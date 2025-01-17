@@ -9,6 +9,8 @@ import { Badge } from "~/components/ui/badge";
 import PageButtons from "~/components/utils/PageButtons";
 import { getConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
+import BasicInfo from "./BasicInfo";
+import { useConfig } from "~/context/config";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -50,21 +52,21 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const { function_name, inferences, inference_bounds, num_inferences } =
     loaderData;
   const navigate = useNavigate();
-
+  const function_config = useConfig().functions[function_name];
   const topInference = inferences[0];
   const bottomInference = inferences[inferences.length - 1];
   const handleNextInferencePage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
     searchParams.set("beforeInference", bottomInference.id);
-    navigate(`?${searchParams.toString()}`);
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
   const handlePreviousInferencePage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
     searchParams.set("afterInference", topInference.id);
-    navigate(`?${searchParams.toString()}`);
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   // These are swapped because the table is sorted in descending order
   const disablePreviousInferencePage =
@@ -80,6 +82,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           {function_name}
         </code>
       </h2>
+      <div className="mb-6 h-px w-full bg-gray-200"></div>
+      <BasicInfo functionConfig={function_config} />
       <div className="mb-6 h-px w-full bg-gray-200"></div>
 
       <div>

@@ -54,11 +54,16 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 
   // IMPORTANT: use the last_inference_id to navigate
   const handleNextPage = () => {
-    navigate(`?before=${bottomEpisode.last_inference_id}&pageSize=${pageSize}`);
+    navigate(
+      `?before=${bottomEpisode.last_inference_id}&pageSize=${pageSize}`,
+      { preventScrollReset: true },
+    );
   };
 
   const handlePreviousPage = () => {
-    navigate(`?after=${topEpisode.last_inference_id}&pageSize=${pageSize}`);
+    navigate(`?after=${topEpisode.last_inference_id}&pageSize=${pageSize}`, {
+      preventScrollReset: true,
+    });
   };
 
   // These are swapped because the table is sorted in descending order
