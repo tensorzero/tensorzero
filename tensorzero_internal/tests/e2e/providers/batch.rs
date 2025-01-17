@@ -7,7 +7,7 @@
 ///    change it so that it looks like it is Pending, and then poll for it to be completed again.
 use std::collections::HashMap;
 
-use gateway::{
+use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
     endpoints::batch_inference::PollPathParams,
     inference::types::{

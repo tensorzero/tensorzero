@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
-use gateway::{
+use tensorzero_internal::{
     inference::types::{ContentBlock, RequestMessage, Role},
     tool::{ToolCall, ToolResult},
 };

@@ -1,7 +1,7 @@
 #![allow(clippy::print_stdout)]
 
 use futures::StreamExt;
-use gateway::{
+use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
     embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
     endpoints::inference::InferenceCredentials,

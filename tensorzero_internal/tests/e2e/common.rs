@@ -1,4 +1,4 @@
-use gateway::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use reqwest::Url;
 use serde_json::Value;
 use uuid::Uuid;

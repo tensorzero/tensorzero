@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use gateway::{
+use tensorzero_internal::{
     embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
     endpoints::inference::InferenceCredentials,
     inference::types::Latency,

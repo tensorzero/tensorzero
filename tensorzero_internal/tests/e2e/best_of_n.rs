@@ -1,4 +1,4 @@
-use gateway::inference::{
+use tensorzero_internal::inference::{
     providers::dummy::DUMMY_INFER_RESPONSE_CONTENT,
     types::{ContentBlock, RequestMessage, Role},
 };

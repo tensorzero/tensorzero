@@ -1,5 +1,5 @@
 use futures::StreamExt;
-use gateway::inference::{
+use tensorzero_internal::inference::{
     providers::dummy::{
         DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_RAW_REQUEST,
         DUMMY_STREAMING_RESPONSE,

@@ -1,4 +1,4 @@
-use gateway::{
+use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
     inference::types::{ContentBlockOutput, JsonInferenceOutput, Text},
 };

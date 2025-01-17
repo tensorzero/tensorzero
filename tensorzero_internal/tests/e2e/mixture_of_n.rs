@@ -1,4 +1,4 @@
-use gateway::inference::types::{ContentBlock, RequestMessage, Role};
+use tensorzero_internal::inference::types::{ContentBlock, RequestMessage, Role};
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
