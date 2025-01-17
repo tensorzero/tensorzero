@@ -86,6 +86,7 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install `uv` [→](https://docs.astral.sh/uv/)
 - Install Python (3.10+) (e.g. `uv python install 3.10` + )
 - Install Node.js (we use v22) and `npm` [→](https://nodejs.org/en)
+- Install pnpm `npm install -g pnpm` [→](https://pnpm.io/installation)
 
 ### Tests
 
@@ -170,7 +171,7 @@ The steps below assume you are in the `ui/` directory.
 
 Here are the steps in order to run or test the UI assuming you have the prerequisites installed and this repository checked out:
 
-1. Install npm dependencies: `npm install --legacy-peer-deps cmdk`
+1. Install dependencies: `pnpm install`
 2. Build the WebAssembly module following instructions in `ui/app/utils/minijinja/README.md`.
 3. Create a `.env` file and set the following environment variables for the server:
 
@@ -184,8 +185,8 @@ TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures
 
 4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up`
 
-With the dependencies running, you can run the tests with `npm run test`.
-Similarly, you can start a development server with `npm run dev`.
+With the dependencies running, you can run the tests with `pnpm run test`.
+Similarly, you can start a development server with `pnpm run dev`.
 
 ---
 
