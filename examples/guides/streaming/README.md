@@ -30,7 +30,7 @@ docker compose up
 
 ```bash
 # Using vanilla Python
-pip install -r requirements.txt
+python run.py
 ```
 
 or
