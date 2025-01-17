@@ -26,5 +26,10 @@ export default [
     "observability/inference/:inference_id",
     "routes/observability/inference/route.tsx",
   ),
+  route("observability/functions", "routes/observability/functions/route.tsx"),
+  route(
+    "observability/function/:function_name",
+    "routes/observability/function/route.tsx",
+  ),
   route("observability/episodes", "routes/observability/episodes/route.tsx"),
 ] satisfies RouteConfig;

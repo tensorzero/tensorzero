@@ -24,7 +24,9 @@ export default function BasicInfo({ inference }: BasicInfoProps) {
           <div>
             <dt className="text-lg font-semibold">Function</dt>
             <dd>
-              <Code>{inference.function_name}</Code>
+              <Link to={`/observability/function/${inference.function_name}`}>
+                <Code>{inference.function_name}</Code>
+              </Link>
             </dd>
           </div>
           <div>

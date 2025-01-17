@@ -8,6 +8,7 @@ import {
   queryInferenceTableBounds,
   queryInferenceTableBoundsByEpisodeId,
   queryInferenceTableByEpisodeId,
+  countInferencesByFunction,
 } from "./inference";
 import { countInferencesForFunction } from "./inference";
 import type {
@@ -514,4 +515,35 @@ test("queryInferenceById for json inference", async () => {
   expect(inference?.input.messages.length).toBe(0);
   const output = inference?.output as JsonInferenceOutput;
   expect(output.parsed).toBeDefined();
+});
+
+test("countInferencesByFunction", async () => {
+  const countsInfo = await countInferencesByFunction();
+  expect(countsInfo).toEqual([
+    {
+      function_name: "ask_question",
+      max_timestamp: "2025-01-03T21:52:59Z",
+      count: 767,
+    },
+    {
+      function_name: "answer_question",
+      max_timestamp: "2025-01-03T21:52:59Z",
+      count: 764,
+    },
+    {
+      function_name: "generate_secret",
+      max_timestamp: "2025-01-03T21:51:29Z",
+      count: 50,
+    },
+    {
+      function_name: "dashboard_fixture_write_haiku",
+      max_timestamp: "2024-12-25T02:20:45Z",
+      count: 494,
+    },
+    {
+      function_name: "dashboard_fixture_extract_entities",
+      max_timestamp: "2024-12-18T16:22:43Z",
+      count: 400,
+    },
+  ]);
 });

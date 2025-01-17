@@ -40,18 +40,60 @@ export async function queryInferenceTable(params: {
   page_size: number;
   before?: string; // UUIDv7 string
   after?: string; // UUIDv7 string
+  /**
+   * Extra WHERE clauses, e.g. ["episode_id = {episode_id:UUID}", "variant_name = {variant:String}"]
+   * Use param placeholders if you want to avoid manual string interpolation.
+   */
+  extraWhere?: string[];
+  /**
+   * Extra query parameters, mapping placeholders (like "episode_id") => actual values
+   */
+  extraParams?: Record<string, string | number>;
 }): Promise<InferenceByIdRow[]> {
-  const { page_size, before, after } = params;
+  const { page_size, before, after, extraWhere, extraParams } = params;
 
   if (before && after) {
     throw new Error("Cannot specify both 'before' and 'after' parameters");
   }
 
-  let query = "";
-  const query_params: Record<string, string | number> = { page_size };
+  // We'll build up WHERE clauses incrementally
+  const whereClauses: string[] = [];
 
+  // Base query params
+  const query_params: Record<string, string | number> = {
+    page_size,
+  };
+
+  // Add the built-in before/after logic
+  if (before) {
+    whereClauses.push("toUInt128(id) < toUInt128(toUUID({before:String}))");
+    query_params.before = before;
+  }
+  if (after) {
+    whereClauses.push("toUInt128(id) > toUInt128(toUUID({after:String}))");
+    query_params.after = after;
+  }
+
+  // Merge in caller-supplied where clauses
+  if (extraWhere && extraWhere.length) {
+    whereClauses.push(...extraWhere);
+  }
+
+  // Merge in caller-supplied params
+  if (extraParams) {
+    Object.entries(extraParams).forEach(([key, value]) => {
+      query_params[key] = value;
+    });
+  }
+
+  // We'll build the actual WHERE portion here (if any).
+  const combinedWhere = whereClauses.length
+    ? `WHERE ${whereClauses.join(" AND ")}`
+    : "";
+
+  let query: string;
   if (!before && !after) {
-    // No before/after => just the most recent page_size items
+    // No "before"/"after" => get the most recent page_size items
     query = `
       SELECT
         id,
@@ -61,11 +103,12 @@ export async function queryInferenceTable(params: {
         function_type,
         UUIDv7ToDateTime(id) AS timestamp
       FROM InferenceById
+      ${combinedWhere}
       ORDER BY toUInt128(id) DESC
       LIMIT {page_size:UInt32}
     `;
   } else if (before) {
-    // "Most recent" page_size before a certain ID => descending sort is fine
+    // "Most recent" page_size before given ID
     query = `
       SELECT
         id,
@@ -75,15 +118,12 @@ export async function queryInferenceTable(params: {
         function_type,
         UUIDv7ToDateTime(id) AS timestamp
       FROM InferenceById
-      WHERE
-        toUInt128(id) < toUInt128(toUUID({before:String}))
+      ${combinedWhere}
       ORDER BY toUInt128(id) DESC
       LIMIT {page_size:UInt32}
     `;
-    query_params.before = before;
-  } else if (after) {
-    // "Earliest" page_size after a certain ID => first sort ascending, then reorder descending
-    // Subselect:
+  } else {
+    // "Earliest" page_size after given ID => subselect ascending, then reorder descending
     query = `
       SELECT
         id,
@@ -102,14 +142,12 @@ export async function queryInferenceTable(params: {
           function_type,
           UUIDv7ToDateTime(id) AS timestamp
         FROM InferenceById
-        WHERE
-          toUInt128(id) > toUInt128(toUUID({after:String}))
+        ${combinedWhere}
         ORDER BY toUInt128(id) ASC
         LIMIT {page_size:UInt32}
       )
       ORDER BY toUInt128(id) DESC
     `;
-    query_params.after = after;
   }
 
   try {
@@ -126,18 +164,30 @@ export async function queryInferenceTable(params: {
   }
 }
 
-export async function queryInferenceTableBounds(): Promise<TableBounds> {
+export async function queryInferenceTableBounds(params?: {
+  extraWhere?: string[];
+  extraParams?: Record<string, string | number>;
+}): Promise<TableBounds> {
+  const { extraWhere = [], extraParams = {} } = params ?? {};
+
+  // Build WHERE clause
+  const whereClauses = [...extraWhere];
+  const whereClause =
+    whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
   const query = `
   SELECT
-    (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM InferenceById)) AS first_id,
-    (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM InferenceById)) AS last_id
+    (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM InferenceById ${whereClause})) AS first_id,
+    (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM InferenceById ${whereClause})) AS last_id
   FROM InferenceById
   LIMIT 1
   `;
+
   try {
     const resultSet = await clickhouseClient.query({
       query,
       format: "JSONEachRow",
+      query_params: extraParams,
     });
 
     const rows = await resultSet.json<TableBounds>();
@@ -301,121 +351,49 @@ export async function queryEpisodeTableBounds(): Promise<TableBounds> {
 export async function queryInferenceTableByEpisodeId(params: {
   episode_id: string;
   page_size: number;
-  before?: string; // UUIDv7 string
-  after?: string; // UUIDv7 string
+  before?: string;
+  after?: string;
 }): Promise<InferenceByIdRow[]> {
-  const { episode_id, page_size, before, after } = params;
-
-  if (before && after) {
-    throw new Error("Cannot specify both 'before' and 'after' parameters");
-  }
-
-  let query = "";
-  const query_params: Record<string, string | number> = {
-    page_size,
-    episode_id,
-  };
-
-  if (!before && !after) {
-    // No before/after => just the most recent page_size items
-    query = `
-      SELECT
-        id,
-        function_name,
-        variant_name,
-        episode_id,
-        function_type,
-        UUIDv7ToDateTime(id) AS timestamp
-      FROM InferenceByEpisodeId
-      WHERE episode_id = {episode_id:String}
-      ORDER BY toUInt128(id) DESC
-      LIMIT {page_size:UInt32}
-    `;
-  } else if (before) {
-    // "Most recent" page_size before a certain ID => descending sort is fine
-    query = `
-      SELECT
-        id,
-        function_name,
-        variant_name,
-        episode_id,
-        function_type,
-        UUIDv7ToDateTime(id) AS timestamp
-      FROM InferenceByEpisodeId
-      WHERE episode_id = {episode_id:String}
-        AND toUInt128(id) < toUInt128(toUUID({before:String}))
-      ORDER BY toUInt128(id) DESC
-      LIMIT {page_size:UInt32}
-    `;
-    query_params.before = before;
-  } else if (after) {
-    // "Earliest" page_size after a certain ID => first sort ascending, then reorder descending
-    // Subselect:
-    query = `
-      SELECT
-        id,
-        function_name,
-        variant_name,
-        episode_id,
-        function_type,
-        timestamp
-      FROM
-      (
-        SELECT
-          id,
-          function_name,
-          variant_name,
-          episode_id,
-          function_type,
-          UUIDv7ToDateTime(id) AS timestamp
-        FROM InferenceById
-        WHERE episode_id = {episode_id:String}
-          AND toUInt128(id) > toUInt128(toUUID({after:String}))
-        ORDER BY toUInt128(id) ASC
-        LIMIT {page_size:UInt32}
-      )
-      ORDER BY toUInt128(id) DESC
-    `;
-    query_params.after = after;
-  }
-
-  try {
-    const resultSet = await clickhouseClient.query({
-      query,
-      format: "JSONEachRow",
-      query_params,
-    });
-    const rows = await resultSet.json<InferenceByIdRow>();
-    return rows;
-  } catch (error) {
-    console.error(error);
-    throw data("Error querying inference table", { status: 500 });
-  }
+  return queryInferenceTable({
+    page_size: params.page_size,
+    before: params.before,
+    after: params.after,
+    extraWhere: ["episode_id = {episode_id:String}"],
+    extraParams: { episode_id: params.episode_id },
+  });
 }
+
 export async function queryInferenceTableBoundsByEpisodeId(params: {
   episode_id: string;
 }): Promise<TableBounds> {
-  const { episode_id } = params;
-  const query = `
-   SELECT
-  (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM InferenceById WHERE episode_id = {episode_id:String})) AS first_id,
-  (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM InferenceById WHERE episode_id = {episode_id:String})) AS last_id
-FROM InferenceById
-LIMIT 1
-  `;
+  return queryInferenceTableBounds({
+    extraWhere: ["episode_id = {episode_id:String}"],
+    extraParams: { episode_id: params.episode_id },
+  });
+}
 
-  try {
-    const resultSet = await clickhouseClient.query({
-      query,
-      format: "JSONEachRow",
-      query_params: { episode_id },
-    });
-    const rows = await resultSet.json<TableBounds>();
-    return rows[0];
-  } catch (error) {
-    console.error(error);
-    throw data("Error querying inference table bounds", { status: 500 });
-  }
+export async function queryInferenceTableByFunctionName(params: {
+  function_name: string;
+  page_size: number;
+  before?: string;
+  after?: string;
+}): Promise<InferenceByIdRow[]> {
+  return queryInferenceTable({
+    page_size: params.page_size,
+    before: params.before,
+    after: params.after,
+    extraWhere: ["function_name = {function_name:String}"],
+    extraParams: { function_name: params.function_name },
+  });
+}
+
+export async function queryInferenceTableBoundsByFunctionName(params: {
+  function_name: string;
+}): Promise<TableBounds> {
+  return queryInferenceTableBounds({
+    extraWhere: ["function_name = {function_name:String}"],
+    extraParams: { function_name: params.function_name },
+  });
 }
 
 export async function countInferencesForFunction(
@@ -679,4 +657,37 @@ export async function queryModelInferencesByInferenceId(
   const validatedRows = z.array(modelInferenceRowSchema).parse(rows);
   const parsedRows = validatedRows.map(parseModelInferenceRow);
   return parsedRows;
+}
+
+const functionCountInfoSchema = z.object({
+  function_name: z.string(),
+  max_timestamp: z.string().datetime(),
+  count: z.number(),
+});
+
+export type FunctionCountInfo = z.infer<typeof functionCountInfoSchema>;
+
+export async function countInferencesByFunction(): Promise<
+  FunctionCountInfo[]
+> {
+  const query = `SELECT
+        function_name,
+        formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%SZ') AS max_timestamp,
+        toUInt32(count()) AS count
+    FROM (
+        SELECT function_name, timestamp
+        FROM tensorzero.ChatInference
+        UNION ALL
+        SELECT function_name, timestamp
+        FROM tensorzero.JsonInference
+    )
+    GROUP BY function_name
+    ORDER BY max_timestamp DESC`;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+  });
+  const rows = await resultSet.json<FunctionCountInfo[]>();
+  const validatedRows = z.array(functionCountInfoSchema).parse(rows);
+  return validatedRows;
 }
