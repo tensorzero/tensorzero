@@ -1,9 +1,9 @@
+use reqwest::{Client, StatusCode};
+use serde_json::{json, Value};
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
     inference::types::{ContentBlockOutput, JsonInferenceOutput, Text},
 };
-use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 

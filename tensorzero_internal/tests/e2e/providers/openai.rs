@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 
-use tensorzero_internal::{
-    embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
-    endpoints::inference::InferenceCredentials,
-    inference::types::Latency,
-};
 use reqwest::Client;
 #[cfg(feature = "e2e_tests")]
 use reqwest::StatusCode;
 #[cfg(feature = "e2e_tests")]
 use serde_json::json;
 use serde_json::Value;
+use tensorzero_internal::{
+    embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
+    endpoints::inference::InferenceCredentials,
+    inference::types::Latency,
+};
 #[cfg(feature = "e2e_tests")]
 use uuid::Uuid;
 

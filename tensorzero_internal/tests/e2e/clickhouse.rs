@@ -1,3 +1,5 @@
+use reqwest::Client;
+use serde_json::json;
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::clickhouse_migration_manager;
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0000::Migration0000;
@@ -10,8 +12,6 @@ use tensorzero_internal::clickhouse_migration_manager::migrations::migration_000
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0008::Migration0008;
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0009::Migration0009;
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0010::Migration0010;
-use reqwest::Client;
-use serde_json::json;
 use tracing_test::traced_test;
 use uuid::Uuid;
 

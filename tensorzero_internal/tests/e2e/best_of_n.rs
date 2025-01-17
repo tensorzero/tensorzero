@@ -1,9 +1,9 @@
+use reqwest::{Client, StatusCode};
+use serde_json::{json, Value};
 use tensorzero_internal::inference::{
     providers::dummy::DUMMY_INFER_RESPONSE_CONTENT,
     types::{ContentBlock, RequestMessage, Role},
 };
-use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::common::{

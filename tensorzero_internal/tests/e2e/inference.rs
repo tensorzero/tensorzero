@@ -1,4 +1,7 @@
 use futures::StreamExt;
+use reqwest::{Client, StatusCode};
+use reqwest_eventsource::{Event, RequestBuilderExt};
+use serde_json::{json, Value};
 use tensorzero_internal::{
     inference::{
         providers::dummy::{
@@ -10,9 +13,6 @@ use tensorzero_internal::{
     },
     tool::ToolCall,
 };
-use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::common::{

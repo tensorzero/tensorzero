@@ -7,6 +7,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use serde_json::json;
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::config_parser::Config;
 /// End-to-end tests for particular internal functionality in the batch inference endpoint
@@ -22,9 +23,10 @@ use tensorzero_internal::inference::types::batch::{
     BatchModelInferenceRow, BatchRequestRow, BatchStatus, PollBatchInferenceResponse,
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
-use tensorzero_internal::inference::types::{ContentBlockOutput, Input, JsonInferenceOutput, Usage};
+use tensorzero_internal::inference::types::{
+    ContentBlockOutput, Input, JsonInferenceOutput, Usage,
+};
 use tensorzero_internal::jsonschema_util::JSONSchemaFromPath;
-use serde_json::json;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
