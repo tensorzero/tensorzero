@@ -1,11 +1,3 @@
-import {
-  Table,
-  TableBody,
-  TableHeader,
-  TableHead,
-  TableRow,
-  TableCell,
-} from "~/components/ui/table";
 import type { VariantPerformanceRow } from "~/utils/clickhouse/function";
 // import { TrendingUp } from "lucide-react";
 import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis } from "recharts";
@@ -14,13 +6,13 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
 import {
-  type ChartConfig,
   ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from "~/components/ui/chart";
@@ -35,8 +27,10 @@ const CHART_COLORS = [
 
 export function VariantPerformance({
   variant_performances,
+  metric_name,
 }: {
   variant_performances: VariantPerformanceRow[];
+  metric_name: string;
 }) {
   const { data, variantNames } =
     transformVariantPerformances(variant_performances);
@@ -55,49 +49,27 @@ export function VariantPerformance({
 
   return (
     <div className="space-y-8">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Period Start</TableHead>
-            <TableHead>Variant Name</TableHead>
-            <TableHead>Count</TableHead>
-            <TableHead>Average Metric</TableHead>
-            <TableHead>Standard Deviation</TableHead>
-            <TableHead>95% CI Lower</TableHead>
-            <TableHead>95% CI Upper</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {variant_performances.map((performance) => (
-            <TableRow
-              key={`${performance.period_start}-${performance.variant_name}`}
-            >
-              <TableCell>{performance.period_start}</TableCell>
-              <TableCell>{performance.variant_name}</TableCell>
-              <TableCell>{performance.count}</TableCell>
-              <TableCell>{performance.avg_metric.toFixed(4)}</TableCell>
-              <TableCell>{performance.stdev.toFixed(4)}</TableCell>
-              <TableCell>
-                {(performance.avg_metric - performance.ci_error).toFixed(4)}
-              </TableCell>
-              <TableCell>
-                {(performance.avg_metric + performance.ci_error).toFixed(4)}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-
       <Card>
         <CardHeader>
           <CardTitle>Variant Performance Over Time</CardTitle>
           <CardDescription>
-            Showing average metric values by variant
+            Showing average metric values by variant for metric{" "}
+            <code>{metric_name}</code>
           </CardDescription>
         </CardHeader>
         <CardContent>
           <ChartContainer config={chartConfig} className="min-h-[300px] w-full">
-            <BarChart data={data} height={300}>
+            <BarChart accessibilityLayer data={data} height={300}>
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="date"
+                tickLine={false}
+                tickMargin={10}
+                axisLine={false}
+                tickFormatter={(value) => new Date(value).toLocaleDateString()}
+              />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartLegend content={<ChartLegendContent />} />
               {variantNames.map((variantName) => (
                 <Bar
                   key={variantName}
@@ -115,11 +87,6 @@ export function VariantPerformance({
             </BarChart>
           </ChartContainer>
         </CardContent>
-        <CardFooter className="flex-col items-start gap-2 text-sm">
-          <div className="leading-none text-muted-foreground">
-            Showing average metric values across variants and time periods
-          </div>
-        </CardFooter>
       </Card>
     </div>
   );
@@ -191,6 +158,7 @@ export function transformVariantPerformances(
     });
     return row;
   });
+  console.log(data);
 
   return {
     data,
