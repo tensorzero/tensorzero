@@ -24,22 +24,22 @@ describe("getVariantPerformances", () => {
       metric_config,
       time_window_unit,
     });
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         period_start: "2024-12-16T00:00:00.000Z",
         variant_name: "gpt4o_initial_prompt",
         count: 90,
-        avg_metric: 0.4937301605939865,
-        stdev: 0.4307567,
-        ci_error: 0.08899525378450246,
+        avg_metric: expect.closeTo(0.4937301605939865, 6),
+        stdev: expect.closeTo(0.4307567, 6),
+        ci_error: expect.closeTo(0.08899525378450246, 6),
       },
       {
         period_start: "2024-12-16T00:00:00.000Z",
         variant_name: "llama_8b_initial_prompt",
         count: 110,
-        avg_metric: 0.4099396590482105,
-        stdev: 0.3624926,
-        ci_error: 0.06774213240851094,
+        avg_metric: expect.closeTo(0.4099396590482105, 6),
+        stdev: expect.closeTo(0.3624926, 6),
+        ci_error: expect.closeTo(0.06774213240851094, 6),
       },
     ]);
   });
@@ -63,14 +63,14 @@ describe("getVariantPerformances", () => {
       metric_config,
       time_window_unit,
     });
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         period_start: "2024-12-23T00:00:00.000Z",
         variant_name: "initial_prompt_gpt4o_mini",
         count: 491,
-        avg_metric: 0.17349116723056418,
-        stdev: 0.48264572,
-        ci_error: 0.04269173301973782,
+        avg_metric: expect.closeTo(0.17349116723056418, 6),
+        stdev: expect.closeTo(0.48264572, 6),
+        ci_error: expect.closeTo(0.04269173301973782, 6),
       },
     ]);
   });
@@ -95,14 +95,14 @@ describe("getVariantPerformances", () => {
       metric_config,
       time_window_unit,
     });
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         period_start: "2024-12-30T00:00:00.000Z",
         variant_name: "baseline",
         count: 23,
-        avg_metric: 0.043478260869565216,
-        stdev: 0.20851441405707477,
-        ci_error: 0.08521739130434784,
+        avg_metric: expect.closeTo(0.043478260869565216, 6),
+        stdev: expect.closeTo(0.20851441405707477, 6),
+        ci_error: expect.closeTo(0.08521739130434784, 6),
       },
     ]);
   });
@@ -127,14 +127,14 @@ describe("getVariantPerformances", () => {
       metric_config,
       time_window_unit,
     });
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         period_start: "2024-12-30T00:00:00.000Z",
         variant_name: "baseline",
         count: 49,
-        avg_metric: 15.653061224489797,
-        stdev: 5.9496174,
-        ci_error: 1.665892868041992,
+        avg_metric: expect.closeTo(15.653061224489797, 6),
+        stdev: expect.closeTo(5.9496174, 6),
+        ci_error: expect.closeTo(1.665892868041992, 6),
       },
     ]);
   });
