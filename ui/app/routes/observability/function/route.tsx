@@ -141,6 +141,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         selectedMetric={metric_name || ""}
         onMetricChange={handleMetricChange}
       />
+      <div className="mb-6 h-px w-full bg-gray-200"></div>
       {variant_performances && (
         <VariantPerformance variant_performances={variant_performances} />
       )}
