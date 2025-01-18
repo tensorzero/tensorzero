@@ -114,3 +114,70 @@ export function VariantPerformance({
     </div>
   );
 }
+
+// After you've already parsed `parsedRows`, you can group them by period_start
+// and transform to the desired structure. For example:
+
+export function transformVariantPerformances(
+  parsedRows: VariantPerformanceRow[],
+): Array<{
+  date: string;
+  variants: Record<
+    string,
+    {
+      num_inferences: number;
+      avg_metric: number;
+      stdev: number;
+      ci_lower_95: number;
+      ci_upper_95: number;
+    }
+  >;
+}> {
+  return parsedRows.reduce(
+    (acc, row) => {
+      const {
+        period_start,
+        variant_name,
+        count,
+        avg_metric,
+        stdev,
+        ci_lower_95,
+        ci_upper_95,
+      } = row;
+
+      // See if we already have an entry for this period_start
+      let existingEntry = acc.find((entry) => entry.date === period_start);
+      if (!existingEntry) {
+        existingEntry = {
+          date: period_start,
+          variants: {},
+        };
+        acc.push(existingEntry);
+      }
+
+      // Attach variant data under the variants key
+      existingEntry.variants[variant_name] = {
+        num_inferences: count,
+        avg_metric,
+        stdev,
+        ci_lower_95,
+        ci_upper_95,
+      };
+
+      return acc;
+    },
+    [] as Array<{
+      date: string;
+      variants: Record<
+        string,
+        {
+          num_inferences: number;
+          avg_metric: number;
+          stdev: number;
+          ci_lower_95: number;
+          ci_upper_95: number;
+        }
+      >;
+    }>,
+  );
+}

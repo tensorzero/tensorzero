@@ -26,18 +26,18 @@ describe("getVariantPerformances", () => {
     });
     expect(result).toEqual([
       {
-        period_start: "2024-12-16",
+        period_start: "2024-12-16T00:00:00.000Z",
         variant_name: "gpt4o_initial_prompt",
-        num_inferences: 90,
+        count: 90,
         avg_metric: 0.4937301605939865,
         stdev: 0.4307567,
         ci_lower_95: 0.40473490680948404,
         ci_upper_95: 0.582725414378489,
       },
       {
-        period_start: "2024-12-16",
+        period_start: "2024-12-16T00:00:00.000Z",
         variant_name: "llama_8b_initial_prompt",
-        num_inferences: 110,
+        count: 110,
         avg_metric: 0.4099396590482105,
         stdev: 0.3624926,
         ci_lower_95: 0.34219752663969955,
@@ -67,9 +67,9 @@ describe("getVariantPerformances", () => {
     });
     expect(result).toEqual([
       {
-        period_start: "2024-12-23",
+        period_start: "2024-12-23T00:00:00.000Z",
         variant_name: "initial_prompt_gpt4o_mini",
-        num_inferences: 491,
+        count: 491,
         avg_metric: 0.17349116723056418,
         stdev: 0.48264572,
         ci_lower_95: 0.13079943421082635,
@@ -100,9 +100,9 @@ describe("getVariantPerformances", () => {
     });
     expect(result).toEqual([
       {
-        period_start: "2024-12-30",
+        period_start: "2024-12-30T00:00:00.000Z",
         variant_name: "baseline",
-        num_episodes: 23,
+        count: 23,
         avg_metric: 0.043478260869565216,
         stdev: 0.20851441405707477,
         ci_lower_95: -0.041739130434782626,
@@ -133,9 +133,9 @@ describe("getVariantPerformances", () => {
     });
     expect(result).toEqual([
       {
-        period_start: "2024-12-30",
+        period_start: "2024-12-30T00:00:00.000Z",
         variant_name: "baseline",
-        num_episodes: 49,
+        count: 49,
         avg_metric: 15.653061224489797,
         stdev: 5.9496174,
         ci_lower_95: 13.987168356447805,

@@ -72,7 +72,7 @@ export async function getVariantPerformances(params: {
 }
 
 const variantPerformanceRowSchema = z.object({
-  period_start: z.string().date(),
+  period_start: z.string().datetime(),
   variant_name: z.string(),
   count: z.number(),
   avg_metric: z.number(),
@@ -137,7 +137,7 @@ WITH sub AS (
 )
 SELECT
     /* The 'period_start' column from the subquery, i.e. dateTrunc({time_window_unit:String}, i.timestamp). */
-    formatDateTime(period_start, '%Y-%m-%dT%H:%M:%S.000Z') AS period_start,
+    formatDateTime(period_start, '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
 
     /* The variant_name from the subquery. */
     variant_name,
@@ -208,7 +208,7 @@ async function getInferencePerformances(params: {
   } = params;
   const query = `
 SELECT
-    dateTrunc({time_window_unit:String}, i.timestamp) AS period_start,
+    formatDateTime(dateTrunc({time_window_unit:String}, i.timestamp), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
     i.variant_name AS variant_name,
     toUInt32(count()) AS count,
     avg(f.value) AS avg_metric,
@@ -251,7 +251,6 @@ ORDER BY
   });
 
   const rows = await resultSet.json();
-  console.log(rows);
   const parsedRows = z.array(variantPerformanceRowSchema).parse(rows);
   return parsedRows;
 }
