@@ -154,7 +154,10 @@ export function getInferenceTableName(
       return InferenceTableName.JSON;
   }
 }
-
+export const TableBoundsSchema = z.object({
+  first_id: z.string().optional(),
+  last_id: z.string().optional(),
+});
 export interface TableBounds {
   first_id?: string; // UUIDv7 string
   last_id?: string; // UUIDv7 string
