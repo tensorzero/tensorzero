@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
 
 use futures::future::join_all;
@@ -58,7 +59,7 @@ impl Variant for MixtureOfNConfig {
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
-    ) -> Result<InferenceResult<'a>, Error> {
+    ) -> Result<InferenceResult, Error> {
         let candidate_inference_results = self
             .infer_candidates(input, models, function, inference_config, clients)
             .await?;
@@ -81,14 +82,7 @@ impl Variant for MixtureOfNConfig {
         _inference_config: &'request InferenceConfig<'static, 'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
-    ) -> Result<
-        (
-            InferenceResultChunk,
-            InferenceResultStream,
-            ModelUsedInfo<'static>,
-        ),
-        Error,
-    > {
+    ) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error> {
         Err(ErrorDetails::InvalidRequest {
             message: "Best of n variants do not support streaming inference.".to_string(),
         }
@@ -99,7 +93,7 @@ impl Variant for MixtureOfNConfig {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<String, EmbeddingModelConfig>,
+        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -168,7 +162,7 @@ impl MixtureOfNConfig {
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
-    ) -> Result<Vec<InferenceResult<'a>>, Error> {
+    ) -> Result<Vec<InferenceResult>, Error> {
         // Get all the variants we are going to infer
         let candidate_variants = self
             .candidates
@@ -238,11 +232,11 @@ impl MixtureOfNConfig {
         &'a self,
         input: &Input,
         function: &'a FunctionConfig,
-        models: &'a HashMap<String, ModelConfig>,
+        models: &'a HashMap<Arc<str>, ModelConfig>,
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
-        mut candidates: Vec<InferenceResult<'a>>,
-    ) -> Result<InferenceResult<'a>, Error> {
+        mut candidates: Vec<InferenceResult>,
+    ) -> Result<InferenceResult, Error> {
         if candidates.is_empty() {
             return Err(ErrorDetails::Inference {
                 message: "No candidates to fuse in the mixture of n".to_string(),
@@ -305,12 +299,12 @@ impl MixtureOfNConfig {
 async fn inner_fuse_candidates<'a, 'request>(
     fuser: &'a FuserConfig,
     input: &'request Input,
-    models: &'a HashMap<String, ModelConfig>,
+    models: &'a HashMap<Arc<str>, ModelConfig>,
     function: &'a FunctionConfig,
     inference_config: &'request InferenceConfig<'a, 'request>,
     clients: &'request InferenceClients<'request>,
-    candidates: &[InferenceResult<'request>],
-) -> Result<InferenceResult<'a>, Error> {
+    candidates: &[InferenceResult],
+) -> Result<InferenceResult, Error> {
     let (inference_request, included_indices) = fuser.prepare_request(
         input,
         function,
@@ -326,12 +320,12 @@ async fn inner_fuse_candidates<'a, 'request>(
     }
     let model_config = models.get(&fuser.inner.model).ok_or_else(|| {
         Error::new(ErrorDetails::UnknownModel {
-            name: fuser.inner.model.clone(),
+            name: fuser.inner.model.to_string(),
         })
     })?;
     let infer_model_request_args = InferModelRequestArgs {
         request: inference_request,
-        model_name: &fuser.inner.model,
+        model_name: fuser.inner.model.clone(),
         model_config,
         function,
         inference_config,
@@ -452,7 +446,7 @@ impl FuserConfig {
         input: &'request Input,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'a, 'request>,
-        candidates: &[InferenceResult<'request>],
+        candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
     ) -> Result<(ModelInferenceRequest<'request>, Vec<usize>), Error>
     where
@@ -530,7 +524,7 @@ mod tests {
         // Test without templates, string message
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
-                model: "dummy".to_string(),
+                model: "dummy".into(),
                 weight: 1.0,
                 ..Default::default()
             },
@@ -551,7 +545,7 @@ mod tests {
         // Test without templates, object message
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
-                model: "dummy".to_string(),
+                model: "dummy".into(),
                 weight: 1.0,
                 ..Default::default()
             },
@@ -570,7 +564,7 @@ mod tests {
         // Test without templates, no message
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
-                model: "dummy".to_string(),
+                model: "dummy".into(),
                 weight: 1.0,
                 ..Default::default()
             },
@@ -592,7 +586,7 @@ mod tests {
 
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
-                model: "dummy".to_string(),
+                model: "dummy".into(),
                 weight: 1.0,
                 system_template: Some(system_template_name.into()),
                 ..Default::default()
@@ -624,7 +618,7 @@ mod tests {
 
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
-                model: "dummy".to_string(),
+                model: "dummy".into(),
                 weight: 1.0,
                 system_template: Some(system_template_name.into()),
                 ..Default::default()
@@ -654,7 +648,7 @@ mod tests {
         // Create an FuserConfig
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
-                model: "dummy".to_string(),
+                model: "dummy".into(),
                 weight: 1.0,
                 ..Default::default()
             },
@@ -676,8 +670,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
             },
-            model_provider_name: "ExampleProvider",
-            model_name: "ExampleModel",
+            model_provider_name: "ExampleProvider".into(),
+            model_name: "ExampleModel".into(),
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -710,8 +704,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(550),
             },
-            model_provider_name: "ExampleProvider2",
-            model_name: "ExampleModel2",
+            model_provider_name: "ExampleProvider2".into(),
+            model_name: "ExampleModel2".into(),
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -750,7 +744,7 @@ mod tests {
         // Create a FuserConfig
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
-                model: "dummy_json".to_string(),
+                model: "dummy_json".into(),
                 weight: 1.0,
                 ..Default::default()
             },
@@ -772,8 +766,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
             },
-            model_provider_name: "ExampleProvider",
-            model_name: "ExampleModel",
+            model_provider_name: "ExampleProvider".into(),
+            model_name: "ExampleModel".into(),
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -806,8 +800,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(550),
             },
-            model_provider_name: "ExampleProvider2",
-            model_name: "ExampleModel2",
+            model_provider_name: "ExampleProvider2".into(),
+            model_name: "ExampleModel2".into(),
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -845,7 +839,7 @@ mod tests {
         // Set up fuser with a provider that returns a valid answer_choice
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
-                model: "json".to_string(),
+                model: "json".into(),
                 ..Default::default()
             },
         };
@@ -881,8 +875,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(500),
             },
-            model_provider_name: "ExampleProvider",
-            model_name: "ExampleModel",
+            model_provider_name: "ExampleProvider".into(),
+            model_name: "ExampleModel".into(),
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -915,8 +909,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(550),
             },
-            model_provider_name: "ExampleProvider1",
-            model_name: "ExampleModel1",
+            model_provider_name: "ExampleProvider1".into(),
+            model_name: "ExampleModel1".into(),
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -935,13 +929,13 @@ mod tests {
         );
         let candidates = vec![candidate0, candidate1];
         let models = HashMap::from([(
-            "json".to_string(),
+            "json".into(),
             ModelConfig {
-                routing: vec!["json".to_string()],
+                routing: vec!["json".into()],
                 providers: HashMap::from([(
-                    "json".to_string(),
+                    "json".into(),
                     ProviderConfig::Dummy(DummyProvider {
-                        model_name: "json".to_string(),
+                        model_name: "json".into(),
                         ..Default::default()
                     }),
                 )]),
@@ -1000,7 +994,7 @@ mod tests {
         // Set up fuser with a provider that fails
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
-                model: "error".to_string(),
+                model: "error".into(),
                 ..Default::default()
             },
         };
@@ -1014,13 +1008,13 @@ mod tests {
         let models = {
             let mut map = HashMap::new();
             map.insert(
-                "error".to_string(),
+                "error".into(),
                 ModelConfig {
-                    routing: vec!["error".to_string()],
+                    routing: vec!["error".into()],
                     providers: HashMap::from([(
-                        "error".to_string(),
+                        "error".into(),
                         ProviderConfig::Dummy(DummyProvider {
-                            model_name: "error".to_string(),
+                            model_name: "error".into(),
                             ..Default::default()
                         }),
                     )]),
@@ -1060,7 +1054,7 @@ mod tests {
         // Set up evaluator with a provider that returns invalid JSON
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
-                model: "regular".to_string(),
+                model: "regular".into(),
                 ..Default::default()
             },
         };
@@ -1074,13 +1068,13 @@ mod tests {
         let models = {
             let mut map = HashMap::new();
             map.insert(
-                "regular".to_string(),
+                "regular".into(),
                 ModelConfig {
-                    routing: vec!["regular".to_string()],
+                    routing: vec!["regular".into()],
                     providers: HashMap::from([(
-                        "regular".to_string(),
+                        "regular".into(),
                         ProviderConfig::Dummy(DummyProvider {
-                            model_name: "regular".to_string(),
+                            model_name: "regular".into(),
                             ..Default::default()
                         }),
                     )]),

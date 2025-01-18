@@ -13,7 +13,7 @@ use crate::common::{
 
 /// This test calls a function which currently uses best of n.
 /// We call 2 models, one that gives the usual good response, one that
-/// gives a JSON repsonse, and then use Gemini to select the best one.
+/// gives a JSON response, and then use Gemini to select the best one.
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
 #[tokio::test]

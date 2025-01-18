@@ -28,7 +28,9 @@ async fn main() {
     ));
 
     // Initialize AppState
-    let app_state = gateway_util::AppStateData::new(config).await;
+    let app_state = gateway_util::AppStateData::new(config)
+        .await
+        .expect_pretty("Failed to initialize AppState");
 
     // Run ClickHouse migrations (if any)
     if !config.gateway.disable_observability {
@@ -79,6 +81,8 @@ async fn main() {
         .expect_pretty(&format!(
             "Failed to bind to socket address `{bind_address}`"
         ));
+
+    tracing::info!("TensorZero Gateway is listening on {}", bind_address);
 
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())

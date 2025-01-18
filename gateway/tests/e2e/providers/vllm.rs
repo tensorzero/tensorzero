@@ -15,15 +15,15 @@ async fn get_providers() -> E2ETestProviders {
 
     let providers = vec![E2ETestProvider {
         variant_name: "vllm".to_string(),
-        model_name: "microsoft/Phi-3.5-mini-instruct".to_string(),
-        model_provider_name: "vllm".to_string(),
+        model_name: "microsoft/Phi-3.5-mini-instruct".into(),
+        model_provider_name: "vllm".into(),
         credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "vllm-dynamic".to_string(),
-        model_name: "microsoft/Phi-3.5-mini-instruct-dynamic".to_string(),
-        model_provider_name: "vllm".to_string(),
+        model_name: "microsoft/Phi-3.5-mini-instruct-dynamic".into(),
+        model_provider_name: "vllm".into(),
         credentials,
     }];
 

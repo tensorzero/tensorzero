@@ -15,23 +15,23 @@ async fn get_providers() -> E2ETestProviders {
 
     let providers = vec![E2ETestProvider {
         variant_name: "mistral".to_string(),
-        model_name: "open-mistral-nemo-2407".to_string(),
-        model_provider_name: "mistral".to_string(),
+        model_name: "open-mistral-nemo-2407".into(),
+        model_provider_name: "mistral".into(),
         credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "mistral-dynamic".to_string(),
-        model_name: "open-mistral-nemo-2407-dynamic".to_string(),
-        model_provider_name: "mistral".to_string(),
+        model_name: "open-mistral-nemo-2407-dynamic".into(),
+        model_provider_name: "mistral".into(),
         credentials,
     }];
 
     #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "mistral-shorthand".to_string(),
-        model_name: "mistral::open-mistral-nemo-2407".to_string(),
-        model_provider_name: "mistral".to_string(),
+        model_name: "mistral::open-mistral-nemo-2407".into(),
+        model_provider_name: "mistral".into(),
         credentials: HashMap::new(),
     }];
 

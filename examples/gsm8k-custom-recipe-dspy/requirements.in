@@ -4,5 +4,6 @@ dspy-ai
 ipykernel
 notebook
 pandas
+scipy
 tensorzero
 tqdm

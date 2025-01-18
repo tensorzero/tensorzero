@@ -11,15 +11,31 @@ env:
 
 jobs:
   validate:
-    runs-on: ubuntu-22.04-8core
+    runs-on: namespace-profile-tensorzero-8x16
 
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Cargo Cache
-        uses: Swatinem/rust-cache@v2
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@v0
+
+      - name: Configure Namespace-powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@v0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Configure Namespace cache for Rust, Python (pip), and pnpm
+        uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: |
+            pnpm
+            python
+            rust
 
       - name: Install cargo-nextest and cargo-deny
         uses: taiki-e/install-action@v2
@@ -77,21 +93,21 @@ jobs:
         working-directory: ui/app/utils/minijinja
         run: wasm-pack test --node --features console_error_panic_hook
 
-      - name: Install npm dependencies
+      - name: Install dependencies
         working-directory: ui
-        run: npm install --platform=linux --legacy-peer-deps cmdk
+        run: pnpm install --frozen-lockfile
 
       - name: Run ESLint
         working-directory: ui
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Run Prettier
         working-directory: ui
-        run: npm run format
+        run: pnpm run format
 
-      - name: Run TypeScript type checking
+      - name: pnpm TypeScript type checking
         working-directory: ui
-        run: npm run typecheck
+        run: pnpm run typecheck
 
       - name: Start services for ui tests
         working-directory: ui
@@ -104,4 +120,4 @@ jobs:
 
       - name: Run ui tests
         working-directory: ui
-        run: npm test
+        run: pnpm test

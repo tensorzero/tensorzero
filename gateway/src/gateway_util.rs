@@ -17,41 +17,38 @@ pub struct AppStateData {
 pub type AppState = axum::extract::State<AppStateData>;
 
 impl AppStateData {
-    pub async fn new(config: &'static Config<'static>) -> Self {
+    pub async fn new(config: &'static Config<'static>) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("CLICKHOUSE_URL").ok();
-        let clickhouse_connection_info = setup_clickhouse(config, clickhouse_url).await;
+        let clickhouse_connection_info = setup_clickhouse(config, clickhouse_url).await?;
 
         let http_client = Client::new();
 
-        Self {
+        Ok(Self {
             config,
             http_client,
             clickhouse_connection_info,
-        }
+        })
     }
 }
 
 async fn setup_clickhouse(
     config: &'static Config<'static>,
     clickhouse_url: Option<String>,
-) -> ClickHouseConnectionInfo {
+) -> Result<ClickHouseConnectionInfo, Error> {
     if config.gateway.disable_observability {
-        ClickHouseConnectionInfo::new_disabled()
+        Ok(ClickHouseConnectionInfo::new_disabled())
     } else {
-        let clickhouse_url = clickhouse_url
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::AppState {
-                    message: "Missing environment variable CLICKHOUSE_URL".to_string(),
-                }) // So that an error is logged
+        let clickhouse_url = clickhouse_url.ok_or_else(|| {
+            Error::new(ErrorDetails::AppState {
+                message: "Missing environment variable CLICKHOUSE_URL".to_string(),
             })
-            .unwrap_or_else(|_| "".to_string());
+        })?;
 
-        // If the ClickHouse URL is malformed, we will log an error and return a disabled connection info
+        // If the ClickHouse URL is malformed, we will propagate the error upwards, and avoid starting the server
         // If the ClickHouse URL is healthy, we will return a Production connection info
         // If the ClickHouse URL is unhealthy, we will log an error and return a Production connection info
-        ClickHouseConnectionInfo::new(&clickhouse_url)
-            .await
-            .unwrap_or_else(|_| ClickHouseConnectionInfo::new_disabled())
+        // (since the gateway and ClickHouse might be started simultaneously)
+        ClickHouseConnectionInfo::new(&clickhouse_url).await
     }
 }
 
@@ -121,7 +118,7 @@ mod tests {
             ..Default::default()
         }));
 
-        let clickhouse_connection_info = setup_clickhouse(config, None).await;
+        let clickhouse_connection_info = setup_clickhouse(config, None).await.unwrap();
         assert!(matches!(
             clickhouse_connection_info,
             ClickHouseConnectionInfo::Disabled
@@ -140,11 +137,9 @@ mod tests {
             ..Default::default()
         }));
 
-        let clickhouse_connection_info = setup_clickhouse(config, None).await;
-        assert!(matches!(
-            clickhouse_connection_info,
-            ClickHouseConnectionInfo::Disabled
-        ));
+        setup_clickhouse(config, None)
+            .await
+            .expect_err("Missing environment variable CLICKHOUSE_URL");
 
         // Bad URL
         let gateway_config = GatewayConfig {
@@ -156,12 +151,9 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         }));
-        let clickhouse_connection_info =
-            setup_clickhouse(config, Some("bad_url".to_string())).await;
-        assert!(matches!(
-            clickhouse_connection_info,
-            ClickHouseConnectionInfo::Disabled
-        ));
+        setup_clickhouse(config, Some("bad_url".to_string()))
+            .await
+            .expect_err("Missing environment variable CLICKHOUSE_URL");
         assert!(logs_contain("Invalid ClickHouse database URL"));
 
         // Sensible URL that doesn't point to ClickHouse
@@ -175,7 +167,9 @@ mod tests {
             ..Default::default()
         }));
         let clickhouse_connection_info =
-            setup_clickhouse(config, Some("https://tensorzero.com:8123".to_string())).await;
+            setup_clickhouse(config, Some("https://tensorzero.com:8123".to_string()))
+                .await
+                .unwrap();
         // If the ClickHouse URL is well-formed but just not pointing at a healthy ClickHouse,
         // we will log a connection error and still return a Production connection info
         // so that we start logging errors on writes

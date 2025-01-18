@@ -12,7 +12,7 @@ use crate::{
 use super::{ContentBlock, Input, ModelInferenceRequest, RequestMessage, Usage};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -151,7 +151,7 @@ pub struct BatchRequestRow<'a> {
     pub id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub batch_params: Cow<'a, Value>,
-    pub model_name: Cow<'a, str>,
+    pub model_name: Arc<str>,
     pub raw_request: Cow<'a, str>,
     pub raw_response: Cow<'a, str>,
     pub model_provider_name: Cow<'a, str>,
@@ -272,7 +272,7 @@ impl<'a> BatchRequestRow<'a> {
             batch_params: Cow::Borrowed(batch_params),
             function_name: Cow::Borrowed(function_name),
             variant_name: Cow::Borrowed(variant_name),
-            model_name: Cow::Borrowed(model_name),
+            model_name: Arc::from(model_name),
             raw_request: Cow::Borrowed(raw_request),
             raw_response: Cow::Borrowed(raw_response),
             model_provider_name: Cow::Borrowed(model_provider_name),
@@ -296,7 +296,7 @@ impl TryFrom<BatchEpisodeIdsWithSize> for BatchEpisodeIds {
     fn try_from(
         BatchEpisodeIdsWithSize(episode_ids, num_inferences): BatchEpisodeIdsWithSize,
     ) -> Result<Self, Self::Error> {
-        let episode_ids = match episode_ids {
+        let episode_ids: Vec<Uuid> = match episode_ids {
             Some(episode_ids) => {
                 if episode_ids.len() != num_inferences {
                     return Err(ErrorDetails::InvalidRequest {
@@ -314,7 +314,7 @@ impl TryFrom<BatchEpisodeIdsWithSize> for BatchEpisodeIds {
                     .map(|id| id.unwrap_or_else(Uuid::now_v7))
                     .collect()
             }
-            None => vec![Uuid::now_v7(); num_inferences],
+            None => (0..num_inferences).map(|_| Uuid::now_v7()).collect(),
         };
         episode_ids.iter().enumerate().try_for_each(|(i, id)| {
             validate_episode_id(*id).map_err(|e| {
@@ -537,10 +537,16 @@ mod tests {
         let batch_episode_ids_with_size = BatchEpisodeIdsWithSize(None, 3);
         let batch_episode_ids = BatchEpisodeIds::try_from(batch_episode_ids_with_size).unwrap();
         assert_eq!(batch_episode_ids.len(), 3);
+        assert_ne!(batch_episode_ids[0], batch_episode_ids[1]);
+        assert_ne!(batch_episode_ids[1], batch_episode_ids[2]);
+        assert_ne!(batch_episode_ids[0], batch_episode_ids[2]);
 
         let batch_episode_ids_with_size = BatchEpisodeIdsWithSize(Some(vec![None, None, None]), 3);
         let batch_episode_ids = BatchEpisodeIds::try_from(batch_episode_ids_with_size).unwrap();
         assert_eq!(batch_episode_ids.len(), 3);
+        assert_ne!(batch_episode_ids[0], batch_episode_ids[1]);
+        assert_ne!(batch_episode_ids[1], batch_episode_ids[2]);
+        assert_ne!(batch_episode_ids[0], batch_episode_ids[2]);
 
         let episode_id_0 = Uuid::now_v7();
         let episode_id_1 = Uuid::now_v7();

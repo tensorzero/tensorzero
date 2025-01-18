@@ -728,7 +728,7 @@ mod tests {
             headers,
             OpenAICompatibleParams {
                 messages,
-                model: "tensorzero::test_function".to_string(),
+                model: "tensorzero::test_function".into(),
                 frequency_penalty: Some(0.5),
                 max_tokens: Some(100),
                 max_completion_tokens: Some(50),

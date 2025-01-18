@@ -1658,7 +1658,7 @@ mod tests {
             content: vec![GCPVertexAnthropicContentBlock::Text {
                 text: "Response text".to_string(),
             }],
-            model: "model-name".to_string(),
+            model: "model-name".into(),
             stop_reason: Some("stop reason".to_string()),
             stop_sequence: Some("stop sequence".to_string()),
             usage: GCPVertexAnthropic {
@@ -1738,7 +1738,7 @@ mod tests {
                 name: "get_temperature".to_string(),
                 input: json!({"location": "New York"}),
             }],
-            model: "model-name".to_string(),
+            model: "model-name".into(),
             stop_reason: Some("tool_call".to_string()),
             stop_sequence: None,
             usage: GCPVertexAnthropic {
@@ -1825,7 +1825,7 @@ mod tests {
                     input: json!({"location": "London"}),
                 },
             ],
-            model: "model-name".to_string(),
+            model: "model-name".into(),
             stop_reason: None,
             stop_sequence: None,
             usage: GCPVertexAnthropic {

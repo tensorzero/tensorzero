@@ -344,7 +344,7 @@ async fn e2e_test_streaming_flaky() {
 
 /// This test calls a function which currently uses best of n.
 /// We call 2 models, one that gives the usual good response, one that
-/// gives a JSON repsonse, and then use a flaky judge to select the best one (it should fail the first time but succeed the second).
+/// gives a JSON response, and then use a flaky judge to select the best one (it should fail the first time but succeed the second).
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
 #[tokio::test]

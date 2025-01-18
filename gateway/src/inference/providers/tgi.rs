@@ -8,7 +8,7 @@
 /// Third, TGI doesn't support tool responses being sent back at all.
 /// Fourth, TGI only supports JSON mode through a tool call. Luckily, we do this out of the box with `implicit_tool` as the json mode
 ///
-/// In light of this, we have decided to not explictly support tool calling for TGI and only support JSON mode via `implicit_tool`.
+/// In light of this, we have decided to not explicitly support tool calling for TGI and only support JSON mode via `implicit_tool`.
 /// Our implementation currently allows you to use a tool in TGI (nonstreaming), but YMMV.
 use futures::{Stream, StreamExt};
 use reqwest::StatusCode;
@@ -16,7 +16,6 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::env;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -37,7 +36,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     TextChunk, Usage,
 };
-use crate::model::CredentialLocation;
+use crate::model::{Credential, CredentialLocation};
 use crate::tool::ToolCall;
 
 const PROVIDER_NAME: &str = "TGI";
@@ -55,27 +54,12 @@ pub struct TGIProvider {
 
 impl TGIProvider {
     pub fn new(api_base: Url, api_key_location: Option<CredentialLocation>) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or(default_api_key_location());
-        let credentials = match api_key_location {
-            CredentialLocation::Env(key_name) => {
-                let api_key = env::var(key_name)
-                    .map_err(|_| {
-                        Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: PROVIDER_NAME.to_string(),
-                        })
-                    })?
-                    .into();
-                TGICredentials::Static(api_key)
-            }
-            CredentialLocation::Dynamic(key_name) => TGICredentials::Dynamic(key_name),
-            CredentialLocation::None => TGICredentials::None,
-            _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for TGI provider".to_string(),
-            }))?,
-        };
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
+        let provider_credentials = TGICredentials::try_from(generic_credentials)?;
         Ok(TGIProvider {
             api_base,
-            credentials,
+            credentials: provider_credentials,
         })
     }
 }
@@ -85,6 +69,23 @@ pub enum TGICredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+}
+
+impl TryFrom<Credential> for TGICredentials {
+    type Error = Error;
+
+    fn try_from(credentials: Credential) -> Result<Self, Error> {
+        match credentials {
+            Credential::Static(key) => Ok(TGICredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(TGICredentials::Dynamic(key_name)),
+            Credential::None => Ok(TGICredentials::None),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            Credential::Missing => Ok(TGICredentials::None),
+            _ => Err(Error::new(ErrorDetails::Config {
+                message: "Invalid api_key_location for TGI provider".to_string(),
+            })),
+        }
+    }
 }
 
 impl TGICredentials {
@@ -118,7 +119,7 @@ impl InferenceProvider for TGIProvider {
         // TGI doesn't care about this field, so we can hardcode it to "tgi"
         let model_name = PROVIDER_TYPE.to_string();
         let request_body = TGIRequest::new(&model_name, request)?;
-        let request_url = get_chat_url(Some(&self.api_base))?;
+        let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
 
@@ -211,14 +212,11 @@ impl InferenceProvider for TGIProvider {
             .into());
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: serde_json::to_string(&request_body).ok(),
-                raw_response: None,
             })
         })?;
-        let request_url = get_chat_url(Some(&self.api_base))?;
+        let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client

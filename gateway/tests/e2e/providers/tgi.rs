@@ -10,7 +10,7 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         variant_name: "tgi".to_string(),
         model_name: model_name.clone(),
-        model_provider_name: "tgi".to_string(),
+        model_provider_name: "tgi".into(),
         credentials: HashMap::new(),
     }];
     E2ETestProviders {
