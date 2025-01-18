@@ -25,7 +25,7 @@ export default function FunctionsTable({
             <TableHead>Name</TableHead>
             <TableHead>Type</TableHead>
             <TableHead>Count</TableHead>
-            <TableHead>Last Use</TableHead>
+            <TableHead>Last Used</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
