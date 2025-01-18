@@ -8,7 +8,7 @@ import {
 } from "~/components/ui/table";
 import type { VariantPerformanceRow } from "~/utils/clickhouse/function";
 // import { TrendingUp } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
+import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis } from "recharts";
 
 import {
   Card,
@@ -25,22 +25,34 @@ import {
   ChartTooltipContent,
 } from "~/components/ui/chart";
 
-const chartConfig = {
-  desktop: {
-    label: "Desktop",
-    color: "hsl(var(--chart-1))",
-  },
-  mobile: {
-    label: "Mobile",
-    color: "hsl(var(--chart-2))",
-  },
-} satisfies ChartConfig;
+const CHART_COLORS = [
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
+] as const;
 
 export function VariantPerformance({
   variant_performances,
 }: {
   variant_performances: VariantPerformanceRow[];
 }) {
+  const { data, variantNames } =
+    transformVariantPerformances(variant_performances);
+
+  const chartConfig: Record<string, { label: string; color: string }> =
+    variantNames.reduce(
+      (config, variantName, index) => ({
+        ...config,
+        [variantName]: {
+          label: variantName,
+          color: CHART_COLORS[index % CHART_COLORS.length],
+        },
+      }),
+      {},
+    );
+
   return (
     <div className="space-y-8">
       <Table>
@@ -65,8 +77,12 @@ export function VariantPerformance({
               <TableCell>{performance.count}</TableCell>
               <TableCell>{performance.avg_metric.toFixed(4)}</TableCell>
               <TableCell>{performance.stdev.toFixed(4)}</TableCell>
-              <TableCell>{performance.ci_lower_95.toFixed(4)}</TableCell>
-              <TableCell>{performance.ci_upper_95.toFixed(4)}</TableCell>
+              <TableCell>
+                {(performance.avg_metric - performance.ci_error).toFixed(4)}
+              </TableCell>
+              <TableCell>
+                {(performance.avg_metric + performance.ci_error).toFixed(4)}
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -80,28 +96,22 @@ export function VariantPerformance({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={chartConfig}>
-            <BarChart data={variant_performances} height={300}>
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="period_start"
-                tickLine={false}
-                tickMargin={10}
-                axisLine={false}
-                tickFormatter={(value: string) =>
-                  new Date(value).toLocaleDateString()
-                }
-              />
-              <ChartTooltip
-                cursor={false}
-                content={<ChartTooltipContent indicator="dashed" />}
-              />
-              <Bar
-                dataKey="avg_metric"
-                name="Average Metric"
-                fill="hsl(var(--primary))"
-                radius={4}
-              />
+          <ChartContainer config={chartConfig} className="min-h-[300px] w-full">
+            <BarChart data={data} height={300}>
+              {variantNames.map((variantName) => (
+                <Bar
+                  key={variantName}
+                  dataKey={variantName}
+                  name={variantName}
+                  fill={chartConfig[variantName].color}
+                  radius={4}
+                >
+                  <ErrorBar
+                    dataKey={`${variantName}_ci_error`}
+                    strokeWidth={1}
+                  />
+                </Bar>
+              ))}
             </BarChart>
           </ChartContainer>
         </CardContent>
@@ -118,32 +128,24 @@ export function VariantPerformance({
 // After you've already parsed `parsedRows`, you can group them by period_start
 // and transform to the desired structure. For example:
 
+export type VariantPerformanceData = {
+  date: string;
+  [key: string]: string | number; // Allow date as string and all other fields as numbers
+};
+
 export function transformVariantPerformances(
   parsedRows: VariantPerformanceRow[],
-): Array<{
-  date: string;
-  variants: Record<
-    string,
-    {
-      num_inferences: number;
-      avg_metric: number;
-      stdev: number;
-      ci_lower_95: number;
-      ci_upper_95: number;
-    }
-  >;
-}> {
-  return parsedRows.reduce(
+): {
+  data: VariantPerformanceData[];
+  variantNames: string[];
+} {
+  const variantNames = [...new Set(parsedRows.map((row) => row.variant_name))];
+
+  // First group by date
+  const groupedByDate = parsedRows.reduce(
     (acc, row) => {
-      const {
-        period_start,
-        variant_name,
-        count,
-        avg_metric,
-        stdev,
-        ci_lower_95,
-        ci_upper_95,
-      } = row;
+      const { period_start, variant_name, count, avg_metric, stdev, ci_error } =
+        row;
 
       // See if we already have an entry for this period_start
       let existingEntry = acc.find((entry) => entry.date === period_start);
@@ -160,13 +162,12 @@ export function transformVariantPerformances(
         num_inferences: count,
         avg_metric,
         stdev,
-        ci_lower_95,
-        ci_upper_95,
+        ci_error,
       };
 
       return acc;
     },
-    [] as Array<{
+    [] as {
       date: string;
       variants: Record<
         string,
@@ -174,10 +175,25 @@ export function transformVariantPerformances(
           num_inferences: number;
           avg_metric: number;
           stdev: number;
-          ci_lower_95: number;
-          ci_upper_95: number;
+          ci_error: number;
         }
       >;
-    }>,
+    }[],
   );
+
+  // Convert to Recharts-friendly shape
+  const data = groupedByDate.map((entry) => {
+    const row: VariantPerformanceData = { date: entry.date };
+    variantNames.forEach((variant) => {
+      const vData = entry.variants[variant];
+      row[variant] = vData?.avg_metric ?? 0;
+      row[`${variant}_ci_error`] = vData?.ci_error ?? 0;
+    });
+    return row;
+  });
+
+  return {
+    data,
+    variantNames,
+  };
 }

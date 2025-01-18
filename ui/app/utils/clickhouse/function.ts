@@ -77,8 +77,7 @@ const variantPerformanceRowSchema = z.object({
   count: z.number(),
   avg_metric: z.number(),
   stdev: z.number(),
-  ci_lower_95: z.number(),
-  ci_upper_95: z.number(),
+  ci_error: z.number(),
 });
 export type VariantPerformanceRow = z.infer<typeof variantPerformanceRowSchema>;
 
@@ -99,8 +98,7 @@ async function getEpisodePerformances(params: {
   const query = `
 -- This query calculates the average value of a metric for
 -- each (variant_name, period_start), counting each episode exactly once rather than
--- counting multiple inference episodes. It also computes a 95% Wald
--- confidence interval around the mean.
+-- counting multiple inference episodes.
 
 WITH sub AS (
     SELECT
@@ -150,19 +148,7 @@ SELECT
     toUInt32(count()) AS count,
     avg(value_per_episode) AS avg_metric,
     stddevSamp(value_per_episode) AS stdev,
-    /*
-       Wald 95% confidence interval around the mean, using the standard formula:
-         mean ± 1.96 * (stdev / sqrt(n))
-       This is approximate and assumes a normal distribution and a sufficiently large n.
-    */
-    (
-        avg(value_per_episode)
-        - 1.96 * (stddevSamp(value_per_episode) / sqrt(count()))
-    ) AS ci_lower_95,
-    (
-        avg(value_per_episode)
-        + 1.96 * (stddevSamp(value_per_episode) / sqrt(count()))
-    ) AS ci_upper_95
+    1.96 * (stddevSamp(value_per_episode) / sqrt(count())) AS ci_error
 
 FROM sub
 /*
@@ -213,19 +199,7 @@ SELECT
     toUInt32(count()) AS count,
     avg(f.value) AS avg_metric,
     stddevSamp(f.value) AS stdev,
-    /*
-       Wald 95% confidence interval around the mean, using the standard formula:
-         mean ± 1.96 * (stdev / sqrt(n))
-       This is approximate and assumes a normal distribution and a sufficiently large n.
-    */
-    (
-        avg(f.value)
-        - 1.96 * (stddevSamp(f.value) / sqrt(count()))
-    ) AS ci_lower_95,
-    (
-        avg(f.value)
-        + 1.96 * (stddevSamp(f.value) / sqrt(count()))
-    ) AS ci_upper_95
+    1.96 * (stddevSamp(f.value) / sqrt(count())) AS ci_error
 FROM ${inference_table_name} i
 JOIN ${metric_table_name} f
     ON i.id = f.target_id

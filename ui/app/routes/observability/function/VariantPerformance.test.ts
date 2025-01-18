@@ -11,8 +11,7 @@ describe("transformVariantPerformances", () => {
         count: 90,
         avg_metric: 0.4937301605939865,
         stdev: 0.4307567,
-        ci_lower_95: 0.40473490680948404,
-        ci_upper_95: 0.582725414378489,
+        ci_error: 0.08899525378450246,
       },
       {
         period_start: "2024-12-16",
@@ -20,34 +19,23 @@ describe("transformVariantPerformances", () => {
         count: 110,
         avg_metric: 0.4099396590482105,
         stdev: 0.3624926,
-        ci_lower_95: 0.34219752663969955,
-        ci_upper_95: 0.47768179145672146,
+        ci_error: 0.06774213240851094,
       },
     ];
-
-    const expected = [
+    const { data, variantNames } = transformVariantPerformances(input);
+    expect(data).toEqual([
       {
         date: "2024-12-16",
-        variants: {
-          gpt4o_initial_prompt: {
-            num_inferences: 90,
-            avg_metric: 0.4937301605939865,
-            stdev: 0.4307567,
-            ci_lower_95: 0.40473490680948404,
-            ci_upper_95: 0.582725414378489,
-          },
-          llama_8b_initial_prompt: {
-            num_inferences: 110,
-            avg_metric: 0.4099396590482105,
-            stdev: 0.3624926,
-            ci_lower_95: 0.34219752663969955,
-            ci_upper_95: 0.47768179145672146,
-          },
-        },
+        gpt4o_initial_prompt: 0.4937301605939865,
+        gpt4o_initial_prompt_ci_error: 0.08899525378450246,
+        llama_8b_initial_prompt: 0.4099396590482105,
+        llama_8b_initial_prompt_ci_error: 0.06774213240851094,
       },
-    ];
-
-    expect(transformVariantPerformances(input)).toEqual(expected);
+    ]);
+    expect(variantNames).toEqual([
+      "gpt4o_initial_prompt",
+      "llama_8b_initial_prompt",
+    ]);
   });
 
   test("transforms single period with single variant", () => {
@@ -58,27 +46,18 @@ describe("transformVariantPerformances", () => {
         count: 491,
         avg_metric: 0.17349116723056418,
         stdev: 0.48264572,
-        ci_lower_95: 0.13079943421082635,
-        ci_upper_95: 0.216182900250302,
+        ci_error: 0.08521739130434784,
       },
     ];
-
-    const expected = [
+    const { data, variantNames } = transformVariantPerformances(input);
+    expect(data).toEqual([
       {
         date: "2024-12-23",
-        variants: {
-          initial_prompt_gpt4o_mini: {
-            num_inferences: 491,
-            avg_metric: 0.17349116723056418,
-            stdev: 0.48264572,
-            ci_lower_95: 0.13079943421082635,
-            ci_upper_95: 0.216182900250302,
-          },
-        },
+        initial_prompt_gpt4o_mini: 0.17349116723056418,
+        initial_prompt_gpt4o_mini_ci_error: 0.08521739130434784,
       },
-    ];
-
-    expect(transformVariantPerformances(input)).toEqual(expected);
+    ]);
+    expect(variantNames).toEqual(["initial_prompt_gpt4o_mini"]);
   });
 
   test("transforms single variant with episode level metrics", () => {
@@ -89,27 +68,19 @@ describe("transformVariantPerformances", () => {
         count: 23,
         avg_metric: 0.043478260869565216,
         stdev: 0.20851441405707477,
-        ci_lower_95: -0.041739130434782626,
-        ci_upper_95: 0.12869565217391304,
+        ci_error: 0.08521739130434784,
       },
     ];
 
-    const expected = [
+    const { data, variantNames } = transformVariantPerformances(input);
+    expect(data).toEqual([
       {
         date: "2024-12-30",
-        variants: {
-          baseline: {
-            num_inferences: 23,
-            avg_metric: 0.043478260869565216,
-            stdev: 0.20851441405707477,
-            ci_lower_95: -0.041739130434782626,
-            ci_upper_95: 0.12869565217391304,
-          },
-        },
+        baseline: 0.043478260869565216,
+        baseline_ci_error: 0.08521739130434784,
       },
-    ];
-
-    expect(transformVariantPerformances(input)).toEqual(expected);
+    ]);
+    expect(variantNames).toEqual(["baseline"]);
   });
 
   test("transforms multiple periods with multiple variants", () => {
@@ -120,8 +91,7 @@ describe("transformVariantPerformances", () => {
         count: 90,
         avg_metric: 0.49,
         stdev: 0.43,
-        ci_lower_95: 0.4,
-        ci_upper_95: 0.58,
+        ci_error: 0.08899525378450246,
       },
       {
         period_start: "2024-12-16",
@@ -129,8 +99,7 @@ describe("transformVariantPerformances", () => {
         count: 110,
         avg_metric: 0.41,
         stdev: 0.36,
-        ci_lower_95: 0.34,
-        ci_upper_95: 0.48,
+        ci_error: 0.06774213240851094,
       },
       {
         period_start: "2024-12-23",
@@ -138,8 +107,7 @@ describe("transformVariantPerformances", () => {
         count: 95,
         avg_metric: 0.51,
         stdev: 0.44,
-        ci_lower_95: 0.42,
-        ci_upper_95: 0.6,
+        ci_error: 0.08899525378450246,
       },
       {
         period_start: "2024-12-23",
@@ -147,52 +115,30 @@ describe("transformVariantPerformances", () => {
         count: 105,
         avg_metric: 0.43,
         stdev: 0.38,
-        ci_lower_95: 0.36,
-        ci_upper_95: 0.5,
+        ci_error: 0.06774213240851094,
       },
     ];
 
-    const expected = [
+    const { data, variantNames } = transformVariantPerformances(input);
+    expect(data).toEqual([
       {
         date: "2024-12-16",
-        variants: {
-          gpt4o_initial_prompt: {
-            num_inferences: 90,
-            avg_metric: 0.49,
-            stdev: 0.43,
-            ci_lower_95: 0.4,
-            ci_upper_95: 0.58,
-          },
-          llama_8b_initial_prompt: {
-            num_inferences: 110,
-            avg_metric: 0.41,
-            stdev: 0.36,
-            ci_lower_95: 0.34,
-            ci_upper_95: 0.48,
-          },
-        },
+        gpt4o_initial_prompt: 0.49,
+        gpt4o_initial_prompt_ci_error: 0.08899525378450246,
+        llama_8b_initial_prompt: 0.41,
+        llama_8b_initial_prompt_ci_error: 0.06774213240851094,
       },
       {
         date: "2024-12-23",
-        variants: {
-          gpt4o_initial_prompt: {
-            num_inferences: 95,
-            avg_metric: 0.51,
-            stdev: 0.44,
-            ci_lower_95: 0.42,
-            ci_upper_95: 0.6,
-          },
-          llama_8b_initial_prompt: {
-            num_inferences: 105,
-            avg_metric: 0.43,
-            stdev: 0.38,
-            ci_lower_95: 0.36,
-            ci_upper_95: 0.5,
-          },
-        },
+        gpt4o_initial_prompt: 0.51,
+        gpt4o_initial_prompt_ci_error: 0.08899525378450246,
+        llama_8b_initial_prompt: 0.43,
+        llama_8b_initial_prompt_ci_error: 0.06774213240851094,
       },
-    ];
-
-    expect(transformVariantPerformances(input)).toEqual(expected);
+    ]);
+    expect(variantNames).toEqual([
+      "gpt4o_initial_prompt",
+      "llama_8b_initial_prompt",
+    ]);
   });
 });

@@ -31,8 +31,7 @@ describe("getVariantPerformances", () => {
         count: 90,
         avg_metric: 0.4937301605939865,
         stdev: 0.4307567,
-        ci_lower_95: 0.40473490680948404,
-        ci_upper_95: 0.582725414378489,
+        ci_error: 0.08899525378450246,
       },
       {
         period_start: "2024-12-16T00:00:00.000Z",
@@ -40,8 +39,7 @@ describe("getVariantPerformances", () => {
         count: 110,
         avg_metric: 0.4099396590482105,
         stdev: 0.3624926,
-        ci_lower_95: 0.34219752663969955,
-        ci_upper_95: 0.47768179145672146,
+        ci_error: 0.06774213240851094,
       },
     ]);
   });
@@ -72,8 +70,7 @@ describe("getVariantPerformances", () => {
         count: 491,
         avg_metric: 0.17349116723056418,
         stdev: 0.48264572,
-        ci_lower_95: 0.13079943421082635,
-        ci_upper_95: 0.216182900250302,
+        ci_error: 0.04269173301973782,
       },
     ]);
   });
@@ -105,8 +102,7 @@ describe("getVariantPerformances", () => {
         count: 23,
         avg_metric: 0.043478260869565216,
         stdev: 0.20851441405707477,
-        ci_lower_95: -0.041739130434782626,
-        ci_upper_95: 0.12869565217391304,
+        ci_error: 0.08521739130434784,
       },
     ]);
   });
@@ -138,8 +134,7 @@ describe("getVariantPerformances", () => {
         count: 49,
         avg_metric: 15.653061224489797,
         stdev: 5.9496174,
-        ci_lower_95: 13.987168356447805,
-        ci_upper_95: 17.31895409253179,
+        ci_error: 1.665892868041992,
       },
     ]);
   });
