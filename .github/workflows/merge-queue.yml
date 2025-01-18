@@ -36,20 +36,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install and configure Namespace CLI
+      - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@v0
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@v0
 
       - name: Install uv
-        # uv recommends pinning a version to avoid unexpected behavior
         run: curl -LsSf https://astral.sh/uv/0.3.3/install.sh | sh
 
-      - name: Configure Namespace cache for Rust and Python (uv)
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Configure Namespace cache for Rust, Python (uv), and pnpm
         uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: |
+            pnpm
             rust
             uv
 
@@ -195,21 +200,21 @@ jobs:
           docker compose -f examples/production-deployment/docker-compose.yml down
           docker compose -f gateway/tests/e2e/docker-compose.yml down
 
-      - name: Install npm dependencies
+      - name: Install dependencies
         working-directory: ui
-        run: npm install --platform=linux --legacy-peer-deps cmdk
+        run: pnpm install --frozen-lockfile
 
       - name: Run ESLint
         working-directory: ui
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Run Prettier
         working-directory: ui
-        run: npm run format
+        run: pnpm run format
 
       - name: Run TypeScript type checking
         working-directory: ui
-        run: npm run typecheck
+        run: pnpm run typecheck
 
       - name: Start services for ui tests
         working-directory: ui
@@ -222,7 +227,7 @@ jobs:
 
       - name: Run ui tests
         working-directory: ui
-        run: npm test
+        run: pnpm test
 
       - name: Take down ui tests
         working-directory: ui

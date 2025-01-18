@@ -71,16 +71,16 @@ export async function getVariantPerformances(params: {
   }
 }
 
-const episodePerformanceRowSchema = z.object({
-  period_start: z.string(),
+const variantPerformanceRowSchema = z.object({
+  period_start: z.string().date(),
   variant_name: z.string(),
-  num_episodes: z.number(),
+  count: z.number(),
   avg_metric: z.number(),
   stdev: z.number(),
   ci_lower_95: z.number(),
   ci_upper_95: z.number(),
 });
-export type EpisodePerformanceRow = z.infer<typeof episodePerformanceRowSchema>;
+export type VariantPerformanceRow = z.infer<typeof variantPerformanceRowSchema>;
 
 async function getEpisodePerformances(params: {
   function_name: string;
@@ -88,7 +88,7 @@ async function getEpisodePerformances(params: {
   metric_name: string;
   metric_table_name: string;
   time_window_unit: TimeWindowUnit;
-}): Promise<EpisodePerformanceRow[]> {
+}): Promise<VariantPerformanceRow[]> {
   const {
     function_name,
     inference_table_name,
@@ -137,7 +137,7 @@ WITH sub AS (
 )
 SELECT
     /* The 'period_start' column from the subquery, i.e. dateTrunc({time_window_unit:String}, i.timestamp). */
-    period_start,
+    formatDateTime(period_start, '%Y-%m-%dT%H:%M:%S.000Z') AS period_start,
 
     /* The variant_name from the subquery. */
     variant_name,
@@ -147,7 +147,7 @@ SELECT
        (period_start, variant_name) group, because the subquery returns only one
        row per episode_id.
     */
-    toUInt32(count()) AS num_episodes,
+    toUInt32(count()) AS count,
     avg(value_per_episode) AS avg_metric,
     stddevSamp(value_per_episode) AS stdev,
     /*
@@ -188,22 +188,10 @@ ORDER BY
     },
   });
   const rows = await resultSet.json();
-  const parsedRows = z.array(episodePerformanceRowSchema).parse(rows);
+  const parsedRows = z.array(variantPerformanceRowSchema).parse(rows);
   return parsedRows;
 }
 
-const inferencePerformanceRowSchema = z.object({
-  period_start: z.string(),
-  variant_name: z.string(),
-  num_inferences: z.number(),
-  avg_metric: z.number(),
-  stdev: z.number(),
-  ci_lower_95: z.number(),
-  ci_upper_95: z.number(),
-});
-export type InferencePerformanceRow = z.infer<
-  typeof inferencePerformanceRowSchema
->;
 async function getInferencePerformances(params: {
   function_name: string;
   inference_table_name: string;
@@ -222,7 +210,7 @@ async function getInferencePerformances(params: {
 SELECT
     dateTrunc({time_window_unit:String}, i.timestamp) AS period_start,
     i.variant_name AS variant_name,
-    toUInt32(count()) AS num_inferences,
+    toUInt32(count()) AS count,
     avg(f.value) AS avg_metric,
     stddevSamp(f.value) AS stdev,
     /*
@@ -263,6 +251,7 @@ ORDER BY
   });
 
   const rows = await resultSet.json();
-  const parsedRows = z.array(inferencePerformanceRowSchema).parse(rows);
+  console.log(rows);
+  const parsedRows = z.array(variantPerformanceRowSchema).parse(rows);
   return parsedRows;
 }

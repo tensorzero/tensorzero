@@ -18,7 +18,7 @@ import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
 import { Badge } from "~/components/ui/badge";
 
 type MetricSelectorProps = {
-  control: Control<SFTFormValues>;
+  control?: Control<SFTFormValues>;
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
   config: Config;
