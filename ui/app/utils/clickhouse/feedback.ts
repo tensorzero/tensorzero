@@ -1,6 +1,5 @@
 import { z } from "zod";
-import type { TableBounds } from "./common";
-import { TableBoundsSchema } from "./common";
+import { type TableBounds, TableBoundsSchema } from "./common";
 import { data } from "react-router";
 import { clickhouseClient, InferenceJoinKey } from "./common";
 import type { MetricConfig } from "~/utils/config/metric";

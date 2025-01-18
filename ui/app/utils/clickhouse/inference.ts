@@ -1,5 +1,5 @@
 import z from "zod";
-import type { TableBounds } from "./common";
+import { type TableBounds, TableBoundsSchema } from "./common";
 import {
   contentBlockOutputSchema,
   contentBlockSchema,
@@ -11,6 +11,7 @@ import {
 import { data } from "react-router";
 import type { FunctionConfig } from "../config/function";
 import { clickhouseClient } from "./common";
+import { parseFeedbackData } from "./helpers";
 
 export const inferenceByIdRowSchema = z
   .object({
@@ -119,7 +120,7 @@ export async function queryInferenceTable(params: {
       query_params,
     });
     const rows = await resultSet.json<InferenceByIdRow>();
-    return rows;
+    return rows.map((row) => parseFeedbackData(row, inferenceByIdRowSchema));
   } catch (error) {
     console.error(error);
     throw data("Error querying inference table", { status: 500 });
@@ -148,7 +149,7 @@ export async function queryInferenceTableBounds(): Promise<TableBounds> {
       };
     }
 
-    return rows[0];
+    return parseFeedbackData(rows[0], TableBoundsSchema);
   } catch (error) {
     console.error("Failed to query inference table bounds:", error);
     return {
@@ -261,7 +262,7 @@ export async function queryEpisodeTable(params: {
         `Found duplicate episode IDs: ${rows.length - uniqueIds.size} duplicates detected`,
       );
     }
-    return rows;
+    return rows.map((row) => parseFeedbackData(row, episodeByIdSchema));
   } catch (error) {
     console.error(error);
     throw data("Error querying episode table", { status: 500 });
@@ -291,7 +292,7 @@ export async function queryEpisodeTableBounds(): Promise<TableBounds> {
         last_id: undefined,
       };
     }
-    return rows[0];
+    return parseFeedbackData(rows[0], TableBoundsSchema);
   } catch (error) {
     console.error(error);
     throw data("Error querying inference table bounds", { status: 500 });
@@ -386,7 +387,7 @@ export async function queryInferenceTableByEpisodeId(params: {
       query_params,
     });
     const rows = await resultSet.json<InferenceByIdRow>();
-    return rows;
+    return rows.map((row) => parseFeedbackData(row, inferenceByIdRowSchema));
   } catch (error) {
     console.error(error);
     throw data("Error querying inference table", { status: 500 });
@@ -411,7 +412,7 @@ LIMIT 1
       query_params: { episode_id },
     });
     const rows = await resultSet.json<TableBounds>();
-    return rows[0];
+    return parseFeedbackData(rows[0], TableBoundsSchema);
   } catch (error) {
     console.error(error);
     throw data("Error querying inference table bounds", { status: 500 });
