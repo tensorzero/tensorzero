@@ -9,6 +9,13 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 
+[models."llama-3.1-8b-instruct"]
+routing = ["fireworks"]
+
+[models."llama-3.1-8b-instruct".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -17,9 +24,14 @@ model_name = "gpt-4o-mini-2024-07-18"
 type = "json"
 output_schema = "functions/extract_entities/output_schema.json"
 
-[functions.dashboard_fixture_extract_entities.variants.baseline]
+[functions.dashboard_fixture_extract_entities.variants.gpt4o_mini_initial_prompt]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
+[functions.dashboard_fixture_extract_entities.variants.llama_8b_initial_prompt]
+type = "chat_completion"
+model = "llama-3.1-8b-instruct"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 
 [functions.dashboard_fixture_write_haiku]

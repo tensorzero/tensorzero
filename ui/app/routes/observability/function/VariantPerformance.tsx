@@ -158,7 +158,6 @@ export function transformVariantPerformances(
     });
     return row;
   });
-  console.log(data);
 
   return {
     data,
