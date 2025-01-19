@@ -155,10 +155,7 @@ export function getInferenceTableName(
   }
 }
 export const TableBoundsSchema = z.object({
-  first_id: z.string().optional(),
-  last_id: z.string().optional(),
+  first_id: z.string().uuid().optional(), // UUIDv7 string
+  last_id: z.string().uuid().optional(), // UUIDv7 string
 });
-export interface TableBounds {
-  first_id?: string; // UUIDv7 string
-  last_id?: string; // UUIDv7 string
-}
+export type TableBounds = z.infer<typeof TableBoundsSchema>;

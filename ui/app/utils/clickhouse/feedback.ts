@@ -4,7 +4,6 @@ import { data } from "react-router";
 import { clickhouseClient, InferenceJoinKey } from "./common";
 import type { MetricConfig } from "~/utils/config/metric";
 import { getInferenceJoinKey } from "~/utils/clickhouse/curation";
-import { parseFeedbackData } from "./helpers";
 
 export const booleanMetricFeedbackRowSchema = z.object({
   type: z.literal("boolean"),
@@ -107,9 +106,7 @@ export async function queryBooleanMetricsByTargetId(params: {
       query_params,
     });
     const rows = await resultSet.json<BooleanMetricFeedbackRow>();
-    return rows.map((row) =>
-      parseFeedbackData(row, booleanMetricFeedbackRowSchema),
-    );
+    return z.array(booleanMetricFeedbackRowSchema).parse(rows);
   } catch (error) {
     console.error(error);
     throw data("Error querying boolean metrics", { status: 500 });
@@ -144,7 +141,7 @@ export async function queryBooleanMetricFeedbackBoundsByTargetId(params: {
     ) {
       return { first_id: undefined, last_id: undefined };
     }
-    return parseFeedbackData(rows[0], TableBoundsSchema);
+    return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
     console.error(error);
     throw data("Error querying boolean metric feedback bounds", {
@@ -260,7 +257,7 @@ export async function queryCommentFeedbackByTargetId(params: {
       query_params,
     });
     const rows = await resultSet.json<CommentFeedbackRow>();
-    return rows.map((row) => parseFeedbackData(row, commentFeedbackRowSchema));
+    return z.array(commentFeedbackRowSchema).parse(rows);
   } catch (error) {
     console.error(error);
     throw data("Error querying comment feedback", { status: 500 });
@@ -295,7 +292,7 @@ export async function queryCommentFeedbackBoundsByTargetId(params: {
     ) {
       return { first_id: undefined, last_id: undefined };
     }
-    return parseFeedbackData(rows[0], TableBoundsSchema);
+    return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
     console.error(error);
     throw data("Error querying comment feedback bounds", { status: 500 });
@@ -406,9 +403,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
       query_params,
     });
     const rows = await resultSet.json<DemonstrationFeedbackRow>();
-    return rows.map((row) =>
-      parseFeedbackData(row, demonstrationFeedbackRowSchema),
-    );
+    return z.array(demonstrationFeedbackRowSchema).parse(rows);
   } catch (error) {
     console.error(error);
     throw data("Error querying demonstration feedback", { status: 500 });
@@ -443,7 +438,7 @@ export async function queryDemonstrationFeedbackBoundsByInferenceId(params: {
     ) {
       return { first_id: undefined, last_id: undefined };
     }
-    return parseFeedbackData(rows[0], TableBoundsSchema);
+    return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
     console.error(error);
     throw data("Error querying demonstration feedback bounds", {
@@ -568,9 +563,7 @@ export async function queryFloatMetricsByTargetId(params: {
       query_params,
     });
     const rows = await resultSet.json<FloatMetricFeedbackRow>();
-    return rows.map((row) =>
-      parseFeedbackData(row, floatMetricFeedbackRowSchema),
-    );
+    return z.array(floatMetricFeedbackRowSchema).parse(rows);
   } catch (error) {
     console.error(error);
     throw data("Error querying float metric feedback", { status: 500 });
@@ -605,7 +598,7 @@ export async function queryFloatMetricFeedbackBoundsByTargetId(params: {
     ) {
       return { first_id: undefined, last_id: undefined };
     }
-    return parseFeedbackData(rows[0], TableBoundsSchema);
+    return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
     console.error(error);
     throw data("Error querying float metric feedback bounds", {
@@ -917,10 +910,7 @@ export async function queryMetricsWithFeedback(params: {
       feedback_count: Number(metric.feedback_count),
     }));
 
-    return parseFeedbackData(
-      { metrics: validMetrics },
-      metricsWithFeedbackDataSchema,
-    );
+    return metricsWithFeedbackDataSchema.parse({ metrics: validMetrics });
   } catch (error) {
     console.error("Error fetching metrics with feedback:", error);
     throw data("Error fetching metrics with feedback", { status: 500 });
