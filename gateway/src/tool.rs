@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -31,7 +31,7 @@ pub struct Tool {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToolConfig {
-    Static(&'static StaticToolConfig),
+    Static(Arc<StaticToolConfig>),
     Dynamic(DynamicToolConfig),
     Implicit(ImplicitToolConfig),
     DynamicImplicit(DynamicImplicitToolConfig),
@@ -90,10 +90,10 @@ pub struct ToolCallConfigDatabaseInsert {
 
 impl ToolCallConfig {
     pub fn new(
-        function_tools: &'static [String],
-        function_tool_choice: &'static ToolChoice,
+        function_tools: &[String],
+        function_tool_choice: &ToolChoice,
         function_parallel_tool_calls: bool,
-        static_tools: &'static HashMap<String, StaticToolConfig>,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
         dynamic_tool_params: DynamicToolParams,
     ) -> Result<Option<Self>, Error> {
         // If `allowed_tools` is not provided, use the function's configured tools.
@@ -109,6 +109,7 @@ impl ToolCallConfig {
             .map(|tool_name| {
                 static_tools
                     .get(tool_name)
+                    .cloned()
                     .map(ToolConfig::Static)
                     .ok_or_else(|| {
                         Error::new(ErrorDetails::ToolNotFound {
@@ -525,11 +526,11 @@ mod tests {
     use serde_json::json;
 
     lazy_static! {
-        static ref TOOLS: HashMap<String, StaticToolConfig> = {
+        static ref TOOLS: HashMap<String, Arc<StaticToolConfig>> = {
             let mut map = HashMap::new();
             map.insert(
                 "get_temperature".to_string(),
-                StaticToolConfig {
+                Arc::new(StaticToolConfig {
                     name: "get_temperature".to_string(),
                     description: "Get the current temperature in a given location".to_string(),
                     #[allow(clippy::expect_used)]
@@ -543,11 +544,11 @@ mod tests {
                     }))
                     .expect("Failed to create schema for get_temperature"),
                     strict: true,
-                },
+                }),
             );
             map.insert(
                 "query_articles".to_string(),
-                StaticToolConfig {
+                Arc::new(StaticToolConfig {
                     name: "query_articles".to_string(),
                     description: "Query articles from a database based on given criteria"
                         .to_string(),
@@ -563,11 +564,11 @@ mod tests {
                     }))
                     .expect("Failed to create schema for query_articles"),
                     strict: false,
-                },
+                }),
             );
             map
         };
-        static ref EMPTY_TOOLS: HashMap<String, StaticToolConfig> = HashMap::new();
+        static ref EMPTY_TOOLS: HashMap<String, Arc<StaticToolConfig>> = HashMap::new();
         static ref EMPTY_FUNCTION_TOOLS: Vec<String> = vec![];
         static ref ALL_FUNCTION_TOOLS: Vec<String> =
             vec!["get_temperature".to_string(), "query_articles".to_string()];
