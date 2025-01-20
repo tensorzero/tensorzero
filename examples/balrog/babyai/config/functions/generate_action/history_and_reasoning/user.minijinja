@@ -1,8 +1,0 @@
-History:
-{{ history }}
-
-Current Observation:
-{{ observation }}
-
-First think about what's the best course of action step by step.
-Finally, provide a single output action at the end of the message.

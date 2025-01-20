@@ -1,9 +1,0 @@
-You are an agent playing a simple navigation game.
-The following are the possible actions you can take in the game:
-
-turn left: turn to the left
-turn right: turn to the right
-go forward: take one step forward
-pick up: pick up the object below you
-drop: drop the object that you are holding
-toggle: manipulate the object in front of you

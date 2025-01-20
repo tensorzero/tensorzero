@@ -9,73 +9,57 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 
-[models."ft:gpt-4o-mini-2024-07-18:tensorzero::ApNUdVRd"]
-routing = [ "openai",]
+[models."ft:gpt-4o-mini-2024-07-18:tensorzero::Arsyj2TT"]
+routing = [ "ft:gpt-4o-mini-2024-07-18:tensorzero::Arsyj2TT" ]
 
-[models."ft:gpt-4o-mini-2024-07-18:tensorzero::ApNUdVRd".providers.openai]
+[models."ft:gpt-4o-mini-2024-07-18:tensorzero::Arsyj2TT".providers."ft:gpt-4o-mini-2024-07-18:tensorzero::Arsyj2TT"]
 type = "openai"
-model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::ApNUdVRd"
+model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::Arsyj2TT"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[functions.generate_action]
-type = "chat"
-system_schema = "functions/generate_action/system_schema.json"
-user_schema = "functions/generate_action/user_schema.json"
-
-[functions.generate_action.variants.baseline]
-type = "chat_completion"
-weight = 1.0
-model = "my_gpt_4o_mini"
-system_template = "functions/generate_action/baseline/system.minijinja"
-user_template = "functions/generate_action/baseline/user.minijinja"
-
-[functions.generate_action.variants.no_mission]
-type = "chat_completion"
-weight = 1.0
-model = "my_gpt_4o_mini"
-system_template = "functions/generate_action/no_mission/system.minijinja"
-user_template = "functions/generate_action/no_mission/user.minijinja"
-
-[functions.generate_action.variants.history]
-type = "chat_completion"
-weight = 1.0
-model = "my_gpt_4o_mini"
-system_template = "functions/generate_action/history/system.minijinja"
-user_template = "functions/generate_action/history/user.minijinja"
-
-[functions.generate_action.variants.reasoning]
-type = "chat_completion"
-weight = 1.0
-model = "my_gpt_4o_mini"
-system_template = "functions/generate_action/reasoning/system.minijinja"
-user_template = "functions/generate_action/reasoning/user.minijinja"
-
-[functions.generate_action.variants.history_and_reasoning]
-type = "chat_completion"
-weight = 1.0
-model = "my_gpt_4o_mini"
-system_template = "functions/generate_action/history_and_reasoning/system.minijinja"
-user_template = "functions/generate_action/history_and_reasoning/user.minijinja"
-
-[functions.generate_action.variants.history_ft]
-type = "chat_completion"
-weight = 0
-model = "ft:gpt-4o-mini-2024-07-18:tensorzero::ApNUdVRd"
-system_template = "functions/generate_action/history/system.minijinja"
-user_template = "functions/generate_action/history/user.minijinja"
-
-[functions.extract_action]
+[functions.act]
 type = "json"
-output_schema = "functions/extract_action/output_schema.json"
+system_schema = "functions/act/system_schema.json"
+user_schema = "functions/act/user_schema.json"
+output_schema = "functions/act/output_schema.json"
 
-[functions.extract_action.variants.simple_variant]
+[functions.act.variants.baseline]
 type = "chat_completion"
 weight = 1.0
 model = "my_gpt_4o_mini"
-system_template = "functions/extract_action/simple_variant/system.minijinja"
+system_template = "functions/act/baseline/system.minijinja"
+user_template = "functions/act/baseline/user.minijinja"
+
+[functions.act.variants.history]
+type = "chat_completion"
+weight = 1.0
+model = "my_gpt_4o_mini"
+system_template = "functions/act/history/system.minijinja"
+user_template = "functions/act/history/user.minijinja"
+
+[functions.act.variants.reasoning]
+type = "chat_completion"
+weight = 1.0
+model = "my_gpt_4o_mini"
+system_template = "functions/act/reasoning/system.minijinja"
+user_template = "functions/act/reasoning/user.minijinja"
+
+[functions.act.variants.history_and_reasoning]
+type = "chat_completion"
+weight = 1.0
+model = "my_gpt_4o_mini"
+system_template = "functions/act/history_and_reasoning/system.minijinja"
+user_template = "functions/act/history_and_reasoning/user.minijinja"
+
+[functions.act.variants.history_and_reasoning_ft]
+type = "chat_completion"
+weight = 1.0
+model = "ft:gpt-4o-mini-2024-07-18:tensorzero::Arsyj2TT"
+system_template = "functions/act/history_and_reasoning/system.minijinja"
+user_template = "functions/act/history_and_reasoning/user.minijinja"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │

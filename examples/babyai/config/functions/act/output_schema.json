@@ -2,11 +2,15 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "properties": {
+      "thinking": {
+        "type": "string",
+        "description": "The agent's thought process."
+      },
       "action": {
         "type": "string",
-        "description": "The action to take."
+        "description": "The action for the agent to take."
       }
     },
     "required": ["action"],
     "additionalProperties": false
-  }
+}
