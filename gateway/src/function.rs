@@ -1,6 +1,7 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -21,6 +22,21 @@ use crate::variant::{InferenceConfig, Variant, VariantConfig};
 pub enum FunctionConfig {
     Chat(FunctionConfigChat),
     Json(FunctionConfigJson),
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum FunctionConfigType {
+    Chat,
+    Json,
+}
+
+impl FunctionConfig {
+    pub fn config_type(&self) -> FunctionConfigType {
+        match self {
+            FunctionConfig::Chat(_) => FunctionConfigType::Chat,
+            FunctionConfig::Json(_) => FunctionConfigType::Json,
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -87,9 +103,9 @@ impl FunctionConfig {
     /// well as the dynamic tool calling information passed in `dynamic_tool_params`.
     /// JSON functions do not get tool_configs even if they end up using tools under the hood.
     pub fn prepare_tool_config(
-        &'static self,
+        &self,
         dynamic_tool_params: DynamicToolParams,
-        static_tools: &'static HashMap<String, StaticToolConfig>,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
     ) -> Result<Option<ToolCallConfig>, Error> {
         match self {
             FunctionConfig::Chat(params) => Ok(ToolCallConfig::new(
@@ -135,10 +151,10 @@ impl FunctionConfig {
         inference_id: Uuid,
         content_blocks: Vec<ContentBlock>,
         usage: Usage,
-        model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+        model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         inference_config: &'request InferenceConfig<'a, 'request>,
         inference_params: InferenceParams,
-    ) -> Result<InferenceResult<'a>, Error> {
+    ) -> Result<InferenceResult, Error> {
         match self {
             FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(
                 ChatInferenceResult::new(
@@ -230,9 +246,9 @@ impl FunctionConfig {
     #[instrument(skip_all, fields(function_name = %function_name))]
     pub fn validate(
         &self,
-        static_tools: &HashMap<String, StaticToolConfig>,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
         models: &mut ModelTable,
-        embedding_models: &HashMap<String, EmbeddingModelConfig>,
+        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
     ) -> Result<(), Error> {
@@ -1106,7 +1122,7 @@ mod tests {
                         name.to_string(),
                         VariantConfig::ChatCompletion(ChatCompletionConfig {
                             weight,
-                            model: "model-name".to_string(),
+                            model: "model-name".into(),
                             ..Default::default()
                         }),
                     )
@@ -1274,8 +1290,8 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
             usage: usage.clone(),
-            model_provider_name: "model_provider_name",
-            model_name: "model_name",
+            model_provider_name: "model_provider_name".into(),
+            model_name: "model_name".into(),
             latency,
         };
         let templates = TemplateConfig::default();
@@ -1330,8 +1346,8 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
             usage: usage.clone(),
-            model_provider_name: "model_provider_name",
-            model_name: "model_name",
+            model_provider_name: "model_provider_name".into(),
+            model_name: "model_name".into(),
             latency,
         };
         let response = function_config
@@ -1378,8 +1394,8 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
             usage: usage.clone(),
-            model_provider_name: "model_provider_name",
-            model_name: "model_name",
+            model_provider_name: "model_provider_name".into(),
+            model_name: "model_name".into(),
             latency,
         };
         let response = function_config
@@ -1425,8 +1441,8 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
             usage: usage.clone(),
-            model_provider_name: "model_provider_name",
-            model_name: "model_name",
+            model_provider_name: "model_provider_name".into(),
+            model_name: "model_name".into(),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -1475,8 +1491,8 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
             usage: usage.clone(),
-            model_provider_name: "model_provider_name",
-            model_name: "model_name",
+            model_provider_name: "model_provider_name".into(),
+            model_name: "model_name".into(),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -1522,8 +1538,8 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
             usage: usage.clone(),
-            model_provider_name: "model_provider_name",
-            model_name: "model_name",
+            model_provider_name: "model_provider_name".into(),
+            model_name: "model_name".into(),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -1582,8 +1598,8 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
             usage: usage.clone(),
-            model_provider_name: "model_provider_name",
-            model_name: "model_name",
+            model_provider_name: "model_provider_name".into(),
+            model_name: "model_name".into(),
             latency,
         };
         let response = function_config
@@ -1627,8 +1643,8 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
             usage: usage.clone(),
-            model_provider_name: "model_provider_name",
-            model_name: "model_name",
+            model_provider_name: "model_provider_name".into(),
+            model_name: "model_name".into(),
             latency,
         };
         let response = function_config
@@ -1674,8 +1690,8 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
             usage: usage.clone(),
-            model_provider_name: "model_provider_name",
-            model_name: "model_name",
+            model_provider_name: "model_provider_name".into(),
+            model_name: "model_name".into(),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -1724,8 +1740,8 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
             usage: usage.clone(),
-            model_provider_name: "model_provider_name",
-            model_name: "model_name",
+            model_provider_name: "model_provider_name".into(),
+            model_name: "model_name".into(),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -1782,8 +1798,8 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: "content".to_string(),
             usage: usage.clone(),
-            model_provider_name: "model_provider_name",
-            model_name: "model_name",
+            model_provider_name: "model_provider_name".into(),
+            model_name: "model_name".into(),
             latency,
         };
         let response = function_config

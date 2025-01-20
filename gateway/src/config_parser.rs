@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::instrument;
 
 use crate::embeddings::EmbeddingModelConfig;
@@ -23,10 +24,10 @@ use crate::variant::{Variant, VariantConfig};
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
     pub models: ModelTable, // model name => model config
-    pub embedding_models: HashMap<String, EmbeddingModelConfig>, // embedding model name => embedding model config
-    pub functions: HashMap<String, FunctionConfig>,              // function name => function config
-    pub metrics: HashMap<String, MetricConfig>,                  // metric name => metric config
-    pub tools: HashMap<String, StaticToolConfig>,                // tool name => tool config
+    pub embedding_models: HashMap<Arc<str>, EmbeddingModelConfig>, // embedding model name => embedding model config
+    pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
+    pub metrics: HashMap<String, MetricConfig>,          // metric name => metric config
+    pub tools: HashMap<String, Arc<StaticToolConfig>>,   // tool name => tool config
     pub templates: TemplateConfig<'c>,
 }
 
@@ -107,14 +108,18 @@ impl<'c> Config<'c> {
         let functions = config
             .functions
             .into_iter()
-            .map(|(name, config)| config.load(&base_path).map(|c| (name, c)))
-            .collect::<Result<HashMap<String, FunctionConfig>, Error>>()?;
+            .map(|(name, config)| config.load(&base_path).map(|c| (name, Arc::new(c))))
+            .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
 
         let tools = config
             .tools
             .into_iter()
-            .map(|(name, config)| config.load(&base_path, name.clone()).map(|c| (name, c)))
-            .collect::<Result<HashMap<String, StaticToolConfig>, Error>>()?;
+            .map(|(name, config)| {
+                config
+                    .load(&base_path, name.clone())
+                    .map(|c| (name, Arc::new(c)))
+            })
+            .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
         let mut config = Config {
             gateway,
@@ -211,7 +216,10 @@ impl<'c> Config<'c> {
     }
 
     /// Get a function by name
-    pub fn get_function<'a>(&'a self, function_name: &str) -> Result<&'a FunctionConfig, Error> {
+    pub fn get_function<'a>(
+        &'a self,
+        function_name: &str,
+    ) -> Result<&'a Arc<FunctionConfig>, Error> {
         self.functions.get(function_name).ok_or_else(|| {
             Error::new(ErrorDetails::UnknownFunction {
                 name: function_name.to_string(),
@@ -219,8 +227,8 @@ impl<'c> Config<'c> {
         })
     }
 
-    /// Get a metric by name
-    pub fn get_metric<'a>(&'a self, metric_name: &str) -> Result<&'a MetricConfig, Error> {
+    /// Get a metric by name, producing an error if it's not found
+    pub fn get_metric_or_err<'a>(&'a self, metric_name: &str) -> Result<&'a MetricConfig, Error> {
         self.metrics.get(metric_name).ok_or_else(|| {
             Error::new(ErrorDetails::UnknownMetric {
                 name: metric_name.to_string(),
@@ -228,8 +236,13 @@ impl<'c> Config<'c> {
         })
     }
 
+    /// Get a metric by name
+    pub fn get_metric<'a>(&'a self, metric_name: &str) -> Option<&'a MetricConfig> {
+        self.metrics.get(metric_name)
+    }
+
     /// Get a tool by name
-    pub fn get_tool<'a>(&'a self, tool_name: &str) -> Result<&'a StaticToolConfig, Error> {
+    pub fn get_tool<'a>(&'a self, tool_name: &str) -> Result<&'a Arc<StaticToolConfig>, Error> {
         self.tools.get(tool_name).ok_or_else(|| {
             Error::new(ErrorDetails::UnknownTool {
                 name: tool_name.to_string(),
@@ -238,7 +251,7 @@ impl<'c> Config<'c> {
     }
 
     /// Get a model by name
-    pub fn get_model<'a>(&'a self, model_name: &str) -> Result<&'a ModelConfig, Error> {
+    pub fn get_model<'a>(&'a self, model_name: &Arc<str>) -> Result<&'a ModelConfig, Error> {
         self.models.get(model_name).ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: model_name.to_string(),
@@ -249,7 +262,7 @@ impl<'c> Config<'c> {
     /// Get all templates from the config
     /// The HashMap returned is a mapping from the path as given in the TOML file
     /// (relative to the directory containing the TOML file) to the path on the filesystem.
-    /// The former path is used as the name of the template for retrival by variants later.
+    /// The former path is used as the name of the template for retrieval by variants later.
     pub fn get_templates<P: AsRef<Path>>(&self, base_path: P) -> HashMap<String, PathBuf> {
         let mut templates = HashMap::new();
 
@@ -282,7 +295,7 @@ struct UninitializedConfig {
     #[serde(default)]
     pub models: ModelTable, // model name => model config
     #[serde(default)]
-    pub embedding_models: HashMap<String, EmbeddingModelConfig>, // embedding model name => embedding model config
+    pub embedding_models: HashMap<Arc<str>, EmbeddingModelConfig>, // embedding model name => embedding model config
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
@@ -548,7 +561,7 @@ mod tests {
         assert_eq!(prompt_b_json_mode, &JsonMode::On);
         // Check that the tool choice for get_weather is set to "specific" and the correct tool
         let function = config.functions.get("weather_helper").unwrap();
-        match function {
+        match &**function {
             FunctionConfig::Chat(chat_config) => {
                 assert_eq!(
                     chat_config.tool_choice,
@@ -562,7 +575,7 @@ mod tests {
             .functions
             .get("templates_with_variables_chat")
             .unwrap();
-        match function {
+        match &**function {
             FunctionConfig::Chat(chat_config) => {
                 if let Some(variant) = chat_config.variants.get("best_of_n") {
                     match variant {
@@ -588,7 +601,7 @@ mod tests {
             .functions
             .get("templates_with_variables_json")
             .unwrap();
-        match json_function {
+        match &**json_function {
             FunctionConfig::Json(json_config) => {
                 let variant = json_config.variants.get("variant_with_variables").unwrap();
                 match variant {
@@ -607,15 +620,10 @@ mod tests {
             .embedding_models
             .get("text-embedding-3-small")
             .unwrap();
-        assert_eq!(embedding_model.routing, vec!["openai"]);
+        assert_eq!(embedding_model.routing, vec!["openai".into()]);
         assert_eq!(embedding_model.providers.len(), 1);
         let provider = embedding_model.providers.get("openai").unwrap();
-        match provider {
-            EmbeddingProviderConfig::OpenAI(openai_config) => {
-                assert_eq!(openai_config.model_name, "text-embedding-3-small");
-            }
-            _ => panic!("Expected an OpenAI provider"),
-        }
+        assert!(matches!(provider, EmbeddingProviderConfig::OpenAI(_)));
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
@@ -908,7 +916,7 @@ mod tests {
         let result = Config::load_from_toml(config, base_path);
         let config = result.unwrap();
         // Check that the output schema is set to {}
-        let output_schema = match config.functions.get("json_with_schemas").unwrap() {
+        let output_schema = match &**config.functions.get("json_with_schemas").unwrap() {
             FunctionConfig::Json(json_config) => &json_config.output_schema,
             _ => panic!("Expected a JSON function"),
         };

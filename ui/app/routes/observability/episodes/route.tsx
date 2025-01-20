@@ -37,6 +37,18 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
   const { episodes, pageSize, bounds } = loaderData;
   const navigate = useNavigate();
 
+  if (episodes.length === 0) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <h2 className="mb-4 text-2xl font-semibold">Episodes</h2>
+        <div className="mb-6 h-px w-full bg-gray-200"></div>
+        <EpisodeSearchBar />
+        <div className="my-6 h-px w-full bg-gray-200"></div>
+        <div className="py-8 text-center text-gray-500">No episodes found</div>
+      </div>
+    );
+  }
+
   const topEpisode = episodes[0];
   const bottomEpisode = episodes[episodes.length - 1];
 
@@ -50,8 +62,10 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
   };
 
   // These are swapped because the table is sorted in descending order
-  const disablePrevious = bounds.last_id === topEpisode.last_inference_id;
-  const disableNext = bounds.first_id === bottomEpisode.last_inference_id;
+  const disablePrevious =
+    !bounds?.last_id || bounds.last_id === topEpisode.last_inference_id;
+  const disableNext =
+    !bounds?.first_id || bounds.first_id === bottomEpisode.last_inference_id;
 
   return (
     <div className="container mx-auto px-4 py-8">

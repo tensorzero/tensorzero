@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
@@ -30,7 +31,6 @@ use crate::inference::types::{
     RequestMessage, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
-use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
@@ -81,7 +81,7 @@ pub struct Params {
 }
 
 #[derive(Clone, Debug)]
-struct InferenceMetadata<'a> {
+struct InferenceMetadata {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
@@ -89,12 +89,12 @@ struct InferenceMetadata<'a> {
     pub dryrun: bool,
     pub start_time: Instant,
     pub inference_params: InferenceParams,
-    pub model_name: &'a str,
-    pub model_provider_name: &'a str,
+    pub model_name: Arc<str>,
+    pub model_provider_name: Arc<str>,
     pub raw_request: String,
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
-    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
@@ -140,7 +140,7 @@ pub enum InferenceOutput {
     )
 )]
 pub async fn inference(
-    config: &'static Config<'static>,
+    config: Arc<Config<'static>>,
     http_client: reqwest::Client,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
@@ -148,7 +148,7 @@ pub async fn inference(
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     // Get the function config or return an error if it doesn't exist
-    let function = config.get_function(&params.function_name)?;
+    let function = config.get_function(&params.function_name)?.clone();
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =
@@ -244,7 +244,7 @@ pub async fn inference(
                 .infer_stream(
                     &params.input,
                     &inference_models,
-                    function,
+                    function.as_ref(),
                     &inference_config,
                     &inference_clients,
                     variant_inference_params,
@@ -287,7 +287,7 @@ pub async fn inference(
 
             let stream = create_stream(
                 function,
-                &config.templates,
+                config.clone(),
                 inference_metadata,
                 chunk,
                 stream,
@@ -300,7 +300,7 @@ pub async fn inference(
                 .infer(
                     &params.input,
                     &inference_models,
-                    function,
+                    function.as_ref(),
                     &inference_config,
                     &inference_clients,
                     variant_inference_params,
@@ -357,15 +357,16 @@ pub async fn inference(
     .into())
 }
 
-fn create_stream<'a>(
-    function: &'static FunctionConfig,
-    templates: &'static TemplateConfig<'static>,
-    metadata: InferenceMetadata<'static>,
+fn create_stream(
+    function: Arc<FunctionConfig>,
+    config: Arc<Config<'static>>,
+    metadata: InferenceMetadata,
     first_chunk: InferenceResultChunk,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-) -> impl Stream<Item = Option<InferenceResponseChunk>> + Send + 'a {
+) -> impl Stream<Item = Option<InferenceResponseChunk>> + Send {
     async_stream::stream! {
+        let templates = &config.templates;
         let mut buffer = vec![first_chunk.clone()];
 
         // Send the first chunk
@@ -495,7 +496,7 @@ pub struct InferenceDatabaseInsertMetadata {
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     input: Input,
-    result: InferenceResult<'_>,
+    result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
     let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
@@ -640,7 +641,7 @@ pub struct InferenceClients<'a> {
 #[derive(Debug)]
 pub struct InferenceModels<'a> {
     pub models: &'a ModelTable,
-    pub embedding_models: &'a HashMap<String, EmbeddingModelConfig>,
+    pub embedding_models: &'a HashMap<Arc<str>, EmbeddingModelConfig>,
 }
 
 /// InferenceParams is the top-level struct for inference parameters.
@@ -738,8 +739,8 @@ mod tests {
             dryrun: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),
-            model_name: "test_model",
-            model_provider_name: "test_provider",
+            model_name: "test_model".into(),
+            model_provider_name: "test_provider".into(),
             raw_request: raw_request.clone(),
             system: None,
             input_messages: vec![],
@@ -788,8 +789,8 @@ mod tests {
             dryrun: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),
-            model_name: "test_model",
-            model_provider_name: "test_provider",
+            model_name: "test_model".into(),
+            model_provider_name: "test_provider".into(),
             raw_request: raw_request.clone(),
             system: None,
             input_messages: vec![],

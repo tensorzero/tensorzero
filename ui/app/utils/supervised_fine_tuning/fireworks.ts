@@ -39,9 +39,9 @@ export const FIREWORKS_API_KEY = process.env.FIREWORKS_API_KEY || logError();
 export const FIREWORKS_ACCOUNT_ID =
   process.env.FIREWORKS_ACCOUNT_ID || logError();
 
-// Log error and return empty string if env vars not set
+// Log warning and return empty string if env vars not set
 function logError(): string {
-  console.error("FIREWORKS_API_KEY and FIREWORKS_ACCOUNT_ID must be set");
+  console.warn("FIREWORKS_API_KEY and FIREWORKS_ACCOUNT_ID are not set");
   return "";
 }
 
@@ -516,7 +516,7 @@ export function tensorzero_inference_to_fireworks_messages(
 }
 
 // Creates a dataset record in Fireworks.
-// This is a placeholder for the dataset that gets uploaded in a subsequest call.
+// This is a placeholder for the dataset that gets uploaded in a subsequent call.
 // Essentially all this does is make an ID in Fireworks that we reuse.
 // We'll use a UUIDv7
 async function create_dataset_record(accountId: string, exampleCount: number) {

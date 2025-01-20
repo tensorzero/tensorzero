@@ -49,9 +49,9 @@ const PROVIDER_TYPE: &str = "openai";
 
 #[derive(Debug)]
 pub struct OpenAIProvider {
-    pub model_name: String,
-    pub api_base: Option<Url>,
-    pub credentials: OpenAICredentials,
+    model_name: String,
+    api_base: Option<Url>,
+    credentials: OpenAICredentials,
 }
 
 impl OpenAIProvider {
@@ -124,7 +124,7 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = OpenAIRequest::new(&self.model_name, request)?;
-        let request_url = get_chat_url(self.api_base.as_ref())?;
+        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client
@@ -216,7 +216,7 @@ impl InferenceProvider for OpenAIProvider {
                 message: format!("Error serializing request: {e}"),
             })
         })?;
-        let request_url = get_chat_url(self.api_base.as_ref())?;
+        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut request_builder = http_client
@@ -268,7 +268,10 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
-        let request_url = get_file_url(self.api_base.as_ref(), None)?;
+        let request_url = get_file_url(
+            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
+            None,
+        )?;
         let inference_ids: Vec<Uuid> = requests.iter().map(|_| Uuid::now_v7()).collect();
         let batch_requests: Result<Vec<OpenAIBatchFileInput>, Error> = requests
             .iter()
@@ -345,7 +348,8 @@ impl InferenceProvider for OpenAIProvider {
         let file_id = response.id;
         let batch_request = OpenAIBatchRequest::new(&file_id);
         let raw_request = serde_json::to_string(&batch_request).map_err(|_| Error::new(ErrorDetails::Serialization { message: "Error serializing OpenAI batch request. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string() }))?;
-        let request_url = get_batch_url(self.api_base.as_ref())?;
+        let request_url =
+            get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let mut request_builder = client.post(request_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
@@ -423,7 +427,8 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         let batch_params = OpenAIBatchParams::from_ref(&batch_request.batch_params)?;
-        let mut request_url = get_batch_url(self.api_base.as_ref())?;
+        let mut request_url =
+            get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         request_url
             .path_segments_mut()
             .map_err(|_| {
@@ -511,7 +516,8 @@ impl EmbeddingProvider for OpenAIProvider {
     ) -> Result<EmbeddingProviderResponse, Error> {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let request_body = OpenAIEmbeddingRequest::new(&self.model_name, &request.input);
-        let request_url = get_embedding_url(self.api_base.as_ref())?;
+        let request_url =
+            get_embedding_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let start_time = Instant::now();
         let mut request_builder = client
             .post(request_url)
@@ -638,7 +644,10 @@ impl OpenAIProvider {
         raw_request: String,
         raw_response: String,
     ) -> Result<ProviderBatchInferenceResponse, Error> {
-        let file_url = get_file_url(self.api_base.as_ref(), Some(file_id))?;
+        let file_url = get_file_url(
+            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
+            Some(file_id),
+        )?;
         let api_key = self.credentials.get_api_key(credentials)?;
         let mut request_builder = client.get(file_url);
         if let Some(api_key) = api_key {
@@ -719,8 +728,7 @@ impl OpenAIProvider {
     }
 }
 
-pub(super) fn get_chat_url(base_url: Option<&Url>) -> Result<Url, Error> {
-    let base_url = base_url.unwrap_or(&OPENAI_DEFAULT_BASE_URL);
+pub(super) fn get_chat_url(base_url: &Url) -> Result<Url, Error> {
     let mut url = base_url.clone();
     if !url.path().ends_with('/') {
         url.set_path(&format!("{}/", url.path()));
@@ -732,8 +740,7 @@ pub(super) fn get_chat_url(base_url: Option<&Url>) -> Result<Url, Error> {
     })
 }
 
-fn get_file_url(base_url: Option<&Url>, file_id: Option<&str>) -> Result<Url, Error> {
-    let base_url = base_url.unwrap_or(&OPENAI_DEFAULT_BASE_URL);
+fn get_file_url(base_url: &Url, file_id: Option<&str>) -> Result<Url, Error> {
     let mut url = base_url.clone();
     if !url.path().ends_with('/') {
         url.set_path(&format!("{}/", url.path()));
@@ -750,8 +757,7 @@ fn get_file_url(base_url: Option<&Url>, file_id: Option<&str>) -> Result<Url, Er
     })
 }
 
-fn get_batch_url(base_url: Option<&Url>) -> Result<Url, Error> {
-    let base_url = base_url.unwrap_or(&OPENAI_DEFAULT_BASE_URL);
+fn get_batch_url(base_url: &Url) -> Result<Url, Error> {
     let mut url = base_url.clone();
     if !url.path().ends_with('/') {
         url.set_path(&format!("{}/", url.path()));
@@ -763,8 +769,7 @@ fn get_batch_url(base_url: Option<&Url>) -> Result<Url, Error> {
     })
 }
 
-fn get_embedding_url(base_url: Option<&Url>) -> Result<Url, Error> {
-    let base_url = base_url.unwrap_or(&OPENAI_DEFAULT_BASE_URL);
+fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
     let mut url = base_url.clone();
     if !url.path().ends_with('/') {
         url.set_path(&format!("{}/", url.path()));
@@ -1875,30 +1880,23 @@ mod tests {
 
     #[test]
     fn test_get_chat_url() {
-        // Test with default URL
-        let default_url = get_chat_url(None).unwrap();
-        assert_eq!(
-            default_url.as_str(),
-            "https://api.openai.com/v1/chat/completions"
-        );
-
         // Test with custom base URL
         let custom_base = "https://custom.openai.com/api/";
-        let custom_url = get_chat_url(Some(&Url::parse(custom_base).unwrap())).unwrap();
+        let custom_url = get_chat_url(&Url::parse(custom_base).unwrap()).unwrap();
         assert_eq!(
             custom_url.as_str(),
             "https://custom.openai.com/api/chat/completions"
         );
 
         // Test with URL without trailing slash
-        let unjoinable_url = get_chat_url(Some(&Url::parse("https://example.com").unwrap()));
+        let unjoinable_url = get_chat_url(&Url::parse("https://example.com").unwrap());
         assert!(unjoinable_url.is_ok());
         assert_eq!(
             unjoinable_url.unwrap().as_str(),
             "https://example.com/chat/completions"
         );
         // Test with URL that can't be joined
-        let unjoinable_url = get_chat_url(Some(&Url::parse("https://example.com/foo").unwrap()));
+        let unjoinable_url = get_chat_url(&Url::parse("https://example.com/foo").unwrap());
         assert!(unjoinable_url.is_ok());
         assert_eq!(
             unjoinable_url.unwrap().as_str(),
@@ -3073,7 +3071,7 @@ mod tests {
         // Test Case 1: Base URL without trailing slash
         let base_url = Url::parse("https://api.openai.com/v1").unwrap();
         let file_id = Some("file123");
-        let result = get_file_url(Some(&base_url), file_id).unwrap();
+        let result = get_file_url(&base_url, file_id).unwrap();
         assert_eq!(
             result.as_str(),
             "https://api.openai.com/v1/files/file123/content"
@@ -3082,7 +3080,7 @@ mod tests {
         // Test Case 2: Base URL with trailing slash
         let base_url = Url::parse("https://api.openai.com/v1/").unwrap();
         let file_id = Some("file456");
-        let result = get_file_url(Some(&base_url), file_id).unwrap();
+        let result = get_file_url(&base_url, file_id).unwrap();
         assert_eq!(
             result.as_str(),
             "https://api.openai.com/v1/files/file456/content"
@@ -3091,38 +3089,26 @@ mod tests {
         // Test Case 3: Base URL with custom domain
         let base_url = Url::parse("https://custom-openai.example.com").unwrap();
         let file_id = Some("file789");
-        let result = get_file_url(Some(&base_url), file_id).unwrap();
+        let result = get_file_url(&base_url, file_id).unwrap();
         assert_eq!(
             result.as_str(),
             "https://custom-openai.example.com/files/file789/content"
         );
 
-        // Test Case 4: None base URL (should use default)
-        let file_id = Some("file101");
-        let result = get_file_url(None, file_id).unwrap();
-        assert_eq!(
-            result.as_str(),
-            "https://api.openai.com/v1/files/file101/content"
-        );
-
-        // Test Case 5: Base URL without trailing slash, no file ID
+        // Test Case 4: Base URL without trailing slash, no file ID
         let base_url = Url::parse("https://api.openai.com/v1").unwrap();
-        let result = get_file_url(Some(&base_url), None).unwrap();
+        let result = get_file_url(&base_url, None).unwrap();
         assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
 
-        // Test Case 6: Base URL with trailing slash, no file ID
+        // Test Case 5: Base URL with trailing slash, no file ID
         let base_url = Url::parse("https://api.openai.com/v1/").unwrap();
-        let result = get_file_url(Some(&base_url), None).unwrap();
+        let result = get_file_url(&base_url, None).unwrap();
         assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
 
-        // Test Case 7: Custom domain base URL, no file ID
+        // Test Case 6: Custom domain base URL, no file ID
         let base_url = Url::parse("https://custom-openai.example.com").unwrap();
-        let result = get_file_url(Some(&base_url), None).unwrap();
+        let result = get_file_url(&base_url, None).unwrap();
         assert_eq!(result.as_str(), "https://custom-openai.example.com/files");
-
-        // Test Case 8: None base URL (default), no file ID
-        let result = get_file_url(None, None).unwrap();
-        assert_eq!(result.as_str(), "https://api.openai.com/v1/files");
     }
 
     #[test]

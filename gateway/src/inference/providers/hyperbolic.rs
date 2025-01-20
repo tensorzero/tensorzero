@@ -37,8 +37,8 @@ const PROVIDER_TYPE: &str = "hyperbolic";
 
 #[derive(Debug)]
 pub struct HyperbolicProvider {
-    pub model_name: String,
-    pub credentials: HyperbolicCredentials,
+    model_name: String,
+    credentials: HyperbolicCredentials,
 }
 
 impl HyperbolicProvider {
@@ -111,7 +111,7 @@ impl InferenceProvider for HyperbolicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = HyperbolicRequest::new(&self.model_name, request)?;
-        let request_url = get_chat_url(Some(&HYPERBOLIC_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(&HYPERBOLIC_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let request_builder = http_client
@@ -197,7 +197,7 @@ impl InferenceProvider for HyperbolicProvider {
                 message: format!("Error serializing request: {e}"),
             })
         })?;
-        let request_url = get_chat_url(Some(&HYPERBOLIC_DEFAULT_BASE_URL))?;
+        let request_url = get_chat_url(&HYPERBOLIC_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let event_source = http_client

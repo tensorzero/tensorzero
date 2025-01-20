@@ -3,6 +3,7 @@ use axum::Router;
 use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 
@@ -23,12 +24,12 @@ async fn main() {
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Load config
-    let config: &'static Config = Box::leak(Box::new(
-        Config::load().expect_pretty("Failed to load config"),
-    ));
+    let config: Arc<Config> = Arc::new(Config::load().expect_pretty("Failed to load config"));
 
     // Initialize AppState
-    let app_state = gateway_util::AppStateData::new(config).await;
+    let app_state = gateway_util::AppStateData::new(config.clone())
+        .await
+        .expect_pretty("Failed to initialize AppState");
 
     // Run ClickHouse migrations (if any)
     if !config.gateway.disable_observability {
@@ -79,6 +80,8 @@ async fn main() {
         .expect_pretty(&format!(
             "Failed to bind to socket address `{bind_address}`"
         ));
+
+    tracing::info!("TensorZero Gateway is listening on {}", bind_address);
 
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())

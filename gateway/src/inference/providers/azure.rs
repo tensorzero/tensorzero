@@ -29,9 +29,9 @@ const PROVIDER_TYPE: &str = "azure";
 
 #[derive(Debug)]
 pub struct AzureProvider {
-    pub deployment_id: String,
-    pub endpoint: Url,
-    pub credentials: AzureCredentials,
+    deployment_id: String,
+    endpoint: Url,
+    credentials: AzureCredentials,
 }
 
 impl AzureProvider {

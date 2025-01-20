@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
-import { checkClickhouseConnection } from "./common";
+import { checkClickHouseConnection } from "./common";
 
-test("checkClickhouseConnection", async () => {
-  const result = await checkClickhouseConnection();
+test("checkClickHouseConnection", async () => {
+  const result = await checkClickHouseConnection();
   expect(result).toBe(true);
 });

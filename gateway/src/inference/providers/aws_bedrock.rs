@@ -38,7 +38,7 @@ const PROVIDER_TYPE: &str = "aws_bedrock";
 // NB: If you add `Clone` someday, you'll need to wrap client in Arc
 #[derive(Debug)]
 pub struct AWSBedrockProvider {
-    pub model_id: String,
+    model_id: String,
     client: aws_sdk_bedrockruntime::Client,
 }
 

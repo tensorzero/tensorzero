@@ -39,3 +39,17 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+  ui:
+    container_name: tensorzero-ui-chess-puzzles-mixture-of-n-sampling
+    image: tensorzero/ui
+    volumes:
+      - ./config:/app/config:ro
+    environment:
+      - CLICKHOUSE_URL=http://tensorzero-chess-puzzles-mixture-of-n-sampling:8123/tensorzero
+    env_file:
+      - ${ENV_FILE:-.env}
+    ports:
+      - "4000:4000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy

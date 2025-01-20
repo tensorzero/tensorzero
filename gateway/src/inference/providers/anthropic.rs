@@ -43,8 +43,8 @@ fn default_api_key_location() -> CredentialLocation {
 
 #[derive(Debug)]
 pub struct AnthropicProvider {
-    pub model_name: String,
-    pub credentials: AnthropicCredentials,
+    model_name: String,
+    credentials: AnthropicCredentials,
 }
 
 impl AnthropicProvider {
@@ -1735,7 +1735,7 @@ mod tests {
             content: vec![AnthropicContentBlock::Text {
                 text: "Response text".to_string(),
             }],
-            model: "model-name".to_string(),
+            model: "model-name".into(),
             stop_reason: Some("stop reason".to_string()),
             stop_sequence: Some("stop sequence".to_string()),
             usage: AnthropicUsage {
@@ -1795,7 +1795,7 @@ mod tests {
                 name: "get_temperature".to_string(),
                 input: json!({"location": "New York"}),
             }],
-            model: "model-name".to_string(),
+            model: "model-name".into(),
             stop_reason: Some("tool_call".to_string()),
             stop_sequence: None,
             usage: AnthropicUsage {
@@ -1862,7 +1862,7 @@ mod tests {
                     input: json!({"location": "London"}),
                 },
             ],
-            model: "model-name".to_string(),
+            model: "model-name".into(),
             stop_reason: None,
             stop_sequence: None,
             usage: AnthropicUsage {

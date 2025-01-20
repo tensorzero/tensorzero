@@ -36,11 +36,10 @@ const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
 #[derive(Debug)]
 pub struct GCPVertexAnthropicProvider {
-    pub request_url: String,
-    pub streaming_request_url: String,
-    pub audience: String,
-    pub credentials: GCPVertexCredentials,
-    pub model_id: String,
+    request_url: String,
+    streaming_request_url: String,
+    audience: String,
+    credentials: GCPVertexCredentials,
 }
 
 impl GCPVertexAnthropicProvider {
@@ -63,7 +62,6 @@ impl GCPVertexAnthropicProvider {
             streaming_request_url,
             audience,
             credentials: provider_credentials,
-            model_id,
         })
     }
 }
@@ -1660,7 +1658,7 @@ mod tests {
             content: vec![GCPVertexAnthropicContentBlock::Text {
                 text: "Response text".to_string(),
             }],
-            model: "model-name".to_string(),
+            model: "model-name".into(),
             stop_reason: Some("stop reason".to_string()),
             stop_sequence: Some("stop sequence".to_string()),
             usage: GCPVertexAnthropic {
@@ -1740,7 +1738,7 @@ mod tests {
                 name: "get_temperature".to_string(),
                 input: json!({"location": "New York"}),
             }],
-            model: "model-name".to_string(),
+            model: "model-name".into(),
             stop_reason: Some("tool_call".to_string()),
             stop_sequence: None,
             usage: GCPVertexAnthropic {
@@ -1827,7 +1825,7 @@ mod tests {
                     input: json!({"location": "London"}),
                 },
             ],
-            model: "model-name".to_string(),
+            model: "model-name".into(),
             stop_reason: None,
             stop_sequence: None,
             usage: GCPVertexAnthropic {

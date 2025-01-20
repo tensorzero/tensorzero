@@ -89,6 +89,19 @@ export const OpenAIProviderConfigSchema = z.object({
 });
 export type OpenAIProviderConfig = z.infer<typeof OpenAIProviderConfigSchema>;
 
+export const TGIProviderConfigSchema = z.object({
+  type: z.literal("tgi"),
+  api_base: z.string().url(),
+});
+export type TGIProviderConfig = z.infer<typeof TGIProviderConfigSchema>;
+
+export const SGLangProviderConfigSchema = z.object({
+  type: z.literal("sglang"),
+  model_name: z.string(),
+  api_base: z.string().url(),
+});
+export type SGLangProviderConfig = z.infer<typeof SGLangProviderConfigSchema>;
+
 export const TogetherProviderConfigSchema = z.object({
   type: z.literal("together"),
   model_name: z.string(),
@@ -123,6 +136,8 @@ export const ProviderConfigSchema = z.discriminatedUnion("type", [
   HyperbolicProviderConfigSchema,
   MistralProviderConfigSchema,
   OpenAIProviderConfigSchema,
+  SGLangProviderConfigSchema,
+  TGIProviderConfigSchema,
   TogetherProviderConfigSchema,
   VLLMProviderConfigSchema,
   XAIProviderConfigSchema,

@@ -6,6 +6,7 @@ use serde::Deserialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
@@ -57,7 +58,7 @@ pub enum JsonMode {
 #[derive(Debug)]
 pub struct InferenceConfig<'a, 'request> {
     pub tool_config: Option<&'request ToolCallConfig>,
-    pub templates: &'a TemplateConfig<'a>,
+    pub templates: &'request TemplateConfig<'a>,
     pub dynamic_output_schema: Option<&'request DynamicJSONSchema>,
     pub function_name: &'request str,
     pub variant_name: Option<&'request str>,
@@ -90,49 +91,42 @@ impl<'a> BatchInferenceConfig<'a> {
 }
 
 #[derive(Debug)]
-pub struct ModelUsedInfo<'a> {
-    pub model_name: &'a str,
-    pub model_provider_name: &'a str,
+pub struct ModelUsedInfo {
+    pub model_name: Arc<str>,
+    pub model_provider_name: Arc<str>,
     pub raw_request: String,
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
-    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata<'a>>,
+    pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
 }
 
 pub trait Variant {
     async fn infer<'a: 'request, 'request>(
-        &'a self,
+        &self,
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
-        clients: &'request InferenceClients<'request>,
-        inference_params: InferenceParams,
-    ) -> Result<InferenceResult<'a>, Error>;
-
-    async fn infer_stream<'request>(
-        &'static self,
-        input: &Input,
-        models: &'request InferenceModels<'static>,
-        function: &'static FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
-    ) -> Result<
-        (
-            InferenceResultChunk,
-            InferenceResultStream,
-            ModelUsedInfo<'static>,
-        ),
-        Error,
-    >;
+    ) -> Result<InferenceResult, Error>;
+
+    async fn infer_stream<'request>(
+        &self,
+        input: &Input,
+        models: &'request InferenceModels<'_>,
+        function: &FunctionConfig,
+        inference_config: &'request InferenceConfig<'static, 'request>,
+        clients: &'request InferenceClients<'request>,
+        inference_params: InferenceParams,
+    ) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error>;
 
     fn validate(
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<String, EmbeddingModelConfig>,
+        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -168,14 +162,14 @@ impl Variant for VariantConfig {
         skip_all
     )]
     async fn infer<'a: 'request, 'request>(
-        &'a self,
+        &self,
         input: &Input,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'a, 'request>,
+        inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
-    ) -> Result<InferenceResult<'a>, Error> {
+    ) -> Result<InferenceResult, Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
@@ -233,22 +227,15 @@ impl Variant for VariantConfig {
         fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name.unwrap_or("")),
         skip_all
     )]
-    async fn infer_stream<'request>(
-        &'static self,
+    async fn infer_stream<'a, 'request>(
+        &self,
         input: &Input,
-        models: &'request InferenceModels<'static>,
-        function: &'static FunctionConfig,
+        models: &'request InferenceModels<'a>,
+        function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
-    ) -> Result<
-        (
-            InferenceResultChunk,
-            InferenceResultStream,
-            ModelUsedInfo<'static>,
-        ),
-        Error,
-    > {
+    ) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
@@ -335,7 +322,7 @@ impl Variant for VariantConfig {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<String, EmbeddingModelConfig>,
+        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -450,7 +437,7 @@ where
 /// Encapsulates all arguments for the `infer_model_request` function
 struct InferModelRequestArgs<'a, 'request> {
     request: ModelInferenceRequest<'request>,
-    model_name: &'a str,
+    model_name: Arc<str>,
     model_config: &'a ModelConfig,
     function: &'a FunctionConfig,
     inference_config: &'request InferenceConfig<'a, 'request>,
@@ -463,7 +450,7 @@ struct InferModelRequestArgs<'a, 'request> {
 #[instrument(fields(model_name = %args.model_name), skip_all)]
 async fn infer_model_request<'a, 'request>(
     args: InferModelRequestArgs<'a, 'request>,
-) -> Result<InferenceResult<'a>, Error> {
+) -> Result<InferenceResult, Error> {
     let model_inference_response = (|| async {
         args.model_config
             .infer(
@@ -498,20 +485,13 @@ async fn infer_model_request<'a, 'request>(
 #[instrument(fields(model_name = %model_name), skip_all)]
 async fn infer_model_request_stream<'request>(
     request: ModelInferenceRequest<'request>,
-    model_name: &'static str,
-    model_config: &'static ModelConfig,
-    function: &'static FunctionConfig,
+    model_name: Arc<str>,
+    model_config: &ModelConfig,
+    function: &FunctionConfig,
     clients: &'request InferenceClients<'request>,
     inference_params: InferenceParams,
-    retry_config: &'static RetryConfig,
-) -> Result<
-    (
-        InferenceResultChunk,
-        InferenceResultStream,
-        ModelUsedInfo<'static>,
-    ),
-    Error,
-> {
+    retry_config: RetryConfig,
+) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error> {
     let (first_chunk, stream, raw_request, model_provider_name) = (|| async {
         model_config
             .infer_stream(&request, clients.http_client, clients.credentials)
@@ -530,13 +510,14 @@ async fn infer_model_request_stream<'request>(
         system,
         input_messages,
     };
-    let first_chunk = InferenceResultChunk::new(first_chunk, function);
+    let config_type = function.config_type();
+    let first_chunk = InferenceResultChunk::new(first_chunk, config_type);
     let stream =
-        stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, function)));
+        stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, config_type)));
     Ok((first_chunk, Box::pin(stream), model_used_info))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Copy, Clone)]
 pub struct RetryConfig {
     pub num_retries: usize,
     pub max_delay_s: f32,
@@ -865,15 +846,15 @@ mod tests {
 
         // Create a model config with the dummy provider
         let model_config = ModelConfig {
-            routing: vec![model_name.to_string()],
-            providers: HashMap::from([(model_name.to_string(), dummy_provider_config)]),
+            routing: vec![model_name.into()],
+            providers: HashMap::from([(model_name.into(), dummy_provider_config)]),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
         // Create the arguments struct
         let args = InferModelRequestArgs {
             request: model_request.clone(),
-            model_name,
+            model_name: model_name.into(),
             model_config: &model_config,
             function: &function_config_chat,
             inference_config: &inference_config,
@@ -894,13 +875,13 @@ mod tests {
                 assert_eq!(chat_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(chat_result.model_inference_results.len(), 1);
                 assert_eq!(
-                    chat_result.model_inference_results[0].model_name,
+                    &*chat_result.model_inference_results[0].model_name,
                     model_name
                 );
                 // Need to recreate to make this ContentBlock rather than ContentBlockOutput
                 let expected_content = vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()];
                 assert_eq!(
-                    chat_result.model_inference_results[0].output,
+                    &*chat_result.model_inference_results[0].output,
                     expected_content
                 );
             }
@@ -959,14 +940,14 @@ mod tests {
         });
 
         let model_config_json = ModelConfig {
-            routing: vec![model_name_json.to_string()],
-            providers: HashMap::from([(model_name_json.to_string(), dummy_provider_config_json)]),
+            routing: vec![model_name_json.into()],
+            providers: HashMap::from([(model_name_json.into(), dummy_provider_config_json)]),
         };
 
         // Create the arguments struct
         let args = InferModelRequestArgs {
             request: model_request_json.clone(),
-            model_name: model_name_json,
+            model_name: model_name_json.into(),
             model_config: &model_config_json,
             function: &function_config_json,
             inference_config: &inference_config,
@@ -987,7 +968,7 @@ mod tests {
                 assert_eq!(json_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 assert_eq!(
-                    json_result.model_inference_results[0].model_name,
+                    &*json_result.model_inference_results[0].model_name,
                     model_name_json
                 );
                 assert_eq!(
@@ -1006,14 +987,14 @@ mod tests {
         });
 
         let error_model_config = ModelConfig {
-            routing: vec![error_model_name.to_string()],
-            providers: HashMap::from([(error_model_name.to_string(), error_provider_config)]),
+            routing: vec![error_model_name.into()],
+            providers: HashMap::from([(error_model_name.into(), error_provider_config)]),
         };
 
         // Create the arguments struct
         let args = InferModelRequestArgs {
             request: model_request.clone(),
-            model_name: error_model_name,
+            model_name: error_model_name.into(),
             model_config: &error_model_config,
             function: &function_config_chat,
             inference_config: &inference_config,
@@ -1102,10 +1083,10 @@ mod tests {
 
         // Create a model config with the dummy provider
         let model_config = ModelConfig {
-            routing: vec![error_model_name.to_string(), model_name.to_string()],
+            routing: vec![error_model_name.into(), model_name.into()],
             providers: HashMap::from([
-                (error_model_name.to_string(), error_provider_config),
-                (model_name.to_string(), dummy_provider_config),
+                (error_model_name.into(), error_provider_config),
+                (model_name.into(), dummy_provider_config),
             ]),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
@@ -1113,7 +1094,7 @@ mod tests {
         // Create the arguments struct
         let args = InferModelRequestArgs {
             request: model_request.clone(),
-            model_name,
+            model_name: model_name.into(),
             model_config: &model_config,
             function: &function_config_chat,
             inference_config: &inference_config,
@@ -1134,7 +1115,7 @@ mod tests {
                 assert_eq!(chat_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(chat_result.model_inference_results.len(), 1);
                 assert_eq!(
-                    chat_result.model_inference_results[0].model_name,
+                    &*chat_result.model_inference_results[0].model_name,
                     model_name
                 );
                 // Need to recreate to make this ContentBlock rather than ContentBlockOutput
@@ -1162,9 +1143,9 @@ mod tests {
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
         };
-        let retry_config = Box::leak(Box::new(RetryConfig::default()));
+        let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
-        let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
+        let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
@@ -1172,7 +1153,7 @@ mod tests {
             tools: vec![],
             tool_choice: crate::tool::ToolChoice::Auto,
             parallel_tool_calls: false,
-        })));
+        });
 
         // Create an input message
         let messages = vec![RequestMessage {
@@ -1183,13 +1164,13 @@ mod tests {
 
         // Create a dummy model config with a provider
         let dummy_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "good".to_string(),
+            model_name: "good".into(),
             ..Default::default()
         });
 
         let model_config = Box::leak(Box::new(ModelConfig {
-            routing: vec!["good_provider".to_string()],
-            providers: HashMap::from([("good_provider".to_string(), dummy_provider_config)]),
+            routing: vec!["good_provider".into()],
+            providers: HashMap::from([("good_provider".into(), dummy_provider_config)]),
         }));
 
         // Prepare the model inference request
@@ -1215,9 +1196,9 @@ mod tests {
         // Call infer_model_request_stream
         let result = infer_model_request_stream(
             request,
-            "good_model",
+            "good_model".into(),
             model_config,
-            function_config,
+            &function_config,
             &clients,
             inference_params.clone(),
             retry_config,
@@ -1243,8 +1224,8 @@ mod tests {
         }
 
         // Verify the model used information
-        assert_eq!(model_used_info.model_name, "good_model");
-        assert_eq!(model_used_info.model_provider_name, "good_provider");
+        assert_eq!(&*model_used_info.model_name, "good_model");
+        assert_eq!(&*model_used_info.model_provider_name, "good_provider");
         assert_eq!(model_used_info.inference_params, inference_params);
 
         // Iterate over the stream and collect the remaining chunks
@@ -1337,18 +1318,18 @@ mod tests {
 
         // Create a model config with the dummy provider
         let model_config = Box::leak(Box::new(ModelConfig {
-            routing: vec![error_model_name.to_string(), model_name.to_string()],
+            routing: vec![error_model_name.into(), model_name.into()],
             providers: HashMap::from([
-                (error_model_name.to_string(), error_provider_config),
-                (model_name.to_string(), dummy_provider_config),
+                (error_model_name.into(), error_provider_config),
+                (model_name.into(), dummy_provider_config),
             ]),
         }));
-        let retry_config = Box::leak(Box::new(RetryConfig::default()));
+        let retry_config = RetryConfig::default();
 
         // Call infer_model_request_stream
         let result = infer_model_request_stream(
             model_request,
-            model_name,
+            model_name.into(),
             model_config,
             function_config_chat,
             &clients,
@@ -1376,8 +1357,8 @@ mod tests {
         }
 
         // Verify the model used information
-        assert_eq!(model_used_info.model_name, model_name);
-        assert_eq!(model_used_info.model_provider_name, model_name);
+        assert_eq!(&*model_used_info.model_name, model_name);
+        assert_eq!(&*model_used_info.model_provider_name, model_name);
         assert_eq!(model_used_info.inference_params, inference_params);
 
         // Iterate over the stream and collect the remaining chunks

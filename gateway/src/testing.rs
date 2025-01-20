@@ -1,11 +1,13 @@
 #![cfg(test)]
 
+use std::sync::Arc;
+
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
 use crate::gateway_util::AppStateData;
 
 pub fn get_unit_test_app_state_data(
-    config: &'static Config<'static>,
+    config: Arc<Config<'static>>,
     clickhouse_healthy: bool,
 ) -> AppStateData {
     let http_client = reqwest::Client::new();

@@ -16,7 +16,7 @@ pub struct Migration0008<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
-impl<'a> Migration for Migration0008<'a> {
+impl Migration for Migration0008<'_> {
     /// Check if you can connect to the database
     /// Also check that the tables that need altering already exist
     async fn can_apply(&self) -> Result<(), Error> {
