@@ -58,8 +58,8 @@ export function VariantPerformance({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={chartConfig} className="min-h-[300px] w-full">
-            <BarChart accessibilityLayer data={data} height={300}>
+          <ChartContainer config={chartConfig} className="min-h-[200px] w-full">
+            <BarChart accessibilityLayer data={data} height={200}>
               <CartesianGrid vertical={false} />
               <XAxis
                 dataKey="date"

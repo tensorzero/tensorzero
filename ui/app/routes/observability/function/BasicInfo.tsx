@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { Badge } from "~/components/ui/badge";
 import type { FunctionConfig, JSONSchema } from "~/utils/config/function";
 import {
   Collapsible,
@@ -7,6 +6,7 @@ import {
   CollapsibleTrigger,
 } from "~/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
+import { Code } from "~/components/ui/code";
 
 interface BasicFunctionInfoProps {
   functionConfig: FunctionConfig;
@@ -56,9 +56,7 @@ export default function BasicFunctionInfo({
           <div>
             <dt className="text-lg font-semibold">Type</dt>
             <dd>
-              <Badge variant="outline" className="bg-blue-200">
-                {functionConfig.type}
-              </Badge>
+              <Code>{functionConfig.type}</Code>
             </dd>
           </div>
 
@@ -75,11 +73,17 @@ export default function BasicFunctionInfo({
               </div>
               <div>
                 <dt className="text-lg font-semibold">Tool Choice</dt>
-                <dd>{functionConfig.tool_choice}</dd>
+                <dd>
+                  <Code>{functionConfig.tool_choice}</Code>
+                </dd>
               </div>
               <div>
                 <dt className="text-lg font-semibold">Parallel Tool Calls</dt>
-                <dd>{functionConfig.parallel_tool_calls ? "Yes" : "No"}</dd>
+                <dd>
+                  <Code>
+                    {functionConfig.parallel_tool_calls ? "true" : "false"}
+                  </Code>
+                </dd>
               </div>
             </>
           )}

@@ -4,7 +4,12 @@ import {
   queryInferenceTableByFunctionName,
 } from "~/utils/clickhouse/inference";
 import type { Route } from "./+types/route";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
+import {
+  data,
+  isRouteErrorResponse,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import { Badge } from "~/components/ui/badge";
 import PageButtons from "~/components/utils/PageButtons";
 import { getConfig } from "~/utils/config/index.server";
@@ -95,6 +100,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     variant_performances,
   } = loaderData;
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const function_config = useConfig().functions[function_name];
   const topInference = inferences[0];
   const bottomInference = inferences[inferences.length - 1];
@@ -117,7 +123,10 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const disableNextInferencePage =
     inference_bounds.first_id === bottomInference.id;
 
-  const [metric_name, setMetricName] = useState("");
+  const [metric_name, setMetricName] = useState(
+    () => searchParams.get("metric_name") || "",
+  );
+
   const handleMetricChange = (metric: string) => {
     setMetricName(metric);
     const searchParams = new URLSearchParams(window.location.search);

@@ -7,8 +7,9 @@ import {
   SelectTrigger,
 } from "~/components/ui/select";
 // import { Badge } from "~/components/ui/badge";
-// import { MetricBadges } from "~/components/metric/MetricBadges";
+import { MetricBadges } from "~/components/metric/MetricBadges";
 import React from "react";
+import { useConfig } from "~/context/config";
 
 type MetricSelectorProps = {
   metricsWithFeedback: MetricsWithFeedbackData;
@@ -29,6 +30,7 @@ export function MetricSelector({
       </div>
     );
   }
+  const config = useConfig();
 
   return (
     <div className="flex flex-col justify-center">
@@ -40,7 +42,10 @@ export function MetricSelector({
         <SelectContent>
           {metricsWithFeedback.metrics.map((metric) => (
             <SelectItem key={metric.metric_name} value={metric.metric_name}>
-              {metric.metric_name}
+              <div className="flex items-center justify-between">
+                <span className="mr-2">{metric.metric_name}</span>
+                <MetricBadges metric={config.metrics[metric.metric_name]} />
+              </div>
             </SelectItem>
           ))}
         </SelectContent>

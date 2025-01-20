@@ -245,12 +245,6 @@ describe("queryMetricsWithFeedback", () => {
       metric_type: "boolean",
       feedback_count: 99,
     });
-    expect(jsonResults.metrics).toContainEqual({
-      function_name: "dashboard_fixture_extract_entities",
-      metric_name: "demonstration",
-      metric_type: "demonstration",
-      feedback_count: 100,
-    });
 
     // Test chat function with float metrics
     const chatResults = await queryMetricsWithFeedback({

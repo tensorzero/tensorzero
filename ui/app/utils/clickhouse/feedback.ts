@@ -858,21 +858,7 @@ export async function queryMetricsWithFeedback(params: {
         AND fmf.metric_name ${episodeIdInClause}
       GROUP BY i.function_name, fmf.metric_name
       HAVING feedback_count > 0
-    ),
-
-    demo_metrics AS (
-      SELECT
-        i.function_name,
-        'demonstration' as metric_name,
-        'demonstration' as metric_type,
-        COUNT(DISTINCT i.id) as feedback_count
-      FROM tensorzero.${inference_table} i
-      JOIN tensorzero.DemonstrationFeedback df ON df.inference_id = i.id
-      WHERE i.function_name = {function_name:String}
-      GROUP BY i.function_name
-      HAVING feedback_count > 0
     )
-
     SELECT
       function_name,
       metric_name,
@@ -886,8 +872,6 @@ export async function queryMetricsWithFeedback(params: {
       SELECT * FROM float_inference_metrics
       UNION ALL
       SELECT * FROM float_episode_metrics
-      UNION ALL
-      SELECT * FROM demo_metrics
     )
     ORDER BY metric_type, metric_name`;
 
