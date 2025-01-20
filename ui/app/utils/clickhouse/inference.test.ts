@@ -291,14 +291,14 @@ test("queryInferenceTableByEpisodeId pages through all results correctly using a
 // queryInferenceTableBounds and queryEpisodeTableBounds are the same because the early inferences are in singleton episodes.
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
-  expect(bounds.first_id).toBe("0192ced0-9873-70e2-ade5-dc5b8faea232");
-  expect(bounds.last_id).toBe("01942e28-4a3c-7873-b94d-402a9cc83f2a");
+  expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
+  expect(bounds.last_id).toBe("01948509-c2c8-7d13-827e-39af5c8a4853");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
-  expect(bounds.first_id).toBe("0192ced0-9873-70e2-ade5-dc5b8faea232");
-  expect(bounds.last_id).toBe("01942e28-4a3c-7873-b94d-402a9cc83f2a");
+  expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
+  expect(bounds.last_id).toBe("01948509-c2c8-7d13-827e-39af5c8a4853");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -521,6 +521,16 @@ test("countInferencesByFunction", async () => {
   const countsInfo = await countInferencesByFunction();
   expect(countsInfo).toEqual([
     {
+      function_name: "dashboard_fixture_write_haiku",
+      max_timestamp: "2025-01-20T18:46:37Z",
+      count: 494,
+    },
+    {
+      function_name: "dashboard_fixture_extract_entities",
+      max_timestamp: "2025-01-20T18:04:59Z",
+      count: 400,
+    },
+    {
       function_name: "ask_question",
       max_timestamp: "2025-01-03T21:52:59Z",
       count: 767,
@@ -534,16 +544,6 @@ test("countInferencesByFunction", async () => {
       function_name: "generate_secret",
       max_timestamp: "2025-01-03T21:51:29Z",
       count: 50,
-    },
-    {
-      function_name: "dashboard_fixture_write_haiku",
-      max_timestamp: "2024-12-25T02:20:45Z",
-      count: 494,
-    },
-    {
-      function_name: "dashboard_fixture_extract_entities",
-      max_timestamp: "2024-12-18T16:22:43Z",
-      count: 400,
     },
   ]);
 });

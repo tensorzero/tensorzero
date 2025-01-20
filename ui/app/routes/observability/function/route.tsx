@@ -16,7 +16,10 @@ import { getConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
 import BasicInfo from "./BasicInfo";
 import { useConfig } from "~/context/config";
-import { getVariantPerformances } from "~/utils/clickhouse/function";
+import {
+  getVariantPerformances,
+  type TimeWindowUnit,
+} from "~/utils/clickhouse/function";
 import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
 import { MetricSelector } from "./MetricSelector";
@@ -31,6 +34,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const afterInference = url.searchParams.get("afterInference");
   const pageSize = Number(url.searchParams.get("pageSize")) || 10;
   const metric_name = url.searchParams.get("metric_name") || undefined;
+  const time_granularity = url.searchParams.get("time_granularity") || "week";
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
@@ -63,7 +67,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         function_config,
         metric_name,
         metric_config: config.metrics[metric_name],
-        time_window_unit: "week",
+        time_window_unit: time_granularity as TimeWindowUnit,
       })
     : undefined;
 
@@ -134,6 +138,15 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
+  const [time_granularity, setTimeGranularity] =
+    useState<TimeWindowUnit>("week");
+  const handleTimeGranularityChange = (granularity: TimeWindowUnit) => {
+    setTimeGranularity(granularity);
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("time_granularity", granularity);
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <h2 className="mb-4 text-2xl font-semibold">
@@ -155,6 +168,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           <VariantPerformance
             variant_performances={variant_performances}
             metric_name={metric_name}
+            time_granularity={time_granularity}
+            onTimeGranularityChange={handleTimeGranularityChange}
           />
         </div>
       )}

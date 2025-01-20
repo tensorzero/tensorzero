@@ -4,12 +4,10 @@ import type { MetricConfig } from "../config/metric";
 import type { FunctionConfig } from "../config/function";
 
 export const timeWindowUnitSchema = z.enum([
-  "hour",
   "day",
   "week",
   "month",
-  "quarter",
-  "year",
+  "cumulative",
 ]);
 export type TimeWindowUnit = z.infer<typeof timeWindowUnitSchema>;
 
@@ -76,8 +74,8 @@ const variantPerformanceRowSchema = z.object({
   variant_name: z.string(),
   count: z.number(),
   avg_metric: z.number(),
-  stdev: z.number(),
-  ci_error: z.number(),
+  stdev: z.number().nullable(),
+  ci_error: z.number().nullable(),
 });
 export type VariantPerformanceRow = z.infer<typeof variantPerformanceRowSchema>;
 
@@ -95,14 +93,47 @@ async function getEpisodePerformances(params: {
     metric_table_name,
     time_window_unit,
   } = params;
-  const query = `
+
+  // Different query for cumulative stats
+  const query =
+    time_window_unit === "cumulative"
+      ? `
+WITH sub AS (
+    SELECT
+        i.variant_name AS variant_name,
+        i.episode_id AS episode_id,
+        any(f.value) AS value_per_episode
+    FROM tensorzero.${inference_table_name} i
+    JOIN tensorzero.${metric_table_name} f
+        ON i.episode_id = f.target_id
+    WHERE
+        f.metric_name = {metric_name:String}
+        AND i.function_name = {function_name:String}
+    GROUP BY
+        variant_name,
+        episode_id
+)
+SELECT
+    '1970-01-01T00:00:00.000Z' AS period_start,
+    variant_name,
+    toUInt32(count()) AS count,
+    avg(value_per_episode) AS avg_metric,
+    stddevSamp(value_per_episode) AS stdev,
+    1.96 * (stddevSamp(value_per_episode) / sqrt(count())) AS ci_error
+FROM sub
+GROUP BY
+    variant_name
+ORDER BY
+    variant_name ASC
+`
+      : `
 -- This query calculates the average value of a metric for
 -- each (variant_name, period_start), counting each episode exactly once rather than
 -- counting multiple inference episodes.
 
 WITH sub AS (
+    /* Round 'timestamp' down to the beginning of the period. */
     SELECT
-        /* Round 'timestamp' down to the beginning of the period. */
         dateTrunc({time_window_unit:String}, i.timestamp) AS period_start,
 
         /* We'll group by variant_name as well, so we have a separate row per variant. */
@@ -192,7 +223,30 @@ async function getInferencePerformances(params: {
     metric_table_name,
     time_window_unit,
   } = params;
-  const query = `
+
+  // Different query for cumulative stats
+  const query =
+    time_window_unit === "cumulative"
+      ? `
+SELECT
+    '1970-01-01T00:00:00.000Z' AS period_start,
+    i.variant_name AS variant_name,
+    toUInt32(count()) AS count,
+    avg(f.value) AS avg_metric,
+    stddevSamp(f.value) AS stdev,
+    1.96 * (stddevSamp(f.value) / sqrt(count())) AS ci_error
+FROM ${inference_table_name} i
+JOIN ${metric_table_name} f
+    ON i.id = f.target_id
+WHERE
+    f.metric_name = {metric_name:String}
+    AND i.function_name = {function_name:String}
+GROUP BY
+    variant_name
+ORDER BY
+    variant_name ASC
+`
+      : `
 SELECT
     formatDateTime(dateTrunc({time_window_unit:String}, i.timestamp), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
     i.variant_name AS variant_name,

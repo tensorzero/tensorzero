@@ -1,4 +1,7 @@
-import type { VariantPerformanceRow } from "~/utils/clickhouse/function";
+import type {
+  TimeWindowUnit,
+  VariantPerformanceRow,
+} from "~/utils/clickhouse/function";
 // import { TrendingUp } from "lucide-react";
 import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis, YAxis } from "recharts";
 
@@ -16,6 +19,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "~/components/ui/chart";
+import { TimeGranularitySelector } from "./TimeGranularitySelector";
 
 const CHART_COLORS = [
   "hsl(var(--chart-1))",
@@ -28,9 +32,13 @@ const CHART_COLORS = [
 export function VariantPerformance({
   variant_performances,
   metric_name,
+  time_granularity,
+  onTimeGranularityChange,
 }: {
   variant_performances: VariantPerformanceRow[];
   metric_name: string;
+  time_granularity: TimeWindowUnit;
+  onTimeGranularityChange: (time_granularity: TimeWindowUnit) => void;
 }) {
   const { data, variantNames } =
     transformVariantPerformances(variant_performances);
@@ -50,12 +58,18 @@ export function VariantPerformance({
   return (
     <div className="space-y-8">
       <Card>
-        <CardHeader>
-          <CardTitle>Variant Performance Over Time</CardTitle>
-          <CardDescription>
-            Showing average metric values by variant for metric{" "}
-            <code>{metric_name}</code>
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between">
+          <div>
+            <CardTitle>Variant Performance Over Time</CardTitle>
+            <CardDescription>
+              Showing average metric values by variant for metric{" "}
+              <code>{metric_name}</code>
+            </CardDescription>
+          </div>
+          <TimeGranularitySelector
+            time_granularity={time_granularity}
+            onTimeGranularityChange={onTimeGranularityChange}
+          />
         </CardHeader>
         <CardContent>
           <ChartContainer config={chartConfig} className="h-80 w-full">
@@ -69,7 +83,32 @@ export function VariantPerformance({
                 tickFormatter={(value) => new Date(value).toLocaleDateString()}
               />
               <YAxis tickLine={false} tickMargin={10} axisLine={true} />
-              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    labelFormatter={(label) =>
+                      new Date(label).toLocaleDateString()
+                    }
+                    formatter={(value, name, entry) => {
+                      const numInferences =
+                        entry.payload[`${name}_num_inferences`];
+                      return (
+                        <div className="flex flex-1 items-center justify-between leading-none">
+                          <span className="text-muted-foreground">{name}</span>
+                          <div className="grid text-right">
+                            <span className="font-mono font-medium tabular-nums text-foreground">
+                              {value.toLocaleString()}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              n={numInferences.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                }
+              />
               <ChartLegend content={<ChartLegendContent />} />
               {variantNames.map((variantName) => (
                 <Bar
@@ -143,24 +182,30 @@ export function transformVariantPerformances(
         {
           num_inferences: number;
           avg_metric: number;
-          stdev: number;
-          ci_error: number;
+          stdev: number | null;
+          ci_error: number | null;
         }
       >;
     }[],
   );
 
+  // Sort by date in descending order and take only the 10 most recent periods
+  const sortedAndLimited = groupedByDate
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 10)
+    .reverse(); // Reverse back to chronological order for display
+
   // Convert to Recharts-friendly shape
-  const data = groupedByDate.map((entry) => {
+  const data = sortedAndLimited.map((entry) => {
     const row: VariantPerformanceData = { date: entry.date };
     variantNames.forEach((variant) => {
       const vData = entry.variants[variant];
       row[variant] = vData?.avg_metric ?? 0;
       row[`${variant}_ci_error`] = vData?.ci_error ?? 0;
+      row[`${variant}_num_inferences`] = vData?.num_inferences ?? 0;
     });
     return row;
   });
-  console.log(data);
 
   return {
     data,
