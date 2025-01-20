@@ -77,7 +77,7 @@ These are all instances of the `gpt-4o-mini` variant.
 Without modifying the prompt or the model used, we can trade more tokens for a statistically significant improvement in performance (we saw ~10% relative improvement from 35% to 39% success rate with no prompt changes and further improvement to 41% with small variations to the prompt as in the section below). -->
 
 Here are our results showing the success rate, episode return, episode length, and input tokens.
-We find that the history variant perfoms best and that using our fine-tuning recipe can improve its performance.
+We find that the history_and_reasoning variant perfoms best and that using our fine-tuning recipe can improve its performance.
 
 <p align="center">
   <img src="img/gpt-4o-mini_success-rate.png" alt="Success Rate">
