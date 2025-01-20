@@ -331,7 +331,7 @@ pub async fn poll_batch_inference_handler(
                 &clickhouse_connection_info,
                 &batch_request,
                 response,
-                config,
+                &config,
             )
             .await?;
             Ok(Json(response.filter_by_query(path_params)).into_response())
@@ -864,7 +864,7 @@ pub async fn write_completed_batch_inference<'a>(
         }
     }
     // Write all the *Inference rows to the database
-    match function {
+    match &**function {
         FunctionConfig::Chat(_chat_function) => {
             clickhouse_connection_info
                 .write(&inference_rows_to_write, "ChatInference")

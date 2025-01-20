@@ -24,6 +24,21 @@ pub enum FunctionConfig {
     Json(FunctionConfigJson),
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum FunctionConfigType {
+    Chat,
+    Json,
+}
+
+impl FunctionConfig {
+    pub fn config_type(&self) -> FunctionConfigType {
+        match self {
+            FunctionConfig::Chat(_) => FunctionConfigType::Chat,
+            FunctionConfig::Json(_) => FunctionConfigType::Json,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, VariantConfig>, // variant name => variant config
@@ -88,9 +103,9 @@ impl FunctionConfig {
     /// well as the dynamic tool calling information passed in `dynamic_tool_params`.
     /// JSON functions do not get tool_configs even if they end up using tools under the hood.
     pub fn prepare_tool_config(
-        &'static self,
+        &self,
         dynamic_tool_params: DynamicToolParams,
-        static_tools: &'static HashMap<String, StaticToolConfig>,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
     ) -> Result<Option<ToolCallConfig>, Error> {
         match self {
             FunctionConfig::Chat(params) => Ok(ToolCallConfig::new(
@@ -231,7 +246,7 @@ impl FunctionConfig {
     #[instrument(skip_all, fields(function_name = %function_name))]
     pub fn validate(
         &self,
-        static_tools: &HashMap<String, StaticToolConfig>,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
         models: &mut ModelTable,
         embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
         templates: &TemplateConfig,

@@ -5,6 +5,7 @@ mod providers;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use gateway::clickhouse::ClickHouseConnectionInfo;
 use gateway::config_parser::Config;
@@ -326,10 +327,10 @@ async fn test_write_read_completed_batch_inference_chat() {
         status,
         errors,
     });
-    let function_config = FunctionConfig::Chat(FunctionConfigChat {
+    let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
         variants: HashMap::new(),
         ..Default::default()
-    });
+    }));
     let config = Config {
         functions: HashMap::from([(function_name.to_string(), function_config)]),
         ..Default::default()
@@ -519,11 +520,11 @@ async fn test_write_read_completed_batch_inference_json() {
         "required": ["answer"]
     }))
     .unwrap();
-    let function_config = FunctionConfig::Json(FunctionConfigJson {
+    let function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
         variants: HashMap::new(),
         output_schema,
         ..Default::default()
-    });
+    }));
     let config = Config {
         functions: HashMap::from([(function_name.to_string(), function_config)]),
         ..Default::default()

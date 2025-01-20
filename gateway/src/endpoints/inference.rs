@@ -31,7 +31,6 @@ use crate::inference::types::{
     RequestMessage, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
-use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
@@ -141,7 +140,7 @@ pub enum InferenceOutput {
     )
 )]
 pub async fn inference(
-    config: &'static Config<'static>,
+    config: Arc<Config<'static>>,
     http_client: reqwest::Client,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
@@ -149,7 +148,7 @@ pub async fn inference(
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     // Get the function config or return an error if it doesn't exist
-    let function = config.get_function(&params.function_name)?;
+    let function = config.get_function(&params.function_name)?.clone();
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =
@@ -245,7 +244,7 @@ pub async fn inference(
                 .infer_stream(
                     &params.input,
                     &inference_models,
-                    function,
+                    function.as_ref(),
                     &inference_config,
                     &inference_clients,
                     variant_inference_params,
@@ -288,7 +287,7 @@ pub async fn inference(
 
             let stream = create_stream(
                 function,
-                &config.templates,
+                config.clone(),
                 inference_metadata,
                 chunk,
                 stream,
@@ -301,7 +300,7 @@ pub async fn inference(
                 .infer(
                     &params.input,
                     &inference_models,
-                    function,
+                    function.as_ref(),
                     &inference_config,
                     &inference_clients,
                     variant_inference_params,
@@ -358,15 +357,16 @@ pub async fn inference(
     .into())
 }
 
-fn create_stream<'a>(
-    function: &'static FunctionConfig,
-    templates: &'static TemplateConfig<'static>,
+fn create_stream(
+    function: Arc<FunctionConfig>,
+    config: Arc<Config<'static>>,
     metadata: InferenceMetadata,
     first_chunk: InferenceResultChunk,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-) -> impl Stream<Item = Option<InferenceResponseChunk>> + Send + 'a {
+) -> impl Stream<Item = Option<InferenceResponseChunk>> + Send {
     async_stream::stream! {
+        let templates = &config.templates;
         let mut buffer = vec![first_chunk.clone()];
 
         // Send the first chunk
