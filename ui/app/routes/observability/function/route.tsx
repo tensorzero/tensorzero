@@ -150,20 +150,19 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         selectedMetric={metric_name || ""}
         onMetricChange={handleMetricChange}
       />
-      <div className="mb-6 h-px w-full bg-gray-200"></div>
       {variant_performances && (
-        <VariantPerformance
-          variant_performances={variant_performances}
-          metric_name={metric_name}
-        />
+        <div className="mt-6">
+          <VariantPerformance
+            variant_performances={variant_performances}
+            metric_name={metric_name}
+          />
+        </div>
       )}
-      <div className="mb-6 h-px w-full bg-gray-200"></div>
-      <div>
+      <div className="mt-6">
         <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">
           Inferences
           <Badge variant="secondary">Count: {num_inferences}</Badge>
         </h3>
-
         <FunctionInferenceTable inferences={inferences} />
         <PageButtons
           onPreviousPage={handlePreviousInferencePage}

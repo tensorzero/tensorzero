@@ -34,7 +34,9 @@ export function MetricSelector({
 
   return (
     <div className="flex flex-col justify-center">
-      <label className="mb-2">Metric</label>
+      <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">
+        Metric
+      </h3>
       <Select value={selectedMetric} onValueChange={onMetricChange}>
         <SelectTrigger>
           <SelectValue placeholder="Choose a metric" />

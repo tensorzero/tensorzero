@@ -1,6 +1,6 @@
 import type { VariantPerformanceRow } from "~/utils/clickhouse/function";
 // import { TrendingUp } from "lucide-react";
-import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis } from "recharts";
+import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import {
   Card,
@@ -58,16 +58,17 @@ export function VariantPerformance({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={chartConfig} className="min-h-[200px] w-full">
-            <BarChart accessibilityLayer data={data} height={200}>
+          <ChartContainer config={chartConfig} className="h-80 w-full">
+            <BarChart accessibilityLayer data={data}>
               <CartesianGrid vertical={false} />
               <XAxis
                 dataKey="date"
                 tickLine={false}
                 tickMargin={10}
-                axisLine={false}
+                axisLine={true}
                 tickFormatter={(value) => new Date(value).toLocaleDateString()}
               />
+              <YAxis tickLine={false} tickMargin={10} axisLine={true} />
               <ChartTooltip content={<ChartTooltipContent />} />
               <ChartLegend content={<ChartLegendContent />} />
               {variantNames.map((variantName) => (
@@ -77,6 +78,7 @@ export function VariantPerformance({
                   name={variantName}
                   fill={chartConfig[variantName].color}
                   radius={4}
+                  maxBarSize={100}
                 >
                   <ErrorBar
                     dataKey={`${variantName}_ci_error`}
