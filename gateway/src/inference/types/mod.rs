@@ -12,11 +12,14 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{error::Error, variant::JsonMode};
 use crate::{function::FunctionConfig, minijinja_util::TemplateConfig};
+use crate::{
+    function::FunctionConfigType,
+    tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolCallOutput, ToolResult},
+};
 use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInsert};
 
 pub mod batch;
@@ -781,10 +784,10 @@ impl InferenceResultChunk {
 }
 
 impl InferenceResultChunk {
-    pub fn new(chunk: ProviderInferenceResponseChunk, function: &FunctionConfig) -> Self {
+    pub fn new(chunk: ProviderInferenceResponseChunk, function: FunctionConfigType) -> Self {
         match function {
-            FunctionConfig::Chat(_) => Self::Chat(chunk.into()),
-            FunctionConfig::Json(_) => Self::Json(chunk.into()),
+            FunctionConfigType::Chat => Self::Chat(chunk.into()),
+            FunctionConfigType::Json => Self::Json(chunk.into()),
         }
     }
 }
@@ -849,7 +852,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
 // Define the CollectChunksArgs struct with existing and new fields
 pub struct CollectChunksArgs<'a, 'b> {
     pub value: Vec<InferenceResultChunk>,
-    pub function: &'a FunctionConfig,
+    pub function: Arc<FunctionConfig>,
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
     pub raw_request: String,
@@ -1701,7 +1704,7 @@ mod tests {
         let templates = TemplateConfig::default();
 
         let chunks = vec![];
-        let function_config = FunctionConfig::Chat(FunctionConfigChat::default());
+        let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat::default()));
         let model_name = "test_model";
         let model_provider_name = "test_provider";
         let raw_request = "raw request".to_string();
@@ -1709,7 +1712,7 @@ mod tests {
             value: chunks,
             system: None,
             input_messages: vec![],
-            function: &function_config,
+            function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
@@ -1767,7 +1770,7 @@ mod tests {
             value: chunks,
             system: None,
             input_messages: vec![],
-            function: &function_config,
+            function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
@@ -1816,14 +1819,14 @@ mod tests {
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
-        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
+        let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
             implicit_tool_call_config,
             output_schema,
-        });
+        }));
         let usage1 = Usage {
             input_tokens: 10,
             output_tokens: 5,
@@ -1854,7 +1857,7 @@ mod tests {
             value: chunks,
             system: None,
             input_messages: vec![],
-            function: &json_function_config,
+            function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
@@ -1925,7 +1928,7 @@ mod tests {
             value: chunks,
             system: None,
             input_messages: vec![],
-            function: &json_function_config,
+            function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
@@ -1994,7 +1997,7 @@ mod tests {
             value: chunks,
             system: None,
             input_messages: vec![],
-            function: &function_config,
+            function: function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
@@ -2039,14 +2042,14 @@ mod tests {
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
-        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
+        let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
             implicit_tool_call_config,
             output_schema,
-        });
+        }));
         let usage1 = Usage {
             input_tokens: 10,
             output_tokens: 5,
@@ -2077,7 +2080,7 @@ mod tests {
             value: chunks,
             system: None,
             input_messages: vec![],
-            function: &json_function_config,
+            function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),
@@ -2129,14 +2132,14 @@ mod tests {
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&static_output_schema);
         let output_schema = JSONSchemaFromPath::from_value(&static_output_schema).unwrap();
-        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
+        let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
             implicit_tool_call_config,
             output_schema,
-        });
+        }));
         let usage1 = Usage {
             input_tokens: 10,
             output_tokens: 5,
@@ -2176,7 +2179,7 @@ mod tests {
             value: chunks,
             system: None,
             input_messages: vec![],
-            function: &json_function_config,
+            function: json_function_config.clone(),
             model_name: model_name.into(),
             model_provider_name: model_provider_name.into(),
             raw_request: raw_request.clone(),

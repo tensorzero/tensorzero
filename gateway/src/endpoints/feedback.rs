@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::State;
@@ -79,7 +80,7 @@ pub async fn feedback_handler(
 ) -> Result<Json<Value>, Error> {
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
-        config,
+        &config,
         &params.metric_name,
         params.episode_id,
         params.inference_id,
@@ -114,7 +115,7 @@ pub async fn feedback_handler(
         FeedbackType::Demonstration => {
             write_demonstration(
                 clickhouse_connection_info,
-                config,
+                &config,
                 &params,
                 feedback_metadata.target_id,
                 feedback_id,
@@ -125,7 +126,7 @@ pub async fn feedback_handler(
         FeedbackType::Float => {
             write_float(
                 clickhouse_connection_info,
-                config,
+                &config,
                 &params,
                 feedback_metadata.target_id,
                 feedback_id,
@@ -136,7 +137,7 @@ pub async fn feedback_handler(
         FeedbackType::Boolean => {
             write_boolean(
                 clickhouse_connection_info,
-                config,
+                &config,
                 &params,
                 feedback_metadata.target_id,
                 feedback_id,
@@ -244,7 +245,7 @@ async fn write_comment(
 
 async fn write_demonstration(
     connection_info: ClickHouseConnectionInfo,
-    config: &'static Config<'_>,
+    config: &Config<'_>,
     params: &Params,
     inference_id: Uuid,
     feedback_id: Uuid,
@@ -272,7 +273,7 @@ async fn write_demonstration(
 
 async fn write_float(
     connection_info: ClickHouseConnectionInfo,
-    config: &'static Config<'_>,
+    config: &Config<'_>,
     params: &Params,
     target_id: Uuid,
     feedback_id: Uuid,
@@ -307,7 +308,7 @@ async fn write_float(
 
 async fn write_boolean(
     connection_info: ClickHouseConnectionInfo,
-    config: &'static Config<'_>,
+    config: &Config<'_>,
     params: &Params,
     target_id: Uuid,
     feedback_id: Uuid,
@@ -463,8 +464,8 @@ impl TryFrom<DemonstrationContentBlock> for ContentBlock {
 // For json functions, the value is validated against the output schema. If it passes,
 // we construct the usual {"raw": str, "parsed": parsed_value} object, serialize it, and return it.
 async fn validate_parse_demonstration(
-    function_config: &'static FunctionConfig,
-    tools: &'static HashMap<String, StaticToolConfig>,
+    function_config: &FunctionConfig,
+    tools: &HashMap<String, Arc<StaticToolConfig>>,
     value: &Value,
 ) -> Result<String, Error> {
     match function_config {
@@ -771,7 +772,7 @@ mod tests {
     #[tokio::test]
     async fn test_feedback_handler() {
         // Test a Comment Feedback
-        let config = Box::leak(Box::new(Config {
+        let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
             embedding_models: HashMap::new(),
@@ -779,7 +780,7 @@ mod tests {
             functions: HashMap::new(),
             tools: HashMap::new(),
             templates: TemplateConfig::new(),
-        }));
+        });
         let app_state_data = get_unit_test_app_state_data(config, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let episode_id = Uuid::new_v7(timestamp);
@@ -854,7 +855,7 @@ mod tests {
                 optimize: MetricConfigOptimize::Max,
             },
         );
-        let config = Box::leak(Box::new(Config {
+        let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
             embedding_models: HashMap::new(),
@@ -862,8 +863,8 @@ mod tests {
             functions: HashMap::new(),
             tools: HashMap::new(),
             templates: TemplateConfig::new(),
-        }));
-        let app_state_data = get_unit_test_app_state_data(config, true);
+        });
+        let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(4.5);
         let inference_id = Uuid::new_v7(timestamp);
         let episode_id = Uuid::new_v7(timestamp);
@@ -914,7 +915,7 @@ mod tests {
                 optimize: MetricConfigOptimize::Max,
             },
         );
-        let config = Box::leak(Box::new(Config {
+        let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
             embedding_models: HashMap::new(),
@@ -922,8 +923,8 @@ mod tests {
             functions: HashMap::new(),
             tools: HashMap::new(),
             templates: TemplateConfig::new(),
-        }));
-        let app_state_data = get_unit_test_app_state_data(config, true);
+        });
+        let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(true);
         let inference_id = Uuid::new_v7(timestamp);
         let params = Params {
@@ -961,10 +962,10 @@ mod tests {
             .unwrap(),
             strict: false,
         };
-        let tools = Box::leak(Box::new(HashMap::from([(
+        let tools = HashMap::from([(
             "get_temperature".to_string(),
-            weather_tool_config_static,
-        )])));
+            Arc::new(weather_tool_config_static),
+        )]);
         let function_config_chat_tools =
             Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {
                 variants: HashMap::new(),
@@ -978,7 +979,7 @@ mod tests {
 
         // Case 1: a string passed to a chat function
         let value = json!("Hello, world!");
-        let parsed_value = validate_parse_demonstration(function_config_chat_tools, tools, &value)
+        let parsed_value = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
             .await
             .unwrap();
         let expected_parsed_value = serde_json::to_string(&vec![ContentBlock::Text(Text {
@@ -990,7 +991,7 @@ mod tests {
         // Case 2: a tool call to get_temperature, which exists
         let value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"location": "London", "unit": "celsius"}}]
         );
-        let parsed_value = validate_parse_demonstration(function_config_chat_tools, tools, &value)
+        let parsed_value = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
             .await
             .unwrap();
         let expected_parsed_value =
@@ -1010,7 +1011,7 @@ mod tests {
         // Case 3: a tool call to get_humidity, which does not exist
         let value = json!([{"type": "tool_call", "name": "get_humidity", "arguments": {"location": "London", "unit": "celsius"}}]
         );
-        let err = validate_parse_demonstration(function_config_chat_tools, tools, &value)
+        let err = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
             .await
             .unwrap_err();
         let details = err.get_owned_details();
@@ -1024,7 +1025,7 @@ mod tests {
         // Case 4: a tool call to get_temperature, which exists but has bad arguments (place instead of location)
         let value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"place": "London", "unit": "celsius"}}]
         );
-        let err = validate_parse_demonstration(function_config_chat_tools, tools, &value)
+        let err = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
             .await
             .unwrap_err();
         let details = err.get_owned_details();
@@ -1067,7 +1068,7 @@ mod tests {
             "name": "John",
             "age": 30
         });
-        let parsed_value = validate_parse_demonstration(function_config, tools, &value)
+        let parsed_value = validate_parse_demonstration(function_config, &tools, &value)
             .await
             .unwrap();
         let expected_parsed_value = serde_json::to_string(&json!({
@@ -1079,7 +1080,7 @@ mod tests {
 
         // Case 6: a JSON function with incorrect output
         let value = json!("Hello, world!");
-        validate_parse_demonstration(function_config, tools, &value)
+        validate_parse_demonstration(function_config, &tools, &value)
             .await
             .unwrap_err();
     }

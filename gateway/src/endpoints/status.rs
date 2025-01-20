@@ -35,6 +35,8 @@ pub async fn health_handler(
 #[cfg(test)]
 mod tests {
 
+    use std::sync::Arc;
+
     use crate::config_parser::Config;
     use crate::testing::get_unit_test_app_state_data;
 
@@ -42,8 +44,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_handler() {
-        let config = Box::leak(Box::new(Config::default()));
-        let app_state_data = get_unit_test_app_state_data(config, true);
+        let config = Arc::new(Config::default());
+        let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let response = health_handler(State(app_state_data)).await;
         assert!(response.is_ok());
         let response_value = response.unwrap();
