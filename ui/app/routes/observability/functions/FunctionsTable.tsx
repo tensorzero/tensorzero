@@ -9,6 +9,7 @@ import {
 import type { FunctionConfig } from "~/utils/config/function";
 import type { FunctionCountInfo } from "~/utils/clickhouse/inference";
 import { formatDate } from "~/utils/date";
+import { Code } from "~/components/ui/code";
 
 export default function FunctionsTable({
   functions,
@@ -24,7 +25,7 @@ export default function FunctionsTable({
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Type</TableHead>
-            <TableHead>Count</TableHead>
+            <TableHead>Inference Count</TableHead>
             <TableHead>Last Used</TableHead>
           </TableRow>
         </TableHeader>
@@ -52,7 +53,9 @@ export default function FunctionsTable({
                     </code>
                   </a>
                 </TableCell>
-                <TableCell>{function_config.type}</TableCell>
+                <TableCell>
+                  <Code>{function_config.type}</Code>
+                </TableCell>
                 <TableCell>{countInfo.count}</TableCell>
                 <TableCell>
                   {formatDate(new Date(countInfo.max_timestamp))}
