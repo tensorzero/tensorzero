@@ -396,19 +396,73 @@ export async function queryInferenceTableBoundsByFunctionName(params: {
   });
 }
 
+export async function queryInferenceTableByVariantName(params: {
+  function_name: string;
+  variant_name: string;
+  page_size: number;
+  before?: string;
+  after?: string;
+}): Promise<InferenceByIdRow[]> {
+  return queryInferenceTable({
+    page_size: params.page_size,
+    before: params.before,
+    after: params.after,
+    extraWhere: [
+      "function_name = {function_name:String}",
+      "variant_name = {variant_name:String}",
+    ],
+    extraParams: {
+      function_name: params.function_name,
+      variant_name: params.variant_name,
+    },
+  });
+}
+
+export async function queryInferenceTableBoundsByVariantName(params: {
+  function_name: string;
+  variant_name: string;
+}): Promise<TableBounds> {
+  return queryInferenceTableBounds({
+    extraWhere: [
+      "function_name = {function_name:String}",
+      "variant_name = {variant_name:String}",
+    ],
+    extraParams: {
+      function_name: params.function_name,
+      variant_name: params.variant_name,
+    },
+  });
+}
+
 export async function countInferencesForFunction(
   function_name: string,
   function_config: FunctionConfig,
 ): Promise<number> {
   const inference_table_name = getInferenceTableName(function_config);
-  const query = `SELECT COUNT() AS count FROM ${inference_table_name} WHERE function_name = {function_name:String}`;
+  const query = `SELECT toUInt32(COUNT()) AS count FROM ${inference_table_name} WHERE function_name = {function_name:String}`;
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
     query_params: { function_name },
   });
-  const rows = await resultSet.json<{ count: string }>();
-  return Number(rows[0].count);
+  const rows = await resultSet.json<{ count: number }>();
+  return rows[0].count;
+}
+
+export async function countInferencesForVariant(
+  function_name: string,
+  function_config: FunctionConfig,
+  variant_name: string,
+): Promise<number> {
+  const inference_table_name = getInferenceTableName(function_config);
+  const query = `SELECT toUInt32(COUNT()) AS count FROM ${inference_table_name} WHERE function_name = {function_name:String} AND variant_name = {variant_name:String}`;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { function_name, variant_name },
+  });
+  const rows = await resultSet.json<{ count: number }>();
+  return rows[0].count;
 }
 
 export async function countInferencesForEpisode(

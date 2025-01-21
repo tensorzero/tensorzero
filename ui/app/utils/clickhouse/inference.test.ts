@@ -9,6 +9,11 @@ import {
   queryInferenceTableBoundsByEpisodeId,
   queryInferenceTableByEpisodeId,
   countInferencesByFunction,
+  countInferencesForVariant,
+  queryInferenceTableByVariantName,
+  queryInferenceTableByFunctionName,
+  queryInferenceTableBoundsByFunctionName,
+  queryInferenceTableBoundsByVariantName,
 } from "./inference";
 import { countInferencesForFunction } from "./inference";
 import type {
@@ -34,6 +39,29 @@ test("countInferencesForFunction returns correct counts", async () => {
       tool_choice: "none",
       parallel_tool_calls: false,
     },
+  );
+  expect(chatCount).toBe(494);
+});
+
+// Test countInferencesForVariant
+test("countInferencesForVariant returns correct counts", async () => {
+  const jsonCount = await countInferencesForVariant(
+    "dashboard_fixture_extract_entities",
+    { type: "json", variants: {} },
+    "gpt4o_initial_prompt",
+  );
+  expect(jsonCount).toBe(90);
+
+  const chatCount = await countInferencesForVariant(
+    "dashboard_fixture_write_haiku",
+    {
+      type: "chat",
+      variants: {},
+      tools: [],
+      tool_choice: "none",
+      parallel_tool_calls: false,
+    },
+    "initial_prompt_gpt4o_mini",
   );
   expect(chatCount).toBe(494);
 });
@@ -315,6 +343,84 @@ test("queryInferenceTableBounds with invalid episode_id", async () => {
   });
   expect(bounds.first_id).toBe(null);
   expect(bounds.last_id).toBe(null);
+});
+
+test("queryInferenceTableByFunctionName", async () => {
+  const inferences = await queryInferenceTableByFunctionName({
+    function_name: "dashboard_fixture_extract_entities",
+    page_size: 10,
+  });
+  expect(inferences.length).toBe(10);
+
+  // Verify IDs are in descending order
+  for (let i = 1; i < inferences.length; i++) {
+    expect(inferences[i - 1].id > inferences[i].id).toBe(true);
+  }
+
+  // Test pagination with before
+  const inferences2 = await queryInferenceTableByFunctionName({
+    function_name: "dashboard_fixture_extract_entities",
+    before: inferences[inferences.length - 1].id,
+    page_size: 10,
+  });
+  expect(inferences2.length).toBe(10);
+
+  // Test pagination with after
+  const inferences3 = await queryInferenceTableByFunctionName({
+    function_name: "dashboard_fixture_extract_entities",
+    after: inferences[0].id,
+    page_size: 10,
+  });
+  expect(inferences3.length).toBe(0);
+});
+
+test("queryInferenceTableBoundsByFunctionName", async () => {
+  const bounds = await queryInferenceTableBoundsByFunctionName({
+    function_name: "dashboard_fixture_extract_entities",
+  });
+  expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
+  expect(bounds.last_id).toBe("019484e3-a4f8-71b3-b609-a4a3eee1e068");
+});
+
+test("queryInferenceTableByVariantName", async () => {
+  const inferences = await queryInferenceTableByVariantName({
+    function_name: "dashboard_fixture_extract_entities",
+    variant_name: "gpt4o_initial_prompt",
+    page_size: 10,
+  });
+  expect(inferences.length).toBe(10);
+
+  // Verify IDs are in descending order
+  for (let i = 1; i < inferences.length; i++) {
+    expect(inferences[i - 1].id > inferences[i].id).toBe(true);
+  }
+
+  // Test pagination with before
+  const inferences2 = await queryInferenceTableByVariantName({
+    function_name: "dashboard_fixture_extract_entities",
+    variant_name: "gpt4o_initial_prompt",
+    before: inferences[inferences.length - 1].id,
+    page_size: 10,
+  });
+  expect(inferences2.length).toBe(10);
+
+  // Test pagination with after
+  const inferences3 = await queryInferenceTableByVariantName({
+    function_name: "dashboard_fixture_extract_entities",
+    variant_name: "gpt4o_initial_prompt",
+    after: inferences[0].id,
+    page_size: 10,
+  });
+  expect(inferences3.length).toBe(0);
+});
+
+test("queryInferenceTableBoundsByVariantName", async () => {
+  const bounds = await queryInferenceTableBoundsByVariantName({
+    function_name: "dashboard_fixture_extract_entities",
+    variant_name: "gpt4o_initial_prompt",
+  });
+  expect(bounds.first_id).toBe("01939adf-0f50-79d0-8d55-7a009fcc5e32");
+  expect(bounds.last_id).toBe("0193e087-6188-7cd1-b608-49724ee9e334");
 });
 
 test("queryEpisodeTable", async () => {

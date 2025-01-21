@@ -12,9 +12,11 @@ import type {
   DiclConfig,
   MixtureOfNConfig,
 } from "~/utils/config/variant";
+import { Code } from "~/components/ui/code";
 
 interface BasicVariantInfoProps {
   variantConfig: VariantConfig;
+  function_name: string;
 }
 
 interface TemplateFieldProps {
@@ -52,6 +54,7 @@ function BaseFields({
   max_tokens,
   presence_penalty,
   frequency_penalty,
+  function_name,
   seed,
 }: {
   weight?: number;
@@ -61,10 +64,19 @@ function BaseFields({
   max_tokens?: number;
   presence_penalty?: number;
   frequency_penalty?: number;
+  function_name: string;
   seed?: number;
 }) {
   return (
     <>
+      <div>
+        <dt className="text-lg font-semibold">Function</dt>
+        <dd>
+          <a href={`/observability/function/${function_name}`}>
+            <Code>{function_name}</Code>
+          </a>
+        </dd>
+      </div>
       {weight !== undefined && (
         <div>
           <dt className="text-lg font-semibold">Weight</dt>
@@ -73,7 +85,9 @@ function BaseFields({
       )}
       <div>
         <dt className="text-lg font-semibold">Model</dt>
-        <dd>{model}</dd>
+        <dd>
+          <Code>{model}</Code>
+        </dd>
       </div>
       {temperature !== undefined && (
         <div>
@@ -117,6 +131,7 @@ function BaseFields({
 
 export default function BasicVariantInfo({
   variantConfig,
+  function_name,
 }: BasicVariantInfoProps) {
   return (
     <Card className="mb-4">
@@ -139,6 +154,7 @@ export default function BasicVariantInfo({
           {variantConfig.type === "chat_completion" && (
             <>
               <BaseFields
+                function_name={function_name}
                 weight={variantConfig.weight}
                 model={variantConfig.model}
                 temperature={variantConfig.temperature}
@@ -189,6 +205,7 @@ export default function BasicVariantInfo({
               return (
                 <>
                   <BaseFields
+                    function_name={function_name}
                     weight={config.weight}
                     model={config.evaluator.model}
                     temperature={config.evaluator.temperature}
@@ -204,7 +221,18 @@ export default function BasicVariantInfo({
                   </div>
                   <div className="col-span-2">
                     <dt className="text-lg font-semibold">Candidates</dt>
-                    <dd>{config.candidates.join(", ")}</dd>
+                    <dd>
+                      {config.candidates.map((candidate, i) => (
+                        <>
+                          {i > 0 && ", "}
+                          <a
+                            href={`/observability/function/${function_name}/variant/${candidate}`}
+                          >
+                            <Code>{candidate}</Code>
+                          </a>
+                        </>
+                      ))}
+                    </dd>
                   </div>
                 </>
               );
@@ -217,6 +245,7 @@ export default function BasicVariantInfo({
               return (
                 <>
                   <BaseFields
+                    function_name={function_name}
                     weight={config.weight}
                     model={config.model}
                     temperature={config.temperature}
@@ -251,6 +280,7 @@ export default function BasicVariantInfo({
               return (
                 <>
                   <BaseFields
+                    function_name={function_name}
                     weight={config.weight}
                     model={config.fuser.model}
                     temperature={config.fuser.temperature}
@@ -266,7 +296,18 @@ export default function BasicVariantInfo({
                   </div>
                   <div className="col-span-2">
                     <dt className="text-lg font-semibold">Candidates</dt>
-                    <dd>{config.candidates.join(", ")}</dd>
+                    <dd>
+                      {config.candidates.map((candidate, i) => (
+                        <>
+                          {i > 0 && ", "}
+                          <a
+                            href={`/observability/function/${function_name}/variant/${candidate}`}
+                          >
+                            <Code>{candidate}</Code>
+                          </a>
+                        </>
+                      ))}
+                    </dd>
                   </div>
                 </>
               );
