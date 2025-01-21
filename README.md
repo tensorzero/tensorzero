@@ -13,7 +13,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 
 - [x] **Inference:** one API for all LLMs, with <1ms P99 overhead
 - [x] **Observability:** inference & feedback → your database
-- [x] **Optimization:** from prompts to fine-tuning and RL (& even 🍓? **[→](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations)**)
+- [x] **Optimization:** from prompts to fine-tuning and RL
 - [x] **Experimentation:** built-in A/B testing, routing, fallbacks
 
 <p align="center">
