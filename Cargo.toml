@@ -4,9 +4,24 @@ members = [
     "tensorzero_internal/tests/mock-inference-provider",
     "gateway",
     "ui/app/utils/minijinja",
+    "clients/rust",
 ]
 resolver = "2"
 
+[workspace.dependencies]
+reqwest = { version = "0.12.10", features = [
+    "json",
+    "multipart",
+    "rustls-tls",
+], default-features = false }
+serde = { version = "1.0.204", features = ["derive", "rc"] }
+uuid = { version = "1.10.0", features = ["serde", "v7"] }
+serde_json = { version = "1.0.134", features = ["preserve_order"] }
+secrecy = { version = "0.10.2", features = ["serde"] }
+reqwest-eventsource = "0.6.0"
+async-stream = "0.3.5"
+tokio-stream = "0.1.15"
+tokio = { version = "1.38.1", features = ["full"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

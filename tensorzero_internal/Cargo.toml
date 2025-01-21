@@ -5,8 +5,10 @@ edition = "2021"
 
 
 [features]
-e2e_tests = []
-batch_tests = []
+# Forward these features to the Rust client, so that the embedded gateway
+# has the `e2e_tests` feature enabled when we run our e2e tests
+e2e_tests = ["tensorzero/e2e_tests"]
+batch_tests = ["tensorzero/batch_tests"]
 
 
 [[test]]
@@ -25,7 +27,7 @@ workspace = true
 
 
 [dependencies]
-async-stream = "0.3.5"
+async-stream = { workspace = true }
 aws-config = { version = "1.5.11", features = ["behavior-version-latest"] }
 aws-sdk-bedrockruntime = { version = "1.65.0", features = [
     "behavior-version-latest",
@@ -58,22 +60,18 @@ minijinja = { version = "2.1.0", features = [
     "builtins",
 ] }
 rand = "0.8.5"
-reqwest = { version = "0.12.10", features = [
-    "json",
-    "multipart",
-    "rustls-tls",
-], default-features = false }
-reqwest-eventsource = "0.6.0"
-secrecy = { version = "0.10.2", features = ["serde"] }
-serde = { version = "1.0.204", features = ["derive", "rc"] }
-serde_json = { version = "1.0.134", features = ["preserve_order"] }
+reqwest = { workspace = true }
+reqwest-eventsource = { workspace = true }
+secrecy = { workspace = true }
+serde = { workspace = true}
+serde_json = { workspace = true }
 serde_path_to_error = "0.1.16"
 sha2 = "0.10.8"
 signal = "0.7.0"
 strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.3"
 tokio = { version = "1.38.1", features = ["full"] }
-tokio-stream = "0.1.15"
+tokio-stream = { workspace = true }
 toml = "0.8.15"
 tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
 tracing-subscriber = { version = "0.3.18", features = [
@@ -82,9 +80,11 @@ tracing-subscriber = { version = "0.3.18", features = [
     "json",
 ] }
 url = { version = "2.5.2", features = ["serde"] }
-uuid = { version = "1.10.0", features = ["serde", "v7"] }
+uuid = { workspace = true }
 
 
 [dev-dependencies]
 tempfile = "3.10.1"
 tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
+tensorzero = { path = "../clients/rust"}
+paste = "1.0.15"
