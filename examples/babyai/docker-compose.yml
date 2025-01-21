@@ -1,0 +1,41 @@
+services:
+  clickhouse:
+    container_name: tensorzero-clickhouse-babyai
+    image: clickhouse/clickhouse-server
+    ports:
+      - "8123:8123"
+    healthcheck:
+      test: wget --spider --tries 1 http://localhost:8123/ping
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  gateway:
+    container_name: tensorzero-gateway-babyai
+    image: tensorzero/gateway
+    volumes:
+      # Mount our tensorzero.toml file into the container
+      - ./config:/app/config:ro
+    environment:
+      - CLICKHOUSE_URL=http://tensorzero-clickhouse-babyai:8123/tensorzero
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+    ports:
+      - "3000:3000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  ui:
+    container_name: tensorzero-ui-babyai
+    image: tensorzero/ui
+    volumes:
+      - ./config:/app/config:ro
+    environment:
+      - CLICKHOUSE_URL=http://tensorzero-clickhouse-babyai:8123/tensorzero
+    env_file:
+      - ${ENV_FILE:-.env}
+    ports:
+      - "4000:4000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
