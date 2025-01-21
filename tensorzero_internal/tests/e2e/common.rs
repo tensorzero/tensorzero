@@ -1,6 +1,6 @@
-use gateway::clickhouse::ClickHouseConnectionInfo;
 use reqwest::Url;
 use serde_json::Value;
+use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use uuid::Uuid;
 
 lazy_static::lazy_static! {

@@ -3,7 +3,7 @@ import { loadConfig } from "./index.server";
 
 test("parse e2e config", async () => {
   const validatedConfig = await loadConfig(
-    "./../gateway/tests/e2e/tensorzero.toml",
+    "./../tensorzero_internal/tests/e2e/tensorzero.toml",
   );
   expect(validatedConfig).toBeDefined();
   // Test something in the gateway config

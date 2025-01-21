@@ -1,14 +1,14 @@
 use futures::StreamExt;
-use gateway::inference::{
+use reqwest::{Client, StatusCode};
+use reqwest_eventsource::{Event, RequestBuilderExt};
+use serde_json::{json, Value};
+use tensorzero_internal::inference::{
     providers::dummy::{
         DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW, DUMMY_RAW_REQUEST,
         DUMMY_STREAMING_RESPONSE,
     },
     types::{ContentBlock, RequestMessage, Role, Text},
 };
-use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::common::{

@@ -7,12 +7,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 
-use gateway::clickhouse_migration_manager;
-use gateway::config_parser::Config;
-use gateway::endpoints;
-use gateway::error;
-use gateway::gateway_util;
-use gateway::observability;
+use tensorzero_internal::clickhouse_migration_manager;
+use tensorzero_internal::config_parser::Config;
+use tensorzero_internal::endpoints;
+use tensorzero_internal::error;
+use tensorzero_internal::gateway_util;
+use tensorzero_internal::observability;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;

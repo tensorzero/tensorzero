@@ -7,7 +7,10 @@
 ///    change it so that it looks like it is Pending, and then poll for it to be completed again.
 use std::collections::HashMap;
 
-use gateway::{
+use reqwest::{Client, StatusCode};
+use serde_json::{json, Value};
+use std::collections::HashSet;
+use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
     endpoints::batch_inference::PollPathParams,
     inference::types::{
@@ -16,9 +19,6 @@ use gateway::{
     },
     tool::{ToolCall, ToolResult},
 };
-use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
-use std::collections::HashSet;
 use tokio::time::{sleep, Duration};
 use url::Url;
 use uuid::Uuid;

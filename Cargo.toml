@@ -1,7 +1,8 @@
 [workspace]
 members = [
+    "tensorzero_internal",
+    "tensorzero_internal/tests/mock-inference-provider",
     "gateway",
-    "gateway/tests/mock-inference-provider",
     "ui/app/utils/minijinja",
 ]
 resolver = "2"
