@@ -3,15 +3,15 @@ use std::collections::HashMap;
 
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
-use gateway::{
-    inference::types::{ContentBlock, RequestMessage, Role},
-    tool::{ToolCall, ToolResult},
-};
 #[cfg(feature = "e2e_tests")]
 use reqwest::{Client, StatusCode};
 #[cfg(feature = "e2e_tests")]
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
+use tensorzero_internal::{
+    inference::types::{ContentBlock, RequestMessage, Role},
+    tool::{ToolCall, ToolResult},
+};
 use uuid::Uuid;
 
 #[cfg(feature = "e2e_tests")]

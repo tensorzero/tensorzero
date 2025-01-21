@@ -7,24 +7,26 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use gateway::clickhouse::ClickHouseConnectionInfo;
-use gateway::config_parser::Config;
+use serde_json::json;
+use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_internal::config_parser::Config;
 /// End-to-end tests for particular internal functionality in the batch inference endpoint
 /// These are not tests of the public API (those should go in tests/e2e/providers/batch.rs)
-use gateway::endpoints::batch_inference::{
+use tensorzero_internal::endpoints::batch_inference::{
     get_batch_inferences, get_batch_request, get_completed_batch_inference_response,
     write_batch_request_row, write_completed_batch_inference, write_poll_batch_inference,
     PollInferenceResponse, PollPathParams,
 };
-use gateway::endpoints::inference::{InferenceParams, InferenceResponse};
-use gateway::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
-use gateway::inference::types::batch::{
+use tensorzero_internal::endpoints::inference::{InferenceParams, InferenceResponse};
+use tensorzero_internal::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
+use tensorzero_internal::inference::types::batch::{
     BatchModelInferenceRow, BatchRequestRow, BatchStatus, PollBatchInferenceResponse,
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
-use gateway::inference::types::{ContentBlockOutput, Input, JsonInferenceOutput, Usage};
-use gateway::jsonschema_util::JSONSchemaFromPath;
-use serde_json::json;
+use tensorzero_internal::inference::types::{
+    ContentBlockOutput, Input, JsonInferenceOutput, Usage,
+};
+use tensorzero_internal::jsonschema_util::JSONSchemaFromPath;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 

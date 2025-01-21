@@ -1,7 +1,11 @@
 #![allow(clippy::print_stdout)]
 
 use futures::StreamExt;
-use gateway::{
+use reqwest::{Client, StatusCode};
+use reqwest_eventsource::{Event, RequestBuilderExt};
+use serde_json::{json, Value};
+use std::time::Duration;
+use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
     embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
     endpoints::inference::InferenceCredentials,
@@ -10,10 +14,6 @@ use gateway::{
         JsonInferenceOutput, RequestMessage, Role,
     },
 };
-use reqwest::{Client, StatusCode};
-use reqwest_eventsource::{Event, RequestBuilderExt};
-use serde_json::{json, Value};
-use std::time::Duration;
 use tokio::time::sleep;
 use uuid::Uuid;
 
