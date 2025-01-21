@@ -34,11 +34,13 @@ export function VariantPerformance({
   metric_name,
   time_granularity,
   onTimeGranularityChange,
+  singleVariantMode = false,
 }: {
   variant_performances: VariantPerformanceRow[];
   metric_name: string;
   time_granularity: TimeWindowUnit;
   onTimeGranularityChange: (time_granularity: TimeWindowUnit) => void;
+  singleVariantMode?: boolean;
 }) {
   const { data, variantNames } =
     transformVariantPerformances(variant_performances);
@@ -49,7 +51,9 @@ export function VariantPerformance({
         ...config,
         [variantName]: {
           label: variantName,
-          color: CHART_COLORS[index % CHART_COLORS.length],
+          color: singleVariantMode
+            ? CHART_COLORS[0]
+            : CHART_COLORS[index % CHART_COLORS.length],
         },
       }),
       {},
@@ -60,10 +64,22 @@ export function VariantPerformance({
       <Card>
         <CardHeader className="flex flex-row items-start justify-between">
           <div>
-            <CardTitle>Variant Performance Over Time</CardTitle>
+            <CardTitle>
+              {singleVariantMode
+                ? "Performance Over Time"
+                : "Variant Performance Over Time"}
+            </CardTitle>
             <CardDescription>
-              Showing average metric values by variant for metric{" "}
-              <code>{metric_name}</code>
+              {singleVariantMode ? (
+                <span>
+                  Showing average metric values for <code>{metric_name}</code>
+                </span>
+              ) : (
+                <span>
+                  Showing average metric values by variant for metric{" "}
+                  <code>{metric_name}</code>
+                </span>
+              )}
             </CardDescription>
           </div>
           <TimeGranularitySelector
@@ -110,21 +126,37 @@ export function VariantPerformance({
                 }
               />
               <ChartLegend content={<ChartLegendContent />} />
-              {variantNames.map((variantName) => (
+              {singleVariantMode ? (
                 <Bar
-                  key={variantName}
-                  dataKey={variantName}
-                  name={variantName}
-                  fill={chartConfig[variantName].color}
+                  key={variantNames[0]}
+                  dataKey={variantNames[0]}
+                  name={variantNames[0]}
+                  fill={CHART_COLORS[0]}
                   radius={4}
                   maxBarSize={100}
                 >
                   <ErrorBar
-                    dataKey={`${variantName}_ci_error`}
+                    dataKey={`${variantNames[0]}_ci_error`}
                     strokeWidth={1}
                   />
                 </Bar>
-              ))}
+              ) : (
+                variantNames.map((variantName) => (
+                  <Bar
+                    key={variantName}
+                    dataKey={variantName}
+                    name={variantName}
+                    fill={chartConfig[variantName].color}
+                    radius={4}
+                    maxBarSize={100}
+                  >
+                    <ErrorBar
+                      dataKey={`${variantName}_ci_error`}
+                      strokeWidth={1}
+                    />
+                  </Bar>
+                ))
+              )}
             </BarChart>
           </ChartContainer>
         </CardContent>

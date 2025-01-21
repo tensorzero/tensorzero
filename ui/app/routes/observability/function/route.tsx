@@ -24,7 +24,7 @@ import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
 import { MetricSelector } from "./MetricSelector";
 import { useState } from "react";
-import { VariantPerformance } from "./VariantPerformance";
+import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
