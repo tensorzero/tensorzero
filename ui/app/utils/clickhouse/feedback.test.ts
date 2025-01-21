@@ -319,4 +319,26 @@ describe("queryMetricsWithFeedback", () => {
       feedback_count: 85,
     });
   });
+
+  test("returns correct feedback counts for variant", async () => {
+    const results = await queryMetricsWithFeedback({
+      function_name: "dashboard_fixture_write_haiku",
+      variant_name: "initial_prompt_gpt4o_mini",
+      inference_table: "ChatInference",
+      metrics: {
+        dashboard_fixture_haiku_rating: {
+          type: "float",
+          optimize: "max",
+          level: "inference",
+        },
+      },
+    });
+
+    expect(results.metrics).toContainEqual({
+      function_name: "dashboard_fixture_write_haiku",
+      metric_name: "dashboard_fixture_haiku_rating",
+      metric_type: "float",
+      feedback_count: 491,
+    });
+  });
 });

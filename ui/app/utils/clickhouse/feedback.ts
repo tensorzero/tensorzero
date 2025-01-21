@@ -771,8 +771,9 @@ export async function queryMetricsWithFeedback(params: {
   function_name: string;
   inference_table: string;
   metrics: Record<string, MetricConfig>;
+  variant_name?: string;
 }): Promise<MetricsWithFeedbackData> {
-  const { function_name, inference_table, metrics } = params;
+  const { function_name, inference_table, metrics, variant_name } = params;
 
   const inferenceMetrics = Object.entries(metrics)
     .filter(([, metric]) => {
@@ -802,6 +803,10 @@ export async function queryMetricsWithFeedback(params: {
   const episodeIdInClause =
     episodeMetrics.length > 0 ? `IN ('${episodeMetrics.join("','")}')` : `= ''`;
 
+  const variantClause = variant_name
+    ? `AND i.variant_name = {variant_name:String}`
+    : "";
+
   const query = `
     WITH
     boolean_inference_metrics AS (
@@ -813,6 +818,7 @@ export async function queryMetricsWithFeedback(params: {
       FROM tensorzero.${inference_table} i
       JOIN tensorzero.BooleanMetricFeedback bmf ON bmf.target_id = i.id
       WHERE i.function_name = {function_name:String}
+        ${variantClause}
         AND bmf.metric_name ${idInClause}
       GROUP BY i.function_name, bmf.metric_name
       HAVING feedback_count > 0
@@ -827,6 +833,7 @@ export async function queryMetricsWithFeedback(params: {
       FROM tensorzero.${inference_table} i
       JOIN tensorzero.BooleanMetricFeedback bmf ON bmf.target_id = i.episode_id
       WHERE i.function_name = {function_name:String}
+        ${variantClause}
         AND bmf.metric_name ${episodeIdInClause}
       GROUP BY i.function_name, bmf.metric_name
       HAVING feedback_count > 0
@@ -841,6 +848,7 @@ export async function queryMetricsWithFeedback(params: {
       FROM tensorzero.${inference_table} i
       JOIN tensorzero.FloatMetricFeedback fmf ON fmf.target_id = i.id
       WHERE i.function_name = {function_name:String}
+        ${variantClause}
         AND fmf.metric_name ${idInClause}
       GROUP BY i.function_name, fmf.metric_name
       HAVING feedback_count > 0
@@ -855,6 +863,7 @@ export async function queryMetricsWithFeedback(params: {
       FROM tensorzero.${inference_table} i
       JOIN tensorzero.FloatMetricFeedback fmf ON fmf.target_id = i.episode_id
       WHERE i.function_name = {function_name:String}
+        ${variantClause}
         AND fmf.metric_name ${episodeIdInClause}
       GROUP BY i.function_name, fmf.metric_name
       HAVING feedback_count > 0
@@ -879,7 +888,10 @@ export async function queryMetricsWithFeedback(params: {
     const resultSet = await clickhouseClient.query({
       query,
       format: "JSONEachRow",
-      query_params: { function_name },
+      query_params: {
+        function_name,
+        ...(variant_name && { variant_name }),
+      },
     });
 
     const rawMetrics = (await resultSet.json()) as Array<{

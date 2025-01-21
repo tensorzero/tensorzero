@@ -17,6 +17,7 @@ export async function getVariantPerformances(params: {
   metric_name: string;
   metric_config: MetricConfig;
   time_window_unit: TimeWindowUnit;
+  variant_name?: string;
 }) {
   const {
     function_name,
@@ -24,6 +25,7 @@ export async function getVariantPerformances(params: {
     metric_name,
     metric_config,
     time_window_unit,
+    variant_name,
   } = params;
   if (
     metric_config.type === "comment" ||
@@ -57,6 +59,7 @@ export async function getVariantPerformances(params: {
         metric_name,
         metric_table_name,
         time_window_unit,
+        variant_name,
       });
     case "inference":
       return getInferencePerformances({
@@ -65,6 +68,7 @@ export async function getVariantPerformances(params: {
         metric_name,
         metric_table_name,
         time_window_unit,
+        variant_name,
       });
   }
 }
@@ -85,6 +89,7 @@ async function getEpisodePerformances(params: {
   metric_name: string;
   metric_table_name: string;
   time_window_unit: TimeWindowUnit;
+  variant_name?: string;
 }): Promise<VariantPerformanceRow[]> {
   const {
     function_name,
@@ -92,7 +97,12 @@ async function getEpisodePerformances(params: {
     metric_name,
     metric_table_name,
     time_window_unit,
+    variant_name,
   } = params;
+
+  const variantFilter = variant_name
+    ? " AND i.variant_name = {variant_name:String}"
+    : "";
 
   // Different query for cumulative stats
   const query =
@@ -108,7 +118,7 @@ WITH sub AS (
         ON i.episode_id = f.target_id
     WHERE
         f.metric_name = {metric_name:String}
-        AND i.function_name = {function_name:String}
+        AND i.function_name = {function_name:String}${variantFilter}
     GROUP BY
         variant_name,
         episode_id
@@ -158,7 +168,7 @@ WITH sub AS (
         f.metric_name = {metric_name:String}
 
         /* Filter to only inferences with the correct function_name. */
-        AND i.function_name = {function_name:String}
+        AND i.function_name = {function_name:String}${variantFilter}
     GROUP BY
         period_start,
         variant_name,
@@ -202,6 +212,7 @@ ORDER BY
       time_window_unit,
       function_name,
       metric_name,
+      ...(variant_name ? { variant_name } : {}),
     },
   });
   const rows = await resultSet.json();
@@ -215,6 +226,7 @@ async function getInferencePerformances(params: {
   metric_name: string;
   metric_table_name: string;
   time_window_unit: TimeWindowUnit;
+  variant_name?: string;
 }) {
   const {
     function_name,
@@ -222,7 +234,12 @@ async function getInferencePerformances(params: {
     metric_name,
     metric_table_name,
     time_window_unit,
+    variant_name,
   } = params;
+
+  const variantFilter = variant_name
+    ? " AND i.variant_name = {variant_name:String}"
+    : "";
 
   // Different query for cumulative stats
   const query =
@@ -240,7 +257,7 @@ JOIN ${metric_table_name} f
     ON i.id = f.target_id
 WHERE
     f.metric_name = {metric_name:String}
-    AND i.function_name = {function_name:String}
+    AND i.function_name = {function_name:String}${variantFilter}
 GROUP BY
     variant_name
 ORDER BY
@@ -259,7 +276,7 @@ JOIN ${metric_table_name} f
     ON i.id = f.target_id
 WHERE
     f.metric_name = {metric_name:String}
-    AND i.function_name = {function_name:String}
+    AND i.function_name = {function_name:String}${variantFilter}
 GROUP BY
     period_start,
     variant_name
@@ -275,6 +292,7 @@ ORDER BY
       function_name,
       metric_name,
       time_window_unit,
+      ...(variant_name ? { variant_name } : {}),
     },
   });
 

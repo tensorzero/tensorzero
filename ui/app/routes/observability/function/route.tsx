@@ -22,7 +22,7 @@ import {
 } from "~/utils/clickhouse/function";
 import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
-import { MetricSelector } from "./MetricSelector";
+import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 
