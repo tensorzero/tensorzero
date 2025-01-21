@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::future::Future;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -24,8 +24,8 @@ use crate::inference::providers::dummy::DummyProvider;
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EmbeddingModelConfig {
-    pub routing: Vec<String>,
-    pub providers: HashMap<String, EmbeddingProviderConfig>,
+    pub routing: Vec<Arc<str>>,
+    pub providers: HashMap<Arc<str>, EmbeddingProviderConfig>,
 }
 
 impl EmbeddingModelConfig {
@@ -40,7 +40,7 @@ impl EmbeddingModelConfig {
         for provider_name in &self.routing {
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
-                    provider_name: provider_name.clone(),
+                    provider_name: provider_name.to_string(),
                 })
             })?;
             let response = provider_config
@@ -48,7 +48,8 @@ impl EmbeddingModelConfig {
                 .await;
             match response {
                 Ok(response) => {
-                    let embedding_response = EmbeddingResponse::new(response, provider_name);
+                    let embedding_response =
+                        EmbeddingResponse::new(response, provider_name.clone());
                     return Ok(embedding_response);
                 }
                 Err(error) => {
@@ -84,7 +85,7 @@ pub struct EmbeddingProviderResponse {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct EmbeddingResponse<'a> {
+pub struct EmbeddingResponse {
     pub id: Uuid,
     pub input: String,
     pub embedding: Vec<f32>,
@@ -93,10 +94,10 @@ pub struct EmbeddingResponse<'a> {
     pub raw_response: String,
     pub usage: Usage,
     pub latency: Latency,
-    pub embedding_provider_name: &'a str,
+    pub embedding_provider_name: Arc<str>,
 }
 
-pub struct EmbeddingResponseWithMetadata<'a> {
+pub struct EmbeddingResponseWithMetadata {
     pub id: Uuid,
     pub input: String,
     pub embedding: Vec<f32>,
@@ -105,14 +106,14 @@ pub struct EmbeddingResponseWithMetadata<'a> {
     pub raw_response: String,
     pub usage: Usage,
     pub latency: Latency,
-    pub embedding_provider_name: &'a str,
-    pub embedding_model_name: &'a str,
+    pub embedding_provider_name: Arc<str>,
+    pub embedding_model_name: Arc<str>,
 }
 
-impl<'a> EmbeddingResponse<'a> {
+impl EmbeddingResponse {
     pub fn new(
         embedding_provider_response: EmbeddingProviderResponse,
-        embedding_provider_name: &'a str,
+        embedding_provider_name: Arc<str>,
     ) -> Self {
         Self {
             id: embedding_provider_response.id,
@@ -128,8 +129,8 @@ impl<'a> EmbeddingResponse<'a> {
     }
 }
 
-impl<'a> EmbeddingResponseWithMetadata<'a> {
-    pub fn new(embedding_response: EmbeddingResponse<'a>, embedding_model_name: &'a str) -> Self {
+impl EmbeddingResponseWithMetadata {
+    pub fn new(embedding_response: EmbeddingResponse, embedding_model_name: Arc<str>) -> Self {
         Self {
             id: embedding_response.id,
             input: embedding_response.input,
@@ -145,8 +146,8 @@ impl<'a> EmbeddingResponseWithMetadata<'a> {
     }
 }
 
-impl<'a> From<EmbeddingResponseWithMetadata<'a>> for ModelInferenceResponseWithMetadata<'a> {
-    fn from(response: EmbeddingResponseWithMetadata<'a>) -> Self {
+impl From<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetadata {
+    fn from(response: EmbeddingResponseWithMetadata) -> Self {
         Self {
             id: response.id,
             output: vec![],
@@ -252,18 +253,18 @@ mod tests {
     #[tokio::test]
     async fn test_embedding_fallbacks() {
         let bad_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
-            model_name: "error".to_string(),
+            model_name: "error".into(),
             ..Default::default()
         });
         let good_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
-            model_name: "good".to_string(),
+            model_name: "good".into(),
             ..Default::default()
         });
         let fallback_embedding_model = EmbeddingModelConfig {
-            routing: vec!["error".to_string(), "good".to_string()],
+            routing: vec!["error".to_string().into(), "good".to_string().into()],
             providers: HashMap::from([
-                ("error".to_string(), bad_provider),
-                ("good".to_string(), good_provider),
+                ("error".to_string().into(), bad_provider),
+                ("good".to_string().into(), good_provider),
             ]),
         };
         let request = EmbeddingRequest {

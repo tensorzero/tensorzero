@@ -123,7 +123,7 @@ impl InferenceProvider for MistralProvider {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = MistralRequest::new(&self.model_name, request)?;
-        let request_url = get_chat_url(Some(&MISTRAL_API_BASE))?;
+        let request_url = get_chat_url(&MISTRAL_API_BASE)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let res = http_client
@@ -205,7 +205,7 @@ impl InferenceProvider for MistralProvider {
                 message: format!("Error serializing request: {e}"),
             })
         })?;
-        let request_url = get_chat_url(Some(&MISTRAL_API_BASE))?;
+        let request_url = get_chat_url(&MISTRAL_API_BASE)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let event_source = http_client

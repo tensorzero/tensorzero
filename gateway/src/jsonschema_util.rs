@@ -4,8 +4,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::{OnceCell, RwLock};
-use tokio::task::JoinHandle;
+use tokio::sync::OnceCell;
 use tracing::instrument;
 
 use crate::error::{Error, ErrorDetails};
@@ -121,12 +120,10 @@ impl JSONSchemaFromPath {
     }
 }
 
-type CompilationTask = Arc<RwLock<Option<JoinHandle<Result<Arc<JSONSchema>, Error>>>>>;
 /// This is a JSONSchema that is compiled on the fly.
 /// This is useful for schemas that are not known at compile time, in particular, for dynamic tool definitions.
 /// In order to avoid blocking the inference, we compile the schema asynchronously as the inference runs.
-/// We use a tokio::sync::OnceCell to ensure that the schema is compiled only once, and an RwLock to manage
-/// interior mutability of the JoinHandle on the compilation task (I don't think this is strictly necessary but Rust will complain without it).
+/// We use a tokio::sync::OnceCell to ensure that the schema is compiled only once
 ///
 /// The public API of this struct should look very normal except validation is `async`
 /// There are just `new` and `validate` methods.
@@ -134,9 +131,7 @@ type CompilationTask = Arc<RwLock<Option<JoinHandle<Result<Arc<JSONSchema>, Erro
 pub struct DynamicJSONSchema {
     pub value: Value,
     #[serde(skip)]
-    compiled_schema: OnceCell<Arc<JSONSchema>>,
-    #[serde(skip)]
-    compilation_task: CompilationTask,
+    compiled_schema: Arc<OnceCell<JSONSchema>>,
 }
 
 impl PartialEq for DynamicJSONSchema {
@@ -147,65 +142,59 @@ impl PartialEq for DynamicJSONSchema {
 
 impl DynamicJSONSchema {
     pub fn new(schema: Value) -> Self {
-        let schema_clone = schema.clone();
-        let compilation_task = tokio::task::spawn_blocking(move || {
-            JSONSchema::compile(&schema_clone)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::DynamicJsonSchema {
-                        message: e.to_string(),
-                    })
-                })
-                .map(Arc::new)
-        });
-        Self {
+        let compiled_schema = Arc::new(OnceCell::new());
+        let this = Self {
             value: schema,
-            compiled_schema: OnceCell::new(),
-            compilation_task: Arc::new(RwLock::new(Some(compilation_task))),
-        }
+            compiled_schema,
+        };
+        let this_clone = this.clone();
+        // Kick off the schema compilation in the background.
+        // The first call to `validate` will either get the compiled schema (if the task finished),
+        // or wait on the task to complete via the `OnceCell`
+        tokio::spawn(async move {
+            // If this errors, then we'll just get the error when we call 'validate'
+            let _ = this_clone.get_or_init_compiled_schema().await;
+        });
+        this
     }
 
     pub async fn validate(&self, instance: &Value) -> Result<(), Error> {
         // This will block until the schema is compiled
-        // We don't take the result here because we want the mutable borrow to end
-        self.get_or_init_compiled_schema().await?;
-
-        let compiled_schema = match self.compiled_schema.get() {
-            Some(compiled_schema) => compiled_schema,
-            None => {
-                return Err(Error::new(ErrorDetails::DynamicJsonSchema {
-                    message: "Schema compilation failed".to_string(),
-                }))
-            }
-        };
-
-        compiled_schema.validate(instance).map_err(|e| {
-            let messages = e.into_iter().map(|error| error.to_string()).collect();
-            Error::new(ErrorDetails::JsonSchemaValidation {
-                messages,
-                data: Box::new(instance.clone()),
-                schema: Box::new(self.value.clone()),
+        self.get_or_init_compiled_schema()
+            .await?
+            .validate(instance)
+            .map_err(|e| {
+                let messages = e.into_iter().map(|error| error.to_string()).collect();
+                Error::new(ErrorDetails::JsonSchemaValidation {
+                    messages,
+                    data: Box::new(instance.clone()),
+                    schema: Box::new(self.value.clone()),
+                })
             })
-        })
     }
 
-    async fn get_or_init_compiled_schema(&self) -> Result<(), Error> {
+    async fn get_or_init_compiled_schema(&self) -> Result<&JSONSchema, Error> {
         self.compiled_schema
-            .get_or_try_init(|| async {
-                let mut task_guard = self.compilation_task.write().await;
-                if let Some(task) = task_guard.take() {
-                    task.await.map_err(|e| {
+            .get_or_try_init(|| {
+                let schema = self.value.clone();
+                async {
+                    // Use a blocking task, since `JSONSchema::compile` is cpu-bound
+                    tokio::task::spawn_blocking(move || {
+                        JSONSchema::compile(&schema).map_err(|e| {
+                            Error::new(ErrorDetails::DynamicJsonSchema {
+                                message: e.to_string(),
+                            })
+                        })
+                    })
+                    .await
+                    .map_err(|e| {
                         Error::new(ErrorDetails::JsonSchema {
                             message: format!("Task join error in DynamicJSONSchema: {}", e),
                         })
                     })?
-                } else {
-                    Err(Error::new(ErrorDetails::JsonSchema {
-                        message: "Schema compilation already completed.".to_string(),
-                    }))
                 }
             })
-            .await?;
-        Ok(())
+            .await
     }
 
     #[instrument]

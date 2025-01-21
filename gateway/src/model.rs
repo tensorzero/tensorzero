@@ -3,6 +3,7 @@ use reqwest::Client;
 use secrecy::SecretString;
 use serde::de::Error as SerdeError;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::{env, fs};
 use strum::VariantNames;
 #[allow(unused_imports)]
@@ -14,6 +15,7 @@ use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
 use crate::inference::providers::hyperbolic::HyperbolicProvider;
+use crate::inference::providers::sglang::SGLangProvider;
 use crate::inference::providers::tgi::TGIProvider;
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
@@ -41,32 +43,36 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelConfig {
-    pub routing: Vec<String>, // [provider name A, provider name B, ...]
-    pub providers: HashMap<String, ProviderConfig>, // provider name => provider config
+    pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
+    pub providers: HashMap<Arc<str>, ProviderConfig>, // provider name => provider config
 }
 
 impl ModelConfig {
-    pub async fn infer<'a, 'request>(
-        &'a self,
+    pub async fn infer<'request>(
+        &self,
         request: &'request ModelInferenceRequest<'request>,
         client: &'request Client,
         api_keys: &'request InferenceCredentials,
-    ) -> Result<ModelInferenceResponse<'a>, Error> {
+    ) -> Result<ModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
-                    provider_name: provider_name.clone(),
+                    provider_name: provider_name.to_string(),
                 })
             })?;
             let response = provider_config
                 .infer(request, client, api_keys)
-                .instrument(span!(Level::INFO, "infer", provider_name))
+                .instrument(span!(
+                    Level::INFO,
+                    "infer",
+                    provider_name = &**provider_name
+                ))
                 .await;
             match response {
                 Ok(response) => {
                     let model_inference_response =
-                        ModelInferenceResponse::new(response, provider_name);
+                        ModelInferenceResponse::new(response, provider_name.clone());
                     return Ok(model_inference_response);
                 }
                 Err(error) => {
@@ -78,8 +84,8 @@ impl ModelConfig {
         Err(err)
     }
 
-    pub async fn infer_stream<'a, 'request>(
-        &'a self,
+    pub async fn infer_stream<'request>(
+        &self,
         request: &'request ModelInferenceRequest<'request>,
         client: &'request Client,
         api_keys: &'request InferenceCredentials,
@@ -88,7 +94,7 @@ impl ModelConfig {
             ProviderInferenceResponseChunk,
             ProviderInferenceResponseStream,
             String,
-            &'a str,
+            Arc<str>,
         ),
         Error,
     > {
@@ -96,17 +102,21 @@ impl ModelConfig {
         for provider_name in &self.routing {
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
-                    provider_name: provider_name.clone(),
+                    provider_name: provider_name.to_string(),
                 })
             })?;
             let response = provider_config
                 .infer_stream(request, client, api_keys)
-                .instrument(span!(Level::INFO, "infer_stream", provider_name))
+                .instrument(span!(
+                    Level::INFO,
+                    "infer_stream",
+                    provider_name = &**provider_name
+                ))
                 .await;
             match response {
                 Ok(response) => {
                     let (chunk, stream, raw_request) = response;
-                    return Ok((chunk, stream, raw_request, provider_name));
+                    return Ok((chunk, stream, raw_request, provider_name.clone()));
                 }
                 Err(error) => {
                     provider_errors.insert(provider_name.to_string(), error);
@@ -128,12 +138,16 @@ impl ModelConfig {
         for provider_name in &self.routing {
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
-                    provider_name: provider_name.clone(),
+                    provider_name: provider_name.to_string(),
                 })
             })?;
             let response = provider_config
                 .start_batch_inference(requests, client, api_keys)
-                .instrument(span!(Level::INFO, "start_batch_inference", provider_name))
+                .instrument(span!(
+                    Level::INFO,
+                    "start_batch_inference",
+                    provider_name = &**provider_name
+                ))
                 .await;
             match response {
                 Ok(response) => {
@@ -158,7 +172,6 @@ impl ModelConfig {
     }
 }
 
-// NOTE: if one adds a new provider, make sure to add it to the set of `BLACKLISTED_NAMES` in `config_parser.rs`
 #[derive(Debug)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
@@ -175,6 +188,7 @@ pub enum ProviderConfig {
     VLLM(VLLMProvider),
     XAI(XAIProvider),
     TGI(TGIProvider),
+    SGLang(SGLangProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -262,6 +276,12 @@ enum ProviderConfigHelper {
     },
     #[allow(clippy::upper_case_acronyms)]
     TGI {
+        api_base: Url,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[allow(clippy::upper_case_acronyms)]
+    SGLang {
+        model_name: String,
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
     },
@@ -387,6 +407,14 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 XAIProvider::new(model_name, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
+            ProviderConfigHelper::SGLang {
+                model_name,
+                api_base,
+                api_key_location,
+            } => ProviderConfig::SGLang(
+                SGLangProvider::new(model_name, api_base, api_key_location)
+                    .map_err(|e| D::Error::custom(e.to_string()))?,
+            ),
             ProviderConfigHelper::TGI {
                 api_base,
                 api_key_location,
@@ -431,6 +459,7 @@ impl ProviderConfig {
             ProviderConfig::Mistral(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::OpenAI(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::Together(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::SGLang(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::TGI(provider) => provider.infer(request, client, api_keys).await,
@@ -484,6 +513,9 @@ impl ProviderConfig {
                 provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::Together(provider) => {
+                provider.infer_stream(request, client, api_keys).await
+            }
+            ProviderConfig::SGLang(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::XAI(provider) => provider.infer_stream(request, client, api_keys).await,
@@ -556,6 +588,11 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::Together(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::SGLang(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -647,6 +684,11 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::Together(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::SGLang(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -839,13 +881,13 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
 ];
 
 #[derive(Debug, Default, Deserialize)]
-#[serde(try_from = "HashMap<String, ModelConfig>")]
-pub struct ModelTable(HashMap<String, ModelConfig>);
+#[serde(try_from = "HashMap<Arc<str>, ModelConfig>")]
+pub struct ModelTable(HashMap<Arc<str>, ModelConfig>);
 
-impl TryFrom<HashMap<String, ModelConfig>> for ModelTable {
+impl TryFrom<HashMap<Arc<str>, ModelConfig>> for ModelTable {
     type Error = String;
 
-    fn try_from(map: HashMap<String, ModelConfig>) -> Result<Self, Self::Error> {
+    fn try_from(map: HashMap<Arc<str>, ModelConfig>) -> Result<Self, Self::Error> {
         for key in map.keys() {
             if RESERVED_MODEL_PREFIXES
                 .iter()
@@ -859,7 +901,7 @@ impl TryFrom<HashMap<String, ModelConfig>> for ModelTable {
 }
 
 impl std::ops::Deref for ModelTable {
-    type Target = HashMap<String, ModelConfig>;
+    type Target = HashMap<Arc<str>, ModelConfig>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -899,7 +941,7 @@ impl ModelTable {
             let provider_type = &prefix[..prefix.len() - 2];
             let model_config = model_config_from_shorthand(provider_type, model_name)?;
             model_config.validate()?;
-            self.0.insert(key.to_string(), model_config);
+            self.0.insert(key.into(), model_config);
             return Ok(());
         }
 
@@ -936,8 +978,8 @@ fn model_config_from_shorthand(
         }
     };
     Ok(ModelConfig {
-        routing: vec![provider_type.to_string()],
-        providers: HashMap::from([(provider_type.to_string(), provider_config)]),
+        routing: vec![provider_type.to_string().into()],
+        providers: HashMap::from([(provider_type.to_string().into(), provider_config)]),
     })
 }
 
@@ -962,16 +1004,16 @@ mod tests {
     #[tokio::test]
     async fn test_model_config_infer_routing() {
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "good".to_string(),
+            model_name: "good".into(),
             credentials: DummyCredentials::None,
         });
         let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "error".to_string(),
+            model_name: "error".into(),
             credentials: DummyCredentials::None,
         });
         let model_config = ModelConfig {
-            routing: vec!["good_provider".to_string()],
-            providers: HashMap::from([("good_provider".to_string(), good_provider_config)]),
+            routing: vec!["good_provider".into()],
+            providers: HashMap::from([("good_provider".into(), good_provider_config)]),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -1009,12 +1051,12 @@ mod tests {
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
         assert_eq!(usage, DUMMY_INFER_USAGE);
-        assert_eq!(response.model_provider_name, "good_provider");
+        assert_eq!(&*response.model_provider_name, "good_provider");
 
         // Try inferring the bad model
         let model_config = ModelConfig {
-            routing: vec!["error".to_string()],
-            providers: HashMap::from([("error".to_string(), bad_provider_config)]),
+            routing: vec!["error".into()],
+            providers: HashMap::from([("error".into(), bad_provider_config)]),
         };
         let response = model_config
             .infer(&request, &Client::new(), &api_keys)
@@ -1045,11 +1087,11 @@ mod tests {
         // Test that fallback works with bad --> good model provider
 
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "good".to_string(),
+            model_name: "good".into(),
             credentials: DummyCredentials::None,
         });
         let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "error".to_string(),
+            model_name: "error".into(),
             credentials: DummyCredentials::None,
         });
         let api_keys = InferenceCredentials::default();
@@ -1071,10 +1113,13 @@ mod tests {
         };
 
         let model_config = ModelConfig {
-            routing: vec!["error_provider".to_string(), "good_provider".to_string()],
+            routing: vec![
+                "error_provider".to_string().into(),
+                "good_provider".to_string().into(),
+            ],
             providers: HashMap::from([
-                ("error_provider".to_string(), bad_provider_config),
-                ("good_provider".to_string(), good_provider_config),
+                ("error_provider".to_string().into(), bad_provider_config),
+                ("good_provider".to_string().into(), good_provider_config),
             ]),
         };
 
@@ -1093,17 +1138,17 @@ mod tests {
         assert_eq!(raw, DUMMY_INFER_RESPONSE_RAW);
         let usage = response.usage;
         assert_eq!(usage, DUMMY_INFER_USAGE);
-        assert_eq!(response.model_provider_name, "good_provider");
+        assert_eq!(&*response.model_provider_name, "good_provider");
     }
 
     #[tokio::test]
     async fn test_model_config_infer_stream_routing() {
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "good".to_string(),
+            model_name: "good".into(),
             credentials: DummyCredentials::None,
         });
         let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "error".to_string(),
+            model_name: "error".into(),
             credentials: DummyCredentials::None,
         });
         let api_keys = InferenceCredentials::default();
@@ -1125,8 +1170,8 @@ mod tests {
 
         // Test good model
         let model_config = ModelConfig {
-            routing: vec!["good_provider".to_string()],
-            providers: HashMap::from([("good_provider".to_string(), good_provider_config)]),
+            routing: vec!["good_provider".to_string().into()],
+            providers: HashMap::from([("good_provider".to_string().into(), good_provider_config)]),
         };
         let (initial_chunk, stream, raw_request, model_provider_name) = model_config
             .infer_stream(&request, &Client::new(), &api_keys)
@@ -1140,7 +1185,7 @@ mod tests {
             })],
         );
         assert_eq!(raw_request, "raw request");
-        assert_eq!(model_provider_name, "good_provider");
+        assert_eq!(&*model_provider_name, "good_provider");
         let mut collected_content: Vec<ContentBlockChunk> =
             vec![ContentBlockChunk::Text(TextChunk {
                 text: DUMMY_STREAMING_RESPONSE[0].to_string(),
@@ -1165,8 +1210,8 @@ mod tests {
 
         // Test bad model
         let model_config = ModelConfig {
-            routing: vec!["error".to_string()],
-            providers: HashMap::from([("error".to_string(), bad_provider_config)]),
+            routing: vec!["error".to_string().into()],
+            providers: HashMap::from([("error".to_string().into(), bad_provider_config)]),
         };
         let response = model_config
             .infer_stream(&request, &Client::new(), &api_keys)
@@ -1201,11 +1246,11 @@ mod tests {
         // Test that fallback works with bad --> good model provider (streaming)
 
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "good".to_string(),
+            model_name: "good".into(),
             credentials: DummyCredentials::None,
         });
         let bad_provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "error".to_string(),
+            model_name: "error".into(),
             credentials: DummyCredentials::None,
         });
         let api_keys = InferenceCredentials::default();
@@ -1227,17 +1272,17 @@ mod tests {
 
         // Test fallback
         let model_config = ModelConfig {
-            routing: vec!["error_provider".to_string(), "good_provider".to_string()],
+            routing: vec!["error_provider".into(), "good_provider".into()],
             providers: HashMap::from([
-                ("error_provider".to_string(), bad_provider_config),
-                ("good_provider".to_string(), good_provider_config),
+                ("error_provider".into(), bad_provider_config),
+                ("good_provider".into(), good_provider_config),
             ]),
         };
         let (initial_chunk, stream, raw_request, model_provider_name) = model_config
             .infer_stream(&request, &Client::new(), &api_keys)
             .await
             .unwrap();
-        assert_eq!(model_provider_name, "good_provider");
+        assert_eq!(&*model_provider_name, "good_provider");
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
         assert!(logs_contain("Error sending request to Dummy provider"));
         assert_eq!(raw_request, "raw request");
@@ -1272,12 +1317,12 @@ mod tests {
     #[tokio::test]
     async fn test_dynamic_api_keys() {
         let provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "test_key".to_string(),
+            model_name: "test_key".into(),
             credentials: DummyCredentials::Dynamic("TEST_KEY".to_string()),
         });
         let model_config = ModelConfig {
-            routing: vec!["model".to_string()],
-            providers: HashMap::from([("model".to_string(), provider_config)]),
+            routing: vec!["model".into()],
+            providers: HashMap::from([("model".into(), provider_config)]),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -1346,12 +1391,12 @@ mod tests {
         );
 
         let provider_config = ProviderConfig::Dummy(DummyProvider {
-            model_name: "test_key".to_string(),
+            model_name: "test_key".into(),
             credentials: DummyCredentials::Dynamic("TEST_KEY".to_string()),
         });
         let model_config = ModelConfig {
-            routing: vec!["model".to_string()],
-            providers: HashMap::from([("model".to_string(), provider_config)]),
+            routing: vec!["model".to_string().into()],
+            providers: HashMap::from([("model".to_string().into(), provider_config)]),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -1414,10 +1459,10 @@ mod tests {
         model_table.validate_or_create("dummy::gpt-4o").unwrap();
         assert_eq!(model_table.len(), 1);
         let model_config = model_table.get("dummy::gpt-4o").unwrap();
-        assert_eq!(model_config.routing, vec!["dummy".to_string()]);
+        assert_eq!(model_config.routing, vec!["dummy".into()]);
         let provider_config = model_config.providers.get("dummy").unwrap();
         match provider_config {
-            ProviderConfig::Dummy(provider) => assert_eq!(provider.model_name, "gpt-4o"),
+            ProviderConfig::Dummy(provider) => assert_eq!(&*provider.model_name, "gpt-4o"),
             _ => panic!("Expected Dummy provider"),
         }
 
@@ -1425,10 +1470,10 @@ mod tests {
         model_table.validate_or_create("dummy::gpt-4o").unwrap();
         assert_eq!(model_table.len(), 1);
         let model_config = model_table.get("dummy::gpt-4o").unwrap();
-        assert_eq!(model_config.routing, vec!["dummy".to_string()]);
+        assert_eq!(model_config.routing, vec!["dummy".into()]);
         let provider_config = model_config.providers.get("dummy").unwrap();
         match provider_config {
-            ProviderConfig::Dummy(provider) => assert_eq!(provider.model_name, "gpt-4o"),
+            ProviderConfig::Dummy(provider) => assert_eq!(&*provider.model_name, "gpt-4o"),
             _ => panic!("Expected Dummy provider"),
         }
 
@@ -1446,11 +1491,11 @@ mod tests {
         let anthropic_provider_config =
             ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap());
         let anthropic_model_config = ModelConfig {
-            routing: vec!["anthropic".to_string()],
-            providers: HashMap::from([("anthropic".to_string(), anthropic_provider_config)]),
+            routing: vec!["anthropic".into()],
+            providers: HashMap::from([("anthropic".into(), anthropic_provider_config)]),
         };
         let mut model_table: ModelTable =
-            HashMap::from([("claude".to_string(), anthropic_model_config)])
+            HashMap::from([("claude".into(), anthropic_model_config)])
                 .try_into()
                 .unwrap();
 

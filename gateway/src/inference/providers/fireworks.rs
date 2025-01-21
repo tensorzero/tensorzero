@@ -127,7 +127,7 @@ impl InferenceProvider for FireworksProvider {
         api_key: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = FireworksRequest::new(&self.model_name, request);
-        let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
+        let request_url = get_chat_url(&FIREWORKS_API_BASE)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
         let res = http_client
@@ -213,7 +213,7 @@ impl InferenceProvider for FireworksProvider {
                 raw_response: None,
             })
         })?;
-        let request_url = get_chat_url(Some(&FIREWORKS_API_BASE))?;
+        let request_url = get_chat_url(&FIREWORKS_API_BASE)?;
         let api_key = self.credentials.get_api_key(api_key)?;
         let start_time = Instant::now();
         let event_source = http_client

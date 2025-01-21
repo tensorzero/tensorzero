@@ -15,29 +15,29 @@ async fn get_providers() -> E2ETestProviders {
 
     let standard_providers = vec![E2ETestProvider {
         variant_name: "azure".to_string(),
-        model_name: "gpt-4o-mini-azure".to_string(),
-        model_provider_name: "azure".to_string(),
+        model_name: "gpt-4o-mini-azure".into(),
+        model_provider_name: "azure".into(),
         credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "azure-dynamic".to_string(),
-        model_name: "gpt-4o-mini-azure-dynamic".to_string(),
-        model_provider_name: "azure".to_string(),
+        model_name: "gpt-4o-mini-azure-dynamic".into(),
+        model_provider_name: "azure".into(),
         credentials,
     }];
 
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "azure".to_string(),
-            model_name: "gpt-4o-mini-azure".to_string(),
-            model_provider_name: "azure".to_string(),
+            model_name: "gpt-4o-mini-azure".into(),
+            model_provider_name: "azure".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             variant_name: "azure-implicit".to_string(),
-            model_name: "gpt-4o-mini-azure".to_string(),
-            model_provider_name: "azure".to_string(),
+            model_name: "gpt-4o-mini-azure".into(),
+            model_provider_name: "azure".into(),
             credentials: HashMap::new(),
         },
     ];

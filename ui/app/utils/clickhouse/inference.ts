@@ -1,4 +1,4 @@
-import z from "node_modules/zod/lib";
+import z from "zod";
 import type { TableBounds } from "./common";
 import {
   contentBlockOutputSchema,
@@ -128,23 +128,33 @@ export async function queryInferenceTable(params: {
 
 export async function queryInferenceTableBounds(): Promise<TableBounds> {
   const query = `
-   SELECT
-  (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM InferenceById)) AS first_id,
-  (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM InferenceById)) AS last_id
-FROM InferenceById
-LIMIT 1
+  SELECT
+    (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MIN(toUInt128(id)) FROM InferenceById)) AS first_id,
+    (SELECT id FROM InferenceById WHERE toUInt128(id) = (SELECT MAX(toUInt128(id)) FROM InferenceById)) AS last_id
+  FROM InferenceById
+  LIMIT 1
   `;
-
   try {
     const resultSet = await clickhouseClient.query({
       query,
       format: "JSONEachRow",
     });
+
     const rows = await resultSet.json<TableBounds>();
+    if (!rows.length) {
+      return {
+        first_id: undefined,
+        last_id: undefined,
+      };
+    }
+
     return rows[0];
   } catch (error) {
-    console.error(error);
-    throw data("Error querying inference table bounds", { status: 500 });
+    console.error("Failed to query inference table bounds:", error);
+    return {
+      first_id: undefined,
+      last_id: undefined,
+    };
   }
 }
 
@@ -275,6 +285,12 @@ export async function queryEpisodeTableBounds(): Promise<TableBounds> {
       format: "JSONEachRow",
     });
     const rows = await resultSet.json<TableBounds>();
+    if (!rows.length) {
+      return {
+        first_id: undefined,
+        last_id: undefined,
+      };
+    }
     return rows[0];
   } catch (error) {
     console.error(error);

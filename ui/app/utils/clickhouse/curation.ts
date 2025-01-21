@@ -11,7 +11,9 @@ import {
 import { clickhouseClient } from "./common";
 import type { FunctionConfig } from "../config/function";
 
-function getInferenceJoinKey(metric_config: MetricConfig): InferenceJoinKey {
+export function getInferenceJoinKey(
+  metric_config: MetricConfig,
+): InferenceJoinKey {
   if ("level" in metric_config) {
     switch (metric_config.level) {
       case "inference":
