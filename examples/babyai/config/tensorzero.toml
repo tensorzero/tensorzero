@@ -9,13 +9,6 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 
-[models."ft:gpt-4o-mini-2024-07-18:tensorzero::Arsyj2TT"]
-routing = [ "ft:gpt-4o-mini-2024-07-18:tensorzero::Arsyj2TT" ]
-
-[models."ft:gpt-4o-mini-2024-07-18:tensorzero::Arsyj2TT".providers."ft:gpt-4o-mini-2024-07-18:tensorzero::Arsyj2TT"]
-type = "openai"
-model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::Arsyj2TT"
-
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -51,13 +44,6 @@ user_template = "functions/act/reasoning/user.minijinja"
 type = "chat_completion"
 weight = 1.0
 model = "my_gpt_4o_mini"
-system_template = "functions/act/history_and_reasoning/system.minijinja"
-user_template = "functions/act/history_and_reasoning/user.minijinja"
-
-[functions.act.variants.history_and_reasoning_ft]
-type = "chat_completion"
-weight = 1.0
-model = "ft:gpt-4o-mini-2024-07-18:tensorzero::Arsyj2TT"
 system_template = "functions/act/history_and_reasoning/system.minijinja"
 user_template = "functions/act/history_and_reasoning/user.minijinja"
 
