@@ -2,6 +2,7 @@ name: Merge Queue Checks
 
 on:
   merge_group:
+  push:
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -79,7 +80,7 @@ jobs:
           echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
-        run: docker compose -f gateway/tests/e2e/docker-compose.yml up -d --wait
+        run: docker compose -f tensorzero_internal/tests/e2e/docker-compose.yml up -d --wait
 
       - name: Launch the gateway for E2E tests
         run: |
@@ -198,7 +199,7 @@ jobs:
       - name: Take down docker compose for production deployment tests
         run: |
           docker compose -f examples/production-deployment/docker-compose.yml down
-          docker compose -f gateway/tests/e2e/docker-compose.yml down
+          docker compose -f tensorzero_internal/tests/e2e/docker-compose.yml down
 
       - name: Install dependencies
         working-directory: ui
