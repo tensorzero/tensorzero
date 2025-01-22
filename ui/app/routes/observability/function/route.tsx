@@ -17,6 +17,7 @@ import FunctionInferenceTable from "./FunctionInferenceTable";
 import BasicInfo from "./BasicInfo";
 import { useConfig } from "~/context/config";
 import {
+  getVariantCounts,
   getVariantPerformances,
   type TimeWindowUnit,
 } from "~/utils/clickhouse/function";
@@ -25,6 +26,7 @@ import { getInferenceTableName } from "~/utils/clickhouse/common";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
+import FunctionVariantTable from "./FunctionVariantTable";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -61,6 +63,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     inference_table: getInferenceTableName(function_config),
     metrics: config.metrics,
   });
+  const variantCountsPromise = getVariantCounts({
+    function_name,
+    function_config,
+  });
   const variantPerformancesPromise = metric_name
     ? getVariantPerformances({
         function_name,
@@ -77,12 +83,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     num_inferences,
     metricsWithFeedback,
     variant_performances,
+    variant_counts,
   ] = await Promise.all([
     inferencePromise,
     tableBoundsPromise,
     numInferencesPromise,
     metricsWithFeedbackPromise,
     variantPerformancesPromise,
+    variantCountsPromise,
   ]);
   return {
     function_name,
@@ -91,6 +99,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     num_inferences,
     metricsWithFeedback,
     variant_performances,
+    variant_counts,
   };
 }
 
@@ -102,6 +111,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     num_inferences,
     metricsWithFeedback,
     variant_performances,
+    variant_counts,
   } = loaderData;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -157,6 +167,14 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       </h2>
       <div className="mb-6 h-px w-full bg-gray-200"></div>
       <BasicInfo functionConfig={function_config} />
+      <div className="mb-6 h-px w-full bg-gray-200"></div>
+      <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">
+        Inferences
+      </h3>
+      <FunctionVariantTable
+        variant_counts={variant_counts}
+        function_name={function_name}
+      />
       <div className="mb-6 h-px w-full bg-gray-200"></div>
       <MetricSelector
         metricsWithFeedback={metricsWithFeedback}
