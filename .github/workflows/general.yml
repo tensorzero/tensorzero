@@ -63,6 +63,13 @@ jobs:
           ruff format --check .
           ruff check --output-format=github --extend-select I .
 
+      - name: "TensorZero PyO3 Client: Build"
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: clients/python-pyo3
+          args: --find-interpreter
+          manylinux: auto
+
       - name: "TensorZero Python Client: pyright"
         working-directory: clients/python
         run: |

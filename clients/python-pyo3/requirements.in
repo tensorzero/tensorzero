@@ -1,0 +1,5 @@
+pytest
+pytest-asyncio
+maturin[patchelf]
+uuid_utils
+httpx

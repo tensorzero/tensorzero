@@ -126,3 +126,17 @@ impl Serialize for ClientSecretString {
         self.0.expose_secret().serialize(serializer)
     }
 }
+
+// The orphan rule requires us to write some impls in this crate, instead of in the `python-pyo3` wrapper crate.
+#[cfg(feature = "pyo3")]
+mod pyo3_impls {
+    use super::*;
+    use pyo3::prelude::*;
+
+    impl<'py> FromPyObject<'py> for ClientSecretString {
+        fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+            let secret: String = ob.extract()?;
+            Ok(ClientSecretString(SecretString::new(secret.into())))
+        }
+    }
+}
