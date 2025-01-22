@@ -161,7 +161,7 @@ pub struct BatchRequestRow<'a> {
     pub errors: Vec<Value>,
 }
 
-fn deserialize_json_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+pub fn deserialize_json_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: serde::de::DeserializeOwned,

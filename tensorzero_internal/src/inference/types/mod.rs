@@ -216,6 +216,7 @@ pub struct ModelInferenceResponseWithMetadata {
     pub latency: Latency,
     pub model_provider_name: Arc<str>,
     pub model_name: Arc<str>,
+    pub cache_hit: bool,
 }
 
 /* As a Variant might make use of multiple model inferences, we then combine
@@ -370,6 +371,7 @@ pub struct ModelInferenceDatabaseInsert {
     pub model_name: String,
     pub model_provider_name: String,
     pub ttft_ms: Option<u32>,
+    pub cache_hit: bool,
 }
 
 #[cfg(test)]
@@ -480,7 +482,7 @@ impl ModelInferenceResponse {
             id: Uuid::now_v7(),
             created: current_timestamp(),
             output: cache_lookup.output,
-            system: None,
+            system: request.system.clone(),
             input_messages: request.messages.clone(), // maybe we can clean this up
             raw_request: cache_lookup.raw_request,
             raw_response: cache_lookup.raw_response,
@@ -511,6 +513,7 @@ impl ModelInferenceResponseWithMetadata {
             latency: model_inference_response.latency,
             model_provider_name: model_inference_response.model_provider_name,
             model_name,
+            cache_hit: model_inference_response.cache_hit,
         }
     }
 }
@@ -546,6 +549,7 @@ impl ModelInferenceDatabaseInsert {
             ttft_ms,
             model_provider_name: result.model_provider_name.to_string(),
             model_name: result.model_name.to_string(),
+            cache_hit: result.cache_hit,
         }
     }
 }
@@ -1163,6 +1167,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cache_hit: false,
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -1209,6 +1214,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cache_hit: false,
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -1255,6 +1261,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cache_hit: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1300,6 +1307,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cache_hit: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1361,6 +1369,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cache_hit: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1444,6 +1453,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cache_hit: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1534,6 +1544,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cache_hit: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1582,6 +1593,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cache_hit: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1652,6 +1664,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cache_hit: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1706,6 +1719,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cache_hit: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(

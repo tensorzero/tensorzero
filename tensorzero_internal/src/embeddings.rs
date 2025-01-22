@@ -163,6 +163,7 @@ impl From<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetadata 
             latency: response.latency,
             model_provider_name: response.embedding_provider_name,
             model_name: response.embedding_model_name,
+            cache_hit: false,
         }
     }
 }

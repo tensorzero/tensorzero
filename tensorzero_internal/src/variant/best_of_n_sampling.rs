@@ -819,6 +819,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cache_hit: false,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -856,6 +857,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
+            cache_hit: false,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -921,6 +923,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cache_hit: false,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -958,6 +961,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
+            cache_hit: false,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1028,6 +1032,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cache_hit: false,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1065,6 +1070,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider1".into(),
             model_name: "ExampleModel1".into(),
+            cache_hit: false,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(

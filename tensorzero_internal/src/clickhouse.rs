@@ -181,7 +181,8 @@ impl ClickHouseConnectionInfo {
                 // Add query parameters if provided
                 if let Some(params) = parameters {
                     for (key, value) in params {
-                        url.query_pairs_mut().append_pair(key, value);
+                        let param_key = format!("param_{}", key);
+                        url.query_pairs_mut().append_pair(&param_key, value);
                     }
                 }
 
