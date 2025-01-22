@@ -4,12 +4,12 @@ import type { FunctionConfig } from "../config/function";
 import type { MetricConfig } from "../config/metric";
 
 describe("getVariantPerformances", () => {
-  test("getVariantPerformances for dashboard_fixture_extract_entities", async () => {
-    const function_name = "dashboard_fixture_extract_entities";
+  test("getVariantPerformances for extract_entities", async () => {
+    const function_name = "extract_entities";
     const function_config = {
       type: "json",
     } as FunctionConfig;
-    const metric_name = "dashboard_fixture_jaccard_similarity";
+    const metric_name = "jaccard_similarity";
     const metric_config = {
       type: "float",
       level: "inference",
@@ -75,12 +75,12 @@ describe("getVariantPerformances", () => {
       },
     ]);
   });
-  test("getVariantPerformances for dashboard_fixture_write_haiku", async () => {
-    const function_name = "dashboard_fixture_write_haiku";
+  test("getVariantPerformances for write_haiku", async () => {
+    const function_name = "write_haiku";
     const function_config = {
       type: "chat",
     } as FunctionConfig;
-    const metric_name = "dashboard_fixture_haiku_rating";
+    const metric_name = "haiku_rating";
     const metric_config = {
       type: "float",
       level: "inference",
@@ -245,12 +245,12 @@ describe("getVariantPerformances", () => {
 });
 
 describe("getVariantPerformances with variant filtering", () => {
-  test("getVariantPerformances for dashboard_fixture_extract_entities with specific variant", async () => {
-    const function_name = "dashboard_fixture_extract_entities";
+  test("getVariantPerformances for extract_entities with specific variant", async () => {
+    const function_name = "extract_entities";
     const function_config = {
       type: "json",
     } as FunctionConfig;
-    const metric_name = "dashboard_fixture_jaccard_similarity";
+    const metric_name = "jaccard_similarity";
     const metric_config = {
       type: "float",
       level: "inference",
@@ -295,12 +295,12 @@ describe("getVariantPerformances with variant filtering", () => {
     ]);
   });
 
-  test("getVariantPerformances for dashboard_fixture_write_haiku with specific variant", async () => {
-    const function_name = "dashboard_fixture_write_haiku";
+  test("getVariantPerformances for write_haiku with specific variant", async () => {
+    const function_name = "write_haiku";
     const function_config = {
       type: "chat",
     } as FunctionConfig;
-    const metric_name = "dashboard_fixture_haiku_rating";
+    const metric_name = "haiku_rating";
     const metric_config = {
       type: "float",
       level: "inference",

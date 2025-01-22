@@ -24,36 +24,33 @@ import type {
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {
-  const jsonCount = await countInferencesForFunction(
-    "dashboard_fixture_extract_entities",
-    { type: "json", variants: {} },
-  );
+  const jsonCount = await countInferencesForFunction("extract_entities", {
+    type: "json",
+    variants: {},
+  });
   expect(jsonCount).toBe(400);
 
-  const chatCount = await countInferencesForFunction(
-    "dashboard_fixture_write_haiku",
-    {
-      type: "chat",
-      variants: {},
-      tools: [],
-      tool_choice: "none",
-      parallel_tool_calls: false,
-    },
-  );
+  const chatCount = await countInferencesForFunction("write_haiku", {
+    type: "chat",
+    variants: {},
+    tools: [],
+    tool_choice: "none",
+    parallel_tool_calls: false,
+  });
   expect(chatCount).toBe(494);
 });
 
 // Test countInferencesForVariant
 test("countInferencesForVariant returns correct counts", async () => {
   const jsonCount = await countInferencesForVariant(
-    "dashboard_fixture_extract_entities",
+    "extract_entities",
     { type: "json", variants: {} },
     "gpt4o_initial_prompt",
   );
   expect(jsonCount).toBe(90);
 
   const chatCount = await countInferencesForVariant(
-    "dashboard_fixture_write_haiku",
+    "write_haiku",
     {
       type: "chat",
       variants: {},
@@ -347,7 +344,7 @@ test("queryInferenceTableBounds with invalid episode_id", async () => {
 
 test("queryInferenceTableByFunctionName", async () => {
   const inferences = await queryInferenceTableByFunctionName({
-    function_name: "dashboard_fixture_extract_entities",
+    function_name: "extract_entities",
     page_size: 10,
   });
   expect(inferences.length).toBe(10);
@@ -359,7 +356,7 @@ test("queryInferenceTableByFunctionName", async () => {
 
   // Test pagination with before
   const inferences2 = await queryInferenceTableByFunctionName({
-    function_name: "dashboard_fixture_extract_entities",
+    function_name: "extract_entities",
     before: inferences[inferences.length - 1].id,
     page_size: 10,
   });
@@ -367,7 +364,7 @@ test("queryInferenceTableByFunctionName", async () => {
 
   // Test pagination with after
   const inferences3 = await queryInferenceTableByFunctionName({
-    function_name: "dashboard_fixture_extract_entities",
+    function_name: "extract_entities",
     after: inferences[0].id,
     page_size: 10,
   });
@@ -376,7 +373,7 @@ test("queryInferenceTableByFunctionName", async () => {
 
 test("queryInferenceTableBoundsByFunctionName", async () => {
   const bounds = await queryInferenceTableBoundsByFunctionName({
-    function_name: "dashboard_fixture_extract_entities",
+    function_name: "extract_entities",
   });
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
   expect(bounds.last_id).toBe("019484e3-a4f8-71b3-b609-a4a3eee1e068");
@@ -384,7 +381,7 @@ test("queryInferenceTableBoundsByFunctionName", async () => {
 
 test("queryInferenceTableByVariantName", async () => {
   const inferences = await queryInferenceTableByVariantName({
-    function_name: "dashboard_fixture_extract_entities",
+    function_name: "extract_entities",
     variant_name: "gpt4o_initial_prompt",
     page_size: 10,
   });
@@ -397,7 +394,7 @@ test("queryInferenceTableByVariantName", async () => {
 
   // Test pagination with before
   const inferences2 = await queryInferenceTableByVariantName({
-    function_name: "dashboard_fixture_extract_entities",
+    function_name: "extract_entities",
     variant_name: "gpt4o_initial_prompt",
     before: inferences[inferences.length - 1].id,
     page_size: 10,
@@ -406,7 +403,7 @@ test("queryInferenceTableByVariantName", async () => {
 
   // Test pagination with after
   const inferences3 = await queryInferenceTableByVariantName({
-    function_name: "dashboard_fixture_extract_entities",
+    function_name: "extract_entities",
     variant_name: "gpt4o_initial_prompt",
     after: inferences[0].id,
     page_size: 10,
@@ -416,7 +413,7 @@ test("queryInferenceTableByVariantName", async () => {
 
 test("queryInferenceTableBoundsByVariantName", async () => {
   const bounds = await queryInferenceTableBoundsByVariantName({
-    function_name: "dashboard_fixture_extract_entities",
+    function_name: "extract_entities",
     variant_name: "gpt4o_initial_prompt",
   });
   expect(bounds.first_id).toBe("01939adf-0f50-79d0-8d55-7a009fcc5e32");
@@ -627,12 +624,12 @@ test("countInferencesByFunction", async () => {
   const countsInfo = await countInferencesByFunction();
   expect(countsInfo).toEqual([
     {
-      function_name: "dashboard_fixture_write_haiku",
+      function_name: "write_haiku",
       max_timestamp: "2025-01-20T18:46:37Z",
       count: 494,
     },
     {
-      function_name: "dashboard_fixture_extract_entities",
+      function_name: "extract_entities",
       max_timestamp: "2025-01-20T18:04:59Z",
       count: 400,
     },

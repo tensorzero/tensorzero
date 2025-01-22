@@ -7,9 +7,9 @@ import { countCuratedInferences, getCuratedInferences } from "./curation";
 test("countCuratedInferences for boolean metrics", async () => {
   // JSON Inference level
   const jsonInferenceResult = await countCuratedInferences(
-    "dashboard_fixture_extract_entities",
+    "extract_entities",
     { type: "json", variants: {} },
-    "dashboard_fixture_exact_match",
+    "exact_match",
     { type: "boolean", optimize: "max", level: "inference" },
     0, // threshold not used for boolean
   );
@@ -17,9 +17,9 @@ test("countCuratedInferences for boolean metrics", async () => {
 
   // JSON Episode level
   const jsonEpisodeResult = await countCuratedInferences(
-    "dashboard_fixture_extract_entities",
+    "extract_entities",
     { type: "json", variants: {} },
-    "dashboard_fixture_exact_match_episode",
+    "exact_match_episode",
     { type: "boolean", optimize: "max", level: "episode" },
     0,
   );
@@ -27,7 +27,7 @@ test("countCuratedInferences for boolean metrics", async () => {
 
   // Chat Inference level
   const chatInferenceResult = await countCuratedInferences(
-    "dashboard_fixture_write_haiku",
+    "write_haiku",
     {
       type: "chat",
       variants: {},
@@ -35,7 +35,7 @@ test("countCuratedInferences for boolean metrics", async () => {
       tool_choice: "none",
       parallel_tool_calls: false,
     },
-    "dashboard_fixture_haiku_score",
+    "haiku_score",
     { type: "boolean", optimize: "max", level: "inference" },
     0,
   );
@@ -43,7 +43,7 @@ test("countCuratedInferences for boolean metrics", async () => {
 
   // Chat Episode level
   const chatEpisodeResult = await countCuratedInferences(
-    "dashboard_fixture_write_haiku",
+    "write_haiku",
     {
       type: "chat",
       variants: {},
@@ -51,7 +51,7 @@ test("countCuratedInferences for boolean metrics", async () => {
       tool_choice: "none",
       parallel_tool_calls: false,
     },
-    "dashboard_fixture_haiku_score_episode",
+    "haiku_score_episode",
     { type: "boolean", optimize: "max", level: "episode" },
     0,
   );
@@ -62,9 +62,9 @@ test("countCuratedInferences for boolean metrics", async () => {
 test("countCuratedInferences for float metrics", async () => {
   // JSON Inference level
   const jsonInferenceResult = await countCuratedInferences(
-    "dashboard_fixture_extract_entities",
+    "extract_entities",
     { type: "json", variants: {} },
-    "dashboard_fixture_jaccard_similarity",
+    "jaccard_similarity",
     { type: "float", optimize: "max", level: "inference" },
     0.8,
   );
@@ -72,9 +72,9 @@ test("countCuratedInferences for float metrics", async () => {
 
   // JSON Episode level
   const jsonEpisodeResult = await countCuratedInferences(
-    "dashboard_fixture_extract_entities",
+    "extract_entities",
     { type: "json", variants: {} },
-    "dashboard_fixture_jaccard_similarity_episode",
+    "jaccard_similarity_episode",
     { type: "float", optimize: "max", level: "episode" },
     0.8,
   );
@@ -82,7 +82,7 @@ test("countCuratedInferences for float metrics", async () => {
 
   // Chat Inference level
   const chatInferenceResult = await countCuratedInferences(
-    "dashboard_fixture_write_haiku",
+    "write_haiku",
     {
       type: "chat",
       variants: {},
@@ -90,7 +90,7 @@ test("countCuratedInferences for float metrics", async () => {
       tool_choice: "none",
       parallel_tool_calls: false,
     },
-    "dashboard_fixture_haiku_rating",
+    "haiku_rating",
     { type: "float", optimize: "max", level: "inference" },
     0.8,
   );
@@ -98,7 +98,7 @@ test("countCuratedInferences for float metrics", async () => {
 
   // Chat Episode level
   const chatEpisodeResult = await countCuratedInferences(
-    "dashboard_fixture_write_haiku",
+    "write_haiku",
     {
       type: "chat",
       variants: {},
@@ -106,7 +106,7 @@ test("countCuratedInferences for float metrics", async () => {
       tool_choice: "none",
       parallel_tool_calls: false,
     },
-    "dashboard_fixture_haiku_rating_episode",
+    "haiku_rating_episode",
     { type: "float", optimize: "max", level: "episode" },
     0.8,
   );
@@ -116,7 +116,7 @@ test("countCuratedInferences for float metrics", async () => {
 // Test demonstration metrics
 test("countCuratedInferences for demonstration metrics", async () => {
   const jsonResult = await countCuratedInferences(
-    "dashboard_fixture_extract_entities",
+    "extract_entities",
     { type: "json", variants: {} },
     "unused_metric_name",
     { type: "demonstration", level: "inference" },
@@ -125,7 +125,7 @@ test("countCuratedInferences for demonstration metrics", async () => {
   expect(jsonResult).toBe(100);
 
   const chatResult = await countCuratedInferences(
-    "dashboard_fixture_write_haiku",
+    "write_haiku",
     {
       type: "chat",
       variants: {},
@@ -144,9 +144,9 @@ test("countCuratedInferences for demonstration metrics", async () => {
 test("getCuratedInferences retrieves correct data", async () => {
   // Test with boolean metric
   const booleanResults = await getCuratedInferences(
-    "dashboard_fixture_extract_entities",
+    "extract_entities",
     { type: "json", variants: {} },
-    "dashboard_fixture_exact_match",
+    "exact_match",
     { type: "boolean", optimize: "max", level: "inference" },
     0,
     undefined,
@@ -155,7 +155,7 @@ test("getCuratedInferences retrieves correct data", async () => {
 
   // Test with float metric
   const floatResults = await getCuratedInferences(
-    "dashboard_fixture_write_haiku",
+    "write_haiku",
     {
       type: "chat",
       variants: {},
@@ -163,7 +163,7 @@ test("getCuratedInferences retrieves correct data", async () => {
       tool_choice: "none",
       parallel_tool_calls: false,
     },
-    "dashboard_fixture_haiku_rating",
+    "haiku_rating",
     { type: "float", optimize: "max", level: "inference" },
     0.8,
     undefined,
@@ -172,7 +172,7 @@ test("getCuratedInferences retrieves correct data", async () => {
 
   // Test with demonstration
   const demoResults = await getCuratedInferences(
-    "dashboard_fixture_extract_entities",
+    "extract_entities",
     { type: "json", variants: {} },
     "unused_metric_name",
     { type: "demonstration", level: "inference" },
@@ -183,7 +183,7 @@ test("getCuratedInferences retrieves correct data", async () => {
 
   // Test without metric (should return all inferences)
   const allResults = await getCuratedInferences(
-    "dashboard_fixture_extract_entities",
+    "extract_entities",
     { type: "json", variants: {} },
     null,
     null,
@@ -197,16 +197,16 @@ test("getCuratedInferences retrieves correct data", async () => {
 test("countFeedbacksForMetric returns correct counts", async () => {
   // Test boolean metrics
   const booleanInferenceCount = await countFeedbacksForMetric(
-    "dashboard_fixture_extract_entities",
+    "extract_entities",
     { type: "json", variants: {} },
-    "dashboard_fixture_exact_match",
+    "exact_match",
     { type: "boolean", optimize: "max", level: "inference" },
   );
   expect(booleanInferenceCount).toBe(99);
 
   // Test float metrics
   const floatInferenceCount = await countFeedbacksForMetric(
-    "dashboard_fixture_write_haiku",
+    "write_haiku",
     {
       type: "chat",
       variants: {},
@@ -214,14 +214,14 @@ test("countFeedbacksForMetric returns correct counts", async () => {
       tool_choice: "none",
       parallel_tool_calls: false,
     },
-    "dashboard_fixture_haiku_rating",
+    "haiku_rating",
     { type: "float", optimize: "max", level: "inference" },
   );
   expect(floatInferenceCount).toBe(491);
 
   // Test demonstration
   const demoCount = await countFeedbacksForMetric(
-    "dashboard_fixture_extract_entities",
+    "extract_entities",
     { type: "json", variants: {} },
     "unused_metric_name",
     { type: "demonstration", level: "inference" },
