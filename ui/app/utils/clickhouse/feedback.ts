@@ -12,7 +12,9 @@ export const booleanMetricFeedbackRowSchema = z.object({
   metric_name: z.string(),
   value: z.boolean(),
   tags: z.record(z.string(), z.string()),
-  timestamp: z.string().datetime(),
+  timestamp: z
+    .string()
+    .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
 });
 
 export type BooleanMetricFeedbackRow = z.infer<
@@ -139,7 +141,7 @@ export async function queryBooleanMetricFeedbackBoundsByTargetId(params: {
       rows.length === 0 ||
       (rows[0].first_id === null && rows[0].last_id === null)
     ) {
-      return { first_id: undefined, last_id: undefined };
+      return { first_id: null, last_id: null };
     }
     return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
@@ -169,7 +171,9 @@ export const commentFeedbackRowSchema = z.object({
   target_id: z.string().uuid(),
   target_type: z.enum(["inference", "episode"]),
   value: z.string(),
-  timestamp: z.string().datetime(),
+  timestamp: z
+    .string()
+    .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
 });
 
 export type CommentFeedbackRow = z.infer<typeof commentFeedbackRowSchema>;
@@ -257,6 +261,7 @@ export async function queryCommentFeedbackByTargetId(params: {
       query_params,
     });
     const rows = await resultSet.json<CommentFeedbackRow>();
+    console.log("Raw rows before Zod parsing:", JSON.stringify(rows, null, 2));
     return z.array(commentFeedbackRowSchema).parse(rows);
   } catch (error) {
     console.error(error);
@@ -290,7 +295,7 @@ export async function queryCommentFeedbackBoundsByTargetId(params: {
       rows.length === 0 ||
       (rows[0].first_id === null && rows[0].last_id === null)
     ) {
-      return { first_id: undefined, last_id: undefined };
+      return { first_id: null, last_id: null };
     }
     return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
@@ -317,7 +322,9 @@ export const demonstrationFeedbackRowSchema = z.object({
   id: z.string().uuid(),
   inference_id: z.string().uuid(),
   value: z.string(),
-  timestamp: z.string().datetime(),
+  timestamp: z
+    .string()
+    .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
 });
 
 export type DemonstrationFeedbackRow = z.infer<
@@ -436,7 +443,7 @@ export async function queryDemonstrationFeedbackBoundsByInferenceId(params: {
       rows.length === 0 ||
       (rows[0].first_id === null && rows[0].last_id === null)
     ) {
-      return { first_id: undefined, last_id: undefined };
+      return { first_id: null, last_id: null };
     }
     return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
@@ -468,7 +475,9 @@ export const floatMetricFeedbackRowSchema = z
     metric_name: z.string(),
     value: z.number(),
     tags: z.record(z.string(), z.string()),
-    timestamp: z.string().datetime(),
+    timestamp: z
+      .string()
+      .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
   })
   .strict();
 
@@ -596,7 +605,7 @@ export async function queryFloatMetricFeedbackBoundsByTargetId(params: {
       rows.length === 0 ||
       (rows[0].first_id === null && rows[0].last_id === null)
     ) {
-      return { first_id: undefined, last_id: undefined };
+      return { first_id: null, last_id: null };
     }
     return TableBoundsSchema.parse(rows[0]);
   } catch (error) {

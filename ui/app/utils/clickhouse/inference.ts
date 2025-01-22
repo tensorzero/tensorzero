@@ -18,7 +18,10 @@ export const inferenceByIdRowSchema = z
     function_name: z.string(),
     variant_name: z.string(),
     episode_id: z.string().uuid(),
-    timestamp: z.string().datetime(),
+    function_type: z.enum(["chat", "json"]),
+    timestamp: z
+      .string()
+      .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
   })
   .strict();
 
@@ -143,8 +146,8 @@ export async function queryInferenceTableBounds(): Promise<TableBounds> {
     const rows = await resultSet.json<TableBounds>();
     if (!rows.length) {
       return {
-        first_id: undefined,
-        last_id: undefined,
+        first_id: null,
+        last_id: null,
       };
     }
 
@@ -152,8 +155,8 @@ export async function queryInferenceTableBounds(): Promise<TableBounds> {
   } catch (error) {
     console.error("Failed to query inference table bounds:", error);
     return {
-      first_id: undefined,
-      last_id: undefined,
+      first_id: null,
+      last_id: null,
     };
   }
 }
@@ -162,8 +165,12 @@ export const episodeByIdSchema = z
   .object({
     episode_id: z.string().uuid(),
     count: z.number().min(1),
-    start_time: z.string().datetime(),
-    end_time: z.string().datetime(),
+    start_time: z
+      .string()
+      .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
+    end_time: z
+      .string()
+      .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
     last_inference_id: z.string().uuid(),
   })
   .strict();
@@ -287,8 +294,8 @@ export async function queryEpisodeTableBounds(): Promise<TableBounds> {
     const rows = await resultSet.json<TableBounds>();
     if (!rows.length) {
       return {
-        first_id: undefined,
-        last_id: undefined,
+        first_id: null,
+        last_id: null,
       };
     }
     return TableBoundsSchema.parse(rows[0]);
@@ -456,7 +463,9 @@ export const chatInferenceRowSchema = z.object({
   tool_params: z.string(),
   inference_params: z.string(),
   processing_time_ms: z.number(),
-  timestamp: z.string().datetime(),
+  timestamp: z
+    .string()
+    .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
   tags: z.record(z.string(), z.string()).default({}),
 });
 
@@ -472,7 +481,9 @@ export const jsonInferenceRowSchema = z.object({
   output_schema: z.string(),
   inference_params: z.string(),
   processing_time_ms: z.number(),
-  timestamp: z.string().datetime(),
+  timestamp: z
+    .string()
+    .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
   tags: z.record(z.string(), z.string()).default({}),
 });
 
@@ -630,7 +641,9 @@ export const modelInferenceRowSchema = z.object({
   output_tokens: z.number(),
   response_time_ms: z.number(),
   ttft_ms: z.number().nullable(),
-  timestamp: z.string().datetime(),
+  timestamp: z
+    .string()
+    .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
   system: z.string().nullable(),
   input_messages: z.string(),
   output: z.string(),
