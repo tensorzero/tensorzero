@@ -13,6 +13,10 @@ use tensorzero_internal::inference::types::{
 
 use crate::common::get_clickhouse;
 
+/// This test does a cache read then write then read again to ensure that
+/// the cache is working as expected.
+/// Then, it reads with a short lookback to ensure that the cache is not
+/// returning stale data.
 #[tokio::test]
 async fn test_cache_write_and_read() {
     let clickhouse_connection_info = get_clickhouse().await;
@@ -43,6 +47,7 @@ async fn test_cache_write_and_read() {
         provider_name: "test_provider",
     };
 
+    // Read (should be None)
     let result = cache_lookup(
         &clickhouse_connection_info,
         model_provider_request.clone(),
@@ -52,6 +57,7 @@ async fn test_cache_write_and_read() {
     .unwrap();
     assert!(result.is_none());
 
+    // Write
     start_cache_write(
         &clickhouse_connection_info,
         model_provider_request.clone(),
@@ -62,6 +68,7 @@ async fn test_cache_write_and_read() {
     .unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
 
+    // Read (should be Some)
     let result = cache_lookup(
         &clickhouse_connection_info,
         model_provider_request.clone(),
@@ -97,6 +104,8 @@ async fn test_cache_write_and_read() {
         }
     );
     assert!(result.cache_hit);
+
+    // Read (should be None)
     tokio::time::sleep(Duration::from_secs(2)).await;
     let result = cache_lookup(&clickhouse_connection_info, model_provider_request, Some(0))
         .await
