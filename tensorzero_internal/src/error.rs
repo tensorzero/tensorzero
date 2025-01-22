@@ -85,6 +85,9 @@ pub enum ErrorDetails {
     BatchNotFound {
         id: Uuid,
     },
+    Cache {
+        message: String,
+    },
     ChannelWrite {
         message: String,
     },
@@ -282,6 +285,7 @@ impl ErrorDetails {
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::Cache { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
@@ -351,6 +355,7 @@ impl ErrorDetails {
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BatchInputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::BatchNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::Cache { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -459,6 +464,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::BatchNotFound { id } => {
                 write!(f, "Batch request not found for id: {}", id)
+            }
+            ErrorDetails::Cache { message } => {
+                write!(f, "Error in cache: {}", message)
             }
             ErrorDetails::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)

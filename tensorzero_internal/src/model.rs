@@ -10,6 +10,8 @@ use strum::VariantNames;
 use tracing::{span, warn, Instrument, Level};
 use url::Url;
 
+use crate::cache::{cache_lookup, ModelProviderRequest};
+use crate::endpoints::inference::InferenceClients;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
@@ -51,18 +53,33 @@ impl ModelConfig {
     pub async fn infer<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
-        client: &'request Client,
+        client: &'request InferenceClients<'request>,
         api_keys: &'request InferenceCredentials,
+        model_name: &'request str,
     ) -> Result<ModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
+            let cache_lookup = cache_lookup(
+                &client.clickhouse_connection_info,
+                ModelProviderRequest {
+                    request,
+                    model_name,
+                    provider_name,
+                },
+            )
+            .await
+            .ok()
+            .flatten();
+            if let Some(cache_lookup) = cache_lookup {
+                return Ok(cache_lookup);
+            }
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
                     provider_name: provider_name.to_string(),
                 })
             })?;
             let response = provider_config
-                .infer(request, client, api_keys)
+                .infer(request, client.http_client, api_keys)
                 .instrument(span!(
                     Level::INFO,
                     "infer",
@@ -1038,8 +1055,9 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
+        let model_name = "test model";
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &Client::new(), &api_keys, model_name)
             .await
             .unwrap();
         let content = response.output;
@@ -1059,7 +1077,7 @@ mod tests {
             providers: HashMap::from([("error".into(), bad_provider_config)]),
         };
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &Client::new(), &api_keys, model_name)
             .await
             .unwrap_err();
         assert_eq!(
@@ -1123,8 +1141,9 @@ mod tests {
             ]),
         };
 
+        let model_name = "test model";
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &Client::new(), &api_keys, model_name)
             .await
             .unwrap();
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
@@ -1346,8 +1365,9 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
+        let model_name = "test model";
         let error = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &Client::new(), &api_keys, model_name)
             .await
             .unwrap_err();
         assert_eq!(
@@ -1369,7 +1389,7 @@ mod tests {
             SecretString::from("notgoodkey".to_string()),
         )]);
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &Client::new(), &api_keys, model_name)
             .await
             .unwrap_err();
         assert_eq!(
@@ -1421,7 +1441,7 @@ mod tests {
             output_schema: None,
         };
         let error = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &Client::new(), &api_keys, model_name)
             .await
             .unwrap_err();
         assert_eq!(
@@ -1443,7 +1463,7 @@ mod tests {
             SecretString::from("good_key".to_string()),
         )]);
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &Client::new(), &api_keys, model_name)
             .await
             .unwrap();
         assert_eq!(

@@ -1,3 +1,4 @@
+mod cache;
 pub mod clickhouse;
 pub mod clickhouse_migration_manager;
 pub mod config_parser; // TensorZero config file

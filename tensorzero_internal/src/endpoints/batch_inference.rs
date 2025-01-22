@@ -438,7 +438,7 @@ pub async fn get_batch_request(
                 "#,
                 batch_id
             );
-            let response = clickhouse.run_query(query).await?;
+            let response = clickhouse.run_query(query, None).await?;
             if response.is_empty() {
                 return Err(ErrorDetails::BatchNotFound { id: *batch_id }.into());
             }
@@ -470,7 +470,7 @@ pub async fn get_batch_request(
                 "#,
                 inference_id
             );
-            let response = clickhouse.run_query(query).await?;
+            let response = clickhouse.run_query(query, None).await?;
             if response.is_empty() {
                 return Err(ErrorDetails::BatchNotFound { id: *inference_id }.into());
             }
@@ -895,7 +895,7 @@ pub async fn get_batch_inferences(
         batch_id,
         inference_ids.iter().map(|id| format!("'{}'", id)).join(",")
     );
-    let response = clickhouse_connection_info.run_query(query).await?;
+    let response = clickhouse_connection_info.run_query(query, None).await?;
     let rows = response
         .lines()
         .filter(|line| !line.is_empty())
@@ -947,7 +947,7 @@ pub async fn get_completed_batch_inference_response(
                     FORMAT JSONEachRow",
                     batch_id, batch_request.function_name, batch_request.variant_name
                 );
-                let response = clickhouse_connection_info.run_query(query).await?;
+                let response = clickhouse_connection_info.run_query(query, None).await?;
                 let mut inference_responses = Vec::new();
                 for row in response.lines() {
                     let inference_response: ChatInferenceResponseDatabaseRead =
@@ -994,7 +994,7 @@ pub async fn get_completed_batch_inference_response(
                     batch_request.function_name,
                     batch_request.variant_name
                 );
-                let response = clickhouse_connection_info.run_query(query).await?;
+                let response = clickhouse_connection_info.run_query(query, None).await?;
                 if response.is_empty() {
                     return Err(ErrorDetails::InferenceNotFound {
                         inference_id: *inference_id,
@@ -1040,7 +1040,7 @@ pub async fn get_completed_batch_inference_response(
                     FORMAT JSONEachRow",
                     path_params.batch_id, batch_request.function_name, batch_request.variant_name
                 );
-                let response = clickhouse_connection_info.run_query(query).await?;
+                let response = clickhouse_connection_info.run_query(query, None).await?;
                 let mut inference_responses = Vec::new();
                 for row in response.lines() {
                     let inference_response: JsonInferenceResponseDatabaseRead =
@@ -1087,7 +1087,7 @@ pub async fn get_completed_batch_inference_response(
                     batch_request.function_name,
                     batch_request.variant_name
                 );
-                let response = clickhouse_connection_info.run_query(query).await?;
+                let response = clickhouse_connection_info.run_query(query, None).await?;
                 if response.is_empty() {
                     return Err(ErrorDetails::InferenceNotFound {
                         inference_id: *inference_id,

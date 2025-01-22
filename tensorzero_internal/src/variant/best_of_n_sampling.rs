@@ -371,7 +371,12 @@ async fn inner_select_best_candidate<'a, 'request>(
     })?;
     let model_inference_response = (|| async {
         model_config
-            .infer(&inference_request, clients.http_client, clients.credentials)
+            .infer(
+                &inference_request,
+                clients,
+                clients.credentials,
+                &evaluator.inner.model,
+            )
             .await
     })
     .retry(evaluator.inner.retries.get_backoff())

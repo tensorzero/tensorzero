@@ -163,7 +163,11 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn run_query(&self, query: String) -> Result<String, Error> {
+    pub async fn run_query(
+        &self,
+        query: String,
+        parameters: Option<&HashMap<String, String>>,
+    ) -> Result<String, Error> {
         match self {
             Self::Disabled => Ok("".to_string()),
             Self::Mock { .. } => Ok("".to_string()),
@@ -172,16 +176,20 @@ impl ClickHouseConnectionInfo {
                 database_url,
                 ..
             } => {
-                let response = client
-                    .post(database_url.clone())
-                    .body(query)
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::ClickHouseQuery {
-                            message: e.to_string(),
-                        })
-                    })?;
+                let mut url = database_url.clone();
+
+                // Add query parameters if provided
+                if let Some(params) = parameters {
+                    for (key, value) in params {
+                        url.query_pairs_mut().append_pair(key, value);
+                    }
+                }
+
+                let response = client.post(url).body(query).send().await.map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: e.to_string(),
+                    })
+                })?;
 
                 let status = response.status();
 

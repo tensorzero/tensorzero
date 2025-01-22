@@ -455,8 +455,9 @@ async fn infer_model_request<'a, 'request>(
         args.model_config
             .infer(
                 &args.request,
-                args.clients.http_client,
+                args.clients,
                 args.clients.credentials,
+                &args.model_name,
             )
             .await
     })
