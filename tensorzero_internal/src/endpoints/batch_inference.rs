@@ -17,6 +17,7 @@ use super::inference::{
     ChatInferenceResponse, InferenceClients, InferenceCredentials, InferenceDatabaseInsertMetadata,
     InferenceModels, InferenceParams, InferenceResponse, JsonInferenceResponse,
 };
+use crate::cache::CacheOptions;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
@@ -201,6 +202,7 @@ pub async fn start_batch_inference_handler(
         http_client: &http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
         credentials: &params.credentials,
+        cache_options: &CacheOptions::default(),
     };
 
     let inference_models = InferenceModels {

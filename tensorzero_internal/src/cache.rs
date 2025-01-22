@@ -3,8 +3,28 @@ use std::collections::HashMap;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{ContentBlock, ModelInferenceRequest, ModelInferenceResponse};
-use hex;
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CacheOptions {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_lookback")]
+    pub lookback_s: u32,
+}
+
+fn default_lookback() -> u32 {
+    u32::MAX
+}
+
+impl Default for CacheOptions {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            lookback_s: default_lookback(),
+        }
+    }
+}
 
 pub struct ModelProviderRequest<'request> {
     pub request: &'request ModelInferenceRequest<'request>,
@@ -12,7 +32,7 @@ pub struct ModelProviderRequest<'request> {
     pub provider_name: &'request str,
 }
 
-impl<'request> ModelProviderRequest<'request> {
+impl ModelProviderRequest<'_> {
     pub fn get_cache_key(&self) -> Result<[u8; 32], Error> {
         let mut hasher = blake3::Hasher::new();
         hasher.update(self.model_name.as_bytes());
@@ -27,17 +47,6 @@ impl<'request> ModelProviderRequest<'request> {
         Ok(*hasher.finalize().as_bytes())
     }
 }
-
-// pub async fn cache_lookup(request: ModelProviderRequest<'_>) -> Option<String> {
-//     let cache_key = match request.get_cache_key() {
-//         Ok(cache_key) => cache_key,
-//         Err(e) => {
-//             return None;
-//         }
-//     };
-
-//     todo!()
-// }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ModelInferenceCacheRow {
@@ -91,6 +100,7 @@ pub struct CacheLookupResult {
 pub async fn cache_lookup(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     request: ModelProviderRequest<'_>,
+    lookback_s: u32,
 ) -> Result<Option<ModelInferenceResponse>, Error> {
     let cache_key = request.get_cache_key()?;
     let short_cache_key = u64::from_le_bytes(cache_key[..8].try_into().map_err(|e| {
@@ -100,20 +110,22 @@ pub async fn cache_lookup(
     })?);
     let long_cache_key = hex::encode(cache_key);
     let query = r#"
-        SELECT 
+        SELECT
             output,
             raw_request,
-            raw_response 
-        FROM ModelInferenceCache 
-        WHERE short_cache_key = {short_cache_key:UInt64} 
+            raw_response
+        FROM ModelInferenceCache
+        WHERE short_cache_key = {short_cache_key:UInt64}
             AND long_cache_key = {long_cache_key:String}
+            AND timestamp > now() - INTERVAL {lookback_s:UInt32} SECOND
         ORDER BY timestamp DESC
-        LIMIT 1 
+        LIMIT 1
         FORMAT JSONEachRow
     "#;
     let query_params = HashMap::from([
         ("short_cache_key".to_string(), short_cache_key.to_string()),
-        ("long_cache_key".to_string(), long_cache_key.into()),
+        ("long_cache_key".to_string(), long_cache_key),
+        ("lookback_s".to_string(), lookback_s.to_string()),
     ]);
     let result = clickhouse_connection_info
         .run_query(query.to_string(), Some(&query_params))

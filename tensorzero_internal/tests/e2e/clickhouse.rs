@@ -641,7 +641,7 @@ async fn test_clickhouse_migration_manager() {
     tracing::info!("Attempting to drop test database: {database}");
 
     clickhouse
-        .run_query(format!("DROP DATABASE {database}"))
+        .run_query(format!("DROP DATABASE {database}"), None)
         .await
         .unwrap();
 }

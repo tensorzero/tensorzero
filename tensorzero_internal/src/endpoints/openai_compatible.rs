@@ -22,6 +22,7 @@ use serde_json::Value;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
+use crate::cache::CacheOptions;
 use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
@@ -340,6 +341,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             output_schema,
             // OpenAI compatible endpoint does not support dynamic credentials
             credentials: InferenceCredentials::default(),
+            cache_options: CacheOptions::default(),
             tags: HashMap::new(),
         })
     }

@@ -453,12 +453,7 @@ async fn infer_model_request<'a, 'request>(
 ) -> Result<InferenceResult, Error> {
     let model_inference_response = (|| async {
         args.model_config
-            .infer(
-                &args.request,
-                args.clients,
-                args.clients.credentials,
-                &args.model_name,
-            )
+            .infer(&args.request, args.clients, &args.model_name)
             .await
     })
     .retry(args.retry_config.get_backoff())
@@ -563,6 +558,7 @@ impl<'a> BatchInferenceConfig<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cache::CacheOptions;
     use crate::clickhouse::ClickHouseConnectionInfo;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
@@ -795,6 +791,7 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions::default(),
         };
         let templates = get_test_template_config();
         let inference_params = InferenceParams::default();
@@ -1026,6 +1023,7 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions::default(),
         };
         let templates = get_test_template_config();
         let inference_params = InferenceParams::default();
@@ -1143,6 +1141,7 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions::default(),
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1269,6 +1268,7 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions::default(),
         };
         let inference_params = InferenceParams::default();
 

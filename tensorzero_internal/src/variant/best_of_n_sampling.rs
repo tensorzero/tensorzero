@@ -371,12 +371,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     })?;
     let model_inference_response = (|| async {
         model_config
-            .infer(
-                &inference_request,
-                clients,
-                clients.credentials,
-                &evaluator.inner.model,
-            )
+            .infer(&inference_request, clients, &evaluator.inner.model)
             .await
     })
     .retry(evaluator.inner.retries.get_backoff())
@@ -642,6 +637,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
+        cache::CacheOptions,
         clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::InferenceCredentials,
         inference::{
@@ -1106,6 +1102,7 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions::default(),
         };
         let input = Input {
             system: None,

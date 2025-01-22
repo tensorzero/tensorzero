@@ -499,6 +499,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
+        cache::CacheOptions,
         clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::InferenceCredentials,
         function::{FunctionConfigChat, FunctionConfigJson},
@@ -948,6 +949,7 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions::default(),
         };
         let input = Input {
             system: None,
