@@ -142,3 +142,60 @@ pub async fn cache_lookup(
         request.provider_name,
     )))
 }
+
+#[cfg(test)]
+mod tests {
+
+    use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
+
+    use super::*;
+
+    /// This test ensures that if we make a small change to the ModelInferenceRequest,
+    /// the cache key will change.
+    #[test]
+    fn test_get_cache_key() {
+        let model_inference_request = ModelInferenceRequest {
+            messages: vec![],
+            system: None,
+            tool_config: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let model_provider_request = ModelProviderRequest {
+            request: &model_inference_request,
+            model_name: "test_model",
+            provider_name: "test_provider",
+        };
+        let cache_key = model_provider_request.get_cache_key().unwrap();
+        let streaming_model_inference_request = ModelInferenceRequest {
+            messages: vec![],
+            system: None,
+            tool_config: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: true,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let model_provider_request = ModelProviderRequest {
+            request: &streaming_model_inference_request,
+            model_name: "test_model",
+            provider_name: "test_provider",
+        };
+        let streaming_cache_key = model_provider_request.get_cache_key().unwrap();
+        assert_ne!(cache_key, streaming_cache_key);
+    }
+}
