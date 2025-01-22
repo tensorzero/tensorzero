@@ -1,5 +1,5 @@
 import z from "zod";
-import { clickhouseClient } from "./common";
+import { clickhouseClient, getInferenceTableName } from "./common";
 import type { MetricConfig } from "../config/metric";
 import type { FunctionConfig } from "../config/function";
 
@@ -298,5 +298,38 @@ ORDER BY
 
   const rows = await resultSet.json();
   const parsedRows = z.array(variantPerformanceRowSchema).parse(rows);
+  return parsedRows;
+}
+
+const variantCountsSchema = z.object({
+  variant_name: z.string(),
+  count: z.number(),
+  last_used: z.string().datetime(),
+});
+export type VariantCounts = z.infer<typeof variantCountsSchema>;
+
+export async function getVariantCounts(params: {
+  function_name: string;
+  function_config: FunctionConfig;
+}): Promise<VariantCounts[]> {
+  const { function_name, function_config } = params;
+  const inference_table_name = getInferenceTableName(function_config);
+  const query = `
+SELECT
+    variant_name,
+    toUInt32(count()) AS count,
+    formatDateTime(max(timestamp), '%Y-%m-%dT%H:%i:%S.000Z') AS last_used
+FROM ${inference_table_name}
+WHERE function_name = {function_name:String}
+GROUP BY variant_name
+ORDER BY count DESC
+`;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { function_name },
+  });
+  const rows = await resultSet.json();
+  const parsedRows = z.array(variantCountsSchema).parse(rows);
   return parsedRows;
 }

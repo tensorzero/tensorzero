@@ -1,5 +1,5 @@
 import { expect, test, describe } from "vitest";
-import { getVariantPerformances } from "./function";
+import { getVariantCounts, getVariantPerformances } from "./function";
 import type { FunctionConfig } from "../config/function";
 import type { MetricConfig } from "../config/metric";
 
@@ -465,6 +465,69 @@ describe("getVariantPerformances with variant filtering", () => {
         avg_metric: expect.closeTo(15.653061224489797, 6),
         stdev: expect.closeTo(5.9496174, 6),
         ci_error: expect.closeTo(1.665892868041992, 6),
+      },
+    ]);
+  });
+});
+
+describe("getVariantCounts", () => {
+  test("getVariantCounts for extract_entities", async () => {
+    const function_name = "extract_entities";
+    const function_config = {
+      type: "json",
+    } as FunctionConfig;
+    const result = await getVariantCounts({
+      function_name,
+      function_config,
+    });
+    expect(result).toMatchObject([
+      {
+        count: 110,
+        last_used: "2025-01-05T13:19:59.000Z",
+        variant_name: "llama_8b_initial_prompt",
+      },
+      {
+        count: 100,
+        last_used: "2025-01-20T18:04:59.000Z",
+        variant_name: "gpt4o_mini_initial_prompt",
+      },
+      {
+        count: 90,
+        last_used: "2024-12-19T20:06:29.000Z",
+        variant_name: "gpt4o_initial_prompt",
+      },
+      {
+        count: 40,
+        last_used: "2024-12-03T13:49:32.000Z",
+        variant_name: "dicl",
+      },
+      {
+        count: 35,
+        last_used: "2024-12-06T03:49:59.000Z",
+        variant_name: "turbo",
+      },
+      {
+        count: 25,
+        last_used: "2024-12-04T08:03:47.000Z",
+        variant_name: "baseline",
+      },
+    ]);
+  });
+
+  test("getVariantCounts for write_haiku", async () => {
+    const function_name = "write_haiku";
+    const function_config = {
+      type: "chat",
+    } as FunctionConfig;
+    const result = await getVariantCounts({
+      function_name,
+      function_config,
+    });
+    expect(result).toMatchObject([
+      {
+        count: 494,
+        last_used: "2025-01-20T18:46:37.000Z",
+        variant_name: "initial_prompt_gpt4o_mini",
       },
     ]);
   });
