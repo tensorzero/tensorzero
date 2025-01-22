@@ -131,7 +131,6 @@ pub async fn cache_lookup(
         .run_query(query.to_string(), Some(&query_params))
         .await?;
     // TODO: handle missing vs error
-    println!("result: {result}");
     let result: CacheLookupResult = serde_json::from_str(&result).map_err(|e| {
         Error::new(ErrorDetails::Cache {
             message: format!("Failed to deserialize output: {e}"),

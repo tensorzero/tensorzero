@@ -331,9 +331,8 @@ async fn write_production(
 }
 
 fn set_clickhouse_format_settings(database_url: &mut Url) {
-    const OVERRIDDEN_SETTINGS: [&str; 3] = [
+    const OVERRIDDEN_SETTINGS: [&str; 2] = [
         "input_format_skip_unknown_fields",
-        "input_format_defaults_for_omitted_fields",
         "input_format_null_as_default",
     ];
 
@@ -444,11 +443,11 @@ mod tests {
     fn test_set_clickhouse_format_settings() {
         let mut database_url = Url::parse("http://localhost:8123/").unwrap();
         set_clickhouse_format_settings(&mut database_url);
-        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_defaults_for_omitted_fields=0&input_format_null_as_default=0");
+        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_null_as_default=0");
 
         let mut database_url = Url::parse("http://localhost:8123/?input_format_skip_unknown_fields=1&input_format_defaults_for_omitted_fields=1&input_format_null_as_default=1").unwrap();
         set_clickhouse_format_settings(&mut database_url);
-        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_defaults_for_omitted_fields=0&input_format_null_as_default=0");
+        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_defaults_for_omitted_fields=1&input_format_skip_unknown_fields=0&input_format_null_as_default=0");
     }
 
     #[test]

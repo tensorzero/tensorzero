@@ -77,6 +77,7 @@ pub struct Params {
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
     pub output_schema: Option<Value>,
+    #[serde(default)]
     pub cache_options: CacheOptions,
     #[serde(default)]
     pub credentials: InferenceCredentials,
@@ -218,7 +219,6 @@ pub async fn inference(
         tool_config: tool_config.as_ref(),
         dynamic_output_schema: output_schema.as_ref(),
     };
-
     let inference_clients = InferenceClients {
         http_client: &http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
