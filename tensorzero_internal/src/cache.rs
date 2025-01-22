@@ -38,18 +38,19 @@ impl ModelProviderRequest<'_> {
 }
 
 #[derive(Debug, Serialize)]
-struct ModelInferenceCacheRow<'a> {
+struct ModelInferenceCacheRow {
     short_cache_key: u64,
     long_cache_key: String,
-    output: &'a Vec<ContentBlock>,
+    output: Vec<ContentBlock>,
     raw_request: String,
     raw_response: String,
 }
 
-pub async fn cache_write(
+// This doesn't block
+pub fn start_cache_write(
     clickhouse_client: &ClickHouseConnectionInfo,
     request: ModelProviderRequest<'_>,
-    output: &Vec<ContentBlock>,
+    output: &[ContentBlock],
     raw_request: &str,
     raw_response: &str,
 ) -> Result<(), Error> {
@@ -60,18 +61,25 @@ pub async fn cache_write(
         })
     })?);
     let long_cache_key = hex::encode(cache_key);
-    clickhouse_client
-        .write(
-            &[ModelInferenceCacheRow {
-                short_cache_key,
-                long_cache_key,
-                output,
-                raw_request: raw_request.to_string(),
-                raw_response: raw_response.to_string(),
-            }],
-            "ModelInferenceCache",
-        )
-        .await
+    let output = output.to_owned();
+    let raw_request = raw_request.to_string();
+    let raw_response = raw_response.to_string();
+    let clickhouse_client = clickhouse_client.clone();
+    tokio::spawn(async move {
+        clickhouse_client
+            .write(
+                &[ModelInferenceCacheRow {
+                    short_cache_key,
+                    long_cache_key,
+                    output,
+                    raw_request,
+                    raw_response,
+                }],
+                "ModelInferenceCache",
+            )
+            .await
+    });
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]

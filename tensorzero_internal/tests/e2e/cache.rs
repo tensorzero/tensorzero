@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use tensorzero_internal::cache::cache_lookup;
-use tensorzero_internal::cache::cache_write;
+use tensorzero_internal::cache::start_cache_write;
 use tensorzero_internal::cache::ModelProviderRequest;
 use tensorzero_internal::inference::types::Latency;
 use tensorzero_internal::inference::types::RequestMessage;
@@ -52,15 +52,15 @@ async fn test_cache_write_and_read() {
     .unwrap();
     assert!(result.is_none());
 
-    cache_write(
+    start_cache_write(
         &clickhouse_connection_info,
         model_provider_request.clone(),
-        &vec!["test content".to_string().into()],
+        &["test content".to_string().into()],
         "raw request",
         "raw response",
     )
-    .await
     .unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     let result = cache_lookup(
         &clickhouse_connection_info,

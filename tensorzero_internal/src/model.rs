@@ -10,7 +10,7 @@ use strum::VariantNames;
 use tracing::{span, warn, Instrument, Level};
 use url::Url;
 
-use crate::cache::{cache_lookup, cache_write, ModelProviderRequest};
+use crate::cache::{cache_lookup, start_cache_write, ModelProviderRequest};
 use crate::endpoints::inference::InferenceClients;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
@@ -92,7 +92,7 @@ impl ModelConfig {
 
             match response {
                 Ok(response) => {
-                    let _ = cache_write(
+                    let _ = start_cache_write(
                         clients.clickhouse_connection_info,
                         ModelProviderRequest {
                             request,
@@ -102,8 +102,7 @@ impl ModelConfig {
                         &response.output,
                         &response.raw_request,
                         &response.raw_response,
-                    )
-                    .await;
+                    );
                     let model_inference_response =
                         ModelInferenceResponse::new(response, provider_name.clone());
 
