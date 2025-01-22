@@ -169,7 +169,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       <BasicInfo functionConfig={function_config} />
       <div className="mb-6 h-px w-full bg-gray-200"></div>
       <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">
-        Inferences
+        Variants
       </h3>
       <FunctionVariantTable
         variant_counts={variant_counts}
