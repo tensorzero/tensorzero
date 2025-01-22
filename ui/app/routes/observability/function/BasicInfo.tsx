@@ -18,6 +18,15 @@ interface SchemaFieldProps {
 }
 
 function SchemaField({ title, content }: SchemaFieldProps) {
+  if (!content) {
+    return (
+      <div className="col-span-2">
+        <dt className="text-lg font-semibold">{title}</dt>
+        <dd className="text-sm text-muted-foreground">None</dd>
+      </div>
+    );
+  }
+
   return (
     <div className="col-span-2">
       <dt className="text-lg font-semibold">{title}</dt>
@@ -89,28 +98,22 @@ export default function BasicFunctionInfo({
           )}
 
           {/* Optional schemas */}
-          {functionConfig.system_schema && (
-            <SchemaField
-              title="System Schema"
-              content={functionConfig.system_schema.content}
-            />
-          )}
-          {functionConfig.user_schema && (
-            <SchemaField
-              title="User Schema"
-              content={functionConfig.user_schema.content}
-            />
-          )}
-          {functionConfig.assistant_schema && (
-            <SchemaField
-              title="Assistant Schema"
-              content={functionConfig.assistant_schema.content}
-            />
-          )}
-          {functionConfig.type === "json" && functionConfig.output_schema && (
+          <SchemaField
+            title="System Schema"
+            content={functionConfig.system_schema?.content}
+          />
+          <SchemaField
+            title="User Schema"
+            content={functionConfig.user_schema?.content}
+          />
+          <SchemaField
+            title="Assistant Schema"
+            content={functionConfig.assistant_schema?.content}
+          />
+          {functionConfig.type === "json" && (
             <SchemaField
               title="Output Schema"
-              content={functionConfig.output_schema.content}
+              content={functionConfig.output_schema?.content}
             />
           )}
         </dl>
