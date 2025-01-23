@@ -11,7 +11,7 @@ Each example in the dataset includes a short segment of text and instructs the m
 
 <details>
 <summary>
-**Sample Data**
+<b>Sample Data</b>
 </summary>
 
 ### Input
@@ -88,7 +88,7 @@ You can run a fine-tuning recipes by opening the UI (`http://localhost:4000/`) a
 
 <details>
 <summary>
-**Fine-Tuning Programatically**
+<b>Fine-Tuning Programatically</b>
 </summary>
 
 Alternatively, you can run a fine-tuning recipe programatically using the Jupyter notebook in `recipes/supervised_fine_tuning/metrics/fireworks/`.
