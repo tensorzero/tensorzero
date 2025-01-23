@@ -2,18 +2,16 @@
 
 ## Background
 
-Named Entity Recognition (NER) is the process of identifying and categorizing named entities in text into predefined categories such as person, organization, location, and date. NER is a fundamental task in natural language processing (NLP) and is widely used in various applications such as information extraction, question answering, and machine translation.
+Named Entity Recognition (NER) is the process of identifying and categorizing named entities in text into predefined categories such as person, organization, and location, and date. NER is a fundamental task in natural language processing (NLP) and is widely used in various applications such as information extraction, question answering, and machine translation.
 
 Once upon a time, this was done using rule-based systems or special-purpose models. In light of progress in foundation models, most would use an LLM to address this task today, especially given recent advancements in structured decoding and JSON mode offerings from most inference providers.
 
 Here, we present a stylized example of an NER system that uses TensorZero JSON functions to decode named entities from text.[^1]
 Each example in the dataset includes a short segment of text and instructs the model to produce a JSON of named entities in the input.
-We provide the output schema to TensorZero at `config/functions/extract_entities/output_schema.json`.
-In our problem setting, we consider any output that fails to validate against the schema to be incorrect.
 
 <details>
 <summary>
-Sample Data
+**Sample Data**
 </summary>
 
 ### Input
@@ -33,53 +31,47 @@ The former Wimbledon champion said the immediate future of Australia 's Davis Cu
 }
 ```
 
-> [!NOTE]
->
-> Useful information that users should know, even when skimming content.
-
 </details>
+
+In our problem setting, we consider any output that fails to validate against the schema to be incorrect.
 
 We'll show that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on this task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.
 
 ## Setup
 
+### Prerequisites
+
+1. Install Docker.
+2. Install Python 3.10+.
+3. Install the Python dependencies: `pip install -r requirements.txt`
+
 ### TensorZero
 
 We've written TensorZero configuration files to accomplish this example and have provided them in the `config` directory.
 See `tensorzero.toml` for the main configuration details.
+We provide the output schema to TensorZero at `config/functions/extract_entities/output_schema.json`.
 
-To get started, create a `.env` file with your OpenAI API key (`OPENAI_API_KEY`) and Fireworks API key (`FIREWORKS_API_KEY`) and run the following command.
-Docker Compose will launch the TensorZero Gateway and a test ClickHouse database.
-Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your notebook will run in.
+1. Create a `.env` file with the following environment variables:
 
-```bash
-docker compose up
-```
+   ```
+   FIREWORKS_ACCOUNT_ID="xxxxx-xxxxxx"
+   FIREWORKS_API_KEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   OPENAI_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   ```
 
-### Python Environment
+2. Run the following command to start the TensorZero Gateway, the TensorZero UI (`http://localhost:4000/`), and a test ClickHouse database:
 
-#### Using [`uv`](https://github.com/astral-sh/uv) (Recommended)
+   ```bash
+   docker compose up
+   ```
 
-```bash
-uv venv  # Create a new virtual environment
-uv pip sync requirements.txt  # Install the dependencies
-```
-
-#### Using `pip`
-
-We recommend using Python 3.10+ and a virtual environment.
-
-```bash
-pip install -r requirements.txt
-```
+3. Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your Jupyter notebook will run in.
 
 ## Running the Example
 
 You can run the example in the `ner-fine-tuning.ipynb` notebook.
-Make sure to install the dependencies in the `requirements.txt` file.
-It should not require any changes to run and will automatically connect to the TensorZero Gateway you started.
 
-The notebook will first attempt to solve the NER task using the `extract_entities` JSON function and randomly sample either GPT-4o or vanilla Llama 3.1 8B to do it with.
+The notebook will first attempt to solve the NER task using the `extract_entities` TensorZero JSON function and randomly sample either GPT-4o or vanilla Llama 3.1 8B to do it with.
 After this is done, we evaluate the output using both an exact match metric and Jaccard similarity.
 We provide feedback in each of these metrics to TensorZero to learn from the results.
 
@@ -92,10 +84,26 @@ At this point, your ClickHouse database will include inferences in a structured 
 You can now use TensorZero recipes to learn from this experience to produce better variants of the NER system.
 You might notice that the best performing LLM is GPT-4o from OpenAI (not surprising!).
 
-However, we offer a recipe in `recipes/supervised_fine_tuning/metrics/fireworks/` that can be used with very small amounts of data to fine-tune a Llama-3.1 8B model to achieve superior performance to GPT-4o at a fraction of the cost and latency!
+You can run a fine-tuning recipes by opening the UI (`http://localhost:4000/`) and clicking on the `Supervised Fine-Tuning` tab.
+
+<details>
+<summary>
+**Fine-Tuning Programatically**
+</summary>
+
+Alternatively, you can run a fine-tuning recipe programatically using the Jupyter notebook in `recipes/supervised_fine_tuning/metrics/fireworks/`.
+
+</details>
+
+Once you complete the fine-tuning recipe, you'll see additional configuration blocks that you can add to your `tensorzero.toml` file.
+
+> [!TIP]
+>
+> Restart the TensorZero Gateway when you update the `tensorzero.toml` configuration file.
+
 At the conclusion of that notebook you should see a few blocks to add to `tensorzero.toml` to update the system to use the new model and the corresponding variant.
 
-You can also easily experiment with other recipes,models, prompts you think might be better, or combinations thereof by editing the configuration.
+You'll see that a fine-tuned Llama-3.1 8B model &mdash; even with a small amount of data &mdash; outperforms GPT-4o on this task.
 
 ## Experimenting with Improved Variants
 
