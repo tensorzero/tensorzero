@@ -6,7 +6,6 @@ import {
   SelectValue,
   SelectTrigger,
 } from "~/components/ui/select";
-// import { Badge } from "~/components/ui/badge";
 import { MetricBadges } from "~/components/metric/MetricBadges";
 import React from "react";
 import { useConfig } from "~/context/config";

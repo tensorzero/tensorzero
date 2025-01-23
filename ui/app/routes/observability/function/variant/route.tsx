@@ -142,9 +142,12 @@ export default function VariantDetails() {
     );
   }
 
-  const topInference = inferences[0];
-  const bottomInference = inferences[inferences.length - 1];
+  const topInference = inferences.length > 0 ? inferences[0] : null;
+  const bottomInference =
+    inferences.length > 0 ? inferences[inferences.length - 1] : null;
+
   const handleNextInferencePage = () => {
+    if (!bottomInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
     searchParams.set("beforeInference", bottomInference.id);
@@ -152,17 +155,18 @@ export default function VariantDetails() {
   };
 
   const handlePreviousInferencePage = () => {
+    if (!topInference) return;
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
     searchParams.set("afterInference", topInference.id);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-  // These are swapped because the table is sorted in descending order
-  const disablePreviousInferencePage =
-    inference_bounds.last_id === topInference.id;
 
+  const disablePreviousInferencePage =
+    !topInference || inference_bounds.last_id === topInference.id;
   const disableNextInferencePage =
-    inference_bounds.first_id === bottomInference.id;
+    !bottomInference || inference_bounds.first_id === bottomInference.id;
+
   const [metric_name, setMetricName] = useState(
     () => searchParams.get("metric_name") || "",
   );
@@ -211,13 +215,21 @@ export default function VariantDetails() {
           Inferences
           <Badge variant="secondary">Count: {num_inferences}</Badge>
         </h3>
-        <VariantInferenceTable inferences={inferences} />
-        <PageButtons
-          onPreviousPage={handlePreviousInferencePage}
-          onNextPage={handleNextInferencePage}
-          disablePrevious={disablePreviousInferencePage}
-          disableNext={disableNextInferencePage}
-        />
+        {inferences.length > 0 ? (
+          <>
+            <VariantInferenceTable inferences={inferences} />
+            <PageButtons
+              onPreviousPage={handlePreviousInferencePage}
+              onNextPage={handleNextInferencePage}
+              disablePrevious={disablePreviousInferencePage}
+              disableNext={disableNextInferencePage}
+            />
+          </>
+        ) : (
+          <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
+            No inferences found
+          </div>
+        )}
       </div>
     </div>
   );
