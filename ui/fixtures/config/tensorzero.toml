@@ -43,6 +43,11 @@ type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 
+[functions.extract_entities.variants.gpt4o_initial_prompt]
+type = "chat_completion"
+model = "openai::gpt-4o"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
 [functions.extract_entities.variants.llama_8b_initial_prompt]
 type = "chat_completion"
 model = "llama-3.1-8b-instruct"

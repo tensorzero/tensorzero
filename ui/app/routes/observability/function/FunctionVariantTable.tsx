@@ -1,3 +1,4 @@
+import { Code } from "~/components/ui/code";
 import {
   Table,
   TableBody,
@@ -9,11 +10,16 @@ import {
 import type { VariantCounts } from "~/utils/clickhouse/function";
 import { formatDate } from "~/utils/date";
 
+type VariantCountsWithMetadata = VariantCounts & {
+  type: string;
+  weight: number;
+};
+
 export default function FunctionVariantTable({
   variant_counts,
   function_name,
 }: {
-  variant_counts: VariantCounts[];
+  variant_counts: VariantCountsWithMetadata[];
   function_name: string;
 }) {
   return (
@@ -21,6 +27,8 @@ export default function FunctionVariantTable({
       <TableHeader>
         <TableRow>
           <TableHead>Variant Name</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead>Weight</TableHead>
           <TableHead>Count</TableHead>
           <TableHead>Last Used</TableHead>
         </TableRow>
@@ -41,6 +49,10 @@ export default function FunctionVariantTable({
                 </code>
               </a>
             </TableCell>
+            <TableCell>
+              <Code>{variant_count.type}</Code>
+            </TableCell>
+            <TableCell>{variant_count.weight}</TableCell>
             <TableCell>{variant_count.count}</TableCell>
             <TableCell>
               {formatDate(new Date(variant_count.last_used))}

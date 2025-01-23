@@ -92,6 +92,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variantPerformancesPromise,
     variantCountsPromise,
   ]);
+  const variant_counts_with_metadata = variant_counts.map((variant_count) => {
+    const variant_config = function_config.variants[variant_count.variant_name];
+    return {
+      ...variant_count,
+      type: variant_config.type,
+      weight: variant_config.weight,
+    };
+  });
   return {
     function_name,
     inferences,
@@ -99,7 +107,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     num_inferences,
     metricsWithFeedback,
     variant_performances,
-    variant_counts,
+    variant_counts: variant_counts_with_metadata,
   };
 }
 
