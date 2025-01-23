@@ -6,7 +6,7 @@ Named Entity Recognition (NER) is the process of identifying and categorizing na
 Here, we present a stylized example of an NER system that uses TensorZero JSON functions to decode named entities from text. [^1]
 
 Each example in the dataset includes a short segment of text and instructs the model to produce a JSON of named entities in the input.
-**We'll show that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on this task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.**
+**We'll show that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on this task using a small amount of training data, and served by Fireworks AI at a fraction of the cost and latency.**
 
 ## Sample Data
 
@@ -31,37 +31,24 @@ The former Wimbledon champion said the immediate future of Australia 's Davis Cu
 
 ## Setup
 
+### TensorZero
+
+We provide a TensorZero configuration file (`config/tensorzero.toml`) to get you started.
+The configuration includes a JSON function `extract_entities` with variants for GPT-4o (OpenAI) and Llama 3.1 8B (Fireworks AI).
+This function uses the output schema in `config/functions/extract_entities/output_schema.json`.
+
 ### Prerequisites
 
 1. Install Docker.
 2. Install Python 3.10+.
-3. Install the Python dependencies: `pip install -r requirements.txt`
-
-### TensorZero
-
-We've written TensorZero configuration files to accomplish this example and have provided them in the `config` directory.
-See `tensorzero.toml` for the main configuration details.
-We provide the output schema to TensorZero at `config/functions/extract_entities/output_schema.json`.
-
-1. Create a `.env` file with the following environment variables:
-
-   ```
-   FIREWORKS_ACCOUNT_ID="xxxxx-xxxxxx"
-   FIREWORKS_API_KEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-   OPENAI_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-   ```
-
-2. Run the following command to start the TensorZero Gateway, the TensorZero UI (`http://localhost:4000/`), and a test ClickHouse database:
-
-   ```bash
-   docker compose up
-   ```
-
-3. Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your Jupyter notebook will run in.
+3. Install the Python dependencies with `pip install -r requirements.txt`.
+4. Create API keys for OpenAI (`OPENAI_API_KEY`) and Fireworks AI (`FIREWORKS_ACCOUNT_ID` and `FIREWORKS_API_KEY`).
+5. Create a `.env` file with these environment variables (see `.env.example` for an example).
+6. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI (`http://localhost:4000/`), and a test ClickHouse database.
+7. Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your Jupyter notebook will run in.
+8. Run the `ner-fine-tuning.ipynb` notebook.
 
 ## Running the Example
-
-You can run the example in the `ner-fine-tuning.ipynb` notebook.
 
 The notebook will first attempt to solve the NER task using the `extract_entities` TensorZero JSON function and randomly sample either GPT-4o or vanilla Llama 3.1 8B to do it with.
 After this is done, we evaluate the output using both an exact match metric and Jaccard similarity.
