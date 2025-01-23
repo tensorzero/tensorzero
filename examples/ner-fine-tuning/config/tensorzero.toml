@@ -2,19 +2,7 @@
 # │                                   MODELS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[models."gpt-4o-2024-08-06"]
-routing = ["openai"]
-
-[models."gpt-4o-2024-08-06".providers.openai]
-type = "openai"
-model_name = "gpt-4o-2024-08-06"
-
-[models."llama-3.1-8b-instruct"]
-routing = ["fireworks"]
-
-[models."llama-3.1-8b-instruct".providers.fireworks]
-type = "fireworks"
-model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+# TODO: You can add your fine-tuned models here.
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
@@ -24,15 +12,15 @@ model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
 type = "json"
 output_schema = "functions/extract_entities/output_schema.json"
 
-[functions.extract_entities.variants.gpt4o_initial_prompt]
+[functions.extract_entities.variants.gpt4o]
 type = "chat_completion"
-model = "gpt-4o-2024-08-06"
+model = "openai::gpt-4o-2024-08-06"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 json_mode = "strict"
 
-[functions.extract_entities.variants.llama_8b_initial_prompt]
+[functions.extract_entities.variants.llama_8b]
 type = "chat_completion"
-model = "llama-3.1-8b-instruct"
+model = "fireworks::accounts/fireworks/models/llama-v3p1-8b-instruct"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐

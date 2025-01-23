@@ -34,7 +34,7 @@ The former Wimbledon champion said the immediate future of Australia 's Davis Cu
 ### TensorZero
 
 We provide a TensorZero configuration file (`config/tensorzero.toml`) to get you started.
-The configuration includes a JSON function `extract_entities` with variants for GPT-4o (OpenAI) and Llama 3.1 8B (Fireworks AI).
+The configuration includes a JSON function `extract_entities` with variants for vanilla GPT-4o (OpenAI) and Llama 3.1 8B (Fireworks AI).
 This function uses the output schema in `config/functions/extract_entities/output_schema.json`.
 
 ### Prerequisites
@@ -42,31 +42,33 @@ This function uses the output schema in `config/functions/extract_entities/outpu
 1. Install Docker.
 2. Install Python 3.10+.
 3. Install the Python dependencies with `pip install -r requirements.txt`.
-4. Create API keys for OpenAI (`OPENAI_API_KEY`) and Fireworks AI (`FIREWORKS_ACCOUNT_ID` and `FIREWORKS_API_KEY`).
+4. Generate API keys for OpenAI (`OPENAI_API_KEY`) and Fireworks AI (`FIREWORKS_ACCOUNT_ID` and `FIREWORKS_API_KEY`).
 
 ### Setup
 
 1. Create a `.env` file with these environment variables (see `.env.example` for an example).
-2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI (`http://localhost:4000/`), and a test ClickHouse database.
+2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI, and a test ClickHouse database.
 3. Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your Jupyter notebook will run in.
 4. Run the `ner-fine-tuning.ipynb` Jupyter notebook.
 
 ## Running the Example
 
-The notebook will first attempt to solve the NER task using the `extract_entities` TensorZero JSON function and randomly sample either GPT-4o or vanilla Llama 3.1 8B to do it with.
-After this is done, we evaluate the output using both an exact match metric and Jaccard similarity.
-We provide feedback in each of these metrics to TensorZero to learn from the results.
+The notebook will first attempt to solve the NER task using the `extract_entities` TensorZero JSON function.
+Under the hood, the TensorZero Gateway will randomly sample either GPT-4o or vanilla Llama 3.1 8B each inference.
 
-Afterwards we run an evaluation on a subset of the test set (and use the same set for each variant) to get a clear picture of the performance of each variant.
-This inference is performed with a variant specified and `dryrun` set to `true` to avoid storing the data and contaminating the training set.
+After completing this process, we evaluate the output using exact match and Jaccard similarity and provide feedback for these metrics to the TensorZero Gateway.
+
+Finally, we run an evaluation on a subset of the validation set to get a clear picture of the performance of each variant.
+You might notice that the best performing LLM is GPT-4o from OpenAI (not surprising!).
 
 ## Improving the NER System
 
 At this point, your ClickHouse database will include inferences in a structured format along with feedback on how they went.
 You can now use TensorZero recipes to learn from this experience to produce better variants of the NER system.
-You might notice that the best performing LLM is GPT-4o from OpenAI (not surprising!).
 
 You can run a fine-tuning recipes by opening the UI (`http://localhost:4000/`) and clicking on the `Supervised Fine-Tuning` tab.
+Let's run fine-tuning on Llama-3.1 8B with Fireworks AI using the `exact_match` metric.
+Go grab a coffee &mdash; fine-tuning can take some time.
 
 <details>
 <summary>
@@ -77,20 +79,35 @@ Alternatively, you can run a fine-tuning recipe programatically using the Jupyte
 
 </details>
 
-Once you complete the fine-tuning recipe, you'll see additional configuration blocks that you can add to your `tensorzero.toml` file.
+Once you finish fine-tuning, you'll see additional configuration blocks that you can add to your `tensorzero.toml` file.
 
-At the conclusion of that notebook you should see a few blocks to add to `tensorzero.toml` to update the system to use the new model and the corresponding variant.
+Let's create a new variant that uses the fine-tuned Llama-3.1 8B model.
 
-You'll see that a fine-tuned Llama-3.1 8B model &mdash; even with a small amount of data &mdash; outperforms GPT-4o on this task.
+```toml
+# The following blocks define our new fine-tuned model and its model provider (Fireworks AI).
+
+# TODO
+
+# ...
+
+# The following block defines a new variant that uses the fine-tuned Llama-3.1 8B model.
+[functions.extract_entities.variants.fine_tuned_llama_8b]
+type = "chat_completion"
+model = "fine_tuned_llama_8b"
+system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+```
+
+Let's restart the TensorZero Gateway to apply the new configuration.
+You can do this by killing the running container and re-running `docker compose up`.
+
+## Experimenting with Fine-Tuned Variants
+
+Once you've generated one or more improved variants, you can re-run the `ner-fine-tuning.ipynb` notebook to see how the new variants perform.
+
+You'll see that the fine-tuned Llama-3.1 8B outperforms GPT-4o on this task with just a few hundred examples!
 
 > [!TIP]
 >
-> Restart the TensorZero Gateway when you update the `tensorzero.toml` configuration file by killing the running container and running `docker compose up` again.
-
-## Experimenting with Improved Variants
-
-Once you've generated one or more improved variants (and, critically, given them some positive weight), you can re-run the test set evaluation in the `ner-fine-tuning.ipynb` notebook to see how the new variants perform.
-
-From a single fine-tune we see the Llama-3.1 8B model greatly outperform GPT-4o on this task with just 100-200 examples!
+> You'll likely see even better performance if you fine-tune Llama-3.1 8B again, since you just generated more training data!
 
 [^1]: We build off of the [CoNLL++ dataset](https://arxiv.org/abs/1909.01441v1) and [work](https://predibase.com/blog/lorax-outlines-better-json-extraction-with-structured-generation-and-lora) from Predibase for the problem setting.
