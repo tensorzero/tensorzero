@@ -11,7 +11,7 @@ pub struct CacheOptions {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
-    pub lookback_s: Option<u32>,
+    pub max_age_s: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -21,11 +21,31 @@ pub struct ModelProviderRequest<'request> {
     pub provider_name: &'request str,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CacheKey([u8; 32]);
+
+impl CacheKey {
+    pub fn get_short_key(&self) -> Result<u64, Error> {
+        let bytes = self.0[..8].try_into().map_err(|e| {
+            Error::new(ErrorDetails::Cache {
+                message: format!("failed to convert hash into u64 for short cache key: {e}"),
+            })
+        })?;
+        Ok(u64::from_le_bytes(bytes))
+    }
+
+    pub fn get_long_key(&self) -> String {
+        hex::encode(self.0)
+    }
+}
+
 impl ModelProviderRequest<'_> {
-    pub fn get_cache_key(&self) -> Result<[u8; 32], Error> {
+    pub fn get_cache_key(&self) -> Result<CacheKey, Error> {
         let mut hasher = blake3::Hasher::new();
         hasher.update(self.model_name.as_bytes());
+        hasher.update(&[0]); // null byte after model name to ensure data is prefix-free
         hasher.update(self.provider_name.as_bytes());
+        hasher.update(&[0]); // null byte after provider name to ensure data is prefix-free
         let serialized_request = serde_json::to_string(self.request).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize request: {e}"),
@@ -33,7 +53,7 @@ impl ModelProviderRequest<'_> {
         })?;
         let request_bytes = serialized_request.as_bytes();
         hasher.update(request_bytes);
-        Ok(*hasher.finalize().as_bytes())
+        Ok(CacheKey(hasher.finalize().into()))
     }
 }
 
@@ -55,12 +75,8 @@ pub fn start_cache_write(
     raw_response: &str,
 ) -> Result<(), Error> {
     let cache_key = request.get_cache_key()?;
-    let short_cache_key = u64::from_le_bytes(cache_key[..8].try_into().map_err(|e| {
-        Error::new(ErrorDetails::Cache {
-            message: format!("failed to convert hash into u64 for short cache key: {e}"),
-        })
-    })?);
-    let long_cache_key = hex::encode(cache_key);
+    let short_cache_key = cache_key.get_short_key()?;
+    let long_cache_key = cache_key.get_long_key();
     let output = output.to_owned();
     let raw_request = raw_request.to_string();
     let raw_response = raw_response.to_string();
@@ -93,16 +109,14 @@ pub struct CacheLookupResult {
 pub async fn cache_lookup(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     request: ModelProviderRequest<'_>,
-    lookback_s: Option<u32>,
+    max_age_s: Option<u32>,
 ) -> Result<Option<ModelInferenceResponse>, Error> {
     let cache_key = request.get_cache_key()?;
-    let short_cache_key = u64::from_le_bytes(cache_key[..8].try_into().map_err(|e| {
-        Error::new(ErrorDetails::Cache {
-            message: format!("failed to convert hash into u64 for short cache key: {e}"),
-        })
-    })?);
-    let long_cache_key = hex::encode(cache_key);
-    let query = if lookback_s.is_some() {
+    // NOTE: the short cache key is just so the ClickHouse index can be as efficient as possible
+    // but we always check against the long cache key before returning a result
+    let short_cache_key = cache_key.get_short_key()?.to_string();
+    let long_cache_key = cache_key.get_long_key();
+    let query = if max_age_s.is_some() {
         r#"
             SELECT
                 output,
@@ -131,10 +145,10 @@ pub async fn cache_lookup(
         "#
     };
     let mut query_params = HashMap::from([
-        ("short_cache_key".to_string(), short_cache_key.to_string()),
+        ("short_cache_key".to_string(), short_cache_key),
         ("long_cache_key".to_string(), long_cache_key),
     ]);
-    if let Some(lookback) = lookback_s {
+    if let Some(lookback) = max_age_s {
         query_params.insert("lookback_s".to_string(), lookback.to_string());
     }
     let result = clickhouse_connection_info

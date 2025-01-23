@@ -15,14 +15,14 @@ use crate::common::get_clickhouse;
 
 /// This test does a cache read then write then read again to ensure that
 /// the cache is working as expected.
-/// Then, it reads with a short lookback to ensure that the cache is not
+/// Then, it reads with a short max age to ensure that the cache is not
 /// returning stale data.
 #[tokio::test]
 async fn test_cache_write_and_read() {
     let clickhouse_connection_info = get_clickhouse().await;
     // Generate a random seed to guarantee a fresh cache key
     let seed = rand::random::<u32>();
-    let lookback_s = 10;
+    let max_age_s = 10;
     let model_inference_request = ModelInferenceRequest {
         messages: vec![RequestMessage {
             role: Role::User,
@@ -51,7 +51,7 @@ async fn test_cache_write_and_read() {
     let result = cache_lookup(
         &clickhouse_connection_info,
         model_provider_request.clone(),
-        Some(lookback_s),
+        Some(max_age_s),
     )
     .await
     .unwrap();
@@ -72,7 +72,7 @@ async fn test_cache_write_and_read() {
     let result = cache_lookup(
         &clickhouse_connection_info,
         model_provider_request.clone(),
-        Some(lookback_s),
+        Some(max_age_s),
     )
     .await
     .unwrap();

@@ -67,7 +67,7 @@ impl ModelConfig {
                         model_name,
                         provider_name,
                     },
-                    clients.cache_options.lookback_s,
+                    clients.cache_options.max_age_s,
                 )
                 .await
                 .ok()
