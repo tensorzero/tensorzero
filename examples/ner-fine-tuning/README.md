@@ -2,17 +2,13 @@
 
 ## Background
 
-Named Entity Recognition (NER) is the process of identifying and categorizing named entities in text into predefined categories such as person, organization, and location, and date. NER is a fundamental task in natural language processing (NLP) and is widely used in various applications such as information extraction, question answering, and machine translation.
-
-Once upon a time, this was done using rule-based systems or special-purpose models. In light of progress in foundation models, most would use an LLM to address this task today, especially given recent advancements in structured decoding and JSON mode offerings from most inference providers.
-
+Named Entity Recognition (NER) is the process of identifying and categorizing named entities in text into predefined categories such as person, organization, location, and date. NER is a fundamental task in natural language processing (NLP) and is widely used in various applications such as information extraction, question answering, and machine translation.
 Here, we present a stylized example of an NER system that uses TensorZero JSON functions to decode named entities from text.[^1]
-Each example in the dataset includes a short segment of text and instructs the model to produce a JSON of named entities in the input.
 
-<details>
-<summary>
-<b>Sample Data</b>
-</summary>
+Each example in the dataset includes a short segment of text and instructs the model to produce a JSON of named entities in the input.
+We'll show that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on this task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.
+
+## Sample Data
 
 ### Input
 
@@ -32,10 +28,6 @@ The former Wimbledon champion said the immediate future of Australia 's Davis Cu
 ```
 
 </details>
-
-In our problem setting, we consider any output that fails to validate against the schema to be incorrect.
-
-We'll show that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on this task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.
 
 ## Setup
 
@@ -97,23 +89,17 @@ Alternatively, you can run a fine-tuning recipe programatically using the Jupyte
 
 Once you complete the fine-tuning recipe, you'll see additional configuration blocks that you can add to your `tensorzero.toml` file.
 
-> [!TIP]
->
-> Restart the TensorZero Gateway when you update the `tensorzero.toml` configuration file.
-
 At the conclusion of that notebook you should see a few blocks to add to `tensorzero.toml` to update the system to use the new model and the corresponding variant.
 
 You'll see that a fine-tuned Llama-3.1 8B model &mdash; even with a small amount of data &mdash; outperforms GPT-4o on this task.
 
+> [!TIP]
+>
+> Restart the TensorZero Gateway when you update the `tensorzero.toml` configuration file by killing the running container and running `docker compose up` again.
+
 ## Experimenting with Improved Variants
 
-Once you've generated one or more improved variants (and, critically, given them some positive weight), you should restart the TensorZero Gateway with the new configuration:
-
-```bash
-docker compose up
-```
-
-You can then re-run the test set evaluation in the `ner-fine-tuning.ipynb` notebook to see how the new variants perform.
+Once you've generated one or more improved variants (and, critically, given them some positive weight), you can re-run the test set evaluation in the `ner-fine-tuning.ipynb` notebook to see how the new variants perform.
 
 From a single fine-tune we see the Llama-3.1 8B model greatly outperform GPT-4o on this task with just 100-200 examples!
 
