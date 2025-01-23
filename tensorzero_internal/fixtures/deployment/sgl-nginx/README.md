@@ -13,6 +13,6 @@ docker run \
  tensorzero/sgl-nginx:latest \
     --model-path HuggingFaceTB/SmolLM-1.7B-Instruct # The model to serve
     --trust-remote-code
-    --disable-overlap 
+    --disable-overlap
     # Do not pass --port here, it is set by the container
 ```

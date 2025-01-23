@@ -9,7 +9,7 @@ import {
 import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
 import { formatDate } from "~/utils/date";
 
-export default function EpisodeInferenceTable({
+export default function VariantInferenceTable({
   inferences,
 }: {
   inferences: InferenceByIdRow[];
@@ -19,8 +19,7 @@ export default function EpisodeInferenceTable({
       <TableHeader>
         <TableRow>
           <TableHead>ID</TableHead>
-          <TableHead>Function</TableHead>
-          <TableHead>Variant</TableHead>
+          <TableHead>Episode ID</TableHead>
           <TableHead>Time</TableHead>
         </TableRow>
       </TableHeader>
@@ -39,21 +38,11 @@ export default function EpisodeInferenceTable({
             </TableCell>
             <TableCell>
               <a
-                href={`/observability/function/${inference.function_name}`}
+                href={`/observability/episode/${inference.episode_id}`}
                 className="block no-underline"
               >
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                  {inference.function_name}
-                </code>
-              </a>
-            </TableCell>
-            <TableCell>
-              <a
-                href={`/observability/function/${inference.function_name}/variant/${inference.variant_name}`}
-                className="block no-underline"
-              >
-                <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                  {inference.variant_name}
+                  {inference.episode_id}
                 </code>
               </a>
             </TableCell>

@@ -29,9 +29,19 @@ test("parse e2e config", async () => {
   // Test a json function
   const jsonTestFunction = validatedConfig.functions["json_success"];
   if (jsonTestFunction.type === "json") {
-    expect(jsonTestFunction.output_schema).toBe(
-      "../../fixtures/config/functions/basic_test/output_schema.json",
-    );
+    expect(jsonTestFunction.output_schema).toEqual({
+      content: {
+        additionalProperties: false,
+        properties: {
+          answer: {
+            type: "string",
+          },
+        },
+        required: ["answer"],
+        type: "object",
+      },
+      path: "../../fixtures/config/functions/basic_test/output_schema.json",
+    });
   } else {
     throw new Error("JSON function not found");
   }

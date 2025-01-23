@@ -54,6 +54,7 @@ describe("create_dump_variant_config", () => {
     );
 
     expect(result).toContain('system_template = "/templates/system.j2"');
+    expect(result).toContain("weight = 0");
     expect(result).toContain('user_template = "/templates/user.j2"');
     expect(result).toContain('assistant_template = "/templates/assistant.j2"');
     expect(result).not.toContain("content");
