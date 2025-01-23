@@ -48,7 +48,7 @@ This function uses the output schema in `config/functions/extract_entities/outpu
 ### Setup
 
 1. Create a `.env` file with these environment variables (see `.env.example` for an example).
-2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI, and a test ClickHouse database.
+2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI, and a development ClickHouse database.
 3. Run the `ner-fine-tuning.ipynb` Jupyter notebook.
 
 ## Running the Example
@@ -56,7 +56,7 @@ This function uses the output schema in `config/functions/extract_entities/outpu
 The notebook will first attempt to solve the NER task using the `extract_entities` TensorZero JSON function.
 Under the hood, the TensorZero Gateway will randomly sample either GPT-4o or vanilla Llama 3.1 8B each inference.
 
-After completing this process, we evaluate the output using exact match and Jaccard similarity and provide feedback for these metrics to the TensorZero Gateway.
+After completing this process, we evaluate the outputs using exact match and Jaccard similarity and provide feedback for these metrics to the TensorZero Gateway.
 
 Finally, we run an evaluation on a subset of the validation set to get a clear picture of the performance of each variant.
 You might notice that the best performing LLM is GPT-4o from OpenAI (not surprising!).
@@ -84,16 +84,9 @@ Once you finish fine-tuning, you'll see additional configuration blocks that you
 Let's create a new variant that uses the fine-tuned Llama-3.1 8B model.
 
 ```toml
-# The following two blocks define our new fine-tuned model and its model provider (Fireworks AI)
-
-# TODO
-
-# ...
-
-# The following block defines a new variant that uses the fine-tuned Llama-3.1 8B model
 [functions.extract_entities.variants.fine_tuned_llama_8b]
 type = "chat_completion"
-model = "fine_tuned_llama_8b"
+model = "fireworks::accounts/xxxxxx-xxxxxx/models/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 ```
 
