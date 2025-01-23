@@ -68,7 +68,7 @@ You can now use TensorZero recipes to learn from this experience to produce bett
 
 You can run a fine-tuning recipes by opening the UI (`http://localhost:4000/`) and clicking on the `Supervised Fine-Tuning` tab.
 Let's run fine-tuning on Llama-3.1 8B with Fireworks AI using the `exact_match` metric.
-Go grab a coffee &mdash; fine-tuning can take some time.
+Go grab a coffee as fine-tuning can take some time.
 
 <details>
 <summary>
@@ -97,14 +97,12 @@ model = "fine_tuned_llama_8b"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 ```
 
-Let's restart the TensorZero Gateway to apply the new configuration.
+**Let's restart the TensorZero Gateway to apply the new configuration.**
 You can do this by killing the running container and re-running `docker compose up`.
 
-## Experimenting with Fine-Tuned Variants
+Finally, re-run the `ner-fine-tuning.ipynb` notebook to see how the new variants perform.
 
-Once you've generated one or more improved variants, you can re-run the `ner-fine-tuning.ipynb` notebook to see how the new variants perform.
-
-You'll see that the fine-tuned Llama-3.1 8B outperforms GPT-4o on this task with just a few hundred examples!
+**You'll see that the fine-tuned Llama-3.1 8B outperforms GPT-4o on this task with just a few hundred examples!**
 
 > [!TIP]
 >
