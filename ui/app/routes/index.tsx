@@ -1,7 +1,13 @@
 import { Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import { Card, CardHeader, CardTitle } from "~/components/ui/card";
-import { BarChart2, GitBranch, Zap, BookOpen } from "lucide-react";
+import {
+  BarChart2,
+  GitBranch,
+  Zap,
+  BookOpen,
+  SquareFunction,
+} from "lucide-react";
 
 export default function Home() {
   return (
@@ -27,6 +33,16 @@ export default function Home() {
                     <div className="flex items-center space-x-2">
                       <GitBranch className="h-6 w-6 text-primary" />
                       <CardTitle>Episodes</CardTitle>
+                    </div>
+                  </CardHeader>
+                </Card>
+              </Link>
+              <Link to="/observability/functions" className="block">
+                <Card className="h-full transition-shadow hover:shadow-md">
+                  <CardHeader>
+                    <div className="flex items-center space-x-2">
+                      <SquareFunction className="h-6 w-6 text-primary" />
+                      <CardTitle>Functions</CardTitle>
                     </div>
                   </CardHeader>
                 </Card>

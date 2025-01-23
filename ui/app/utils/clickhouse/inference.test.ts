@@ -8,6 +8,12 @@ import {
   queryInferenceTableBounds,
   queryInferenceTableBoundsByEpisodeId,
   queryInferenceTableByEpisodeId,
+  countInferencesByFunction,
+  countInferencesForVariant,
+  queryInferenceTableByVariantName,
+  queryInferenceTableByFunctionName,
+  queryInferenceTableBoundsByFunctionName,
+  queryInferenceTableBoundsByVariantName,
 } from "./inference";
 import { countInferencesForFunction } from "./inference";
 import type {
@@ -18,14 +24,33 @@ import type {
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {
-  const jsonCount = await countInferencesForFunction(
-    "dashboard_fixture_extract_entities",
-    { type: "json", variants: {} },
-  );
+  const jsonCount = await countInferencesForFunction("extract_entities", {
+    type: "json",
+    variants: {},
+  });
   expect(jsonCount).toBe(400);
 
-  const chatCount = await countInferencesForFunction(
-    "dashboard_fixture_write_haiku",
+  const chatCount = await countInferencesForFunction("write_haiku", {
+    type: "chat",
+    variants: {},
+    tools: [],
+    tool_choice: "none",
+    parallel_tool_calls: false,
+  });
+  expect(chatCount).toBe(494);
+});
+
+// Test countInferencesForVariant
+test("countInferencesForVariant returns correct counts", async () => {
+  const jsonCount = await countInferencesForVariant(
+    "extract_entities",
+    { type: "json", variants: {} },
+    "gpt4o_initial_prompt",
+  );
+  expect(jsonCount).toBe(90);
+
+  const chatCount = await countInferencesForVariant(
+    "write_haiku",
     {
       type: "chat",
       variants: {},
@@ -33,6 +58,7 @@ test("countInferencesForFunction returns correct counts", async () => {
       tool_choice: "none",
       parallel_tool_calls: false,
     },
+    "initial_prompt_gpt4o_mini",
   );
   expect(chatCount).toBe(494);
 });
@@ -290,14 +316,14 @@ test("queryInferenceTableByEpisodeId pages through all results correctly using a
 // queryInferenceTableBounds and queryEpisodeTableBounds are the same because the early inferences are in singleton episodes.
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
-  expect(bounds.first_id).toBe("0192ced0-9873-70e2-ade5-dc5b8faea232");
-  expect(bounds.last_id).toBe("01942e28-4a3c-7873-b94d-402a9cc83f2a");
+  expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
+  expect(bounds.last_id).toBe("01948509-c2c8-7d13-827e-39af5c8a4853");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
-  expect(bounds.first_id).toBe("0192ced0-9873-70e2-ade5-dc5b8faea232");
-  expect(bounds.last_id).toBe("01942e28-4a3c-7873-b94d-402a9cc83f2a");
+  expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
+  expect(bounds.last_id).toBe("01948509-c2c8-7d13-827e-39af5c8a4853");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -314,6 +340,84 @@ test("queryInferenceTableBounds with invalid episode_id", async () => {
   });
   expect(bounds.first_id).toBe(null);
   expect(bounds.last_id).toBe(null);
+});
+
+test("queryInferenceTableByFunctionName", async () => {
+  const inferences = await queryInferenceTableByFunctionName({
+    function_name: "extract_entities",
+    page_size: 10,
+  });
+  expect(inferences.length).toBe(10);
+
+  // Verify IDs are in descending order
+  for (let i = 1; i < inferences.length; i++) {
+    expect(inferences[i - 1].id > inferences[i].id).toBe(true);
+  }
+
+  // Test pagination with before
+  const inferences2 = await queryInferenceTableByFunctionName({
+    function_name: "extract_entities",
+    before: inferences[inferences.length - 1].id,
+    page_size: 10,
+  });
+  expect(inferences2.length).toBe(10);
+
+  // Test pagination with after
+  const inferences3 = await queryInferenceTableByFunctionName({
+    function_name: "extract_entities",
+    after: inferences[0].id,
+    page_size: 10,
+  });
+  expect(inferences3.length).toBe(0);
+});
+
+test("queryInferenceTableBoundsByFunctionName", async () => {
+  const bounds = await queryInferenceTableBoundsByFunctionName({
+    function_name: "extract_entities",
+  });
+  expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
+  expect(bounds.last_id).toBe("019484e3-a4f8-71b3-b609-a4a3eee1e068");
+});
+
+test("queryInferenceTableByVariantName", async () => {
+  const inferences = await queryInferenceTableByVariantName({
+    function_name: "extract_entities",
+    variant_name: "gpt4o_initial_prompt",
+    page_size: 10,
+  });
+  expect(inferences.length).toBe(10);
+
+  // Verify IDs are in descending order
+  for (let i = 1; i < inferences.length; i++) {
+    expect(inferences[i - 1].id > inferences[i].id).toBe(true);
+  }
+
+  // Test pagination with before
+  const inferences2 = await queryInferenceTableByVariantName({
+    function_name: "extract_entities",
+    variant_name: "gpt4o_initial_prompt",
+    before: inferences[inferences.length - 1].id,
+    page_size: 10,
+  });
+  expect(inferences2.length).toBe(10);
+
+  // Test pagination with after
+  const inferences3 = await queryInferenceTableByVariantName({
+    function_name: "extract_entities",
+    variant_name: "gpt4o_initial_prompt",
+    after: inferences[0].id,
+    page_size: 10,
+  });
+  expect(inferences3.length).toBe(0);
+});
+
+test("queryInferenceTableBoundsByVariantName", async () => {
+  const bounds = await queryInferenceTableBoundsByVariantName({
+    function_name: "extract_entities",
+    variant_name: "gpt4o_initial_prompt",
+  });
+  expect(bounds.first_id).toBe("01939adf-0f50-79d0-8d55-7a009fcc5e32");
+  expect(bounds.last_id).toBe("0193e087-6188-7cd1-b608-49724ee9e334");
 });
 
 test("queryEpisodeTable", async () => {
@@ -514,4 +618,35 @@ test("queryInferenceById for json inference", async () => {
   expect(inference?.input.messages.length).toBe(0);
   const output = inference?.output as JsonInferenceOutput;
   expect(output.parsed).toBeDefined();
+});
+
+test("countInferencesByFunction", async () => {
+  const countsInfo = await countInferencesByFunction();
+  expect(countsInfo).toEqual([
+    {
+      function_name: "write_haiku",
+      max_timestamp: "2025-01-20T18:46:37Z",
+      count: 494,
+    },
+    {
+      function_name: "extract_entities",
+      max_timestamp: "2025-01-20T18:04:59Z",
+      count: 400,
+    },
+    {
+      function_name: "ask_question",
+      max_timestamp: "2025-01-03T21:52:59Z",
+      count: 767,
+    },
+    {
+      function_name: "answer_question",
+      max_timestamp: "2025-01-03T21:52:59Z",
+      count: 764,
+    },
+    {
+      function_name: "generate_secret",
+      max_timestamp: "2025-01-03T21:51:29Z",
+      count: 50,
+    },
+  ]);
 });

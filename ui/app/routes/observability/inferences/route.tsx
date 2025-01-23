@@ -56,11 +56,15 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const bottomInference = inferences[inferences.length - 1];
 
   const handleNextPage = () => {
-    navigate(`?before=${bottomInference.id}&pageSize=${pageSize}`);
+    navigate(`?before=${bottomInference.id}&pageSize=${pageSize}`, {
+      preventScrollReset: true,
+    });
   };
 
   const handlePreviousPage = () => {
-    navigate(`?after=${topInference.id}&pageSize=${pageSize}`);
+    navigate(`?after=${topInference.id}&pageSize=${pageSize}`, {
+      preventScrollReset: true,
+    });
   };
 
   const disablePrevious =

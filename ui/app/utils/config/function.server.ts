@@ -1,7 +1,9 @@
 import { z } from "zod";
-import type { FunctionConfig } from "./function";
+import type { FunctionConfig, JSONSchema } from "./function";
 import { RawVariantConfigSchema } from "./variant.server";
 import type { VariantConfig } from "./variant";
+import path from "path";
+import fs from "fs";
 
 // Common schema for both Chat and Json variants
 const rawBaseConfigSchema = z.object({
@@ -25,6 +27,21 @@ export const RawFunctionConfigJsonSchema = rawBaseConfigSchema.extend({
   output_schema: z.string().optional(),
 });
 
+// Add this helper function at the top level
+async function loadSchemaContent(
+  schemaPath: string | undefined,
+  configPath: string,
+): Promise<JSONSchema | undefined> {
+  if (!schemaPath) return undefined;
+  const fullPath = path.join(path.dirname(configPath), schemaPath);
+  try {
+    const content = await fs.promises.readFile(fullPath, "utf-8");
+    return JSON.parse(content) as JSONSchema; // Parse and return the JSON
+  } catch (error) {
+    throw new Error(`Invalid JSON schema in ${fullPath}: ${error}`);
+  }
+}
+
 // Combined FunctionConfig schema
 export const RawFunctionConfigSchema = z
   .discriminatedUnion("type", [
@@ -40,9 +57,61 @@ export const RawFunctionConfigSchema = z
         for (const [key, variant] of Object.entries(config.variants)) {
           loadedVariants[key] = await variant.load(config_path);
         }
-        return {
+
+        const baseConfig = {
           ...config,
           variants: loadedVariants,
+          system_schema: config.system_schema
+            ? {
+                path: config.system_schema,
+                content: await loadSchemaContent(
+                  config.system_schema,
+                  config_path,
+                ),
+              }
+            : undefined,
+          user_schema: config.user_schema
+            ? {
+                path: config.user_schema,
+                content: await loadSchemaContent(
+                  config.user_schema,
+                  config_path,
+                ),
+              }
+            : undefined,
+          assistant_schema: config.assistant_schema
+            ? {
+                path: config.assistant_schema,
+                content: await loadSchemaContent(
+                  config.assistant_schema,
+                  config_path,
+                ),
+              }
+            : undefined,
+        };
+
+        if (config.type === "json") {
+          return {
+            ...baseConfig,
+            type: "json" as const,
+            output_schema: config.output_schema
+              ? {
+                  path: config.output_schema,
+                  content: await loadSchemaContent(
+                    config.output_schema,
+                    config_path,
+                  ),
+                }
+              : undefined,
+          };
+        }
+
+        return {
+          ...baseConfig,
+          type: "chat" as const,
+          tools: config.tools,
+          tool_choice: config.tool_choice,
+          parallel_tool_calls: config.parallel_tool_calls,
         };
       },
     };
