@@ -6,11 +6,38 @@ Named Entity Recognition (NER) is the process of identifying and categorizing na
 
 Once upon a time, this was done using rule-based systems or special-purpose models. In light of progress in foundation models, most would use an LLM to address this task today, especially given recent advancements in structured decoding and JSON mode offerings from most inference providers.
 
-Here, we present a stylized example of a NER system that uses TensorZero JSON functions to decode named entities from text.
-We build off of the [CoNLL++ dataset](https://arxiv.org/abs/1909.01441v1) and [work](https://predibase.com/blog/lorax-outlines-better-json-extraction-with-structured-generation-and-lora) from Predibase for the problem setting.
+Here, we present a stylized example of an NER system that uses TensorZero JSON functions to decode named entities from text.[^1]
 Each example in the dataset includes a short segment of text and instructs the model to produce a JSON of named entities in the input.
 We provide the output schema to TensorZero at `config/functions/extract_entities/output_schema.json`.
 In our problem setting, we consider any output that fails to validate against the schema to be incorrect.
+
+<details>
+<summary>
+Sample Data
+</summary>
+
+### Input
+
+```
+The former Wimbledon champion said the immediate future of Australia 's Davis Cup coach Tony Roche could also be determined by events in Split .
+```
+
+### Output
+
+```
+{
+  "person": ["Tony Roche"],
+  "organization": [],
+  "location": ["Australia", "Split"],
+  "miscellaneous": ["Wimbledon", "Davis Cup"]
+}
+```
+
+> [!NOTE]
+>
+> Useful information that users should know, even when skimming content.
+
+</details>
 
 We'll show that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on this task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.
 
@@ -48,7 +75,7 @@ pip install -r requirements.txt
 
 ## Running the Example
 
-You can run the example in the `conll.ipynb` notebook.
+You can run the example in the `ner-fine-tuning.ipynb` notebook.
 Make sure to install the dependencies in the `requirements.txt` file.
 It should not require any changes to run and will automatically connect to the TensorZero Gateway you started.
 
@@ -78,6 +105,8 @@ Once you've generated one or more improved variants (and, critically, given them
 docker compose up
 ```
 
-You can then re-run the test set evaluation in the `conll.ipynb` notebook to see how the new variants perform.
+You can then re-run the test set evaluation in the `ner-fine-tuning.ipynb` notebook to see how the new variants perform.
 
 From a single fine-tune we see the Llama-3.1 8B model greatly outperform GPT-4o on this task with just 100-200 examples!
+
+[^1]: We build off of the [CoNLL++ dataset](https://arxiv.org/abs/1909.01441v1) and [work](https://predibase.com/blog/lorax-outlines-better-json-extraction-with-structured-generation-and-lora) from Predibase for the problem setting.
