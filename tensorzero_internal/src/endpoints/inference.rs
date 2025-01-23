@@ -36,6 +36,8 @@ use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::{InferenceConfig, Variant};
 
+use super::check_tags;
+
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -147,6 +149,7 @@ pub async fn inference(
 ) -> Result<InferenceOutput, Error> {
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
+    check_tags(&params.tags)?;
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?.clone();
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;

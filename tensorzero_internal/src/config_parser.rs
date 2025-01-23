@@ -146,6 +146,14 @@ impl<'c> Config<'c> {
     fn validate(&mut self) -> Result<(), Error> {
         // Validate each function
         for (function_name, function) in &self.functions {
+            if function_name.starts_with("tensorzero::") {
+                return Err(ErrorDetails::Config {
+                    message: format!(
+                        "Function name cannot start with 'tensorzero::': {function_name}"
+                    ),
+                }
+                .into());
+            }
             function.validate(
                 &self.tools,
                 &mut self.models, // NOTE: in here there might be some models created using shorthand initialization
@@ -166,50 +174,43 @@ impl<'c> Config<'c> {
                 }
                 .into());
             }
+            if metric_name.starts_with("tensorzero::") {
+                return Err(ErrorDetails::Config {
+                    message: format!("Metric name cannot start with 'tensorzero::': {metric_name}"),
+                }
+                .into());
+            }
         }
 
         // Validate each model
         for (model_name, model) in self.models.iter() {
-            // Ensure that the model has at least one provider
-            if model.routing.is_empty() {
+            if model_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
-                    message: format!("`models.{model_name}`: `routing` must not be empty"),
+                    message: format!("Model name cannot start with 'tensorzero::': {model_name}"),
                 }
                 .into());
             }
+            model.validate(model_name)?;
+        }
 
-            // Ensure that routing entries are unique and exist as keys in providers
-            let mut seen_providers = std::collections::HashSet::new();
-            for provider in &model.routing {
-                if !seen_providers.insert(provider) {
-                    return Err(ErrorDetails::Config {
-                        message: format!(
-                            "`models.{model_name}.routing`: duplicate entry `{provider}`"
-                        ),
-                    }
-                    .into());
+        for embedding_model_name in self.embedding_models.keys() {
+            if embedding_model_name.starts_with("tensorzero::") {
+                return Err(ErrorDetails::Config {
+                    message: format!(
+                        "Embedding model name cannot start with 'tensorzero::': {embedding_model_name}"
+                    ),
                 }
-
-                if !model.providers.contains_key(provider) {
-                    return Err(ErrorDetails::Config {
-                message: format!(
-                    "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
-                ),
+                .into());
             }
-            .into());
-                }
-            }
+        }
 
-            // Validate each provider
-            for provider_name in model.providers.keys() {
-                if !seen_providers.contains(provider_name) {
-                    return Err(ErrorDetails::Config {
-                        message: format!(
-                    "`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"
-                ),
-                    }
-                    .into());
+        // Validate each tool
+        for tool_name in self.tools.keys() {
+            if tool_name.starts_with("tensorzero::") {
+                return Err(ErrorDetails::Config {
+                    message: format!("Tool name cannot start with 'tensorzero::': {tool_name}"),
                 }
+                .into());
             }
         }
         Ok(())
@@ -979,13 +980,8 @@ mod tests {
         config["models"]["gpt-3.5-turbo"]["routing"] =
             toml::Value::Array(vec!["openai".into(), "openai".into()]);
         let result = Config::load_from_toml(config, PathBuf::new());
-        assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "`models.gpt-3.5-turbo.routing`: duplicate entry `openai`".to_string()
-            }
-            .into()
-        );
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("`models.gpt-3.5-turbo.routing`: duplicate entry `openai`"));
     }
 
     /// Ensure that the config validation fails when a routing entry does not exist in providers
