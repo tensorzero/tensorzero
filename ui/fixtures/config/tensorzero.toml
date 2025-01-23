@@ -16,6 +16,20 @@ routing = ["fireworks"]
 type = "fireworks"
 model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
 
+[embedding_models.text-embedding-3-small]
+routing = ["openai"]
+
+[embedding_models.text-embedding-3-small.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+
+[models."ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"]
+routing = ["openai"]
+
+[models."ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j".providers.openai]
+type = "openai"
+model_name = "ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -33,6 +47,26 @@ system_template = "functions/extract_entities/initial_prompt/system_template.min
 type = "chat_completion"
 model = "llama-3.1-8b-instruct"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
+[functions.extract_entities.variants.baseline]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "functions/extract_entities/baseline/system_template.minijinja"
+json_mode = "strict"
+
+[functions.extract_entities.variants.dicl]
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "text-embedding-3-small"
+model = "gpt-4o-mini-2024-07-18"
+k = 10
+system_instructions = "functions/extract_entities/baseline/system_template.minijinja"
+json_mode = "strict"
+weight = 1
+
+[functions.extract_entities.variants.turbo]
+type = "chat_completion"
+model = "ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"
+system_template = "functions/extract_entities/baseline/system_template.minijinja"
 
 [functions.write_haiku]
 type = "chat"
