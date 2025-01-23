@@ -3,15 +3,16 @@ use axum::Router;
 use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 
-use gateway::clickhouse_migration_manager;
-use gateway::config_parser::Config;
-use gateway::endpoints;
-use gateway::error;
-use gateway::gateway_util;
-use gateway::observability;
+use tensorzero_internal::clickhouse_migration_manager;
+use tensorzero_internal::config_parser::Config;
+use tensorzero_internal::endpoints;
+use tensorzero_internal::error;
+use tensorzero_internal::gateway_util;
+use tensorzero_internal::observability;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -23,12 +24,10 @@ async fn main() {
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Load config
-    let config: &'static Config = Box::leak(Box::new(
-        Config::load().expect_pretty("Failed to load config"),
-    ));
+    let config: Arc<Config> = Arc::new(Config::load().expect_pretty("Failed to load config"));
 
     // Initialize AppState
-    let app_state = gateway_util::AppStateData::new(config)
+    let app_state = gateway_util::AppStateData::new(config.clone())
         .await
         .expect_pretty("Failed to initialize AppState");
 

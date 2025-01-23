@@ -1,0 +1,6 @@
+tensorzero
+git+ssh://git@github.com/balrog-ai/BALROG.git#egg=balrog
+ipykernel
+scipy
+pandas
+seaborn
