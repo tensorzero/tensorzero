@@ -43,10 +43,13 @@ This function uses the output schema in `config/functions/extract_entities/outpu
 2. Install Python 3.10+.
 3. Install the Python dependencies with `pip install -r requirements.txt`.
 4. Create API keys for OpenAI (`OPENAI_API_KEY`) and Fireworks AI (`FIREWORKS_ACCOUNT_ID` and `FIREWORKS_API_KEY`).
-5. Create a `.env` file with these environment variables (see `.env.example` for an example).
-6. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI (`http://localhost:4000/`), and a test ClickHouse database.
-7. Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your Jupyter notebook will run in.
-8. Run the `ner-fine-tuning.ipynb` notebook.
+
+### Setup
+
+1. Create a `.env` file with these environment variables (see `.env.example` for an example).
+2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI (`http://localhost:4000/`), and a test ClickHouse database.
+3. Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your Jupyter notebook will run in.
+4. Run the `ner-fine-tuning.ipynb` Jupyter notebook.
 
 ## Running the Example
 
