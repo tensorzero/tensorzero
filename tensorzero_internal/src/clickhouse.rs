@@ -166,7 +166,7 @@ impl ClickHouseConnectionInfo {
     pub async fn run_query(
         &self,
         query: String,
-        parameters: Option<&HashMap<String, String>>,
+        parameters: Option<&HashMap<&str, &str>>,
     ) -> Result<String, Error> {
         match self {
             Self::Disabled => Ok("".to_string()),

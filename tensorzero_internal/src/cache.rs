@@ -145,11 +145,13 @@ pub async fn cache_lookup(
         "#
     };
     let mut query_params = HashMap::from([
-        ("short_cache_key".to_string(), short_cache_key),
-        ("long_cache_key".to_string(), long_cache_key),
+        ("short_cache_key", short_cache_key.as_str()),
+        ("long_cache_key", long_cache_key.as_str()),
     ]);
+    let lookback_str;
     if let Some(lookback) = max_age_s {
-        query_params.insert("lookback_s".to_string(), lookback.to_string());
+        lookback_str = lookback.to_string();
+        query_params.insert("lookback_s", lookback_str.as_str());
     }
     let result = clickhouse_connection_info
         .run_query(query.to_string(), Some(&query_params))
