@@ -19,7 +19,7 @@ use crate::inference::types::{parse_chat_output, ContentBlock, ContentBlockOutpu
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCall, ToolCallConfig};
 use crate::uuid_util::uuid_elapsed;
 
-use super::check_tags;
+use super::validate_tags;
 
 /// There is a potential issue here where if we write an inference and then immediately write feedback for it,
 /// we might not be able to find the inference in the database because it hasn't been written yet.
@@ -80,7 +80,7 @@ pub async fn feedback_handler(
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Json<Value>, Error> {
-    check_tags(&params.tags)?;
+    validate_tags(&params.tags)?;
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
         &config,

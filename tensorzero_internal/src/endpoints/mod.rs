@@ -9,7 +9,7 @@ pub mod inference;
 pub mod openai_compatible;
 pub mod status;
 
-fn check_tags(tags: &HashMap<String, String>) -> Result<(), Error> {
+fn validate_tags(tags: &HashMap<String, String>) -> Result<(), Error> {
     for tag_name in tags.keys() {
         if tag_name.starts_with("tensorzero::") {
             return Err(Error::new(ErrorDetails::InvalidRequest {
@@ -18,4 +18,17 @@ fn check_tags(tags: &HashMap<String, String>) -> Result<(), Error> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_tags() {
+        let mut tags = HashMap::new();
+        assert!(validate_tags(&tags).is_ok());
+        tags.insert("tensorzero::test".to_string(), "test".to_string());
+        assert!(validate_tags(&tags).is_err());
+    }
 }

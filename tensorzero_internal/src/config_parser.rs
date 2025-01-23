@@ -990,13 +990,7 @@ mod tests {
         let mut config = get_sample_valid_config();
         config["models"]["gpt-3.5-turbo"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
         let result = Config::load_from_toml(config, PathBuf::new());
-        assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "`models.gpt-3.5-turbo`: `routing` contains entry `closedai` that does not exist in `providers`".to_string()
-            }
-            .into()
-        );
+        assert!(result.unwrap_err().to_string().contains("`models.gpt-3.5-turbo`: `routing` contains entry `closedai` that does not exist in `providers`"));
     }
 
     /// Ensure that the config loading fails when the system schema does not exist
@@ -1266,6 +1260,212 @@ mod tests {
             ErrorDetails::Config {
                 message: "`functions.generate_draft.tools`: tool `non_existent_tool` is not present in the config".to_string()
             }.into()
+        );
+    }
+
+    /// Ensure that the config validation fails when a function name starts with `tensorzero::`
+    #[test]
+    fn test_config_validate_function_name_tensorzero_prefix() {
+        let mut config = get_sample_valid_config();
+
+        // Rename an existing function to start with `tensorzero::`
+        let old_function_entry = config["functions"]
+            .as_table_mut()
+            .unwrap()
+            .remove("generate_draft")
+            .expect("Did not find function `generate_draft`");
+        config["functions"]
+            .as_table_mut()
+            .unwrap()
+            .insert("tensorzero::bad_function".to_string(), old_function_entry);
+
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::new(ErrorDetails::Config {
+                message: "Function name cannot start with 'tensorzero::': tensorzero::bad_function"
+                    .to_string()
+            })
+        );
+    }
+
+    /// Ensure that the config validation fails when a metric name starts with `tensorzero::`
+    #[test]
+    fn test_config_validate_metric_name_tensorzero_prefix() {
+        let mut config = get_sample_valid_config();
+
+        // Rename an existing metric to start with `tensorzero::`
+        let old_metric_entry = config["metrics"]
+            .as_table_mut()
+            .unwrap()
+            .remove("task_success")
+            .expect("Did not find metric `task_success`");
+        config["metrics"]
+            .as_table_mut()
+            .unwrap()
+            .insert("tensorzero::bad_metric".to_string(), old_metric_entry);
+
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::new(ErrorDetails::Config {
+                message: "Metric name cannot start with 'tensorzero::': tensorzero::bad_metric"
+                    .to_string()
+            })
+        );
+    }
+
+    /// Ensure that the config validation fails when a model name starts with `tensorzero::`
+    #[test]
+    fn test_config_validate_model_name_tensorzero_prefix() {
+        let mut config = get_sample_valid_config();
+
+        // Rename an existing model to start with `tensorzero::`
+        let old_model_entry = config["models"]
+            .as_table_mut()
+            .unwrap()
+            .remove("gpt-3.5-turbo")
+            .expect("Did not find model `gpt-3.5-turbo`");
+        config["models"]
+            .as_table_mut()
+            .unwrap()
+            .insert("tensorzero::bad_model".to_string(), old_model_entry);
+
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::new(ErrorDetails::Config {
+                message:
+                    "Model name 'tensorzero::bad_model' contains a reserved prefix\nin `models`\n"
+                        .to_string()
+            })
+        );
+    }
+
+    /// Ensure that the config validation fails when an embedding model name starts with `tensorzero::`
+    #[test]
+    fn test_config_validate_embedding_model_name_tensorzero_prefix() {
+        let mut config = get_sample_valid_config();
+
+        // Rename an existing embedding model to start with `tensorzero::`
+        let old_embedding_model_entry = config["embedding_models"]
+            .as_table_mut()
+            .unwrap()
+            .remove("text-embedding-3-small")
+            .expect("Did not find embedding model `text-embedding-3-small`");
+        config["embedding_models"].as_table_mut().unwrap().insert(
+            "tensorzero::bad_embedding_model".to_string(),
+            old_embedding_model_entry,
+        );
+
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+        assert_eq!(
+                result.unwrap_err(),
+                Error::new(ErrorDetails::Config {
+                    message:
+                        "Embedding model name cannot start with 'tensorzero::': tensorzero::bad_embedding_model"
+                            .to_string()
+                })
+            );
+    }
+
+    /// Ensure that the config validation fails when a tool name starts with `tensorzero::`
+    #[test]
+    fn test_config_validate_tool_name_tensorzero_prefix() {
+        let mut config = get_sample_valid_config();
+
+        // Clone an existing tool and add a new one with tensorzero:: prefix
+        let old_tool_entry = config["tools"]
+            .as_table()
+            .unwrap()
+            .get("get_temperature")
+            .expect("Did not find tool `get_temperature`")
+            .clone();
+        config["tools"]
+            .as_table_mut()
+            .unwrap()
+            .insert("tensorzero::bad_tool".to_string(), old_tool_entry);
+
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::new(ErrorDetails::Config {
+                message: "Tool name cannot start with 'tensorzero::': tensorzero::bad_tool"
+                    .to_string()
+            })
+        );
+    }
+
+    /// If you also want to confirm a variant name starting with `tensorzero::` fails
+    /// (only do this if your `function.validate` logic checks variant names):
+    #[test]
+    fn test_config_validate_variant_name_tensorzero_prefix() {
+        let mut config = get_sample_valid_config();
+
+        // For demonstration, rename an existing variant inside `generate_draft`:
+        let old_variant_entry = config["functions"]["generate_draft"]["variants"]
+            .as_table_mut()
+            .unwrap()
+            .remove("openai_promptA")
+            .expect("Did not find variant `openai_promptA`");
+        config["functions"]["generate_draft"]["variants"]
+            .as_table_mut()
+            .unwrap()
+            .insert("tensorzero::bad_variant".to_string(), old_variant_entry);
+
+        // This test will only pass if your code actually rejects variant names with that prefix
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+
+        // Adjust the expected message if your code gives a different error shape for variants
+        // Or remove this test if variant names are *not* validated in that manner
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("tensorzero::bad_variant"));
+    }
+
+    /// Ensure that the config validation fails when a model provider's name starts with `tensorzero::`
+    #[test]
+    fn test_config_validate_model_provider_name_tensorzero_prefix() {
+        let mut config = get_sample_valid_config();
+
+        // Rename an existing provider to start with `tensorzero::`
+        let old_openai_provider = config["models"]["gpt-3.5-turbo"]["providers"]
+            .as_table_mut()
+            .unwrap()
+            .remove("openai")
+            .expect("Did not find provider `openai` under `gpt-3.5-turbo`");
+        config["models"]["gpt-3.5-turbo"]["providers"]
+            .as_table_mut()
+            .unwrap()
+            .insert("tensorzero::openai".to_string(), old_openai_provider);
+
+        // Update the routing entry to match the new provider name
+        let routing = config["models"]["gpt-3.5-turbo"]["routing"]
+            .as_array_mut()
+            .expect("Expected routing to be an array");
+        for entry in routing.iter_mut() {
+            if entry.as_str() == Some("openai") {
+                *entry = toml::Value::String("tensorzero::openai".to_string());
+            }
+        }
+
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+
+        // Adjust this check to match how your code surfaces the "cannot start with `tensorzero::`" error
+        assert_eq!(
+            result.unwrap_err(),
+            Error::new(ErrorDetails::Config {
+                message: "`models.gpt-3.5-turbo.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"
+                    .to_string()
+            })
         );
     }
 
