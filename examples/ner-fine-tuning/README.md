@@ -3,10 +3,10 @@
 ## Background
 
 Named Entity Recognition (NER) is the process of identifying and categorizing named entities in text into predefined categories such as person, organization, location, and date. NER is a fundamental task in natural language processing (NLP) and is widely used in various applications such as information extraction, question answering, and machine translation.
-Here, we present a stylized example of an NER system that uses TensorZero JSON functions to decode named entities from text.[^1]
+Here, we present a stylized example of an NER system that uses TensorZero JSON functions to decode named entities from text. [^1]
 
 Each example in the dataset includes a short segment of text and instructs the model to produce a JSON of named entities in the input.
-We'll show that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on this task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.
+**We'll show that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on this task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.**
 
 ## Sample Data
 
