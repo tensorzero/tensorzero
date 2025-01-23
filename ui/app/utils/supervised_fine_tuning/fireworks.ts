@@ -142,7 +142,7 @@ export class FireworksSFTJob extends SFTJob {
     if (!jobId) {
       throw new Error("Failed to parse job ID from path");
     }
-    return `https://fireworks.ai/dashboard/fine-tuning/${jobId}`;
+    return `https://fireworks.ai/dashboard/fine-tuning/v1/${jobId}`;
   }
 
   status(): SFTJobStatus {
