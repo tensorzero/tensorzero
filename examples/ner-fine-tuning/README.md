@@ -3,9 +3,10 @@
 ## Background
 
 Named Entity Recognition (NER) is the process of identifying and categorizing named entities in text into predefined categories such as person, organization, location, and date. NER is a fundamental task in natural language processing (NLP) and is widely used in various applications such as information extraction, question answering, and machine translation.
-Here, we present a stylized example of an NER system that uses TensorZero JSON functions to decode named entities from text. [^1]
-
+Here, we present a stylized example of an NER system that uses TensorZero JSON functions to decode named entities from text.
 Each example in the dataset includes a short segment of text and instructs the model to produce a JSON of named entities in the input.
+[^1]
+
 **We'll show that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on this task using a small amount of training data, and served by Fireworks AI at a fraction of the cost and latency.**
 
 ## Sample Data
@@ -48,8 +49,7 @@ This function uses the output schema in `config/functions/extract_entities/outpu
 
 1. Create a `.env` file with these environment variables (see `.env.example` for an example).
 2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI, and a test ClickHouse database.
-3. Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your Jupyter notebook will run in.
-4. Run the `ner-fine-tuning.ipynb` Jupyter notebook.
+3. Run the `ner-fine-tuning.ipynb` Jupyter notebook.
 
 ## Running the Example
 
@@ -84,13 +84,13 @@ Once you finish fine-tuning, you'll see additional configuration blocks that you
 Let's create a new variant that uses the fine-tuned Llama-3.1 8B model.
 
 ```toml
-# The following blocks define our new fine-tuned model and its model provider (Fireworks AI).
+# The following two blocks define our new fine-tuned model and its model provider (Fireworks AI)
 
 # TODO
 
 # ...
 
-# The following block defines a new variant that uses the fine-tuned Llama-3.1 8B model.
+# The following block defines a new variant that uses the fine-tuned Llama-3.1 8B model
 [functions.extract_entities.variants.fine_tuned_llama_8b]
 type = "chat_completion"
 model = "fine_tuned_llama_8b"
