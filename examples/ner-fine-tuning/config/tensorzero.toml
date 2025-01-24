@@ -1,3 +1,7 @@
+# TODO: REMOVE -- pending bug fix
+[models]
+
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -6,7 +10,7 @@
 type = "json"
 output_schema = "functions/extract_entities/output_schema.json"
 
-[functions.extract_entities.variants.gpt4o]
+[functions.extract_entities.variants.gpt_4o]
 type = "chat_completion"
 model = "openai::gpt-4o-2024-08-06"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
@@ -31,7 +35,7 @@ type = "float"
 level = "inference"
 optimize = "max"
 
-[metrics.valid_json]
+[metrics.valid_output]
 type = "boolean"
 level = "inference"
 optimize = "max"

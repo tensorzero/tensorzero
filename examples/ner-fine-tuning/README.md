@@ -79,14 +79,13 @@ Alternatively, you can run a fine-tuning recipe programatically using the Jupyte
 
 </details>
 
-Once you finish fine-tuning, you'll see additional configuration blocks that you can add to your `tensorzero.toml` file.
-
-Let's create a new variant that uses the fine-tuned Llama-3.1 8B model.
+Once you finish fine-tuning, you'll see additional configuration blocks.
+For our purposes, we only need the `model_name` which we'll use to create a new variant in the `tensorzero.toml` file.
 
 ```toml
 [functions.extract_entities.variants.fine_tuned_llama_8b]
 type = "chat_completion"
-model = "fireworks::accounts/xxxxxx-xxxxxx/models/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+model = "fireworks::accounts/xxxxxx-xxxxxx/models/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"  # TODO: Replace with your model name
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 ```
 
