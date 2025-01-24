@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::sync::OnceLock;
 
 use futures::StreamExt;
 use reqwest_eventsource::RequestBuilderExt;
@@ -21,7 +22,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 
 const PROVIDER_NAME: &str = "vLLM";
 const PROVIDER_TYPE: &str = "vllm";
@@ -33,19 +34,24 @@ pub struct VLLMProvider {
     credentials: VLLMCredentials,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<VLLMCredentials> = OnceLock::new();
+
 impl VLLMProvider {
     pub fn new(
         model_name: String,
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = VLLMCredentials::try_from(generic_credentials)?;
+        let credentials = build_creds_caching_default(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+        )?;
         Ok(VLLMProvider {
             model_name,
             api_base,
-            credentials: provider_credentials,
+            credentials,
         })
     }
 }
@@ -54,7 +60,7 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("VLLM_API_KEY".to_string())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum VLLMCredentials {
     Static(SecretString),
     Dynamic(String),

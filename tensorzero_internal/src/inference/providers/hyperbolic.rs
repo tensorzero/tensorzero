@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
@@ -5,7 +7,7 @@ use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
@@ -41,22 +43,27 @@ pub struct HyperbolicProvider {
     credentials: HyperbolicCredentials,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<HyperbolicCredentials> = OnceLock::new();
+
 impl HyperbolicProvider {
     pub fn new(
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = HyperbolicCredentials::try_from(generic_credentials)?;
+        let credentials = build_creds_caching_default(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+        )?;
         Ok(HyperbolicProvider {
             model_name,
-            credentials: provider_credentials,
+            credentials,
         })
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum HyperbolicCredentials {
     Static(SecretString),
     Dynamic(String),

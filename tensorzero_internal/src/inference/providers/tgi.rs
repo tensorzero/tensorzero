@@ -16,6 +16,7 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -36,7 +37,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     TextChunk, Usage,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::ToolCall;
 
 const PROVIDER_NAME: &str = "TGI";
@@ -52,19 +53,24 @@ pub struct TGIProvider {
     credentials: TGICredentials,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<TGICredentials> = OnceLock::new();
+
 impl TGIProvider {
     pub fn new(api_base: Url, api_key_location: Option<CredentialLocation>) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = TGICredentials::try_from(generic_credentials)?;
+        let credentials = build_creds_caching_default(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+        )?;
         Ok(TGIProvider {
             api_base,
-            credentials: provider_credentials,
+            credentials,
         })
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TGICredentials {
     Static(SecretString),
     Dynamic(String),

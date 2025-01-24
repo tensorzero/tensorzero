@@ -3,7 +3,7 @@ use reqwest::Client;
 use secrecy::SecretString;
 use serde::de::Error as SerdeError;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::{env, fs};
 use strum::VariantNames;
 #[allow(unused_imports)]
@@ -794,6 +794,7 @@ impl<'de> Deserialize<'de> for CredentialLocation {
     }
 }
 
+#[derive(Clone)]
 pub enum Credential {
     Static(SecretString),
     FileContents(SecretString),
@@ -801,6 +802,66 @@ pub enum Credential {
     None,
     #[cfg(any(test, feature = "e2e_tests"))]
     Missing,
+}
+
+/// Gets the value from a `OnceLock` or initializes it with the result of `f`
+/// If this is called simultaneously from multiple threads, it may call `f` multiple times
+/// If `f` returns an error, the `OnceLock` will remain uninitialized
+fn racy_get_or_try_init<T: Clone, E>(
+    once_lock: &OnceLock<T>,
+    f: impl FnOnce() -> Result<T, E>,
+) -> Result<T, E> {
+    if let Some(val) = once_lock.get() {
+        Ok(val.clone())
+    } else {
+        let val = f()?;
+        // We don't care if the value was est
+        let _ = once_lock.set(val.clone());
+        Ok(val)
+    }
+}
+
+/// Builds a credential type from the provided `CrendentialLocation` and default location.
+/// This is a convenience function that calls `get_creds_with_cache_and_fn` using
+/// the `TryFrom<Credential>` implementation for `T`.
+///
+/// Most providers should be able to use this function to build their credentials,
+/// unless they have special requirements (e.g. calling an `async fn`)
+pub fn build_creds_caching_default<T: Clone + TryFrom<Credential, Error = Error>>(
+    location: Option<CredentialLocation>,
+    default_location: CredentialLocation,
+    provider_type: &str,
+    cache: &OnceLock<T>,
+) -> Result<T, Error> {
+    build_creds_caching_default_with_fn(location, default_location, provider_type, cache, |creds| {
+        T::try_from(creds)
+    })
+}
+
+/// Builds a credential type from the provided `CrendentialLocation` and default location.
+/// If the location is `None`, we'll use the provided `OnceLock` to cache the result
+/// of `f(default_location)`.
+/// Otherwise, we'll call `f(location)` without caching the result.
+///
+/// **NOTE** - `f` may be run multiple times in parallel even when `default_location` is used,
+/// due to a limitation of the current `OnceLock` api.
+pub fn build_creds_caching_default_with_fn<T: Clone, F: FnOnce(Credential) -> Result<T, Error>>(
+    location: Option<CredentialLocation>,
+    default_location: CredentialLocation,
+    provider_type: &str,
+    cache: &OnceLock<T>,
+    f: F,
+) -> Result<T, Error> {
+    let make_creds = |location| {
+        let creds = Credential::try_from((location, provider_type))?;
+        let provider_creds = f(creds)?;
+        Ok(provider_creds)
+    };
+    if let Some(location) = location {
+        make_creds(location)
+    } else {
+        racy_get_or_try_init(cache, || make_creds(default_location))
+    }
 }
 
 impl TryFrom<(CredentialLocation, &str)> for Credential {

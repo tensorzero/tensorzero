@@ -5,6 +5,7 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -23,7 +24,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
 lazy_static! {
@@ -47,17 +48,22 @@ pub struct AnthropicProvider {
     credentials: AnthropicCredentials,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<AnthropicCredentials> = OnceLock::new();
+
 impl AnthropicProvider {
     pub fn new(
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = AnthropicCredentials::try_from(generic_credentials)?;
+        let credentials = build_creds_caching_default(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+        )?;
         Ok(AnthropicProvider {
             model_name,
-            credentials: provider_credentials,
+            credentials,
         })
     }
 }
