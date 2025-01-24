@@ -114,3 +114,8 @@ test("parse e2e config", async () => {
     "../../fixtures/config/tools/get_temperature.json",
   );
 });
+
+test("parse empty config", async () => {
+  const validatedConfig = await loadConfig("fixtures/config/empty.toml");
+  expect(validatedConfig).toBeDefined();
+});

@@ -559,7 +559,8 @@ mod tests {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
             _ => panic!("Expected a chat completion variant"),
         };
-        assert_eq!(prompt_b_json_mode, &JsonMode::On);
+        // The default json mode is strict, so this should be strict
+        assert_eq!(prompt_b_json_mode, &JsonMode::Strict);
         // Check that the tool choice for get_weather is set to "specific" and the correct tool
         let function = config.functions.get("weather_helper").unwrap();
         match &**function {
