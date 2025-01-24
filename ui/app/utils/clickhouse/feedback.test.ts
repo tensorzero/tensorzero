@@ -120,8 +120,8 @@ test("queryFeedbackBoundsByTargetId", async () => {
     target_id: "01942e26-4693-7e80-8591-47b98e25d711",
   });
   expect(emptyBounds).toEqual({
-    first_id: undefined,
-    last_id: undefined,
+    first_id: null,
+    last_id: null,
   });
 });
 
