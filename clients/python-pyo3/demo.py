@@ -1,8 +1,8 @@
-import asyncio
-import tensorzero
-import sys
 import argparse
+import asyncio
+import sys
 
+import tensorzero
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--use-async", action=argparse.BooleanOptionalAction, default=False)
