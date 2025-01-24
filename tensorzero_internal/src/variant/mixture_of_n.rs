@@ -731,7 +731,7 @@ mod tests {
         let (request_message, included_indices) = result.unwrap();
         assert_eq!(included_indices, vec![0, 1]);
 
-        let expected_message_text = "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n[{\"type\":\"text\",\"text\":\"Candidate answer 1\"}]\n------1:\n[{\"type\":\"text\",\"text\":\"Candidate answer 2\"}]\n------".to_string();
+        let expected_message_text = "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n[{\"type\":\"text\",\"text\":\"Candidate answer 1\"}]\n------\n1:\n[{\"type\":\"text\",\"text\":\"Candidate answer 2\"}]\n------".to_string();
         // Now check that the request_message has the expected role and content
         assert_eq!(request_message.role, Role::User);
         assert_eq!(request_message.content, vec![expected_message_text.into()]);

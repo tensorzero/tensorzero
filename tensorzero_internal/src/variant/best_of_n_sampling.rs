@@ -880,7 +880,7 @@ mod tests {
         let (request_message, skipped_indices) = result.unwrap();
         assert!(skipped_indices.is_empty());
 
-        let expected_message_text = "Here are the candidate answers (with the index and a row of ------ separating):\n0: [{\"type\":\"text\",\"text\":\"Candidate answer 1\"}]\n------1: [{\"type\":\"text\",\"text\":\"Candidate answer 2\"}]\n------\nPlease evaluate these candidates and provide the index of the best one.".to_string();
+        let expected_message_text = "Here are the candidate answers (with the index and a row of ------ separating):\n0: [{\"type\":\"text\",\"text\":\"Candidate answer 1\"}]\n------\n1: [{\"type\":\"text\",\"text\":\"Candidate answer 2\"}]\n------\nPlease evaluate these candidates and provide the index of the best one.".to_string();
         // Now check that the request_message has the expected role and content
         assert_eq!(request_message.role, Role::User);
         assert_eq!(request_message.content, vec![expected_message_text.into()]);
