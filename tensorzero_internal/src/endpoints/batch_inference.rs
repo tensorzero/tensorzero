@@ -17,7 +17,7 @@ use super::inference::{
     ChatInferenceResponse, InferenceClients, InferenceCredentials, InferenceDatabaseInsertMetadata,
     InferenceModels, InferenceParams, InferenceResponse, JsonInferenceResponse,
 };
-use crate::cache::CacheOptions;
+use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
@@ -197,12 +197,16 @@ pub async fn start_batch_inference_handler(
         &params.function_name,
         params.variant_name.as_deref(),
     );
+    let cache_options = CacheOptions {
+        max_age_s: None,
+        enabled: CacheEnabledMode::WriteOnly,
+    };
 
     let inference_clients = InferenceClients {
         http_client: &http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
         credentials: &params.credentials,
-        cache_options: &CacheOptions::default(),
+        cache_options: &cache_options,
     };
 
     let inference_models = InferenceModels {

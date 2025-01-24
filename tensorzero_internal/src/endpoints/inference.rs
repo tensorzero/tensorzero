@@ -17,7 +17,7 @@ use tokio_stream::StreamExt;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::cache::CacheOptions;
+use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
 use crate::embeddings::EmbeddingModelConfig;
@@ -78,7 +78,7 @@ pub struct Params {
     // configured one. We only lazily validate this schema.
     pub output_schema: Option<Value>,
     #[serde(default)]
-    pub cache_options: CacheOptions,
+    pub cache_options: CacheParamsOptions,
     #[serde(default)]
     pub credentials: InferenceCredentials,
 }
@@ -223,7 +223,7 @@ pub async fn inference(
         http_client: &http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
         credentials: &params.credentials,
-        cache_options: &params.cache_options,
+        cache_options: &(params.cache_options, dryrun).into(),
     };
 
     let inference_models = InferenceModels {

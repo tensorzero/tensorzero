@@ -59,7 +59,7 @@ impl ModelConfig {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             // TODO: think about how to best handle errors here
-            if clients.cache_options.read {
+            if clients.cache_options.enabled.read() {
                 let cache_lookup = cache_lookup(
                     clients.clickhouse_connection_info,
                     ModelProviderRequest {
@@ -92,7 +92,7 @@ impl ModelConfig {
 
             match response {
                 Ok(response) => {
-                    if clients.cache_options.write {
+                    if clients.cache_options.enabled.write() {
                         let _ = start_cache_write(
                             clients.clickhouse_connection_info,
                             ModelProviderRequest {
@@ -1022,6 +1022,7 @@ fn model_config_from_shorthand(
 mod tests {
     use std::borrow::Cow;
 
+    use crate::cache::CacheEnabledMode;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         cache::CacheOptions,
@@ -1066,7 +1067,10 @@ mod tests {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
-            cache_options: &CacheOptions::default(),
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
 
         // Try inferring the good model only
@@ -1149,7 +1153,10 @@ mod tests {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
-            cache_options: &CacheOptions::default(),
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -1393,7 +1400,10 @@ mod tests {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
-            cache_options: &CacheOptions::default(),
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
 
         let request = ModelInferenceRequest {
@@ -1438,7 +1448,10 @@ mod tests {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
-            cache_options: &CacheOptions::default(),
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -1482,7 +1495,10 @@ mod tests {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
-            cache_options: &CacheOptions::default(),
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
 
         let request = ModelInferenceRequest {
@@ -1526,7 +1542,10 @@ mod tests {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
-            cache_options: &CacheOptions::default(),
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let response = model_config
             .infer(&request, &clients, model_name)

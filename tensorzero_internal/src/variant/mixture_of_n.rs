@@ -499,7 +499,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
-        cache::CacheOptions,
+        cache::{CacheEnabledMode, CacheOptions},
         clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::InferenceCredentials,
         function::{FunctionConfigChat, FunctionConfigJson},
@@ -955,7 +955,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
-            cache_options: &CacheOptions::default(),
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let input = Input {
             system: None,

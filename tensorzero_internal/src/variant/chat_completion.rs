@@ -379,7 +379,7 @@ mod tests {
     use reqwest::Client;
     use serde_json::{json, Value};
 
-    use crate::cache::CacheOptions;
+    use crate::cache::{CacheEnabledMode, CacheOptions};
     use crate::clickhouse::ClickHouseConnectionInfo;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
@@ -702,7 +702,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
-            cache_options: &CacheOptions::default(),
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let templates = get_test_template_config();
         let system_template_name = "system";
@@ -1369,7 +1372,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
-            cache_options: &CacheOptions::default(),
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let templates = Box::leak(Box::new(get_test_template_config()));
         let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {

@@ -558,7 +558,7 @@ impl<'a> BatchInferenceConfig<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cache::CacheOptions;
+    use crate::cache::{CacheEnabledMode, CacheOptions};
     use crate::clickhouse::ClickHouseConnectionInfo;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
@@ -791,7 +791,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
-            cache_options: &CacheOptions::default(),
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let templates = get_test_template_config();
         let inference_params = InferenceParams::default();
@@ -1023,7 +1026,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
-            cache_options: &CacheOptions::default(),
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let templates = get_test_template_config();
         let inference_params = InferenceParams::default();
@@ -1141,7 +1147,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
-            cache_options: &CacheOptions::default(),
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1268,7 +1277,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
-            cache_options: &CacheOptions::default(),
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let inference_params = InferenceParams::default();
 

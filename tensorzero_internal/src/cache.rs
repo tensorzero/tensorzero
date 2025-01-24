@@ -6,18 +6,55 @@ use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::{ContentBlock, ModelInferenceRequest, ModelInferenceResponse};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct CacheOptions {
-    #[serde(default)]
-    pub read: bool,
-    #[serde(default = "default_write")]
-    pub write: bool,
-    #[serde(default)]
-    pub max_age_s: Option<u32>,
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CacheEnabledMode {
+    On,
+    Off,
+    ReadOnly,
+    #[default]
+    WriteOnly,
 }
 
-fn default_write() -> bool {
-    true
+impl CacheEnabledMode {
+    pub fn write(&self) -> bool {
+        matches!(self, CacheEnabledMode::On | CacheEnabledMode::WriteOnly)
+    }
+
+    pub fn read(&self) -> bool {
+        matches!(self, CacheEnabledMode::On | CacheEnabledMode::ReadOnly)
+    }
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct CacheParamsOptions {
+    #[serde(default)]
+    pub max_age_s: Option<u32>,
+    #[serde(default)]
+    pub enabled: CacheEnabledMode,
+}
+
+impl From<(CacheParamsOptions, bool)> for CacheOptions {
+    fn from((options, dryrun): (CacheParamsOptions, bool)) -> Self {
+        let enabled = match (options.enabled, dryrun) {
+            (CacheEnabledMode::On, true) => CacheEnabledMode::ReadOnly,
+            (CacheEnabledMode::On, false) => CacheEnabledMode::On,
+            (CacheEnabledMode::WriteOnly, true) => CacheEnabledMode::Off,
+            (CacheEnabledMode::WriteOnly, false) => CacheEnabledMode::WriteOnly,
+            (CacheEnabledMode::ReadOnly, _) => CacheEnabledMode::ReadOnly,
+            (CacheEnabledMode::Off, _) => CacheEnabledMode::Off,
+        };
+        Self {
+            max_age_s: options.max_age_s,
+            enabled,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct CacheOptions {
+    pub max_age_s: Option<u32>,
+    pub enabled: CacheEnabledMode,
 }
 
 #[derive(Debug, Clone)]
