@@ -19,9 +19,9 @@ uv run pytest
 """
 
 from copy import deepcopy
+from enum import Enum
 from time import time
 from uuid import UUID
-from enum import Enum
 
 import pytest
 import pytest_asyncio
@@ -30,12 +30,12 @@ from tensorzero import (
     ChatInferenceResponse,
     FeedbackResponse,
     JsonInferenceResponse,
+    TensorZeroError,
     TensorZeroGateway,
     Text,
     ToolCall,
     ToolResult,
 )
-from tensorzero import TensorZeroError
 from uuid_utils import uuid7
 
 
