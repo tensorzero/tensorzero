@@ -17,6 +17,7 @@ use axum::http::HeaderMap;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_stream::StreamExt;
@@ -37,6 +38,7 @@ use crate::tool::{
 
 use super::inference::{
     InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
+    InferenceStream,
 };
 
 /// A handler for the OpenAI-compatible inference endpoint
@@ -58,7 +60,7 @@ pub async fn inference_handler(
             Ok(Json(openai_compatible_response).into_response())
         }
         InferenceOutput::Streaming(stream) => {
-            let openai_compatible_stream = stream.map(prepare_serialized_openai_compatible_chunk);
+            let openai_compatible_stream = prepare_serialized_openai_compatible_events(stream);
             Ok(Sse::new(openai_compatible_stream)
                 .keep_alive(axum::response::sse::KeepAlive::new())
                 .into_response())
@@ -667,23 +669,29 @@ fn process_chat_content_chunk(
 
 /// Prepares an Event for SSE on the way out of the gateway
 /// When None is passed in, we send "[DONE]" to the client to signal the end of the stream
-fn prepare_serialized_openai_compatible_chunk(
-    chunk: Option<InferenceResponseChunk>,
-) -> Result<Event, Error> {
-    if let Some(chunk) = chunk {
-        let openai_compatible_chunk = OpenAICompatibleResponseChunk::from(chunk);
-        let chunk_json = serde_json::to_value(openai_compatible_chunk).map_err(|e| {
-            Error::new(ErrorDetails::Inference {
-                message: format!("Failed to convert chunk to JSON: {}", e),
+fn prepare_serialized_openai_compatible_events(
+    mut stream: InferenceStream,
+) -> impl Stream<Item = Result<Event, Error>> {
+    async_stream::stream! {
+        while let Some(chunk) = stream.next().await {
+            // NOTE - in the future, we may want to end the stream early if we get an error
+            // For now, we just ignore the error and try to get more chunks
+            let Ok(chunk) = chunk else {
+                continue;
+            };
+            let openai_compatible_chunk = OpenAICompatibleResponseChunk::from(chunk);
+            let chunk_json = serde_json::to_value(openai_compatible_chunk).map_err(|e| {
+                Error::new(ErrorDetails::Inference {
+                    message: format!("Failed to convert chunk to JSON: {}", e),
+                })
+            })?;
+            yield Event::default().json_data(chunk_json).map_err(|e| {
+                Error::new(ErrorDetails::Inference {
+                    message: format!("Failed to convert Value to Event: {}", e),
+                })
             })
-        })?;
-        Event::default().json_data(chunk_json).map_err(|e| {
-            Error::new(ErrorDetails::Inference {
-                message: format!("Failed to convert Value to Event: {}", e),
-            })
-        })
-    } else {
-        Ok(Event::default().data("[DONE]"))
+        }
+        yield Ok(Event::default().data("[DONE]"));
     }
 }
 

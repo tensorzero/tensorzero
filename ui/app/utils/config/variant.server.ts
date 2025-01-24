@@ -6,7 +6,9 @@ import {
   BestOfNSamplingConfigSchema,
   DiclConfigSchema,
   MixtureOfNConfigSchema,
+  type RawDiclConfig,
   type ChatCompletionConfig,
+  type DiclConfig,
   type VariantConfig,
 } from "./variant";
 import { stringify } from "smol-toml";
@@ -14,11 +16,15 @@ import { stringify } from "smol-toml";
 export const RawChatCompletionConfigSchema =
   BaseChatCompletionConfigSchema.extend({
     type: z.literal("chat_completion"),
-  }).partial({ retries: true, weight: true });
+  }).partial({ retries: true });
 
 export type RawChatCompletionConfig = z.infer<
   typeof RawChatCompletionConfigSchema
 >;
+
+export const RawDiclConfigSchema = DiclConfigSchema.extend({
+  type: z.literal("experimental_dynamic_in_context_learning"),
+});
 
 // Raw variant config using basic string templates
 export const RawVariantConfigSchema = z
@@ -121,7 +127,24 @@ export async function convertRawVariantConfig(
           }
         : undefined,
     };
+
     return templatedVariant;
+  }
+  if (variantConfig.type === "experimental_dynamic_in_context_learning") {
+    const rawDiclConfig = variantConfig as RawDiclConfig;
+    const diclConfig: DiclConfig = {
+      ...rawDiclConfig,
+      system_instructions: rawDiclConfig.system_instructions
+        ? {
+            path: rawDiclConfig.system_instructions,
+            content: await loadTemplateContent(
+              rawDiclConfig.system_instructions,
+              configPath,
+            ),
+          }
+        : undefined,
+    };
+    return diclConfig;
   }
 
   // Other variant types don't need conversion

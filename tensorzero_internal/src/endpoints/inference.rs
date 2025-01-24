@@ -36,6 +36,8 @@ use crate::tool::{DynamicToolParams, ToolCallConfig};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::{InferenceConfig, Variant};
 
+use super::validate_tags;
+
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -117,7 +119,7 @@ pub async fn inference_handler(
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
         InferenceOutput::Streaming(stream) => {
-            let event_stream = stream.map(prepare_serialized_event);
+            let event_stream = prepare_serialized_events(stream);
 
             Ok(Sse::new(event_stream)
                 .keep_alive(axum::response::sse::KeepAlive::new())
@@ -126,9 +128,12 @@ pub async fn inference_handler(
     }
 }
 
+pub type InferenceStream =
+    Pin<Box<dyn Stream<Item = Result<InferenceResponseChunk, Error>> + Send>>;
+
 pub enum InferenceOutput {
     NonStreaming(InferenceResponse),
-    Streaming(Pin<Box<dyn Stream<Item = Option<InferenceResponseChunk>> + Send>>),
+    Streaming(InferenceStream),
 }
 
 #[instrument(
@@ -147,6 +152,7 @@ pub async fn inference(
 ) -> Result<InferenceOutput, Error> {
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
+    validate_tags(&params.tags)?;
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?.clone();
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
@@ -364,86 +370,83 @@ fn create_stream(
     first_chunk: InferenceResultChunk,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-) -> impl Stream<Item = Option<InferenceResponseChunk>> + Send {
+) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
-        let templates = &config.templates;
         let mut buffer = vec![first_chunk.clone()];
 
         // Send the first chunk
-        yield Some(prepare_response_chunk(&metadata, first_chunk));
+        yield Ok(prepare_response_chunk(&metadata, first_chunk));
 
         while let Some(chunk) = stream.next().await {
-            let chunk = match chunk.ok() {
-                Some(c) => c,
-                None => continue,
-            };
-            buffer.push(chunk.clone());
-            yield Some(prepare_response_chunk(&metadata, chunk));
-
+            match chunk {
+                Ok(chunk) => {
+                    buffer.push(chunk.clone());
+                    yield Ok(prepare_response_chunk(&metadata, chunk));
+                }
+                Err(e) => yield Err(e),
+            }
         }
-
-        // Send the None chunk to signal the end of the stream
-        yield None;
-
-        // IMPORTANT: The following code will not be reached if the stream is interrupted.
-        // Only do things that would be ok to skip in that case.
-        //
-        // For example, if we were using ClickHouse for billing, we would want to store the interrupted requests.
-        //
-        // If we really care about storing interrupted requests, we should use a drop guard:
-        // https://github.com/tokio-rs/axum/discussions/1060
-        let InferenceMetadata {
-            function_name,
-            variant_name,
-            episode_id,
-            input,
-            dryrun,
-            start_time,
-            inference_params,
-            model_name,
-            model_provider_name,
-            raw_request,
-            system,
-            input_messages,
-            previous_model_inference_results,
-            tags,
-            tool_config,
-            dynamic_output_schema,
-        } = metadata;
-
-        if !dryrun {
-            let collect_chunks_args = CollectChunksArgs {
-                value: buffer,
-                system,
-                input_messages,
-                function,
+        if !metadata.dryrun {
+            // IMPORTANT: The following code will not be reached if the stream is interrupted.
+            // Only do things that would be ok to skip in that case.
+            //
+            // For example, if we were using ClickHouse for billing, we would want to store the interrupted requests.
+            //
+            // If we really care about storing interrupted requests, we should use a drop guard:
+            // https://github.com/tokio-rs/axum/discussions/1060
+            let InferenceMetadata {
+                function_name,
+                variant_name,
+                episode_id,
+                input,
+                dryrun: _,
+                start_time,
+                inference_params,
                 model_name,
                 model_provider_name,
                 raw_request,
-                inference_params,
-                function_name: &function_name,
-                variant_name: &variant_name,
+                system,
+                input_messages,
+                previous_model_inference_results,
+                tags,
+                tool_config,
                 dynamic_output_schema,
-                templates,
-                tool_config: tool_config.as_ref(),
-            };
-            let inference_response: Result<InferenceResult, Error> =
-                collect_chunks(collect_chunks_args).await;
+            } = metadata;
 
-            let inference_response = inference_response.ok();
-
-            if let Some(inference_response) = inference_response {
-                let mut inference_response = inference_response;
-                inference_response.mut_model_inference_results().extend(previous_model_inference_results);
-                let write_metadata = InferenceDatabaseInsertMetadata {
-                    function_name,
-                    variant_name,
-                    episode_id,
-                    tool_config,
-                    processing_time: Some(start_time.elapsed()),
-                    tags,
+            let config = config.clone();
+            tokio::spawn(async move {
+                let templates = &config.templates;
+                let collect_chunks_args = CollectChunksArgs {
+                    value: buffer,
+                    system,
+                    input_messages,
+                    function,
+                    model_name,
+                    model_provider_name,
+                    raw_request,
+                    inference_params,
+                    function_name: &function_name,
+                    variant_name: &variant_name,
+                    dynamic_output_schema,
+                    templates,
+                    tool_config: tool_config.as_ref(),
                 };
-                tokio::spawn(async move {
+                let inference_response: Result<InferenceResult, Error> =
+                    collect_chunks(collect_chunks_args).await;
+
+                let inference_response = inference_response.ok();
+
+                if let Some(inference_response) = inference_response {
+                    let mut inference_response = inference_response;
+                    inference_response.mut_model_inference_results().extend(previous_model_inference_results);
+                    let write_metadata = InferenceDatabaseInsertMetadata {
+                        function_name,
+                        variant_name,
+                        episode_id,
+                        tool_config,
+                        processing_time: Some(start_time.elapsed()),
+                        tags,
+                    };
                     write_inference(
                         &clickhouse_connection_info,
                         input,
@@ -451,8 +454,8 @@ fn create_stream(
                         write_metadata,
                     )
                     .await;
-                });
-            }
+                }
+            });
         }
     }
 }
@@ -466,20 +469,28 @@ fn prepare_response_chunk(
 
 // Prepares an Event for SSE on the way out of the gateway
 // When None is passed in, we send "[DONE]" to the client to signal the end of the stream
-fn prepare_serialized_event(chunk: Option<InferenceResponseChunk>) -> Result<Event, Error> {
-    if let Some(chunk) = chunk {
-        let chunk_json = serde_json::to_value(chunk).map_err(|e| {
-            Error::new(ErrorDetails::Inference {
-                message: format!("Failed to convert chunk to JSON: {}", e),
+fn prepare_serialized_events(
+    mut stream: InferenceStream,
+) -> impl Stream<Item = Result<Event, Error>> {
+    async_stream::stream! {
+        while let Some(chunk) = stream.next().await {
+            // NOTE - in the future, we may want to end the stream early if we get an error
+            // For now, we just ignore the error and try to get more chunks
+            let Ok(chunk) = chunk else {
+                continue;
+            };
+            let chunk_json = serde_json::to_value(chunk).map_err(|e| {
+                Error::new(ErrorDetails::Inference {
+                    message: format!("Failed to convert chunk to JSON: {}", e),
+                })
+            })?;
+            yield Event::default().json_data(chunk_json).map_err(|e| {
+                Error::new(ErrorDetails::Inference {
+                    message: format!("Failed to convert Value to Event: {}", e),
+                })
             })
-        })?;
-        Event::default().json_data(chunk_json).map_err(|e| {
-            Error::new(ErrorDetails::Inference {
-                message: format!("Failed to convert Value to Event: {}", e),
-            })
-        })
-    } else {
-        Ok(Event::default().data("[DONE]"))
+        }
+        yield Ok(Event::default().data("[DONE]"));
     }
 }
 

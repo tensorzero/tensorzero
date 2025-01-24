@@ -28,24 +28,56 @@ function TemplateField({ title, content }: TemplateFieldProps) {
   return (
     <div className="col-span-2">
       <dt className="text-lg font-semibold">{title}</dt>
+      {!content ? (
+        <dd className="text-sm text-muted-foreground">None</dd>
+      ) : (
+        <dd>
+          <Collapsible>
+            <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+              <ChevronDown className="h-4 w-4" />
+              Show full template
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <pre className="max-h-[500px] overflow-auto rounded-md bg-muted p-4">
+                <code className="text-sm">{content}</code>
+              </pre>
+            </CollapsibleContent>
+          </Collapsible>
+        </dd>
+      )}
+    </div>
+  );
+}
+
+interface BaseFieldProps {
+  title: string;
+  content?: string | number;
+  href?: string;
+}
+
+function BaseField({ title, content, href }: BaseFieldProps) {
+  if (content === undefined) {
+    return null;
+  }
+
+  return (
+    <div>
+      <dt className="text-lg font-semibold">{title}</dt>
       <dd>
-        <Collapsible>
-          <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-            <ChevronDown className="h-4 w-4" />
-            Show full template
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <pre className="max-h-[500px] overflow-auto rounded-md bg-muted p-4">
-              <code className="text-sm">{content}</code>
-            </pre>
-          </CollapsibleContent>
-        </Collapsible>
+        {href ? (
+          <a href={href}>
+            <Code>{content}</Code>
+          </a>
+        ) : typeof content === "number" ? (
+          content
+        ) : (
+          <Code>{content}</Code>
+        )}
       </dd>
     </div>
   );
 }
 
-// Helper for showing base config fields that appear in multiple variants
 function BaseFields({
   weight,
   model,
@@ -57,7 +89,7 @@ function BaseFields({
   function_name,
   seed,
 }: {
-  weight?: number;
+  weight: number;
   model: string;
   temperature?: number;
   top_p?: number;
@@ -69,62 +101,19 @@ function BaseFields({
 }) {
   return (
     <>
-      <div>
-        <dt className="text-lg font-semibold">Function</dt>
-        <dd>
-          <a href={`/observability/function/${function_name}`}>
-            <Code>{function_name}</Code>
-          </a>
-        </dd>
-      </div>
-      {weight !== undefined && (
-        <div>
-          <dt className="text-lg font-semibold">Weight</dt>
-          <dd>{weight}</dd>
-        </div>
-      )}
-      <div>
-        <dt className="text-lg font-semibold">Model</dt>
-        <dd>
-          <Code>{model}</Code>
-        </dd>
-      </div>
-      {temperature !== undefined && (
-        <div>
-          <dt className="text-lg font-semibold">Temperature</dt>
-          <dd>{temperature}</dd>
-        </div>
-      )}
-      {top_p !== undefined && (
-        <div>
-          <dt className="text-lg font-semibold">Top P</dt>
-          <dd>{top_p}</dd>
-        </div>
-      )}
-      {max_tokens !== undefined && (
-        <div>
-          <dt className="text-lg font-semibold">Max Tokens</dt>
-          <dd>{max_tokens}</dd>
-        </div>
-      )}
-      {presence_penalty !== undefined && (
-        <div>
-          <dt className="text-lg font-semibold">Presence Penalty</dt>
-          <dd>{presence_penalty}</dd>
-        </div>
-      )}
-      {frequency_penalty !== undefined && (
-        <div>
-          <dt className="text-lg font-semibold">Frequency Penalty</dt>
-          <dd>{frequency_penalty}</dd>
-        </div>
-      )}
-      {seed !== undefined && (
-        <div>
-          <dt className="text-lg font-semibold">Seed</dt>
-          <dd>{seed}</dd>
-        </div>
-      )}
+      <BaseField
+        title="Function"
+        content={function_name}
+        href={`/observability/function/${function_name}`}
+      />
+      <BaseField title="Weight" content={weight} />
+      <BaseField title="Model" content={model} />
+      <BaseField title="Temperature" content={temperature} />
+      <BaseField title="Top P" content={top_p} />
+      <BaseField title="Max Tokens" content={max_tokens} />
+      <BaseField title="Presence Penalty" content={presence_penalty} />
+      <BaseField title="Frequency Penalty" content={frequency_penalty} />
+      <BaseField title="Seed" content={seed} />
     </>
   );
 }
@@ -165,36 +154,30 @@ export default function BasicVariantInfo({
                 seed={variantConfig.seed}
               />
 
-              {variantConfig.system_template && (
-                <TemplateField
-                  title="System Template"
-                  content={
-                    variantConfig.system_template.content ??
-                    variantConfig.system_template.path ??
-                    ""
-                  }
-                />
-              )}
-              {variantConfig.user_template && (
-                <TemplateField
-                  title="User Template"
-                  content={
-                    variantConfig.user_template.content ??
-                    variantConfig.user_template.path ??
-                    ""
-                  }
-                />
-              )}
-              {variantConfig.assistant_template && (
-                <TemplateField
-                  title="Assistant Template"
-                  content={
-                    variantConfig.assistant_template.content ??
-                    variantConfig.assistant_template.path ??
-                    ""
-                  }
-                />
-              )}
+              <TemplateField
+                title="System Template"
+                content={
+                  variantConfig.system_template?.content ??
+                  variantConfig.system_template?.path ??
+                  ""
+                }
+              />
+              <TemplateField
+                title="User Template"
+                content={
+                  variantConfig.user_template?.content ??
+                  variantConfig.user_template?.path ??
+                  ""
+                }
+              />
+              <TemplateField
+                title="Assistant Template"
+                content={
+                  variantConfig.assistant_template?.content ??
+                  variantConfig.assistant_template?.path ??
+                  ""
+                }
+              />
             </>
           )}
 
@@ -257,18 +240,22 @@ export default function BasicVariantInfo({
                   />
                   <div>
                     <dt className="text-lg font-semibold">Embedding Model</dt>
-                    <dd>{config.embedding_model}</dd>
+                    <dd>
+                      <Code>{config.embedding_model}</Code>
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-lg font-semibold">k (Neighbors)</dt>
                     <dd>{config.k}</dd>
                   </div>
-                  {config.system_instructions && (
-                    <TemplateField
-                      title="System Instructions"
-                      content={config.system_instructions}
-                    />
-                  )}
+                  <TemplateField
+                    title="System Instructions"
+                    content={
+                      config.system_instructions?.content ??
+                      config.system_instructions?.path ??
+                      ""
+                    }
+                  />
                 </>
               );
             })()}

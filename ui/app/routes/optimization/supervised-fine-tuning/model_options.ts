@@ -10,13 +10,38 @@ export type ModelOption = z.infer<typeof ModelOptionSchema>;
 
 export const models: ModelOption[] = [
   {
+    displayName: "gpt-4o-2024-08-06",
+    name: "gpt-4o-2024-08-06",
+    provider: "openai",
+  },
+  {
     displayName: "gpt-4o-mini-2024-07-18",
     name: "gpt-4o-mini-2024-07-18",
     provider: "openai",
   },
   {
+    displayName: "gpt-3.5-turbo-0125",
+    name: "gpt-3.5-turbo-0125",
+    provider: "openai",
+  },
+  {
+    displayName: "gpt-3.5-turbo-1106",
+    name: "gpt-3.5-turbo-1106",
+    provider: "openai",
+  },
+  {
     displayName: "llama-3.1-8b-instruct",
     name: "accounts/fireworks/models/llama-v3p1-8b-instruct",
+    provider: "fireworks",
+  },
+  {
+    displayName: "llama-3.1-70b-instruct",
+    name: "accounts/fireworks/models/llama-v3p1-70b-instruct",
+    provider: "fireworks",
+  },
+  {
+    displayName: "llama-3.2-3b-instruct",
+    name: "accounts/fireworks/models/llama-v3p2-3b-instruct",
     provider: "fireworks",
   },
 ];
