@@ -160,19 +160,19 @@ type = "google_ai_studio_gemini"
 model_name = "gemini-1.5-pro-002"
 api_key_location = "dynamic::google_ai_studio_api_key"
 
-[models."llama3.1-8b-instruct-fireworks"]
+[models."llama3.1-70b-instruct-fireworks"]
 routing = ["fireworks"]
 
-[models."llama3.1-8b-instruct-fireworks".providers.fireworks]
+[models."llama3.1-70b-instruct-fireworks".providers.fireworks]
 type = "fireworks"
-model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+model_name = "accounts/fireworks/models/llama-v3p3-70b-instruct"
 
-[models."llama3.1-8b-instruct-fireworks-dynamic"]
+[models."llama3.1-70b-instruct-fireworks-dynamic"]
 routing = ["fireworks"]
 
-[models."llama3.1-8b-instruct-fireworks-dynamic".providers.fireworks]
+[models."llama3.1-70b-instruct-fireworks-dynamic".providers.fireworks]
 type = "fireworks"
-model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
+model_name = "accounts/fireworks/models/llama-v3p3-70b-instruct"
 api_key_location = "dynamic::fireworks_api_key"
 
 [models.firefunction-v2]
@@ -475,13 +475,13 @@ max_tokens = 100
 
 [functions.basic_test.variants.fireworks]
 type = "chat_completion"
-model = "llama3.1-8b-instruct-fireworks"
+model = "llama3.1-70b-instruct-fireworks"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.fireworks-dynamic]
 type = "chat_completion"
-model = "llama3.1-8b-instruct-fireworks-dynamic"
+model = "llama3.1-70b-instruct-fireworks-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -775,7 +775,7 @@ max_tokens = 100
 
 [functions.json_success.variants.fireworks]
 type = "chat_completion"
-model = "llama3.1-8b-instruct-fireworks"
+model = "llama3.1-70b-instruct-fireworks"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -1022,7 +1022,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.fireworks]
 type = "chat_completion"
-model = "llama3.1-8b-instruct-fireworks"
+model = "llama3.1-70b-instruct-fireworks"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
