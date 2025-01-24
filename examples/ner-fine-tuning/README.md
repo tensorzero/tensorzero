@@ -9,11 +9,11 @@ Each example in the dataset includes a short segment of text and instructs the m
 
 **We'll show that GPT-4o Mini can be fine-tuned to outperform GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.**
 
-<center>
+<p align="center">
 
 ![Metrics by Variant](visualization.svg)
 
-</center>
+</p>
 
 ## Sample Data
 
