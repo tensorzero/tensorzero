@@ -810,7 +810,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                         "content": [
                             {
                                 "type": "text",
-                                "text": "Here are the candidate answers (with the index and a row of ------ separating):\n0: {\"answer\":\"Hello\"}\n------1: {\"answer\":\"Goodbye\"}\n------\nPlease evaluate these candidates and provide the index of the best one."
+                                "text": "Here are the candidate answers (with the index and a row of ------ separating):\n0: {\"answer\":\"Hello\"}\n------\n1: {\"answer\":\"Goodbye\"}\n------\nPlease evaluate these candidates and provide the index of the best one."
                             }
                         ]
                     }
