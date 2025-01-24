@@ -59,7 +59,7 @@ impl ModelConfig {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             // TODO: think about how to best handle errors here
-            if clients.cache_options.enabled {
+            if clients.cache_options.read {
                 let cache_lookup = cache_lookup(
                     clients.clickhouse_connection_info,
                     ModelProviderRequest {
@@ -92,17 +92,19 @@ impl ModelConfig {
 
             match response {
                 Ok(response) => {
-                    let _ = start_cache_write(
-                        clients.clickhouse_connection_info,
-                        ModelProviderRequest {
-                            request,
-                            model_name,
-                            provider_name,
-                        },
-                        &response.output,
-                        &response.raw_request,
-                        &response.raw_response,
-                    );
+                    if clients.cache_options.write {
+                        let _ = start_cache_write(
+                            clients.clickhouse_connection_info,
+                            ModelProviderRequest {
+                                request,
+                                model_name,
+                                provider_name,
+                            },
+                            &response.output,
+                            &response.raw_request,
+                            &response.raw_response,
+                        );
+                    }
                     let model_inference_response =
                         ModelInferenceResponse::new(response, provider_name.clone());
 

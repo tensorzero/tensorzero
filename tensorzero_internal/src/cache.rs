@@ -9,9 +9,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CacheOptions {
     #[serde(default)]
-    pub enabled: bool,
+    pub read: bool,
+    #[serde(default = "default_write")]
+    pub write: bool,
     #[serde(default)]
     pub max_age_s: Option<u32>,
+}
+
+fn default_write() -> bool {
+    true
 }
 
 #[derive(Debug, Clone)]

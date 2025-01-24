@@ -53,7 +53,7 @@ impl Migration for Migration0011<'_> {
                 raw_request String,
                 raw_response String
             ) ENGINE = MergeTree()
-            ORDER BY short_cache_key;
+            ORDER BY (short_cache_key, timestamp);
             -- TODO: consider setting a smaller granule size for improved query latency
             -- and a partitioning scheme to enable a global TTL later
         "#;
@@ -61,7 +61,7 @@ impl Migration for Migration0011<'_> {
 
         // Add the `cache_hit` column to ModelInference
         let query = r#"
-            ALTER TABLE ModelInference ADD COLUMN cache_hit Bool DEFAULT false;        
+            ALTER TABLE ModelInference ADD COLUMN cache_hit Bool DEFAULT false;
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
