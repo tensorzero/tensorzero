@@ -19,9 +19,7 @@ export const inferenceByIdRowSchema = z
     variant_name: z.string(),
     episode_id: z.string().uuid(),
     function_type: z.enum(["chat", "json"]),
-    timestamp: z
-      .string()
-      .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
+    timestamp: z.string().datetime(),
   })
   .strict();
 
@@ -104,7 +102,7 @@ export async function queryInferenceTable(params: {
         variant_name,
         episode_id,
         function_type,
-        UUIDv7ToDateTime(id) AS timestamp
+        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
       FROM InferenceById
       ${combinedWhere}
       ORDER BY toUInt128(id) DESC
@@ -119,7 +117,7 @@ export async function queryInferenceTable(params: {
         variant_name,
         episode_id,
         function_type,
-        UUIDv7ToDateTime(id) AS timestamp
+        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
       FROM InferenceById
       ${combinedWhere}
       ORDER BY toUInt128(id) DESC
@@ -134,7 +132,7 @@ export async function queryInferenceTable(params: {
         variant_name,
         episode_id,
         function_type,
-        timestamp
+        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
       FROM
       (
         SELECT
@@ -143,7 +141,7 @@ export async function queryInferenceTable(params: {
           variant_name,
           episode_id,
           function_type,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM InferenceById
         ${combinedWhere}
         ORDER BY toUInt128(id) ASC
@@ -215,12 +213,8 @@ export const episodeByIdSchema = z
   .object({
     episode_id: z.string().uuid(),
     count: z.number().min(1),
-    start_time: z
-      .string()
-      .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
-    end_time: z
-      .string()
-      .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
+    start_time: z.string().datetime(),
+    end_time: z.string().datetime(),
     last_inference_id: z.string().uuid(),
   })
   .strict();
@@ -254,8 +248,8 @@ export async function queryEpisodeTable(params: {
       SELECT
         episode_id,
         toUInt32(count(*)) as count,
-        min(UUIDv7ToDateTime(id)) as start_time,
-        max(UUIDv7ToDateTime(id)) as end_time,
+        formatDateTime(min(UUIDv7ToDateTime(id)), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+        formatDateTime(max(UUIDv7ToDateTime(id)), '%Y-%m-%dT%H:%i:%SZ') as end_time,
         argMax(id, toUInt128(id)) as last_inference_id
       FROM InferenceByEpisodeId
       GROUP BY episode_id
@@ -267,8 +261,8 @@ export async function queryEpisodeTable(params: {
       SELECT
         episode_id,
         toUInt32(count(*)) as count,
-        min(UUIDv7ToDateTime(id)) as start_time,
-        max(UUIDv7ToDateTime(id)) as end_time,
+        formatDateTime(min(UUIDv7ToDateTime(id)), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+        formatDateTime(max(UUIDv7ToDateTime(id)), '%Y-%m-%dT%H:%i:%SZ') as end_time,
         argMax(id, toUInt128(id)) as last_inference_id
       FROM InferenceByEpisodeId
       GROUP BY episode_id
@@ -290,8 +284,8 @@ export async function queryEpisodeTable(params: {
         SELECT
           episode_id,
           toUInt32(count(*)) as count,
-          min(UUIDv7ToDateTime(id)) as start_time,
-          max(UUIDv7ToDateTime(id)) as end_time,
+          formatDateTime(min(UUIDv7ToDateTime(id)), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+          formatDateTime(max(UUIDv7ToDateTime(id)), '%Y-%m-%dT%H:%i:%SZ') as end_time,
           argMax(id, toUInt128(id)) as last_inference_id
         FROM InferenceByEpisodeId
         GROUP BY episode_id
@@ -495,9 +489,7 @@ export const chatInferenceRowSchema = z.object({
   tool_params: z.string(),
   inference_params: z.string(),
   processing_time_ms: z.number(),
-  timestamp: z
-    .string()
-    .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
+  timestamp: z.string().datetime(),
   tags: z.record(z.string(), z.string()).default({}),
 });
 
@@ -513,9 +505,7 @@ export const jsonInferenceRowSchema = z.object({
   output_schema: z.string(),
   inference_params: z.string(),
   processing_time_ms: z.number(),
-  timestamp: z
-    .string()
-    .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
+  timestamp: z.string().datetime(),
   tags: z.record(z.string(), z.string()).default({}),
 });
 
@@ -673,9 +663,7 @@ export const modelInferenceRowSchema = z.object({
   output_tokens: z.number(),
   response_time_ms: z.number(),
   ttft_ms: z.number().nullable(),
-  timestamp: z
-    .string()
-    .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
+  timestamp: z.string().datetime(),
   system: z.string().nullable(),
   input_messages: z.string(),
   output: z.string(),

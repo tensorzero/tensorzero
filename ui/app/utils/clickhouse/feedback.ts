@@ -12,9 +12,7 @@ export const booleanMetricFeedbackRowSchema = z.object({
   metric_name: z.string(),
   value: z.boolean(),
   tags: z.record(z.string(), z.string()),
-  timestamp: z
-    .string()
-    .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
+  timestamp: z.string().datetime(),
 });
 
 export type BooleanMetricFeedbackRow = z.infer<
@@ -48,7 +46,7 @@ export async function queryBooleanMetricsByTargetId(params: {
           metric_name,
           value,
           tags,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM BooleanMetricFeedbackByTargetId
         WHERE target_id = {target_id:String}
         ORDER BY toUInt128(id) DESC
@@ -63,7 +61,7 @@ export async function queryBooleanMetricsByTargetId(params: {
           metric_name,
           value,
           tags,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM BooleanMetricFeedbackByTargetId
         WHERE target_id = {target_id:String}
           AND toUInt128(id) < toUInt128(toUUID({before:String}))
@@ -89,7 +87,7 @@ export async function queryBooleanMetricsByTargetId(params: {
             metric_name,
             value,
             tags,
-            UUIDv7ToDateTime(id) AS timestamp
+            formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
           FROM BooleanMetricFeedbackByTargetId
           WHERE target_id = {target_id:String}
             AND toUInt128(id) > toUInt128(toUUID({after:String}))
@@ -171,9 +169,7 @@ export const commentFeedbackRowSchema = z.object({
   target_id: z.string().uuid(),
   target_type: z.enum(["inference", "episode"]),
   value: z.string(),
-  timestamp: z
-    .string()
-    .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
+  timestamp: z.string().datetime(),
 });
 
 export type CommentFeedbackRow = z.infer<typeof commentFeedbackRowSchema>;
@@ -204,7 +200,7 @@ export async function queryCommentFeedbackByTargetId(params: {
           target_id,
           target_type,
           value,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM CommentFeedbackByTargetId
         WHERE target_id = {target_id:String}
         ORDER BY toUInt128(id) DESC
@@ -218,7 +214,7 @@ export async function queryCommentFeedbackByTargetId(params: {
           target_id,
           target_type,
           value,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM CommentFeedbackByTargetId
         WHERE target_id = {target_id:String}
           AND toUInt128(id) < toUInt128(toUUID({before:String}))
@@ -242,7 +238,7 @@ export async function queryCommentFeedbackByTargetId(params: {
             target_id,
             target_type,
             value,
-            UUIDv7ToDateTime(id) AS timestamp
+            formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
           FROM CommentFeedbackByTargetId
           WHERE target_id = {target_id:String}
             AND toUInt128(id) > toUInt128(toUUID({after:String}))
@@ -261,7 +257,6 @@ export async function queryCommentFeedbackByTargetId(params: {
       query_params,
     });
     const rows = await resultSet.json<CommentFeedbackRow>();
-    console.log("Raw rows before Zod parsing:", JSON.stringify(rows, null, 2));
     return z.array(commentFeedbackRowSchema).parse(rows);
   } catch (error) {
     console.error(error);
@@ -322,9 +317,7 @@ export const demonstrationFeedbackRowSchema = z.object({
   id: z.string().uuid(),
   inference_id: z.string().uuid(),
   value: z.string(),
-  timestamp: z
-    .string()
-    .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
+  timestamp: z.string().datetime(),
 });
 
 export type DemonstrationFeedbackRow = z.infer<
@@ -356,7 +349,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
           id,
           inference_id,
           value,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM DemonstrationFeedbackByInferenceId
         WHERE inference_id = {inference_id:String}
         ORDER BY toUInt128(id) DESC
@@ -369,7 +362,7 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
           id,
           inference_id,
           value,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM DemonstrationFeedbackByInferenceId
         WHERE inference_id = {inference_id:String}
           AND toUInt128(id) < toUInt128(toUUID({before:String}))
@@ -384,14 +377,14 @@ export async function queryDemonstrationFeedbackByInferenceId(params: {
           id,
           inference_id,
           value,
-          timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM
         (
           SELECT
             id,
             inference_id,
             value,
-            UUIDv7ToDateTime(id) AS timestamp
+            formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
           FROM DemonstrationFeedbackByInferenceId
           WHERE inference_id = {inference_id:String}
             AND toUInt128(id) > toUInt128(toUUID({after:String}))
@@ -475,9 +468,7 @@ export const floatMetricFeedbackRowSchema = z
     metric_name: z.string(),
     value: z.number(),
     tags: z.record(z.string(), z.string()),
-    timestamp: z
-      .string()
-      .transform((str) => new Date(`${str.replace(" ", "T")}Z`)),
+    timestamp: z.string().datetime(),
   })
   .strict();
 
@@ -512,7 +503,7 @@ export async function queryFloatMetricsByTargetId(params: {
           metric_name,
           value,
           tags,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM FloatMetricFeedbackByTargetId
         WHERE target_id = {target_id:String}
         ORDER BY toUInt128(id) DESC
@@ -527,7 +518,7 @@ export async function queryFloatMetricsByTargetId(params: {
           metric_name,
           value,
           tags,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM FloatMetricFeedbackByTargetId
         WHERE target_id = {target_id:String}
           AND toUInt128(id) < toUInt128(toUUID({before:String}))
@@ -553,7 +544,7 @@ export async function queryFloatMetricsByTargetId(params: {
             metric_name,
             value,
             tags,
-            UUIDv7ToDateTime(id) AS timestamp
+            formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
           FROM FloatMetricFeedbackByTargetId
           WHERE target_id = {target_id:String}
             AND toUInt128(id) > toUInt128(toUUID({after:String}))
