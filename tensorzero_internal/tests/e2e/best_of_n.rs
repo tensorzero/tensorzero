@@ -154,7 +154,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "role": "user",
                     "parts": [
                       {
-                        "text": "Here are the candidate answers (with the index and a row of ------ separating):\n0: [{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]\n------1: [{\"type\":\"text\",\"text\":\"{\\\"answer\\\":\\\"Hello\\\"}\"}]\n------\nPlease evaluate these candidates and provide the index of the best one."
+                        "text": "Here are the candidate answers (with the index and a row of ------ separating):\n0: [{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]\n------\n1: [{\"type\":\"text\",\"text\":\"{\\\"answer\\\":\\\"Hello\\\"}\"}]\n------\nPlease evaluate these candidates and provide the index of the best one."
                       }
                     ]
                   }
@@ -201,7 +201,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
             assert_eq!(input_messages[1], RequestMessage {
                 role: Role::User,
                 content: vec![
-                    "Here are the candidate answers (with the index and a row of ------ separating):\n0: [{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]\n------1: [{\"type\":\"text\",\"text\":\"{\\\"answer\\\":\\\"Hello\\\"}\"}]\n------\nPlease evaluate these candidates and provide the index of the best one."
+                    "Here are the candidate answers (with the index and a row of ------ separating):\n0: [{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]\n------\n1: [{\"type\":\"text\",\"text\":\"{\\\"answer\\\":\\\"Hello\\\"}\"}]\n------\nPlease evaluate these candidates and provide the index of the best one."
                         .to_string()
                         .into()
                 ],
@@ -533,7 +533,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
                   "role": "user",
                   "parts": [
                     {
-                      "text": "Here are the candidate answers (with the index and a row of ------ separating):\n0: {\"answer\":\"Hello\"}\n------1: {\"answer\":\"Goodbye\"}\n------\nPlease evaluate these candidates and provide the index of the best one."
+                      "text": "Here are the candidate answers (with the index and a row of ------ separating):\n0: {\"answer\":\"Hello\"}\n------\n1: {\"answer\":\"Goodbye\"}\n------\nPlease evaluate these candidates and provide the index of the best one."
                     }
                   ]
                 }
@@ -810,7 +810,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                         "content": [
                             {
                                 "type": "text",
-                                "text": "Here are the candidate answers (with the index and a row of ------ separating):\n0: {\"answer\":\"Hello\"}\n------1: {\"answer\":\"Goodbye\"}\n------\nPlease evaluate these candidates and provide the index of the best one."
+                                "text": "Here are the candidate answers (with the index and a row of ------ separating):\n0: {\"answer\":\"Hello\"}\n------\n1: {\"answer\":\"Goodbye\"}\n------\nPlease evaluate these candidates and provide the index of the best one."
                             }
                         ]
                     }
