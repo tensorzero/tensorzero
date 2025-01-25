@@ -63,9 +63,8 @@ impl ClickHouseConnectionInfo {
             database,
             client,
         };
-        // Error will be constructed and logged in health()
-        // Don't need to do anything with the error here
-        let _ = connection_info.health().await;
+        // If the connection is unhealthy, we won't be able to run / check migrations. So we just fail here.
+        connection_info.health().await?;
         Ok(connection_info)
     }
 
