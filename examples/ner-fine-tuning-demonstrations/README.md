@@ -1,4 +1,4 @@
-# Example: Improving Data Extraction (NER) by Fine-Tuning a Llama 3 Model Using Demonstrations
+# Example: Improving Data Extraction (NER) by Fine-Tuning a Llama 3 Model (Demonstrations)
 
 ## Background
 

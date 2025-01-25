@@ -1,4 +1,4 @@
-# Example: Improving Data Extraction (NER) by Fine-Tuning GPT-4o Mini
+# Example: Improving Data Extraction (NER) by Fine-Tuning GPT-4o Mini (Metrics)
 
 ## Background
 
@@ -10,6 +10,10 @@ Each example in the dataset includes a short segment of text and instructs the m
 **We'll show that GPT-4o Mini can be fine-tuned to outperform GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.**
 
 <p align="center"><img src="visualization.svg" alt="Metrics by Variant" /></p>
+
+> [!TIP]
+>
+> See the following examples for a similar problem setting using other feedback signals and optimization techniques: [Fine-Tuning with Demonstrations](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-tuning-demonstrations) and [Dynamic In-Context Learning (DICL)](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-dicl).
 
 ## Sample Data
 
