@@ -39,7 +39,7 @@ pub struct GatewayConfig {
 }
 
 /// Note: This struct and the two impls below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag
-/// TODO(Viraj): open an issue for this and throw a reminder on your calendar to do it in a couple months
+/// TODO (#797): Remove this once we have removed the `disable_observability` flag
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
