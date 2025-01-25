@@ -52,7 +52,7 @@ impl Migration for Migration0011<'_> {
                 output String,
                 raw_request String,
                 raw_response String
-            ) ENGINE = ReplacingMergeTree()
+            ) ENGINE = ReplacingMergeTree(timestamp)
             ORDER BY (short_cache_key, long_cache_key)
             PRIMARY KEY (short_cache_key)
             -- TODO: consider setting a smaller granule size for improved query latency
