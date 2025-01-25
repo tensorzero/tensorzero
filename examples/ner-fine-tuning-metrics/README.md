@@ -36,7 +36,7 @@ The former Wimbledon champion said the immediate future of Australia 's Davis Cu
 
 </details>
 
-## Setup
+## Getting Started
 
 ### TensorZero
 
