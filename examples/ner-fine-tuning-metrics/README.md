@@ -81,7 +81,7 @@ Go grab a coffee as fine-tuning can take some time.
 <b>Fine-Tuning Programatically</b>
 </summary>
 
-Alternatively, you can run a fine-tuning recipe programatically using the Jupyter notebook in `recipes/supervised_fine_tuning/metrics/fireworks/`.
+Alternatively, you can run a fine-tuning recipe programatically using the Jupyter notebook in `recipes/supervised_fine_tuning/`.
 
 </details>
 
