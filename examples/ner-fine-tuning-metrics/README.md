@@ -93,6 +93,7 @@ For our purposes, we only need the `model_name` which we'll use to create a new 
 type = "chat_completion"
 model = "openai::ft:gpt-4o-mini-2024-07-18:xxxxxxxx::xxxxxxxx"  # TODO: Replace with your model ID
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
 ```
 
 **Let's restart the TensorZero Gateway to apply the new configuration.**
