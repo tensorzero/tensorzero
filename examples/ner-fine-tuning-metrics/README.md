@@ -53,7 +53,7 @@ This function uses the output schema in `config/functions/extract_entities/outpu
 
 ### Setup
 
-1. Create a `.env` file with these environment variables (see `.env.example` for an example).
+1. Create a `.env` file with the `OPENAI_API_KEY` environment variable (see `.env.example` for an example).
 2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI, and a development ClickHouse database.
 3. Run the `ner-fine-tuning.ipynb` Jupyter notebook.
 
