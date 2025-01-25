@@ -78,10 +78,10 @@ Go grab a coffee as fine-tuning can take some time.
 
 <details>
 <summary>
-<b>Fine-Tuning Programatically</b>
+<b>Fine-Tuning Programmatically</b>
 </summary>
 
-Alternatively, you can run a fine-tuning recipe programatically using the Jupyter notebook in `recipes/supervised_fine_tuning/`.
+Alternatively, you can run a fine-tuning recipe programmatically using the Jupyter notebook in `recipes/supervised_fine_tuning/`.
 
 </details>
 
