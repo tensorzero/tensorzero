@@ -99,7 +99,7 @@ json_mode = "strict"
 **Let's restart the TensorZero Gateway to apply the new configuration.**
 You can do this by killing the running container and re-running `docker compose up`.
 
-Finally, re-run the `ner-fine-tuning.ipynb` notebook to see how the new variants perform.
+Finally, re-run the `ner-fine-tuning.ipynb` notebook to see how the new variant performs.
 
 **You'll see that the fine-tuned GPT-4o Mini outperforms GPT-4o on this task with just a few hundred examples!**
 
