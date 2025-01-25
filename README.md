@@ -100,9 +100,9 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > You'll see TensorZero's "data flywheel in a box" in action: better variants leads to better data, and better data leads to better variants.
 > You'll see progress by fine-tuning the LLM multiple times.
 
-> **[Improving Data Extraction (NER) by Fine-Tuning a Llama 3 Model](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-tuning)**
+> **[Improving Data Extraction (NER) by Fine-Tuning GPT-4o Mini](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-tuning)**
 >
-> This example shows that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on a Named Entity Recognition (NER) task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.
+> This example shows that GPT-4o Mini can be fine-tuned to outperform GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.
 
 > **[Improving LLM Chess Ability with Best-of-N Sampling](https://github.com/tensorzero/tensorzero/tree/main/examples/chess-puzzles-best-of-n-sampling/)**
 >
