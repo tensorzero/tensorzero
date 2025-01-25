@@ -254,6 +254,14 @@ impl FunctionConfig {
     ) -> Result<(), Error> {
         // Validate each variant
         for (variant_name, variant) in self.variants() {
+            if variant_name.starts_with("tensorzero::") {
+                return Err(ErrorDetails::Config {
+                    message: format!(
+                        "Variant name cannot start with 'tensorzero::': {variant_name}"
+                    ),
+                }
+                .into());
+            }
             variant.validate(
                 self,
                 models,

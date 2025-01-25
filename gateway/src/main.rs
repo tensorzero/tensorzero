@@ -10,6 +10,7 @@ use tokio::signal;
 use tensorzero_internal::clickhouse_migration_manager;
 use tensorzero_internal::config_parser::Config;
 use tensorzero_internal::endpoints;
+use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_internal::error;
 use tensorzero_internal::gateway_util;
 use tensorzero_internal::observability;
@@ -81,7 +82,11 @@ async fn main() {
             "Failed to bind to socket address `{bind_address}`"
         ));
 
-    tracing::info!("TensorZero Gateway is listening on {}", bind_address);
+    tracing::info!(
+        "TensorZero Gateway version {} is listening on {}",
+        TENSORZERO_VERSION,
+        bind_address
+    );
 
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())

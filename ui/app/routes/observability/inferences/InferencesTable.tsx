@@ -51,7 +51,7 @@ export default function InferencesTable({
               </TableCell>
               <TableCell>
                 <a
-                  href={`#${inference.function_name}`}
+                  href={`/observability/function/${inference.function_name}`}
                   className="block no-underline"
                 >
                   <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
@@ -61,7 +61,7 @@ export default function InferencesTable({
               </TableCell>
               <TableCell>
                 <a
-                  href={`#${inference.variant_name}`}
+                  href={`/observability/function/${inference.function_name}/variant/${inference.variant_name}`}
                   className="block no-underline"
                 >
                   <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">

@@ -201,8 +201,52 @@ impl ModelConfig {
         }))
     }
 
-    pub fn validate(&self) -> Result<(), Error> {
-        // Placeholder in case we want to add validation in the future
+    pub fn validate(&self, model_name: &str) -> Result<(), Error> {
+        // Ensure that the model has at least one provider
+        if self.routing.is_empty() {
+            return Err(ErrorDetails::Config {
+                message: format!("`models.{model_name}`: `routing` must not be empty"),
+            }
+            .into());
+        }
+
+        // Ensure that routing entries are unique and exist as keys in providers
+        let mut seen_providers = std::collections::HashSet::new();
+        for provider in &self.routing {
+            if provider.starts_with("tensorzero::") {
+                return Err(ErrorDetails::Config {
+                    message: format!("`models.{model_name}.routing`: Provider name cannot start with 'tensorzero::': {provider}"),
+                }
+                .into());
+            }
+            if !seen_providers.insert(provider) {
+                return Err(ErrorDetails::Config {
+                    message: format!("`models.{model_name}.routing`: duplicate entry `{provider}`"),
+                }
+                .into());
+            }
+
+            if !self.providers.contains_key(provider) {
+                return Err(ErrorDetails::Config {
+            message: format!(
+                "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
+            ),
+        }
+        .into());
+            }
+        }
+
+        // Validate each provider
+        for provider_name in self.providers.keys() {
+            if !seen_providers.contains(provider_name) {
+                return Err(ErrorDetails::Config {
+                    message: format!(
+                "`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"
+            ),
+                }
+                .into());
+            }
+        }
         Ok(())
     }
 }
@@ -897,10 +941,14 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
 }
 
 lazy_static! {
-    static ref RESERVED_MODEL_PREFIXES: Vec<String> = ProviderConfigHelper::VARIANTS
-        .iter()
-        .map(|&v| format!("{}::", v))
-        .collect();
+    static ref RESERVED_MODEL_PREFIXES: Vec<String> = {
+        let mut prefixes: Vec<String> = ProviderConfigHelper::VARIANTS
+            .iter()
+            .map(|&v| format!("{}::", v))
+            .collect();
+        prefixes.push("tensorzero::".to_string());
+        prefixes
+    };
 }
 
 const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
@@ -951,7 +999,7 @@ impl ModelTable {
         // Try direct lookup (if it's blacklisted, it's not in the table)
         // If it's shorthand and already in the table, it's valid
         if let Some(model_config) = self.0.get(key) {
-            model_config.validate()?;
+            model_config.validate(key)?;
             return Ok(());
         }
 
@@ -975,7 +1023,7 @@ impl ModelTable {
             // Remove the last two characters of the prefix to get the provider type
             let provider_type = &prefix[..prefix.len() - 2];
             let model_config = model_config_from_shorthand(provider_type, model_name)?;
-            model_config.validate()?;
+            model_config.validate(key)?;
             self.0.insert(key.into(), model_config);
             return Ok(());
         }

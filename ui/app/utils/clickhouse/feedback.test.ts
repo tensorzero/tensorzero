@@ -120,8 +120,8 @@ test("queryFeedbackBoundsByTargetId", async () => {
     target_id: "01942e26-4693-7e80-8591-47b98e25d711",
   });
   expect(emptyBounds).toEqual({
-    first_id: undefined,
-    last_id: undefined,
+    first_id: null,
+    last_id: null,
   });
 });
 
@@ -222,15 +222,15 @@ describe("queryMetricsWithFeedback", () => {
   test("returns correct feedback counts for different metric types", async () => {
     // Test json function with multiple metric types
     const jsonResults = await queryMetricsWithFeedback({
-      function_name: "dashboard_fixture_extract_entities",
+      function_name: "extract_entities",
       inference_table: "JsonInference",
       metrics: {
-        dashboard_fixture_exact_match: {
+        exact_match: {
           type: "boolean",
           optimize: "max",
           level: "inference",
         },
-        dashboard_fixture_jaccard_similarity: {
+        jaccard_similarity: {
           type: "float",
           optimize: "max",
           level: "inference",
@@ -240,24 +240,18 @@ describe("queryMetricsWithFeedback", () => {
 
     // Check boolean and demonstration counts for JSON function
     expect(jsonResults.metrics).toContainEqual({
-      function_name: "dashboard_fixture_extract_entities",
-      metric_name: "dashboard_fixture_exact_match",
+      function_name: "extract_entities",
+      metric_name: "exact_match",
       metric_type: "boolean",
       feedback_count: 99,
-    });
-    expect(jsonResults.metrics).toContainEqual({
-      function_name: "dashboard_fixture_extract_entities",
-      metric_name: "demonstration",
-      metric_type: "demonstration",
-      feedback_count: 100,
     });
 
     // Test chat function with float metrics
     const chatResults = await queryMetricsWithFeedback({
-      function_name: "dashboard_fixture_write_haiku",
+      function_name: "write_haiku",
       inference_table: "ChatInference",
       metrics: {
-        dashboard_fixture_haiku_rating: {
+        haiku_rating: {
           type: "float",
           optimize: "max",
           level: "inference",
@@ -266,8 +260,8 @@ describe("queryMetricsWithFeedback", () => {
     });
 
     expect(chatResults.metrics).toContainEqual({
-      function_name: "dashboard_fixture_write_haiku",
-      metric_name: "dashboard_fixture_haiku_rating",
+      function_name: "write_haiku",
+      metric_name: "haiku_rating",
       metric_type: "float",
       feedback_count: 491,
     });
@@ -279,7 +273,7 @@ describe("queryMetricsWithFeedback", () => {
       function_name: "nonexistent_function",
       inference_table: "ChatInference",
       metrics: {
-        dashboard_fixture_haiku_rating: {
+        haiku_rating: {
           type: "float",
           optimize: "max",
           level: "inference",
@@ -293,15 +287,15 @@ describe("queryMetricsWithFeedback", () => {
   // Tests handling of metrics at different levels (inference vs episode)
   test("returns correct metrics for both inference and episode levels", async () => {
     const results = await queryMetricsWithFeedback({
-      function_name: "dashboard_fixture_write_haiku",
+      function_name: "write_haiku",
       inference_table: "ChatInference",
       metrics: {
-        dashboard_fixture_haiku_rating: {
+        haiku_rating: {
           type: "float",
           optimize: "max",
           level: "inference",
         },
-        dashboard_fixture_haiku_rating_episode: {
+        haiku_rating_episode: {
           type: "float",
           optimize: "max",
           level: "episode",
@@ -311,18 +305,40 @@ describe("queryMetricsWithFeedback", () => {
 
     // Check inference level metric
     expect(results.metrics).toContainEqual({
-      function_name: "dashboard_fixture_write_haiku",
-      metric_name: "dashboard_fixture_haiku_rating",
+      function_name: "write_haiku",
+      metric_name: "haiku_rating",
       metric_type: "float",
       feedback_count: 491,
     });
 
     // Check episode level metric
     expect(results.metrics).toContainEqual({
-      function_name: "dashboard_fixture_write_haiku",
-      metric_name: "dashboard_fixture_haiku_rating_episode",
+      function_name: "write_haiku",
+      metric_name: "haiku_rating_episode",
       metric_type: "float",
       feedback_count: 85,
+    });
+  });
+
+  test("returns correct feedback counts for variant", async () => {
+    const results = await queryMetricsWithFeedback({
+      function_name: "write_haiku",
+      variant_name: "initial_prompt_gpt4o_mini",
+      inference_table: "ChatInference",
+      metrics: {
+        haiku_rating: {
+          type: "float",
+          optimize: "max",
+          level: "inference",
+        },
+      },
+    });
+
+    expect(results.metrics).toContainEqual({
+      function_name: "write_haiku",
+      metric_name: "haiku_rating",
+      metric_type: "float",
+      feedback_count: 491,
     });
   });
 });

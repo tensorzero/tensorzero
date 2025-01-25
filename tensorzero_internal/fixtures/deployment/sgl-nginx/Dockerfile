@@ -1,5 +1,5 @@
 FROM lmsysorg/sglang:latest
- 
+
 # Install nginx and remove default site
 RUN apt-get update && apt-get install -y nginx \
     && rm -rf /var/lib/apt/lists/* \

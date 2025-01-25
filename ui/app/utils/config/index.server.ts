@@ -45,13 +45,16 @@ export function getConfig() {
 export const RawConfig = z
   .object({
     gateway: GatewayConfig.optional().default({}),
-    models: z.record(z.string(), ModelConfigSchema),
+    models: z.record(z.string(), ModelConfigSchema).optional().default({}),
     embedding_models: z
       .record(z.string(), EmbeddingModelConfigSchema)
       .optional()
       .default({}),
-    functions: z.record(z.string(), RawFunctionConfigSchema),
-    metrics: z.record(z.string(), MetricConfigSchema),
+    functions: z
+      .record(z.string(), RawFunctionConfigSchema)
+      .optional()
+      .default({}),
+    metrics: z.record(z.string(), MetricConfigSchema).optional().default({}),
     tools: z.record(z.string(), ToolConfigSchema).optional().default({}),
   })
   .transform((raw) => {

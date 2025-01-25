@@ -97,14 +97,14 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterInference");
     searchParams.set("beforeInference", bottomInference.id);
-    navigate(`?${searchParams.toString()}`);
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
   const handlePreviousInferencePage = () => {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeInference");
     searchParams.set("afterInference", topInference.id);
-    navigate(`?${searchParams.toString()}`);
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   // These are swapped because the table is sorted in descending order
   const disablePreviousInferencePage =
@@ -122,7 +122,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("afterFeedback");
     searchParams.set("beforeFeedback", bottomFeedback.id);
-    navigate(`?${searchParams.toString()}`);
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
   const handlePreviousFeedbackPage = () => {
@@ -130,7 +130,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.delete("beforeFeedback");
     searchParams.set("afterFeedback", topFeedback.id);
-    navigate(`?${searchParams.toString()}`);
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
   // These are swapped because the table is sorted in descending order

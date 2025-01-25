@@ -24,12 +24,20 @@ export default function BasicInfo({ inference }: BasicInfoProps) {
           <div>
             <dt className="text-lg font-semibold">Function</dt>
             <dd>
-              <Code>{inference.function_name}</Code>
+              <Link to={`/observability/function/${inference.function_name}`}>
+                <Code>{inference.function_name}</Code>
+              </Link>
             </dd>
           </div>
           <div>
             <dt className="text-lg font-semibold">Variant</dt>
-            <Code>{inference.variant_name}</Code>
+            <dd>
+              <Link
+                to={`/observability/function/${inference.function_name}/variant/${inference.variant_name}`}
+              >
+                <Code>{inference.variant_name}</Code>
+              </Link>
+            </dd>
             <Badge variant="outline" className="ml-2 bg-blue-200">
               {variantType}
             </Badge>

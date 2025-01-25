@@ -1700,7 +1700,10 @@ mod tests {
         assert_eq!(model_request.top_p, Some(0.9));
         assert_eq!(model_request.presence_penalty, Some(0.1));
         assert_eq!(model_request.frequency_penalty, Some(0.2));
-        assert_eq!(model_request.json_mode, ModelInferenceRequestJsonMode::On);
+        assert_eq!(
+            model_request.json_mode,
+            ModelInferenceRequestJsonMode::Strict
+        );
         assert_eq!(model_request.output_schema, Some(&output_schema_value));
         assert_eq!(inference_params.chat_completion.temperature, Some(0.5));
         assert_eq!(inference_params.chat_completion.max_tokens, Some(100));
