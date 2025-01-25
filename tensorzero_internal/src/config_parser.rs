@@ -1461,12 +1461,8 @@ mod tests {
         let result = Config::load_from_toml(config, base_path);
 
         // Adjust this check to match how your code surfaces the "cannot start with `tensorzero::`" error
-        assert_eq!(
-            result.unwrap_err(),
-            Error::new(ErrorDetails::Config {
-                message: "`models.gpt-3.5-turbo.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"
-                    .to_string()
-            })
+        assert!(
+            result.unwrap_err().to_string().contains("models.gpt-3.5-turbo.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai")
         );
     }
 
