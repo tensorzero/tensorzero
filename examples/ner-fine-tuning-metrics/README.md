@@ -13,7 +13,7 @@ Each example in the dataset includes a short segment of text and instructs the m
 
 > [!TIP]
 >
-> See the following examples for a similar problem setting using other feedback signals and optimization techniques: [Fine-Tuning with Demonstrations](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-tuning-demonstrations) and [Dynamic In-Context Learning (DICL)](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-dicl).
+> See the following examples for a similar problem setting using other feedback signals and optimization techniques: [Fine-Tuning with Demonstrations](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-tuning-demonstrations) and [Dynamic In-Context Learning (DICL)](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-dicl).
 
 ## Sample Data
 
