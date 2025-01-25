@@ -147,7 +147,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge() {
                 },
                 {
                   "role": "user",
-                  "content": "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]\n------1:\n[{\"type\":\"text\",\"text\":\"Megumin chanted her spell, but instead of an explosion, a gentle rain began to fall.\"}]\n------"
+                  "content": "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]\n------\n1:\n[{\"type\":\"text\",\"text\":\"Megumin chanted her spell, but instead of an explosion, a gentle rain began to fall.\"}]\n------"
                 }
               ],
               "model": "gpt-4o-mini-2024-07-18",
@@ -176,7 +176,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge() {
             assert_eq!(input_messages[1], RequestMessage {
                 role: Role::User,
                 content: vec![
-                    "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]\n------1:\n[{\"type\":\"text\",\"text\":\"Megumin chanted her spell, but instead of an explosion, a gentle rain began to fall.\"}]\n------"
+                    "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]\n------\n1:\n[{\"type\":\"text\",\"text\":\"Megumin chanted her spell, but instead of an explosion, a gentle rain began to fall.\"}]\n------"
                         .to_string()
                         .into()
                 ],
@@ -352,7 +352,7 @@ async fn e2e_test_mixture_of_n_json_real_judge() {
                 },
                 {
                   "role": "user",
-                  "content": "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n{\"names\":[\"John\", \"George\"]}\n------1:\n{\"names\":[\"Paul\", \"Ringo\"]}\n------"
+                  "content": "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n{\"names\":[\"John\", \"George\"]}\n------\n1:\n{\"names\":[\"Paul\", \"Ringo\"]}\n------"
                 }
               ],
               "model": "gpt-4o-mini-2024-07-18",
@@ -401,7 +401,7 @@ async fn e2e_test_mixture_of_n_json_real_judge() {
             assert_eq!(input_messages[1], RequestMessage {
                 role: Role::User,
                 content: vec![
-                    "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n{\"names\":[\"John\", \"George\"]}\n------1:\n{\"names\":[\"Paul\", \"Ringo\"]}\n------"
+                    "Here are the candidate answers (with the index and a row of ------ separating):\n0:\n{\"names\":[\"John\", \"George\"]}\n------\n1:\n{\"names\":[\"Paul\", \"Ringo\"]}\n------"
                         .to_string()
                         .into()
                 ],
