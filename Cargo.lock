@@ -1074,45 +1074,12 @@ dependencies = [
 name = "gateway"
 version = "0.1.0"
 dependencies = [
- "async-stream",
- "aws-config",
- "aws-sdk-bedrockruntime",
- "aws-smithy-types",
- "aws-types",
  "axum",
- "backon",
- "bytes",
- "derive_builder",
- "futures",
- "futures-core",
- "itertools",
- "jsonschema",
- "jsonwebtoken",
- "lazy_static",
- "metrics",
- "metrics-exporter-prometheus",
  "mimalloc",
- "minijinja",
- "rand",
- "reqwest",
- "reqwest-eventsource",
- "secrecy",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "sha2",
- "signal",
- "strum",
- "strum_macros",
- "tempfile",
+ "tensorzero_internal",
  "tokio",
- "tokio-stream",
- "toml",
  "tracing",
  "tracing-subscriber",
- "tracing-test",
- "url",
- "uuid",
 ]
 
 [[package]]
@@ -1814,6 +1781,7 @@ dependencies = [
  "memo-map",
  "self_cell",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2833,6 +2801,51 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "tensorzero_internal"
+version = "0.1.0"
+dependencies = [
+ "async-stream",
+ "aws-config",
+ "aws-sdk-bedrockruntime",
+ "aws-smithy-types",
+ "aws-types",
+ "axum",
+ "backon",
+ "bytes",
+ "derive_builder",
+ "futures",
+ "futures-core",
+ "itertools",
+ "jsonschema",
+ "jsonwebtoken",
+ "lazy_static",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "mimalloc",
+ "minijinja",
+ "rand",
+ "reqwest",
+ "reqwest-eventsource",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "sha2",
+ "signal",
+ "strum",
+ "strum_macros",
+ "tempfile",
+ "tokio",
+ "tokio-stream",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "tracing-test",
+ "url",
+ "uuid",
 ]
 
 [[package]]

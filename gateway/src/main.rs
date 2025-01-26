@@ -3,14 +3,17 @@ use axum::Router;
 use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 
-use gateway::clickhouse_migration_manager;
-use gateway::config_parser::Config;
-use gateway::endpoints;
-use gateway::gateway_util;
-use gateway::observability;
+use tensorzero_internal::clickhouse_migration_manager;
+use tensorzero_internal::config_parser::Config;
+use tensorzero_internal::endpoints;
+use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
+use tensorzero_internal::error;
+use tensorzero_internal::gateway_util;
+use tensorzero_internal::observability;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -22,12 +25,12 @@ async fn main() {
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Load config
-    let config: &'static Config = Box::leak(Box::new(
-        Config::load().expect_pretty("Failed to load config"),
-    ));
+    let config: Arc<Config> = Arc::new(Config::load().expect_pretty("Failed to load config"));
 
     // Initialize AppState
-    let app_state = gateway_util::AppStateData::new(config).await;
+    let app_state = gateway_util::AppStateData::new(config.clone())
+        .await
+        .expect_pretty("Failed to initialize AppState");
 
     // Run ClickHouse migrations (if any)
     if !config.gateway.disable_observability {
@@ -36,11 +39,22 @@ async fn main() {
             .expect_pretty("Failed to run ClickHouse migrations");
     }
 
+    // Set debug mode
+    error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
+
     let router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
         .route(
-            "/start_batch_inference",
+            "/batch_inference",
             post(endpoints::batch_inference::start_batch_inference_handler),
+        )
+        .route(
+            "/batch_inference/:batch_id",
+            get(endpoints::batch_inference::poll_batch_inference_handler),
+        )
+        .route(
+            "/batch_inference/:batch_id/inference/:inference_id",
+            get(endpoints::batch_inference::poll_batch_inference_handler),
         )
         .route(
             "/openai/v1/chat/completions",
@@ -53,6 +67,7 @@ async fn main() {
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
         )
+        .fallback(endpoints::fallback::handle_404)
         .with_state(app_state);
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
@@ -66,6 +81,12 @@ async fn main() {
         .expect_pretty(&format!(
             "Failed to bind to socket address `{bind_address}`"
         ));
+
+    tracing::info!(
+        "TensorZero Gateway version {} is listening on {}",
+        TENSORZERO_VERSION,
+        bind_address
+    );
 
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())

@@ -85,6 +85,8 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Install Docker [→](https://docs.docker.com/get-docker/)
 - Install `uv` [→](https://docs.astral.sh/uv/)
 - Install Python (3.10+) (e.g. `uv python install 3.10` + )
+- Install Node.js (we use v22) and `npm` [→](https://nodejs.org/en)
+- Install pnpm `npm install -g pnpm` [→](https://pnpm.io/installation)
 
 ### Tests
 
@@ -106,34 +108,6 @@ cargo test-unit
 
 2. Set the relevant environment variables. See `examples/production-deployment/.env.example` for the full list.
 
-> [!TIP]
->
-> The gateway requires credentials for every model provider defined in its configuration.
-> The E2E tests define every supported provider, so you need every possible credential to run the entire test suite.
->
-> You can run a subset of the tests by setting the missing credentials to fake values.
-> For example, you can set `OPENAI_API_KEY="none"` if you don't plan to run OpenAI tests.
->
-> For GCP Vertex AI, you'll need a credentials file. You can use the following fake file and point `GCP_VERTEX_CREDENTIALS_PATH` to it:
->
-> ```json
-> {
->   "type": "service_account",
->   "project_id": "none",
->   "private_key_id": "none",
->   "private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIICXAIBAAKBgQDAKxbF0dfne7PmPwpFEcSi2JFBeO98DXW7bimAPE6dHHCkDvoU\nlD/fy8svrPU6xsCYxM3LfKY/F+s/P+FizXUQ6eDu5ipYCRfweiQ4gqms+zROeORA\nJez3zelPQ7vY/MYCnp0LYYCH2HTyBeMFIX+Rgwjral495j0O6uV7cjgneQIDAQAB\nAoGAOXcpMjLUS6bUX1AOtCTiFoiIt3mAtCoaQNhqlKx0Hct5a7YG1syWZUg+FJ22\nH8N7qLOBjw5RcKCoepuRvMgP71+Hp03Xt8WSpN1Evl6EllwtmTtVTTeVS8fjP7xL\nhc7XemtDPY/81cBuj+HCit9/+44HZCT9V3dV6D9IWWnc3mECQQD1sTvcNAsh8idv\nMS12jmqdaOYTnJM1kFiddRvdkfChADq35x5bzV/oORYAmfurjuPN7ssHvrEEjmew\nbvi62MYtAkEAyDsAKrWsAfJQKbraTraJE7r7mTWxvAAYUONKKPZV2BXPzrTD/WMI\nn7z95pUu8x7anck9qqF6RYplo4fFLQKh/QJBANYwsszgGix33WUUbFwFAHFGN/40\n7CkwM/DhXW+mgS768jXNKSxDOS9MRSA1HbCMm5C2cw3Hcq9ULpUjyXeq7+kCQDx1\nvFYpJzgrP9Np7XNpILkJc+FOWk2nRbBfAUyfHUqzQ11qLef8GGWLfqs6jsOwpFiS\npIE6Yx5ObORVIc+2hM0CQE/pVhPEZ3boB8xoc9+3YL+++0yR2uMHoTY/q6r96kPC\n6C1oSRcDX/MUDOzC5HCUuwTYhNoN3FYkB5fov32BUbQ=\n-----END RSA PRIVATE KEY-----\n",
->   "client_email": "none",
->   "client_id": "114469363779822440226",
->   "auth_uri": "https://accounts.google.com/o/oauth2/auth",
->   "token_uri": "https://oauth2.googleapis.com/token",
->   "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
->   "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/vertex%40tensorzero-public.iam.gserviceaccount.com",
->   "universe_domain": "googleapis.com"
-> }
-> ```
->
-> This workflow is quite cumbersome, so we're planning to streamline it in the future (see [#575](https://github.com/tensorzero/tensorzero/issues/575)).
-
 3. Launch the gateway in testing mode
 
    ```bash
@@ -147,7 +121,9 @@ cargo test-unit
 
 > [!TIP]
 >
-> You can run a subset of tests with `cargo test-e2e xyz`, which will only run tests with `xyz` in their name.
+> The E2E tests involve every supported model provider, so you need every possible credential to run the entire test suite.
+>
+> If your changes don't affect every provider, you can run a subset of tests with `cargo test-e2e xyz`, which will only run tests with `xyz` in their name.
 
 #### Python
 
@@ -171,20 +147,46 @@ cargo test-unit
 5. Run the type checker
 
    ```bash
-   uv pip install mypy
-   uv run mypy . --strict
+   uv pip install pyright
+   uv run pyright
    ```
 
 6. Run the formatter
 
    ```bash
+   uv pip install ruff
    uv run ruff format --check .
    uv run ruff check --output-format=github --extend-select I .
    ```
 
 #### Dashboard
 
-Refer to the instructions in `dashboard/README.md`.
+For development, the UI runs against hardcoded fixtures in `ui/fixtures/`.
+It depends on a running ClickHouse instance that has been initialized with the TensorZero data model.
+We include some fixture data as well in order to exercise some functionality.
+
+It also requires a one-time build of a WebAssembly module from Rust source code that is used to ensure consistent templating of messages across the gateway and UI.
+
+The steps below assume you are in the `ui/` directory.
+
+Here are the steps in order to run or test the UI assuming you have the prerequisites installed and this repository checked out:
+
+1. Install dependencies: `pnpm install`
+2. Build the WebAssembly module following instructions in `ui/app/utils/minijinja/README.md`.
+3. Create a `.env` file and set the following environment variables for the server:
+
+```bash
+OPENAI_API_KEY=<your-key>
+FIREWORKS_API_KEY=<your-key>
+FIREWORKS_ACCOUNT_ID=<your-account-id>
+CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://localhost:8123/tensorzero
+TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures/config/tensorzero.toml
+```
+
+4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up`
+
+With the dependencies running, you can run the tests with `pnpm run test`.
+Similarly, you can start a development server with `pnpm run dev`.
 
 ---
 

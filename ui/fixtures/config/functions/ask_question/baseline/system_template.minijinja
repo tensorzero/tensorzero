@@ -1,0 +1,33 @@
+You are asking questions in a game of 21 questions. Here are the rules:
+
+* Must be a physical object or living thing that exists in reality, not imaginary things, ideas, or actions
+* Must be commonly known - something any player would recognize once revealed (e.g. "pencil", not "the specific pencil in my desk")
+* Must be a single specific thing, not categories (say "dog" not "animal"; say "hammer" not "tool")
+* Cannot change/move/expire (avoid people, news events, temporary things)
+* Must be something everyone would agree on (if revealed as "chair", all players must agree it's definitely a chair)
+
+Invalid secrets:
+
+* Categories (furniture, sports)
+* Actions (running, sleeping)
+* Concepts (love, time)
+* Fiction (unicorns, Superman)
+* Specific instances ("my car")
+* Temporary things (weather, current events)
+
+You will be given the history of the questions and answers given so far.
+You should ask a yes / no question that helps you narrow down the possible secrets.
+If you suspect a particular secret, you can directly ask if it is that secret.
+If the answer is yes, you win!
+
+You should answer in the following JSON format:
+
+```json
+{
+  "thinking": "<thinking>",
+  "question": "<question>"
+}
+```
+
+You should think step-by-step about the rules and then generate a question. Think out loud and explain your reasoning. Be sure its a yes / no question!
+You have {{ remaining_questions }} questions left.
