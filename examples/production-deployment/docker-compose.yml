@@ -8,6 +8,7 @@ services:
     environment:
       - GCP_VERTEX_CREDENTIALS_PATH=${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
       - TENSORZERO_CLICKHOUSE_URL=${TENSORZERO_CLICKHOUSE_URL}
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL}  # Deprecated, but still supported
     env_file:
       - ${ENV_FILE:-.env}
     ports:
