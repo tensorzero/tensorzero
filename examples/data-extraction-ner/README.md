@@ -11,12 +11,6 @@ Each example in the dataset includes a short segment of text and instructs the m
 
 <p align="center">
   <img src="visualization.svg" alt="Metrics by Variant" />
-  <br>
-  <sup>
-
-  `gpt_4o_mini_fine_tuned` curates examples with the `exact_match` metric. `gpt_4o_mini_dicl` uses demonstrations.
-
-  </sup>
 </p>
 
 ## Sample Data
@@ -81,6 +75,7 @@ Let's run fine-tuning on GPT-4o Mini with OpenAI using the `exact_match` metric.
 Go grab a coffee as fine-tuning can take some time.
 
 Alternatively, you can run other optimization recipes like [Dynamic In-Context Learning (DICL)](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations) programmatically using the Jupyter notebooks in `recipes/`.
+We also show the performance of DICL with demonstrations.
 
 Once you finish fine-tuning, you'll see additional configuration blocks.
 For our purposes, we only need the `model_name` which we'll use to create a new variant in the `tensorzero.toml` file.
