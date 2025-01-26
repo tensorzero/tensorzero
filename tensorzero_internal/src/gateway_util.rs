@@ -54,7 +54,10 @@ async fn setup_clickhouse(
         // Observability enabled and ClickHouse URL provided
         (Some(true), Some(clickhouse_url)) => ClickHouseConnectionInfo::new(&clickhouse_url).await,
         // Observability default and no ClickHouse URL
-        (None, None) => Ok(ClickHouseConnectionInfo::new_disabled()),
+        (None, None) => {
+            tracing::warn!("Observability not explicitly specified in config and no ClickHouse URL provided. Disabling ClickHouse.");
+            Ok(ClickHouseConnectionInfo::new_disabled())
+        }
         // Observability default and ClickHouse URL provided
         (None, Some(clickhouse_url)) => ClickHouseConnectionInfo::new(&clickhouse_url).await,
     }
