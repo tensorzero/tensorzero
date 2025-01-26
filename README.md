@@ -97,7 +97,7 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > **[Optimizing Data Extraction (NER) with TensorZero](https://github.com/tensorzero/tensorzero/tree/main/examples/data-extraction-ner)**
 >
 > This example shows how to use TensorZero to optimize a data extraction pipeline.
-> We demonstrate techniques like fine-tuning, DPO, and dynamic in-context learning.
+> We demonstrate techniques like fine-tuning and dynamic in-context learning (DICL).
 > In the end, a optimized GPT-4o Mini model outperforms GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.
 
 > **[Writing Haikus to Satisfy a Judge with Hidden Preferences](https://github.com/tensorzero/tensorzero/tree/main/examples/haiku-hidden-preferences)**

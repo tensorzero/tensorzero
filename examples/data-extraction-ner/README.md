@@ -9,7 +9,11 @@ Each example in the dataset includes a short segment of text and instructs the m
 
 **We'll show that TensorZero can optimize GPT-4o Mini to outperform GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.**
 
-<p align="center"><img src="visualization.svg" alt="Metrics by Variant" /></p>
+<p align="center">
+  <img src="visualization.svg" alt="Metrics by Variant" />
+  <br>
+  <small>`gpt_4o_mini_fine_tuned` curates examples with the `exact_match` metric. `gpt_4o_mini_dicl` uses demonstrations.</small>
+</p>
 
 ## Sample Data
 
