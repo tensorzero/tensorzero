@@ -7,7 +7,7 @@ on:
 
 env:
   FORCE_COLOR: 1
-  CLICKHOUSE_URL: "http://localhost:8123/tensorzero"
+  TENSORZERO_CLICKHOUSE_URL: "http://localhost:8123/tensorzero"
 
 jobs:
   validate:
@@ -115,7 +115,7 @@ jobs:
           echo "OPENAI_API_KEY=not_used" >> .env
           echo "FIREWORKS_API_KEY=not_used" >> .env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
-          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> .env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> .env
           docker compose -f fixtures/docker-compose.yml up -d
 
       - name: Run ui tests

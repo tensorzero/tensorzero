@@ -48,7 +48,7 @@ async fn setup_clickhouse(
         (Some(false), _) => Ok(ClickHouseConnectionInfo::new_disabled()),
         // Observability enabled but no ClickHouse URL
         (Some(true), None) => Err(ErrorDetails::AppState {
-            message: "Missing environment variable CLICKHOUSE_URL".to_string(),
+            message: "Missing environment variable TENSORZERO_CLICKHOUSE_URL".to_string(),
         }
         .into()),
         // Observability enabled and ClickHouse URL provided
@@ -133,7 +133,9 @@ mod tests {
             clickhouse_connection_info,
             ClickHouseConnectionInfo::Disabled
         ));
-        assert!(!logs_contain("Missing environment variable CLICKHOUSE_URL"));
+        assert!(!logs_contain(
+            "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
+        ));
 
         // Default observability and no ClickHouse URL
         let gateway_config = GatewayConfig {
@@ -149,7 +151,9 @@ mod tests {
             clickhouse_connection_info,
             ClickHouseConnectionInfo::Disabled
         ));
-        assert!(!logs_contain("Missing environment variable CLICKHOUSE_URL"));
+        assert!(!logs_contain(
+            "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
+        ));
 
         // We do not test the case where a ClickHouse URL is provided but observability is default,
         // as this would require a working ClickHouse and we don't have one in unit tests.
@@ -168,9 +172,10 @@ mod tests {
             ..Default::default()
         }));
 
-        setup_clickhouse(config, None)
-            .await
-            .expect_err("Missing environment variable CLICKHOUSE_URL");
+        let err = setup_clickhouse(config, None).await.unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"));
 
         // Bad URL
         let gateway_config = GatewayConfig {

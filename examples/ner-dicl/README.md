@@ -53,7 +53,7 @@ pip install -r requirements.txt
 
 ## Running the Example
 
-Set `CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your notebook will run in.
+Set `TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your notebook will run in.
 
 You can run the example in the `conll.ipynb` notebook.
 Make sure to install the dependencies in the `requirements.txt` file.

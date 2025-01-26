@@ -76,7 +76,7 @@ jobs:
 
       - name: Set up CLICKHOUSE_URL for E2E tests
         run: |
-          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
         run: docker compose -f tensorzero_internal/tests/e2e/docker-compose.yml up -d --wait
@@ -181,9 +181,9 @@ jobs:
       - name: Build Docker container for production deployment tests
         run: docker build -t tensorzero/gateway .
 
-      - name: Set up CLICKHOUSE_URL for production deployment tests
+      - name: Set up TENSORZERO_CLICKHOUSE_URL for production deployment tests
         run: |
-          echo "CLICKHOUSE_URL=http://172.17.0.1:8123/tensorzero" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_URL=http://172.17.0.1:8123/tensorzero" >> $GITHUB_ENV
 
       - name: Set up .env file for production deployment tests
         run: |
@@ -222,7 +222,7 @@ jobs:
           echo "OPENAI_API_KEY=${{secrets.OPENAI_API_KEY}}" >> .env
           echo "FIREWORKS_API_KEY=${{secrets.FIREWORKS_API_KEY}}" >> .env
           echo "FIREWORKS_ACCOUNT_ID=${{secrets.FIREWORKS_ACCOUNT_ID}}" >> .env
-          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> .env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> .env
           docker compose -f fixtures/docker-compose.yml up -d
 
       - name: Run ui tests
@@ -233,9 +233,9 @@ jobs:
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.yml down
 
-      - name: Set up CLICKHOUSE_URL for batch tests
+      - name: Set up TENSORZERO_CLICKHOUSE_URL for batch tests
         run: |
-          echo "CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
       - name: Launch the gateway for batch tests
         run: |
           cargo run-e2e &

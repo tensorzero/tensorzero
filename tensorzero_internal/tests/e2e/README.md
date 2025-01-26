@@ -8,7 +8,7 @@
   docker compose -f gateway/tests/e2e/docker-compose.yml up -d --build --force-recreate --remove-orphans  --wait
   ```
 
-- Set the `CLICKHOUSE_URL` environment variable to the URL of the ClickHouse container (e.g. `CLICKHOUSE_URL=http://localhost:8123`).
+- Set the `TENSORZERO_CLICKHOUSE_URL` environment variable to the URL of the ClickHouse container (e.g. `TENSORZERO_CLICKHOUSE_URL=http://localhost:8123`).
 
 - Spin up the gateway: `cargo run-e2e` or `cargo watch-e2e`
 
