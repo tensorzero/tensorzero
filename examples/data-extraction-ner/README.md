@@ -12,7 +12,11 @@ Each example in the dataset includes a short segment of text and instructs the m
 <p align="center">
   <img src="visualization.svg" alt="Metrics by Variant" />
   <br>
-  <sup>`gpt_4o_mini_fine_tuned` curates examples with the `exact_match` metric. `gpt_4o_mini_dicl` uses demonstrations.</sup>
+  <sup>
+
+  `gpt_4o_mini_fine_tuned` curates examples with the `exact_match` metric. `gpt_4o_mini_dicl` uses demonstrations.
+
+  </sup>
 </p>
 
 ## Sample Data
