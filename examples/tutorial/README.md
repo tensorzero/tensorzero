@@ -1,45 +1,34 @@
-# Tutorial
+# TensorZero Tutorial
 
-This directory contains the code for the tutorial.
-You can find the full tutorial [here](https://www.tensorzero.com/docs/gateway/tutorial/).
+This directory contains the code for the **[TensorZero Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)**.
 
-## Setup
+## Running an Example
 
-First, set the `OPENAI_API_KEY` environment variable.
-For the second example (Email Copilot), you will also need to set the `ANTHROPIC_API_KEY` environment variable.
+1. Set the `OPENAI_API_KEY` environment variable.
+   For the second example (Email Copilot), you will also need to set the `ANTHROPIC_API_KEY` environment variable.
 
-Then, execute the following commands to run the examples.
-We use Docker Compose to simplify the setup for the tutorial.
-It will launch a ClickHouse database, launch the TensorZero Gateway with the corresponding configuration, and run the API calls using a Python script.
-
-## Examples
-
-You can find the script and configuration files for each example in its corresponding sub-directory.
-Feel free to make changes and explore!
-
-> The commands take a few seconds to run because you're spinning up new containers.
-> Once the containers are in place, the TensorZero Gateway only adds sub-millisecond overhead to your inference requests.
-
-### Part I — Simple Chatbot
+2. Launch the TensorZero Gateway and ClickHouse database:
 
 ```bash
-docker compose up --always-recreate-deps simple-chatbot
+docker compose up
 ```
 
-### Part II — Email Copilot
+3. Install the dependencies:
 
 ```bash
-docker compose up --always-recreate-deps email-copilot
+uv venv
+uv pip sync requirements.txt
 ```
 
-### Part III — Weather RAG
+or
 
 ```bash
-docker compose up --always-recreate-deps weather-rag
+# We recommend using Python 3.10+ and a virtual environment
+pip install -r requirements.txt
 ```
 
-### Part IV — Email Data Extraction
+4. Run the example:
 
 ```bash
-docker compose up --always-recreate-deps email-data-extraction
+python run.py # or run_async.py or run_openai.py
 ```

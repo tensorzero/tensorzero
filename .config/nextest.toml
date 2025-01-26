@@ -8,3 +8,30 @@ retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max
 [profile.unit]
 retries = 0
 slow-timeout = { period = "2s", terminate-after = 1 }
+
+# Note: use the following commands to debug test groups:
+# cargo nextest show-config test-groups
+# cargo nextest show-config test-groups --features e2e_tests
+
+# Run E2E provider tests sequentially to avoid rate limits
+[test-groups]
+e2e_aws_bedrock = { max-threads = 1 }
+e2e_fireworks = { max-threads = 1 }
+e2e_together = { max-threads = 1 }
+e2e_xai = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'binary(e2e) and test(providers::aws_bedrock::)'
+test-group = 'e2e_aws_bedrock'
+
+[[profile.default.overrides]]
+filter = 'binary(e2e) and test(providers::fireworks::)'
+test-group = 'e2e_fireworks'
+
+[[profile.default.overrides]]
+filter = 'binary(e2e) and test(providers::together::)'
+test-group = 'e2e_together'
+
+[[profile.default.overrides]]
+filter = 'binary(e2e) and test(providers::xai::)'
+test-group = 'e2e_xai'

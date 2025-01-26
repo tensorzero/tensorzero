@@ -121,7 +121,7 @@ stack-data==0.6.3
     # via ipython
 tensorzero==2024.9.2
     # via -r requirements.in
-tornado==6.4.1
+tornado==6.4.2
     # via
     #   ipykernel
     #   jupyter-client

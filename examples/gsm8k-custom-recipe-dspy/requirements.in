@@ -1,7 +1,9 @@
+aiohttp>=3.10.11 # to patch a security vulnerability
 clickhouse_connect
 dspy-ai
 ipykernel
 notebook
 pandas
-tensorzero @ ../../clients/python-asyncio
+scipy
+tensorzero
 tqdm

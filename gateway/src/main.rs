@@ -3,14 +3,17 @@ use axum::Router;
 use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 
-use gateway::clickhouse_migration_manager;
-use gateway::config_parser::Config;
-use gateway::endpoints;
-use gateway::gateway_util;
-use gateway::observability;
+use tensorzero_internal::clickhouse_migration_manager;
+use tensorzero_internal::config_parser::Config;
+use tensorzero_internal::endpoints;
+use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
+use tensorzero_internal::error;
+use tensorzero_internal::gateway_util;
+use tensorzero_internal::observability;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -22,13 +25,12 @@ async fn main() {
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Load config
-    let config: &'static Config = Box::leak(Box::new(
-        Config::load().expect_pretty("Failed to load config"),
-    ));
+    let config: Arc<Config> = Arc::new(Config::load().expect_pretty("Failed to load config"));
 
     // Initialize AppState
-    let app_state =
-        gateway_util::AppStateData::new(config).expect_pretty("Failed to initialize AppState");
+    let app_state = gateway_util::AppStateData::new(config.clone())
+        .await
+        .expect_pretty("Failed to initialize AppState");
 
     // Run ClickHouse migrations (if any)
     if !config.gateway.disable_observability {
@@ -37,8 +39,27 @@ async fn main() {
             .expect_pretty("Failed to run ClickHouse migrations");
     }
 
+    // Set debug mode
+    error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
+
     let router = Router::new()
         .route("/inference", post(endpoints::inference::inference_handler))
+        .route(
+            "/batch_inference",
+            post(endpoints::batch_inference::start_batch_inference_handler),
+        )
+        .route(
+            "/batch_inference/:batch_id",
+            get(endpoints::batch_inference::poll_batch_inference_handler),
+        )
+        .route(
+            "/batch_inference/:batch_id/inference/:inference_id",
+            get(endpoints::batch_inference::poll_batch_inference_handler),
+        )
+        .route(
+            "/openai/v1/chat/completions",
+            post(endpoints::openai_compatible::inference_handler),
+        )
         .route("/feedback", post(endpoints::feedback::feedback_handler))
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
@@ -46,6 +67,7 @@ async fn main() {
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
         )
+        .fallback(endpoints::fallback::handle_404)
         .with_state(app_state);
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
@@ -59,6 +81,12 @@ async fn main() {
         .expect_pretty(&format!(
             "Failed to bind to socket address `{bind_address}`"
         ));
+
+    tracing::info!(
+        "TensorZero Gateway version {} is listening on {}",
+        TENSORZERO_VERSION,
+        bind_address
+    );
 
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())
@@ -106,7 +134,7 @@ pub async fn shutdown_signal() {
 /// ┌──────────────────────────────────────────────────────────────────────────┐
 /// │                           MAIN.RS ESCAPE HATCH                           │
 /// └──────────────────────────────────────────────────────────────────────────┘
-
+///
 /// We don't allow panic, escape, unwrap, or similar methods in the codebase,
 /// except for the private `expect_pretty` method, which is to be used only in
 /// main.rs during initialization. After initialization, we expect all code to
@@ -114,7 +142,6 @@ pub async fn shutdown_signal() {
 ///
 /// We use `expect_pretty` for better DX when handling errors in main.rs.
 /// `expect_pretty` will print an error message and exit with a status code of 1.
-
 trait ExpectPretty<T> {
     fn expect_pretty(self, msg: &str) -> T;
 }

@@ -2,18 +2,18 @@
 
 # TensorZero
 
-**TensorZero makes LLMs improve through experience.**
+**TensorZero creates a feedback loop for optimizing LLM applications — turning production data into smarter, faster, and cheaper models.**
 
 1. Integrate our model gateway
 2. Send metrics or feedback
-3. Optimize prompts, models, and inference-time strategies
-4. Watch your LLMs get smarter, cheaper, and faster over time
+3. Optimize prompts, models, and inference strategies
+4. Watch your LLMs improve over time
 
 It provides a **data & learning flywheel for LLMs** by unifying:
 
 - [x] **Inference:** one API for all LLMs, with <1ms P99 overhead
 - [x] **Observability:** inference & feedback → your database
-- [x] **Optimization:** from prompts to fine-tuning and RL (& even 🍓? **[→](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations)**)
+- [x] **Optimization:** from prompts to fine-tuning and RL
 - [x] **Experimentation:** built-in A/B testing, routing, fallbacks
 
 <p align="center">
@@ -38,6 +38,17 @@ It provides a **data & learning flywheel for LLMs** by unifying:
   ·
   <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Configuration Reference</a></b>
 </p>
+
+## Demo
+
+> [!NOTE]
+>
+> **Watch LLMs get better at data extraction in real time with TensorZero!**
+>
+> **[Dynamic in-context learning (DICL)](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#dynamic-in-context-learning-dicl)** is a powerful inference-time optimization available out of the box with TensorZero.
+> It enhances LLM performance by automatically incorporating relevant historical examples into the prompt, without the need for model fine-tuning.
+
+https://github.com/user-attachments/assets/4df1022e-886e-48c2-8f79-6af3cdad79cb
 
 ## Overview
 
@@ -65,11 +76,19 @@ Read more about our **[Vision & Roadmap](https://www.tensorzero.com/docs/vision-
 
 ## Get Started
 
-**Next steps?** The **[Quick Start](https://www.tensorzero.com/docs/gateway/quickstart)** shows it's easy to set up an LLM application with TensorZero. If you want to dive deeper, the **[Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)** teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
+**Start building today.**
+The **[Quick Start](https://www.tensorzero.com/docs/gateway/quickstart)** shows it's easy to set up an LLM application with TensorZero.
+If you want to dive deeper, the **[Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)** teaches how to build a simple chatbot, an email copilot, a weather RAG system, and a structured data extraction pipeline.
 
-**Questions?** Ask us on **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://www.tensorzero.com/discord)**.
+**Questions?**
+Ask us on **[Slack](https://www.tensorzero.com/slack)** or **[Discord](https://www.tensorzero.com/discord)**.
 
-**Using TensorZero at work?** Email us at **[hello@tensorzero.com](mailto:hello@tensorzero.com)** to set up a Slack or Teams channel with your team (free).
+**Using TensorZero at work?**
+Email us at **[hello@tensorzero.com](mailto:hello@tensorzero.com)** to set up a Slack or Teams channel with your team (free).
+
+**Work with us.**
+We're **[hiring in NYC](https://www.tensorzero.com/jobs)**.
+We'd also welcome **[open-source contributions](https://github.com/tensorzero/tensorzero/blob/main/CONTRIBUTING.md)**!
 
 ## Examples
 

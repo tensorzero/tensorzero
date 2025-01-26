@@ -1,12 +1,13 @@
 import json
 import os
+from time import sleep
 from uuid import UUID
 
-from clickhouse_driver import Client
-from uuid_extensions import uuid7
+from clickhouse_connect import get_client
+from tensorzero.util import uuid7
 
 
-def test_double_feedback_query():
+def test_double_feedback_query() -> None:
     """
     Most fine-tuning recipes will use a query that pulls all inference for a function and the
     feedback associated with that inference, if the feedback is above / below a certain threshold.
@@ -16,8 +17,8 @@ def test_double_feedback_query():
     This test checks that the query works as expected.
     """
 
-    CLICKHOUSE_NATIVE_URL = os.getenv("CLICKHOUSE_NATIVE_URL")
-    client = Client.from_url(CLICKHOUSE_NATIVE_URL)
+    assert "CLICKHOUSE_URL" in os.environ, "CLICKHOUSE_URL environment variable not set"
+    client = get_client(dsn=os.environ["CLICKHOUSE_URL"])
     # Insert an Inference we can use to assign feedback to
     inference = {
         "id": str(uuid7()),
@@ -30,11 +31,11 @@ def test_double_feedback_query():
         "processing_time_ms": 100,
     }
     query = f"""
-    INSERT INTO Inference
+    INSERT INTO ChatInference
     FORMAT JSONEachRow
     {json.dumps(inference)}
     """
-    client.execute(query)
+    client.query(query)
 
     # Insert a float feedback for the inference
     first_feedback = {
@@ -48,7 +49,9 @@ def test_double_feedback_query():
     FORMAT JSONEachRow
     {json.dumps(first_feedback)}
     """
-    client.execute(query)
+    client.query(query)
+    # Sleep to ensure the first feedback is recorded with a different timestamp
+    sleep(0.2)
 
     # Insert a second feedback for the inference
     second_feedback = {
@@ -62,7 +65,7 @@ def test_double_feedback_query():
     FORMAT JSONEachRow
     {json.dumps(second_feedback)}
     """
-    client.execute(query)
+    client.query(query)
 
     # At this point we have a duplicate feedback for the inference. Let's test that the query we use in the recipes gets the later one.
     query = """
@@ -73,7 +76,7 @@ def test_double_feedback_query():
         f.value,
         i.episode_id
     FROM
-        Inference i
+        ChatInference i
     JOIN
         (SELECT
             target_id,
@@ -91,12 +94,10 @@ def test_double_feedback_query():
     """
     # NOTE: we add the last AND i.id = %(inference_id)s to ensure that the query is using the inference id we set above
     # and we can run the test multiple times without it failing
-    result = client.execute(query, params={"inference_id": inference["id"]})
+    result = client.query_df(query, {"inference_id": inference["id"]})
     assert len(result) == 1
-    assert result[0] == (
-        "test_variant",
-        "test_input",
-        "test_output",
-        4.0,
-        UUID(inference["episode_id"]),
-    )
+    assert result.iloc[0]["variant_name"] == "test_variant"
+    assert result.iloc[0]["input"] == "test_input"
+    assert result.iloc[0]["output"] == "test_output"
+    assert result.iloc[0]["value"] == 4.0
+    assert result.iloc[0]["episode_id"] == UUID(str(inference["episode_id"]))

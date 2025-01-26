@@ -20,7 +20,7 @@ class ContentBlock(ABC):
     type: str
 
     @abstractmethod
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         pass
 
 
@@ -28,7 +28,7 @@ class ContentBlock(ABC):
 class Text(ContentBlock):
     text: str
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return dict(type="text", value=self.text)
 
 
@@ -40,7 +40,7 @@ class ToolCall(ContentBlock):
     raw_arguments: Dict[str, Any]
     raw_name: str
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return dict(
             type="tool_call",
             arguments=json.dumps(self.raw_arguments),
@@ -55,7 +55,7 @@ class ToolResult:
     result: str
     id: str
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return dict(type="tool_result", name=self.name, result=self.result, id=self.id)
 
 
@@ -92,15 +92,16 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
-            content=[parse_content_block(block) for block in data["content"]],
+            content=[parse_content_block(block) for block in data["content"]],  # type: ignore
             usage=Usage(**data["usage"]),
         )
     elif "output" in data and isinstance(data["output"], dict):
+        output: Dict[str, Any] = data["output"]
         return JsonInferenceResponse(
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
-            output=JsonInferenceOutput(**data["output"]),
+            output=JsonInferenceOutput(**output),
             usage=Usage(**data["usage"]),
         )
     else:
@@ -216,6 +217,11 @@ class FeedbackResponse:
 class TensorZeroError(Exception):
     def __init__(self, response: httpx.Response):
         self.response = response
+        self.status_code = response.status_code
+        try:
+            self.text = response.text
+        except Exception:
+            self.text = "(response body unavailable)"
 
-    def __str__(self):
-        return f"TensorZeroError (status code {self.response.status_code}): {self.response.text}"
+    def __str__(self) -> str:
+        return f"TensorZeroError (status code {self.status_code}): {self.text}"
