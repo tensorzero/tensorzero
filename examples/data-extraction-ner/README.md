@@ -1,4 +1,4 @@
-# Example: Improving Data Extraction (NER) by Fine-Tuning GPT-4o Mini (Metrics)
+# Example: Optimizing Data Extraction (NER) with TensorZero
 
 ## Background
 
@@ -7,13 +7,9 @@ Here, we present a stylized example of an NER system that uses TensorZero JSON f
 Each example in the dataset includes a short segment of text and instructs the model to produce a JSON of named entities in the input.
 [^1]
 
-**We'll show that GPT-4o Mini can be fine-tuned to outperform GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.**
+**We'll show that TensorZero can optimize GPT-4o Mini to outperform GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.**
 
 <p align="center"><img src="visualization.svg" alt="Metrics by Variant" /></p>
-
-> [!TIP]
->
-> See the following examples for a similar problem setting using other feedback signals and optimization techniques: [Fine-Tuning with Demonstrations](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-tuning-demonstrations) and [Dynamic In-Context Learning (DICL)](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-dicl).
 
 ## Sample Data
 
@@ -55,7 +51,7 @@ This function uses the output schema in `config/functions/extract_entities/outpu
 
 1. Create a `.env` file with the `OPENAI_API_KEY` environment variable (see `.env.example` for an example).
 2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI, and a development ClickHouse database.
-3. Run the `ner-fine-tuning.ipynb` Jupyter notebook.
+3. Run the `data-extraction-ner.ipynb` Jupyter notebook.
 
 ## Running the Example
 
@@ -76,14 +72,7 @@ You can run a fine-tuning recipes by opening the UI (`http://localhost:4000/`) a
 Let's run fine-tuning on GPT-4o Mini with OpenAI using the `exact_match` metric.
 Go grab a coffee as fine-tuning can take some time.
 
-<details>
-<summary>
-<b>Fine-Tuning Programmatically</b>
-</summary>
-
-Alternatively, you can run a fine-tuning recipe programmatically using the Jupyter notebook in `recipes/supervised_fine_tuning/`.
-
-</details>
+Alternatively, you can run other optimization recipes like [Dynamic In-Context Learning (DICL)](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations) programmatically using the Jupyter notebooks in `recipes/`.
 
 Once you finish fine-tuning, you'll see additional configuration blocks.
 For our purposes, we only need the `model_name` which we'll use to create a new variant in the `tensorzero.toml` file.
@@ -99,7 +88,7 @@ json_mode = "strict"
 **Let's restart the TensorZero Gateway to apply the new configuration.**
 You can do this by killing the running container and re-running `docker compose up`.
 
-Finally, re-run the `ner-fine-tuning.ipynb` notebook to see how the new variant performs.
+Finally, re-run the `data-extraction-ner.ipynb` notebook to see how the new variant performs.
 
 **You'll see that the fine-tuned GPT-4o Mini outperforms GPT-4o on this task with just a few hundred examples!**
 
