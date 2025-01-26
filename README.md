@@ -94,7 +94,7 @@ We'd also welcome **[open-source contributions](https://github.com/tensorzero/te
 
 We are working on a series of **complete runnable examples** illustrating TensorZero's data & learning flywheel.
 
-> **[Writing Haikus to Satisfy a Judge with Hidden Preferences](https://github.com/tensorzero/tensorzero/tree/main/examples/haiku-hidden-preferences)**
+> **[Optimizing LLMs to Satisfy a Judge with Hidden Preferences](https://github.com/tensorzero/tensorzero/tree/main/examples/haiku-hidden-preferences)**
 >
 > This example fine-tunes GPT-4o Mini to generate haikus tailored to a specific taste.
 > You'll see TensorZero's "data flywheel in a box" in action: better variants leads to better data, and better data leads to better variants.
