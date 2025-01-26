@@ -78,7 +78,7 @@ Without modifying the prompt or the model used, we can trade more tokens for a s
 Here are our results:
 
 <p align="center">
-  <img src="img/variant_success_rates_beautified.png" alt="Results">
+  <img src="img/variant_success_rates.png" alt="Results">
 </p>
 
 ## Modifying the Prompt

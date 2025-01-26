@@ -88,6 +88,6 @@ docker compose up
 You can then re-run the test set evaluation in the `conll.ipynb` notebook to see how the new variants perform.
 You should see a clear improvement over the baseline.
 
-![DICL Performance Improvement](img/example_dicl_performance_beautified.png)
+![DICL Performance Improvement](img/example_dicl_performance.png)
 
 This image illustrates the significant boost in performance that can be obtained by applying the DICL recipe to improve the NER system.

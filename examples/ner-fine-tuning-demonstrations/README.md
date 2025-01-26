@@ -85,4 +85,4 @@ You should see a clear improvement over the baseline.
 
 We used 100 demonstrations to fine-tune the GPT-4o mini model and achieved a significant improvement in performance as shown in the plot below.
 
-![fine-tuned-performance](./img/example_demonstration_performance_beautified.png)
+![fine-tuned-performance](./img/example-performance.png)
