@@ -17,7 +17,9 @@ def test_double_feedback_query() -> None:
     This test checks that the query works as expected.
     """
 
-    assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, "TENSORZERO_CLICKHOUSE_URL environment variable not set"
+    assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
+        "TENSORZERO_CLICKHOUSE_URL environment variable not set"
+    )
     client = get_client(dsn=os.environ["TENSORZERO_CLICKHOUSE_URL"])
     # Insert an Inference we can use to assign feedback to
     inference = {
