@@ -1,3 +1,4 @@
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -22,7 +23,7 @@ use crate::inference::types::{
     ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream, RequestMessage, Usage,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default_with_fn, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
@@ -42,6 +43,8 @@ pub struct GCPVertexAnthropicProvider {
     credentials: GCPVertexCredentials,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
+
 impl GCPVertexAnthropicProvider {
     pub fn new(
         model_id: String,
@@ -49,10 +52,13 @@ impl GCPVertexAnthropicProvider {
         project_id: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials =
-            GCPVertexCredentials::try_from((generic_credentials, PROVIDER_TYPE))?;
+        let credentials = build_creds_caching_default_with_fn(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
+        )?;
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -61,7 +67,7 @@ impl GCPVertexAnthropicProvider {
             request_url,
             streaming_request_url,
             audience,
-            credentials: provider_credentials,
+            credentials,
         })
     }
 }

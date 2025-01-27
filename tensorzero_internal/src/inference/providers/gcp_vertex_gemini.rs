@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -23,7 +24,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default_with_fn, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 const PROVIDER_NAME: &str = "GCP Vertex Gemini";
@@ -40,6 +41,8 @@ pub struct GCPVertexGeminiProvider {
     model_id: String,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
+
 impl GCPVertexGeminiProvider {
     pub fn new(
         model_id: String,
@@ -47,10 +50,13 @@ impl GCPVertexGeminiProvider {
         project_id: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials =
-            GCPVertexCredentials::try_from((generic_credentials, PROVIDER_TYPE))?;
+        let credentials = build_creds_caching_default_with_fn(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
+        )?;
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -59,7 +65,7 @@ impl GCPVertexGeminiProvider {
             request_url,
             streaming_request_url,
             audience,
-            credentials: provider_credentials,
+            credentials,
             model_id,
         })
     }
@@ -69,7 +75,7 @@ pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::PathFromEnv("GCP_VERTEX_CREDENTIALS_PATH".to_string())
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum GCPVertexCredentials {
     Static(GCPServiceAccountCredentials),
     Dynamic(String),
