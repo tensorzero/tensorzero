@@ -72,20 +72,6 @@ impl ClickHouseConnectionInfo {
         Ok(connection_info)
     }
 
-    pub fn get_url(&self) -> Result<Url, Error> {
-        match self {
-            Self::Production { database_url, .. } => Url::parse(database_url.expose_secret())
-                .map_err(|_| {
-                    Error::new(ErrorDetails::Config {
-                        message: "Invalid ClickHouse database URL".to_string(),
-                    })
-                }),
-            _ => Err(Error::new(ErrorDetails::Config {
-                message: "Not a production ClickHouse connection".to_string(),
-            })),
-        }
-    }
-
     pub fn new_mock(healthy: bool) -> Self {
         Self::Mock {
             mock_data: Arc::new(RwLock::new(HashMap::new())),
