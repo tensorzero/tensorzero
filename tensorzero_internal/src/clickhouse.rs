@@ -1,5 +1,4 @@
 use reqwest::Client;
-use secrecy::SecretBox;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -36,14 +35,14 @@ impl ClickHouseConnectionInfo {
     /// However, for tests that directly test ClickHouse behavior, you can directly create the struct.
     pub async fn new(database_url: &str) -> Result<Self, Error> {
         // Add a query string for the database using the URL crate
-        let mut parsed_url = Url::parse(database_url).map_err(|_| {
+        let mut database_url = Url::parse(database_url).map_err(|_| {
             Error::new(ErrorDetails::Config {
                 message: "Invalid ClickHouse database URL".to_string(),
             })
         })?;
 
         #[allow(unused_variables)]
-        let database = validate_clickhouse_url_get_db_name(&parsed_url)?
+        let database = validate_clickhouse_url_get_db_name(&database_url)?
             .unwrap_or_else(|| "default".to_string());
 
         #[cfg(any(feature = "e2e_tests", feature = "batch_tests"))]
@@ -51,22 +50,23 @@ impl ClickHouseConnectionInfo {
 
         // Although we take the database name from the URL path,
         // we need to set the query string for the database name for the ClickHouse TCP protocol
-        parsed_url.set_path("");
-        parsed_url
+        database_url.set_path("");
+        database_url
             .query_pairs_mut()
             .append_pair("database", &database);
 
         // Set ClickHouse format settings for some error checking on writes
-        set_clickhouse_format_settings(&mut parsed_url);
+        set_clickhouse_format_settings(&mut database_url);
 
-        let client = Client::new();
         // Store the original URL as a SecretString
-        let database_url = SecretString::from(parsed_url.to_string());
+        let database_url = SecretString::from(database_url.to_string());
+
         let connection_info = Self::Production {
             database_url,
             database,
-            client,
+            client: Client::new(),
         };
+
         // Error will be constructed and logged in health()
         // Don't need to do anything with the error here
         let _ = connection_info.health().await;
@@ -152,9 +152,8 @@ impl ClickHouseConnectionInfo {
                 client,
                 ..
             } => {
-                let database_url = database_url.expose_secret();
                 match client
-                    .get(database_url)
+                    .get(database_url.expose_secret())
                     // If ClickHouse is healthy, it should respond within 500ms
                     .timeout(std::time::Duration::from_millis(500))
                     .send()
@@ -219,8 +218,7 @@ impl ClickHouseConnectionInfo {
                 client,
                 ..
             } => {
-                let exposed_database_url = database_url.expose_secret();
-                let database_url = Url::parse(exposed_database_url).map_err(|_| {
+                let database_url = Url::parse(database_url.expose_secret()).map_err(|_| {
                     Error::new(ErrorDetails::Config {
                         message: "Invalid ClickHouse database URL".to_string(),
                     })
@@ -285,13 +283,13 @@ async fn write_mock(
 }
 
 async fn write_production(
-    database_url_secret: &SecretBox<str>,
+    database_url: &SecretString,
     client: &Client,
     rows: &[impl Serialize + Send + Sync],
     table: &str,
 ) -> Result<(), Error> {
+    // Empty rows is a no-op
     if rows.is_empty() {
-        // Empty rows is a no-op
         return Ok(());
     }
 
@@ -305,8 +303,8 @@ async fn write_production(
             })
         })
         .collect();
-    let rows_json = rows_json?;
-    let rows_json = rows_json.join("\n");
+
+    let rows_json = rows_json?.join("\n");
 
     // We can wait for the async insert since we're spawning a new tokio task to do the insert
     let query = format!(
@@ -315,9 +313,9 @@ async fn write_production(
         FORMAT JSONEachRow\n\
         {rows_json}"
     );
-    let database_url = database_url_secret.expose_secret();
+
     let response = client
-        .post(database_url)
+        .post(database_url.expose_secret())
         .body(query)
         .send()
         .await
@@ -326,13 +324,14 @@ async fn write_production(
                 message: e.to_string(),
             })
         })?;
+
     match response.status() {
         reqwest::StatusCode::OK => Ok(()),
         _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
             message: response
                 .text()
                 .await
-                .unwrap_or_else(|e| format!("Failed to get response text: {}", e)),
+                .unwrap_or_else(|e| format!("Failed to get response text: {e}")),
         })),
     }
 }
