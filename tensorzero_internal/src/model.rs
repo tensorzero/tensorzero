@@ -1645,7 +1645,7 @@ mod tests {
     #[test]
     fn test_cache_default_creds() {
         let make_creds_call_count = Cell::new(0);
-        let mut make_creds = |_| {
+        let make_creds = |_| {
             make_creds_call_count.set(make_creds_call_count.get() + 1);
             Ok(())
         };
@@ -1657,7 +1657,7 @@ mod tests {
             CredentialLocation::None,
             "test",
             &cache,
-            &mut make_creds,
+            make_creds,
         )
         .expect("Failed to build creds");
         // The first call should initialize the OnceLock, and call `make_creds`
@@ -1670,7 +1670,7 @@ mod tests {
             CredentialLocation::None,
             "test",
             &cache,
-            &mut make_creds,
+            make_creds,
         )
         .expect("Failed to build creds");
         assert_eq!(make_creds_call_count.get(), 1);
@@ -1679,7 +1679,7 @@ mod tests {
     #[test]
     fn test_dont_cache_non_default_creds() {
         let make_creds_call_count = Cell::new(0);
-        let mut make_creds = |_| {
+        let make_creds = |_| {
             make_creds_call_count.set(make_creds_call_count.get() + 1);
             Ok(())
         };
@@ -1692,7 +1692,7 @@ mod tests {
             CredentialLocation::None,
             "test",
             &cache,
-            &mut make_creds,
+            make_creds,
         )
         .expect("Failed to build creds");
 
