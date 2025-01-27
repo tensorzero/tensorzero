@@ -204,6 +204,34 @@ fn to_uuid(param_name: &str, val: Option<Bound<'_, PyAny>>) -> PyResult<Option<U
     })
 }
 
+fn parse_tool(py: Python<'_>, key_vals: HashMap<String, Bound<'_, PyAny>>) -> PyResult<Tool> {
+    let name = key_vals.get("name").ok_or_else(|| {
+        PyValueError::new_err(format!("Missing 'name' in additional tool: {key_vals:?}"))
+    })?;
+    let description = key_vals.get("description").ok_or_else(|| {
+        PyValueError::new_err(format!(
+            "Missing 'description' in additional tool: {key_vals:?}"
+        ))
+    })?;
+    let params = key_vals.get("parameters").ok_or_else(|| {
+        PyValueError::new_err(format!(
+            "Missing 'parameters' in additional tool: {key_vals:?}"
+        ))
+    })?;
+    let strict = if let Some(val) = key_vals.get("strict") {
+        val.extract::<bool>()?
+    } else {
+        false
+    };
+    let tool_params: serde_json::Value = deserialize_from_json(py, params)?;
+    Ok(Tool {
+        name: name.extract()?,
+        description: description.extract()?,
+        parameters: tool_params,
+        strict,
+    })
+}
+
 impl BaseTensorZeroGateway {
     fn prepare_feedback_params(
         py: Python<'_>,
@@ -241,13 +269,7 @@ impl BaseTensorZeroGateway {
         tags: Option<HashMap<String, String>>,
         credentials: Option<HashMap<String, ClientSecretString>>,
     ) -> PyResult<ClientInferenceParams> {
-        let episode_id = if let Some(episode_id) = episode_id {
-            Some(Uuid::parse_str(episode_id.str()?.to_str()?).map_err(|e| {
-                PyValueError::new_err(format!("Failed to parse episode_id as UUID: {e:?}"))
-            })?)
-        } else {
-            None
-        };
+        let episode_id = to_uuid("episode_id", episode_id)?;
 
         let params: Option<InferenceParams> = if let Some(params) = params {
             deserialize_from_json(py, params)?
@@ -259,35 +281,7 @@ impl BaseTensorZeroGateway {
             Some(
                 tools
                     .into_iter()
-                    .map(|key_vals| {
-                        let name = key_vals.get("name").ok_or_else(|| {
-                            PyValueError::new_err(format!(
-                                "Missing 'name' in additional tool: {key_vals:?}"
-                            ))
-                        })?;
-                        let description = key_vals.get("description").ok_or_else(|| {
-                            PyValueError::new_err(format!(
-                                "Missing 'description' in additional tool: {key_vals:?}"
-                            ))
-                        })?;
-                        let params = key_vals.get("parameters").ok_or_else(|| {
-                            PyValueError::new_err(format!(
-                                "Missing 'parameters' in additional tool: {key_vals:?}"
-                            ))
-                        })?;
-                        let strict = if let Some(val) = key_vals.get("strict") {
-                            val.extract::<bool>()?
-                        } else {
-                            false
-                        };
-                        let tool_params: serde_json::Value = deserialize_from_json(py, params)?;
-                        Ok(Tool {
-                            name: name.extract()?,
-                            description: description.extract()?,
-                            parameters: tool_params,
-                            strict,
-                        })
-                    })
+                    .map(|key_vals| parse_tool(py, key_vals))
                     .collect::<Result<Vec<Tool>, PyErr>>()?,
             )
         } else {
