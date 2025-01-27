@@ -176,7 +176,10 @@ mod tests {
         // we will log a connection error and still return a Production connection info
         // so that we start logging errors on writes
         match clickhouse_connection_info {
-            ClickHouseConnectionInfo::Production { database_url, .. } => {
+            ClickHouseConnectionInfo::Production { .. } => {
+                let database_url = clickhouse_connection_info
+                    .get_url()
+                    .expect("Failed to get ClickHouse URL");
                 assert_eq!(database_url.host_str(), Some("tensorzero.com"));
             }
             _ => panic!("Expected production ClickHouse connection info"),
