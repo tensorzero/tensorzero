@@ -39,13 +39,21 @@ impl AsyncStreamWrapper {
         this
     }
 
+    // This method returns a Python `Future` which will either resolve to a chunk of the stream,
+    // or raise a `StopAsyncIteration` exception if the stream is finished.
     fn __anext__<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
         let stream = self.stream.clone();
+        // The Rust future relies on a tokio runtime (via `reqwest` and `hyper`), so
+        // we need to use `pyo3_async_runtimes` to convert it into a Python future that runs
+        // on Tokio. Inside the `async move` block, we can `.await` on Rust futures just like
+        // we would in normal Rust code.
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let chunk = stream.lock().await.next().await;
             let Some(chunk) = chunk else {
                 return Err(PyStopAsyncIteration::new_err(()));
             };
+            // The overall 'async move' future needs to be 'static, so we cannot capture
+            // the `py` parameter from `__anext__`,
             Python::with_gil(|py| {
                 let chunk = match chunk {
                     Ok(chunk) => chunk,
@@ -482,6 +490,13 @@ impl AsyncTensorZeroGateway {
         this
     }
 
+    // We make this a class method rather than adding parameters to the `__init__` method,
+    // becaues this needs to return a python `Future` (since we need to connect to ClickHouse
+    // and run DB migrations.
+    //
+    // While we could block in the `__init__` method, this would be very suprising to consumers,
+    // as `AsyncTensorZeroGateway` would be completely async *except* for this one method
+    // (which potentially takes a very long time due to running DB migrations).
     #[classmethod]
     #[pyo3(signature = (*, config_path, clickhouse_url=None))]
     fn create_embedded_gateway<'a>(
@@ -495,6 +510,7 @@ impl AsyncTensorZeroGateway {
         })
         .build();
 
+        // See `AsyncStreamWrapper::__anext__` for more details about `future_into_py`
         pyo3_async_runtimes::tokio::future_into_py(cls.py(), async move {
             let client = client_fut.await;
             Python::with_gil(|py| {
@@ -552,6 +568,7 @@ impl AsyncTensorZeroGateway {
             credentials,
         )?;
         let client = this.as_super().client.clone();
+        // See `AsyncStreamWrapper::__anext__` for more details about `future_into_py`
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let res = client.inference(params).await;
             Python::with_gil(|py| match res {
@@ -587,6 +604,7 @@ impl AsyncTensorZeroGateway {
             dryrun,
             tags,
         )?;
+        // See `AsyncStreamWrapper::__anext__` for more details about `future_into_py`
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.feedback(params).await;
             Python::with_gil(|py| match res {
@@ -609,6 +627,9 @@ fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyResult<PyErr> {
             source: _,
         } => tensorzero_error(py, status_code, text),
         TensorZeroError::Other { source } => tensorzero_internal_error(py, &source.to_string()),
+        // Required due to the `#[non_exhaustive]` attribute on `TensorZeroError` - we want to force
+        // downstream consumers to handle all possible error types, but the compiler also requires us
+        // to do this (since our python bindings are in a different crates from the Rust client.)
         _ => unreachable!(),
     }
 }
