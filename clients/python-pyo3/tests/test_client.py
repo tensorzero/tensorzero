@@ -26,8 +26,6 @@ from uuid import UUID
 
 import pytest
 import pytest_asyncio
-from uuid_utils import uuid7
-
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
@@ -39,6 +37,7 @@ from tensorzero import (
     ToolCall,
     ToolResult,
 )
+from uuid_utils import uuid7
 
 PWD = os.path.dirname(os.path.abspath(__file__))
 TEST_CONFIG_PATH = os.path.join(
