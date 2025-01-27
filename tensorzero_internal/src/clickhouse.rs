@@ -1,4 +1,5 @@
 use reqwest::Client;
+use secrecy::SecretBox;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -105,10 +106,7 @@ impl ClickHouseConnectionInfo {
                 database_url,
                 client,
                 ..
-            } => {
-                let database_url = database_url.expose_secret();
-                write_production(&database_url, client, rows, table).await
-            }
+            } => write_production(database_url, client, rows, table).await,
         }
     }
 
@@ -287,7 +285,7 @@ async fn write_mock(
 }
 
 async fn write_production(
-    database_url: &str,
+    database_url_secret: &SecretBox<str>,
     client: &Client,
     rows: &[impl Serialize + Send + Sync],
     table: &str,
@@ -317,6 +315,7 @@ async fn write_production(
         FORMAT JSONEachRow\n\
         {rows_json}"
     );
+    let database_url = database_url_secret.expose_secret();
     let response = client
         .post(database_url)
         .body(query)
