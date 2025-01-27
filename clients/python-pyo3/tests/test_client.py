@@ -18,14 +18,16 @@ uv run pytest
 ```
 """
 
+import os
 from copy import deepcopy
 from enum import Enum
 from time import time
 from uuid import UUID
-import os
 
 import pytest
 import pytest_asyncio
+from uuid_utils import uuid7
+
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
@@ -37,8 +39,6 @@ from tensorzero import (
     ToolCall,
     ToolResult,
 )
-from uuid_utils import uuid7
-
 
 PWD = os.path.dirname(os.path.abspath(__file__))
 TEST_CONFIG_PATH = os.path.join(

@@ -1,5 +1,6 @@
-from .client import BaseTensorZeroGateway, AsyncTensorZeroGateway, TensorZeroGateway
+from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .types import (
+    BaseTensorZeroError,
     ChatInferenceResponse,
     ContentBlock,
     FeedbackResponse,
@@ -7,15 +8,14 @@ from .types import (
     InferenceResponse,
     JsonInferenceOutput,
     JsonInferenceResponse,
+    TensorZeroError,
+    TensorZeroInternalError,
     Text,
     TextChunk,
     ToolCall,
     ToolCallChunk,
     ToolResult,
     Usage,
-    BaseTensorZeroError,
-    TensorZeroInternalError,
-    TensorZeroError,
 )
 
 __all__ = [
