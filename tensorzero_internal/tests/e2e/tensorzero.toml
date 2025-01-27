@@ -1443,6 +1443,16 @@ candidates = ["variant0", "variant1", "variant2"]
 model = "gemini-1.5-flash-001"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
+[functions.best_of_n_json.variants.best_of_n_variant_implicit_tool]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["variant0", "variant1", "variant2"]
+
+[functions.best_of_n_json.variants.best_of_n_variant_implicit_tool.evaluator]
+model = "claude-3-haiku-20240307-anthropic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "implicit_tool"
+
 [functions.mixture_of_n]
 type = "chat"
 system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"

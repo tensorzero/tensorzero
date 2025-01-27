@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
 
@@ -14,10 +15,11 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, FunctionType, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
+    ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::model::ModelTable;
+use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
 use crate::{
     endpoints::inference::InferenceParams,
     error::Error,
@@ -28,7 +30,7 @@ use crate::{
     variant::chat_completion::ChatCompletionConfig,
 };
 
-use super::{InferenceConfig, ModelUsedInfo, Variant};
+use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -65,6 +67,13 @@ lazy_static! {
             "additionalProperties": false
         }))
         .expect("Failed to create schema for evaluator output")
+    };
+    static ref IMPLICIT_TOOL_CALL_CONFIG: ToolCallConfig = ToolCallConfig {
+        tools_available: vec![ToolConfig::Implicit(ImplicitToolConfig {
+            parameters: EVALUATOR_OUTPUT_SCHEMA.clone(),
+        })],
+        tool_choice: ToolChoice::Specific("respond".to_string()),
+        parallel_tool_calls: false,
     };
 }
 
@@ -380,11 +389,12 @@ async fn inner_select_best_candidate<'a, 'request>(
         model_inference_response,
         evaluator.inner.model.clone(),
     );
-    let text_content = match model_inference_result
+    let raw = match model_inference_result
         .output
         .iter()
         .find_map(|block| match block {
-            ContentBlock::Text(text) => Some(text),
+            ContentBlock::Text(text) => Some(&text.text),
+            ContentBlock::ToolCall(tool_call) => Some(&tool_call.arguments),
             _ => None,
         }) {
         Some(text) => text,
@@ -395,7 +405,7 @@ async fn inner_select_best_candidate<'a, 'request>(
             return Ok((None, Some(model_inference_result)));
         }
     };
-    let parsed_output = match serde_json::from_str::<Value>(&text_content.text) {
+    let parsed_output = match serde_json::from_str::<Value>(raw) {
         Ok(value) => value,
         Err(e) => {
             Error::new(ErrorDetails::Inference {
@@ -592,11 +602,15 @@ impl EvaluatorConfig {
                 self.inner.presence_penalty,
                 self.inner.frequency_penalty,
             );
+        let tool_config = match self.inner.json_mode {
+            JsonMode::ImplicitTool => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
+            _ => None,
+        };
         Ok((
             ModelInferenceRequest {
                 messages,
                 system,
-                tool_config: None,
+                tool_config,
                 temperature: inference_params.chat_completion.temperature,
                 max_tokens: inference_params.chat_completion.max_tokens,
                 seed: inference_params.chat_completion.seed,
@@ -604,7 +618,7 @@ impl EvaluatorConfig {
                 presence_penalty: inference_params.chat_completion.presence_penalty,
                 frequency_penalty: inference_params.chat_completion.frequency_penalty,
                 stream: false,
-                json_mode: ModelInferenceRequestJsonMode::Strict, // TODO (#338): Handle Anthropic models better here.
+                json_mode: (&self.inner.json_mode).into(),
                 function_type: FunctionType::Json,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
             },
@@ -880,7 +894,7 @@ mod tests {
         let (request_message, skipped_indices) = result.unwrap();
         assert!(skipped_indices.is_empty());
 
-        let expected_message_text = "Here are the candidate answers (with the index and a row of ------ separating):\n0: [{\"type\":\"text\",\"text\":\"Candidate answer 1\"}]\n------1: [{\"type\":\"text\",\"text\":\"Candidate answer 2\"}]\n------\nPlease evaluate these candidates and provide the index of the best one.".to_string();
+        let expected_message_text = "Here are the candidate answers (with the index and a row of ------ separating):\n0: [{\"type\":\"text\",\"text\":\"Candidate answer 1\"}]\n------\n1: [{\"type\":\"text\",\"text\":\"Candidate answer 2\"}]\n------\nPlease evaluate these candidates and provide the index of the best one.".to_string();
         // Now check that the request_message has the expected role and content
         assert_eq!(request_message.role, Role::User);
         assert_eq!(request_message.content, vec![expected_message_text.into()]);
