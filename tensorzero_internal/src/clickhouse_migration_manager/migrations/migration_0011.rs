@@ -51,12 +51,12 @@ impl Migration for Migration0011<'_> {
                 timestamp DateTime DEFAULT now(),
                 output String,
                 raw_request String,
-                raw_response String
+                raw_response String,
+                INDEX idx_long_cache_key long_cache_key TYPE bloom_filter GRANULARITY 1
             ) ENGINE = ReplacingMergeTree(timestamp)
             ORDER BY (short_cache_key, long_cache_key)
             PRIMARY KEY (short_cache_key)
-            -- TODO: consider setting a smaller granule size for improved query latency
-            -- and a partitioning scheme to enable a global TTL later
+            SETTINGS index_granularity = 1024
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 

@@ -368,7 +368,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
             ]},
         "stream": false,
         "tags": {"foo": "bar"},
-        "cache_options": {"enabled": true, "lookback_s": 10}
+        "cache_options": {"enabled": "on", "lookback_s": 10}
     });
 
     let response = Client::new()
