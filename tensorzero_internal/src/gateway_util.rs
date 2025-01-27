@@ -100,6 +100,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use secrecy::ExposeSecret;
     use tracing_test::traced_test;
 
     use super::*;
@@ -177,7 +178,8 @@ mod tests {
         // so that we start logging errors on writes
         match clickhouse_connection_info {
             ClickHouseConnectionInfo::Production { database_url, .. } => {
-                assert_eq!(database_url.host_str(), Some("tensorzero.com"));
+                let database_url = database_url.expose_secret();
+                assert!(database_url.starts_with("https://tensorzero.com:8123"));
             }
             _ => panic!("Expected production ClickHouse connection info"),
         }

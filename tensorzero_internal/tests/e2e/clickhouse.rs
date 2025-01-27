@@ -1,5 +1,9 @@
 use reqwest::Client;
+use secrecy::SecretString;
 use serde_json::json;
+use tracing_test::traced_test;
+use uuid::Uuid;
+
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::clickhouse_migration_manager;
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0000::Migration0000;
@@ -12,8 +16,6 @@ use tensorzero_internal::clickhouse_migration_manager::migrations::migration_000
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0008::Migration0008;
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0009::Migration0009;
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0010::Migration0010;
-use tracing_test::traced_test;
-use uuid::Uuid;
 
 use crate::common::{get_clickhouse, CLICKHOUSE_URL};
 
@@ -27,7 +29,7 @@ fn get_clean_clickhouse() -> ClickHouseConnectionInfo {
     clickhouse_url.set_query(Some(format!("database={}", database).as_str()));
 
     ClickHouseConnectionInfo::Production {
-        database_url: clickhouse_url,
+        database_url: SecretString::from(clickhouse_url.to_string()),
         database: database.clone(),
         client: Client::new(),
     }
