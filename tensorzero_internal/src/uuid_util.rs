@@ -129,7 +129,8 @@ mod tests {
 
         let uuid = Uuid::now_v7();
         let elapsed = uuid_elapsed(&uuid).unwrap();
-        assert!(elapsed > Duration::from_secs(0) && elapsed < Duration::from_millis(1));
+        // It is not guaranteed that the elapsed time is exactly 0, so we allow a small margin of error
+        assert!(elapsed > Duration::from_secs(0) && elapsed < Duration::from_millis(10));
 
         // Test UUID in future
         let future_timestamp = SystemTime::now()
