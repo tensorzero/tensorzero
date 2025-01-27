@@ -1,7 +1,6 @@
-clickhouse-connect
+altair
 ipykernel
 notebook
 pandas
-tenacity
 tensorzero
 tqdm
