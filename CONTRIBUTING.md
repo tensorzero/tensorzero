@@ -179,7 +179,7 @@ Here are the steps in order to run or test the UI assuming you have the prerequi
 OPENAI_API_KEY=<your-key>
 FIREWORKS_API_KEY=<your-key>
 FIREWORKS_ACCOUNT_ID=<your-account-id>
-CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://localhost:8123/tensorzero
+TENSORZERO_CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://localhost:8123/tensorzero
 TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures/config/tensorzero.toml
 ```
 

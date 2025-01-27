@@ -17,7 +17,7 @@ services:
       # Mount our tensorzero.toml file into the container
       - ./config:/app/config:ro
     environment:
-      - CLICKHOUSE_URL=http://tensorzero-clickhouse-babyai:8123/tensorzero
+      - TENSORZERO_CLICKHOUSE_URL=http://tensorzero-clickhouse-babyai:8123/tensorzero
       - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
     ports:
       - "3000:3000"
@@ -31,7 +31,7 @@ services:
     volumes:
       - ./config:/app/config:ro
     environment:
-      - CLICKHOUSE_URL=http://tensorzero-clickhouse-babyai:8123/tensorzero
+      - TENSORZERO_CLICKHOUSE_URL=http://tensorzero-clickhouse-babyai:8123/tensorzero
     env_file:
       - ${ENV_FILE:-.env}
     ports:
