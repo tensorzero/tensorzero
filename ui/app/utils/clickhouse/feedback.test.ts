@@ -120,8 +120,8 @@ test("queryFeedbackBoundsByTargetId", async () => {
     target_id: "01942e26-4693-7e80-8591-47b98e25d711",
   });
   expect(emptyBounds).toEqual({
-    first_id: undefined,
-    last_id: undefined,
+    first_id: null,
+    last_id: null,
   });
 });
 
@@ -238,12 +238,20 @@ describe("queryMetricsWithFeedback", () => {
       },
     });
 
-    // Check boolean and demonstration counts for JSON function
+    // Check boolean counts for JSON function
     expect(jsonResults.metrics).toContainEqual({
       function_name: "extract_entities",
       metric_name: "exact_match",
       metric_type: "boolean",
       feedback_count: 99,
+    });
+
+    // Check demonstration counts for JSON function
+    expect(jsonResults.metrics).toContainEqual({
+      function_name: "extract_entities",
+      metric_name: "demonstration",
+      metric_type: "demonstration",
+      feedback_count: 100,
     });
 
     // Test chat function with float metrics
@@ -264,6 +272,14 @@ describe("queryMetricsWithFeedback", () => {
       metric_name: "haiku_rating",
       metric_type: "float",
       feedback_count: 491,
+    });
+
+    // Check demonstration counts for chat function
+    expect(chatResults.metrics).toContainEqual({
+      function_name: "write_haiku",
+      metric_name: "demonstration",
+      metric_type: "demonstration",
+      feedback_count: 493,
     });
   });
 

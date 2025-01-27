@@ -559,7 +559,8 @@ mod tests {
             VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
             _ => panic!("Expected a chat completion variant"),
         };
-        assert_eq!(prompt_b_json_mode, &JsonMode::On);
+        // The default json mode is strict, so this should be strict
+        assert_eq!(prompt_b_json_mode, &JsonMode::Strict);
         // Check that the tool choice for get_weather is set to "specific" and the correct tool
         let function = config.functions.get("weather_helper").unwrap();
         match &**function {
@@ -964,13 +965,10 @@ mod tests {
         config["models"]["gpt-3.5-turbo"]["routing"] = toml::Value::Array(vec![]);
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "`models.gpt-3.5-turbo`: `routing` must not be empty".to_string()
-            }
-            .into()
-        );
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("`models.gpt-3.5-turbo`: `routing` must not be empty"));
     }
 
     /// Ensure that the config validation fails when there are duplicate routing entries
@@ -1459,14 +1457,7 @@ mod tests {
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
 
-        // Adjust this check to match how your code surfaces the "cannot start with `tensorzero::`" error
-        assert_eq!(
-            result.unwrap_err(),
-            Error::new(ErrorDetails::Config {
-                message: "`models.gpt-3.5-turbo.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"
-                    .to_string()
-            })
-        );
+        assert!(result.unwrap_err().to_string().contains("`models.gpt-3.5-turbo.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
     }
 
     /// Ensure that get_templates returns the correct templates

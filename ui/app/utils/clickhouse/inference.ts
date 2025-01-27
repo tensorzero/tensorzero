@@ -1,5 +1,5 @@
 import z from "zod";
-import type { TableBounds } from "./common";
+import { type TableBounds, TableBoundsSchema } from "./common";
 import {
   contentBlockOutputSchema,
   contentBlockSchema,
@@ -18,6 +18,7 @@ export const inferenceByIdRowSchema = z
     function_name: z.string(),
     variant_name: z.string(),
     episode_id: z.string().uuid(),
+    function_type: z.enum(["chat", "json"]),
     timestamp: z.string().datetime(),
   })
   .strict();
@@ -101,7 +102,7 @@ export async function queryInferenceTable(params: {
         variant_name,
         episode_id,
         function_type,
-        UUIDv7ToDateTime(id) AS timestamp
+        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
       FROM InferenceById
       ${combinedWhere}
       ORDER BY toUInt128(id) DESC
@@ -116,7 +117,7 @@ export async function queryInferenceTable(params: {
         variant_name,
         episode_id,
         function_type,
-        UUIDv7ToDateTime(id) AS timestamp
+        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
       FROM InferenceById
       ${combinedWhere}
       ORDER BY toUInt128(id) DESC
@@ -131,7 +132,7 @@ export async function queryInferenceTable(params: {
         variant_name,
         episode_id,
         function_type,
-        timestamp
+        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
       FROM
       (
         SELECT
@@ -140,7 +141,7 @@ export async function queryInferenceTable(params: {
           variant_name,
           episode_id,
           function_type,
-          UUIDv7ToDateTime(id) AS timestamp
+          formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM InferenceById
         ${combinedWhere}
         ORDER BY toUInt128(id) ASC
@@ -157,7 +158,7 @@ export async function queryInferenceTable(params: {
       query_params,
     });
     const rows = await resultSet.json<InferenceByIdRow>();
-    return rows;
+    return z.array(inferenceByIdRowSchema).parse(rows);
   } catch (error) {
     console.error(error);
     throw data("Error querying inference table", { status: 500 });
@@ -193,17 +194,17 @@ export async function queryInferenceTableBounds(params?: {
     const rows = await resultSet.json<TableBounds>();
     if (!rows.length) {
       return {
-        first_id: undefined,
-        last_id: undefined,
+        first_id: null,
+        last_id: null,
       };
     }
 
-    return rows[0];
+    return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
     console.error("Failed to query inference table bounds:", error);
     return {
-      first_id: undefined,
-      last_id: undefined,
+      first_id: null,
+      last_id: null,
     };
   }
 }
@@ -247,8 +248,8 @@ export async function queryEpisodeTable(params: {
       SELECT
         episode_id,
         toUInt32(count(*)) as count,
-        min(UUIDv7ToDateTime(id)) as start_time,
-        max(UUIDv7ToDateTime(id)) as end_time,
+        formatDateTime(min(UUIDv7ToDateTime(id)), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+        formatDateTime(max(UUIDv7ToDateTime(id)), '%Y-%m-%dT%H:%i:%SZ') as end_time,
         argMax(id, toUInt128(id)) as last_inference_id
       FROM InferenceByEpisodeId
       GROUP BY episode_id
@@ -260,8 +261,8 @@ export async function queryEpisodeTable(params: {
       SELECT
         episode_id,
         toUInt32(count(*)) as count,
-        min(UUIDv7ToDateTime(id)) as start_time,
-        max(UUIDv7ToDateTime(id)) as end_time,
+        formatDateTime(min(UUIDv7ToDateTime(id)), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+        formatDateTime(max(UUIDv7ToDateTime(id)), '%Y-%m-%dT%H:%i:%SZ') as end_time,
         argMax(id, toUInt128(id)) as last_inference_id
       FROM InferenceByEpisodeId
       GROUP BY episode_id
@@ -283,8 +284,8 @@ export async function queryEpisodeTable(params: {
         SELECT
           episode_id,
           toUInt32(count(*)) as count,
-          min(UUIDv7ToDateTime(id)) as start_time,
-          max(UUIDv7ToDateTime(id)) as end_time,
+          formatDateTime(min(UUIDv7ToDateTime(id)), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+          formatDateTime(max(UUIDv7ToDateTime(id)), '%Y-%m-%dT%H:%i:%SZ') as end_time,
           argMax(id, toUInt128(id)) as last_inference_id
         FROM InferenceByEpisodeId
         GROUP BY episode_id
@@ -311,7 +312,7 @@ export async function queryEpisodeTable(params: {
         `Found duplicate episode IDs: ${rows.length - uniqueIds.size} duplicates detected`,
       );
     }
-    return rows;
+    return z.array(episodeByIdSchema).parse(rows);
   } catch (error) {
     console.error(error);
     throw data("Error querying episode table", { status: 500 });
@@ -337,11 +338,11 @@ export async function queryEpisodeTableBounds(): Promise<TableBounds> {
     const rows = await resultSet.json<TableBounds>();
     if (!rows.length) {
       return {
-        first_id: undefined,
-        last_id: undefined,
+        first_id: null,
+        last_id: null,
       };
     }
-    return rows[0];
+    return TableBoundsSchema.parse(rows[0]);
   } catch (error) {
     console.error(error);
     throw data("Error querying inference table bounds", { status: 500 });
@@ -626,7 +627,10 @@ export async function queryInferenceById(
   IF(i.function_type = 'json', j.output_schema, '') AS output_schema,
 
   -- Timestamps & tags
-  IF(i.function_type = 'chat', c.timestamp, j.timestamp) AS timestamp,
+  IF(i.function_type = 'chat',
+   formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ'),
+   formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ')
+) AS timestamp,
   IF(i.function_type = 'chat', c.tags,      j.tags)      AS tags,
 
   -- Discriminator itself
