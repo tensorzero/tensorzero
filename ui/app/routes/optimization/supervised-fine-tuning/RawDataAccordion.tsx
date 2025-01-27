@@ -16,6 +16,8 @@ type RawDataWithTimestamp = RawData & {
   timestamp: Date;
 };
 
+const MAX_HISTORY_ITEMS = 20;
+
 export function RawDataAccordion({ rawData }: RawDataAccordionProps) {
   const [history, setHistory] = useState<RawDataWithTimestamp[]>([]);
   // Add state for accordion value
@@ -35,7 +37,11 @@ export function RawDataAccordion({ rawData }: RawDataAccordionProps) {
   // Add new raw data to history when it changes
   useEffect(() => {
     if (rawData) {
-      setHistory((prev) => [...prev, { ...rawData, timestamp: new Date() }]);
+      setHistory((prev) =>
+        [...prev, { ...rawData, timestamp: new Date() }].slice(
+          -MAX_HISTORY_ITEMS,
+        ),
+      );
     }
   }, [rawData]);
 
