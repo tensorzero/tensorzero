@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 mod python_helpers;
 
-// TODO - this should extend the python `ABC` class once pyo3 supports it
+// TODO - this should extend the python `ABC` class once pyo3 supports it: https://github.com/PyO3/pyo3/issues/991
 #[pyclass(subclass)]
 struct BaseTensorZeroGateway {
     client: Arc<Client>,
