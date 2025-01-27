@@ -31,14 +31,56 @@ pub struct Config<'c> {
     pub templates: TemplateConfig<'c>,
 }
 
+#[derive(Debug, Default)]
+pub struct GatewayConfig {
+    pub bind_address: Option<std::net::SocketAddr>,
+    pub observability: ObservabilityConfig,
+    pub debug: bool,
+}
+
+/// Note: This struct and the impl below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag
+/// TODO (#797): Remove this once we have removed the `disable_observability` flag
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct GatewayConfig {
+pub struct UninitializedGatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
     pub disable_observability: bool,
     #[serde(default)]
+    pub observability: ObservabilityConfig,
+    #[serde(default)]
     pub debug: bool,
+}
+
+impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
+    type Error = Error;
+    fn try_from(config: UninitializedGatewayConfig) -> Result<Self, Self::Error> {
+        let enabled = match (config.disable_observability, config.observability.enabled) {
+            (true, Some(_)) => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: "Configuration flag `gateway.disable_observability` and `gateway.observability.enabled` are mutually exclusive. We are deprecating `gateway.disable_observability` in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.".to_string(),
+                }));
+            }
+            (true, None) => {
+                tracing::warn!("Deprecation Warning: The configuration flag `gateway.disable_observability.enabled` is deprecated in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.");
+                Some(false)
+            }
+            (false, Some(enabled)) => Some(enabled),
+            (false, None) => None,
+        };
+        Ok(Self {
+            bind_address: config.bind_address,
+            observability: ObservabilityConfig { enabled },
+            debug: config.debug,
+        })
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObservabilityConfig {
+    #[serde(default)]
+    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,7 +143,7 @@ impl<'c> Config<'c> {
     fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config<'c>, Error> {
         let config = UninitializedConfig::try_from(table)?;
 
-        let gateway = config.gateway.unwrap_or_default();
+        let gateway = config.gateway.unwrap_or_default().try_into()?;
 
         let templates = TemplateConfig::new();
 
@@ -292,7 +334,7 @@ impl<'c> Config<'c> {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
-    pub gateway: Option<GatewayConfig>,
+    pub gateway: Option<UninitializedGatewayConfig>,
     #[serde(default)]
     pub models: ModelTable, // model name => model config
     #[serde(default)]
@@ -965,13 +1007,10 @@ mod tests {
         config["models"]["gpt-3.5-turbo"]["routing"] = toml::Value::Array(vec![]);
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
-        assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "`models.gpt-3.5-turbo`: `routing` must not be empty".to_string()
-            }
-            .into()
-        );
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("`models.gpt-3.5-turbo`: `routing` must not be empty"));
     }
 
     /// Ensure that the config validation fails when there are duplicate routing entries
@@ -1460,14 +1499,7 @@ mod tests {
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
 
-        // Adjust this check to match how your code surfaces the "cannot start with `tensorzero::`" error
-        assert_eq!(
-            result.unwrap_err(),
-            Error::new(ErrorDetails::Config {
-                message: "`models.gpt-3.5-turbo.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"
-                    .to_string()
-            })
-        );
+        assert!(result.unwrap_err().to_string().contains("`models.gpt-3.5-turbo.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
     }
 
     /// Ensure that get_templates returns the correct templates

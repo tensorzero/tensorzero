@@ -4,7 +4,7 @@ use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use uuid::Uuid;
 
 lazy_static::lazy_static! {
-    pub static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("Environment variable CLICKHOUSE_URL must be set");
+    pub static ref CLICKHOUSE_URL: String = std::env::var("TENSORZERO_CLICKHOUSE_URL").expect("Environment variable TENSORZERO_CLICKHOUSE_URL must be set");
     static ref GATEWAY_URL: String = std::env::var("GATEWAY_URL").unwrap_or("http://localhost:3000".to_string());
 }
 
