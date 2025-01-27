@@ -1,6 +1,5 @@
 use reqwest::Client;
-use secrecy::ExposeSecret;
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -36,9 +35,9 @@ impl ClickHouseConnectionInfo {
     /// However, for tests that directly test ClickHouse behavior, you can directly create the struct.
     pub async fn new(database_url: &str) -> Result<Self, Error> {
         // Add a query string for the database using the URL crate
-        let parsed_url = Url::parse(database_url).map_err(|e| {
+        let mut parsed_url = Url::parse(database_url).map_err(|_| {
             Error::new(ErrorDetails::Config {
-                message: format!("Invalid ClickHouse database URL: {}", e),
+                message: "Invalid ClickHouse database URL".to_string(),
             })
         })?;
 
@@ -49,23 +48,21 @@ impl ClickHouseConnectionInfo {
         #[cfg(any(feature = "e2e_tests", feature = "batch_tests"))]
         let database = "tensorzero_e2e_tests".to_string();
 
-        // Store the original URL as a SecretString
-        let secret_url = SecretString::from(parsed_url.to_string());
-
         // Although we take the database name from the URL path,
         // we need to set the query string for the database name for the ClickHouse TCP protocol
-        let mut working_url = parsed_url.clone();
-        working_url.set_path("");
-        working_url
+        parsed_url.set_path("");
+        parsed_url
             .query_pairs_mut()
             .append_pair("database", &database);
 
         // Set ClickHouse format settings for some error checking on writes
-        set_clickhouse_format_settings(&mut working_url);
+        set_clickhouse_format_settings(&mut parsed_url);
 
         let client = Client::new();
+        // Store the original URL as a SecretString
+        let database_url = SecretString::from(parsed_url.to_string());
         let connection_info = Self::Production {
-            database_url: secret_url,
+            database_url,
             database,
             client,
         };
@@ -78,9 +75,9 @@ impl ClickHouseConnectionInfo {
     pub fn get_url(&self) -> Result<Url, Error> {
         match self {
             Self::Production { database_url, .. } => Url::parse(database_url.expose_secret())
-                .map_err(|e| {
+                .map_err(|_| {
                     Error::new(ErrorDetails::Config {
-                        message: format!("Invalid ClickHouse database URL: {}", e),
+                        message: "Invalid ClickHouse database URL".to_string(),
                     })
                 }),
             _ => Err(Error::new(ErrorDetails::Config {
@@ -118,8 +115,12 @@ impl ClickHouseConnectionInfo {
             Self::Mock { mock_data, .. } => {
                 write_mock(rows, table, &mut mock_data.write().await).await
             }
-            Self::Production { client, .. } => {
-                let database_url = self.get_url()?;
+            Self::Production {
+                database_url,
+                client,
+                ..
+            } => {
+                let database_url = database_url.expose_secret();
                 write_production(&database_url, client, rows, table).await
             }
         }
@@ -162,10 +163,14 @@ impl ClickHouseConnectionInfo {
                     .into())
                 }
             }
-            Self::Production { client, .. } => {
-                let database_url = self.get_url()?;
+            Self::Production {
+                database_url,
+                client,
+                ..
+            } => {
+                let database_url = database_url.expose_secret();
                 match client
-                    .get(database_url.clone())
+                    .get(database_url)
                     // If ClickHouse is healthy, it should respond within 500ms
                     .timeout(std::time::Duration::from_millis(500))
                     .send()
@@ -185,10 +190,14 @@ impl ClickHouseConnectionInfo {
         match self {
             Self::Disabled => Ok("".to_string()),
             Self::Mock { .. } => Ok("".to_string()),
-            Self::Production { client, .. } => {
-                let database_url = self.get_url()?;
+            Self::Production {
+                database_url,
+                client,
+                ..
+            } => {
+                let database_url = database_url.expose_secret();
                 let response = client
-                    .post(database_url.clone())
+                    .post(database_url)
                     .body(query)
                     .send()
                     .await
@@ -221,9 +230,17 @@ impl ClickHouseConnectionInfo {
             Self::Disabled => Ok(()),
             Self::Mock { .. } => Ok(()),
             Self::Production {
-                database, client, ..
+                database_url,
+                database,
+                client,
+                ..
             } => {
-                let database_url = self.get_url()?;
+                let exposed_database_url = database_url.expose_secret();
+                let database_url = Url::parse(exposed_database_url).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: "Invalid ClickHouse database URL".to_string(),
+                    })
+                })?;
                 let query = format!("CREATE DATABASE IF NOT EXISTS {}", database);
                 // In order to create the database, we need to remove the database query parameter from the URL
                 // Otherwise, ClickHouse will throw an error
@@ -284,7 +301,7 @@ async fn write_mock(
 }
 
 async fn write_production(
-    database_url: &Url,
+    database_url: &str,
     client: &Client,
     rows: &[impl Serialize + Send + Sync],
     table: &str,
@@ -315,7 +332,7 @@ async fn write_production(
         {rows_json}"
     );
     let response = client
-        .post(database_url.clone())
+        .post(database_url)
         .body(query)
         .send()
         .await

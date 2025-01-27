@@ -180,7 +180,9 @@ mod tests {
                 let database_url = clickhouse_connection_info
                     .get_url()
                     .expect("Failed to get ClickHouse URL");
-                assert_eq!(database_url.host_str(), Some("tensorzero.com"));
+                assert!(database_url
+                    .as_str()
+                    .starts_with("https://tensorzero.com:8123"));
             }
             _ => panic!("Expected production ClickHouse connection info"),
         }
