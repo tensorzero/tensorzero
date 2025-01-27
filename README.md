@@ -94,23 +94,21 @@ We'd also welcome **[open-source contributions](https://github.com/tensorzero/te
 
 We are working on a series of **complete runnable examples** illustrating TensorZero's data & learning flywheel.
 
+> **[Optimizing Data Extraction (NER) with TensorZero](https://github.com/tensorzero/tensorzero/tree/main/examples/data-extraction-ner)**
+>
+> This example shows how to use TensorZero to optimize a data extraction pipeline.
+> We demonstrate techniques like fine-tuning and dynamic in-context learning (DICL).
+> In the end, a optimized GPT-4o Mini model outperforms GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.
+
 > **[Optimizing LLMs to Satisfy a Judge with Hidden Preferences](https://github.com/tensorzero/tensorzero/tree/main/examples/haiku-hidden-preferences)**
 >
 > This example fine-tunes GPT-4o Mini to generate haikus tailored to a specific taste.
 > You'll see TensorZero's "data flywheel in a box" in action: better variants leads to better data, and better data leads to better variants.
 > You'll see progress by fine-tuning the LLM multiple times.
 
-> **[Improving Data Extraction (NER) by Fine-Tuning a Llama 3 Model](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-fine-tuning)**
->
-> This example shows that an optimized Llama 3.1 8B model can be trained to outperform GPT-4o on a Named Entity Recognition (NER) task using a small amount of training data, and served by Fireworks at a fraction of the cost and latency.
-
 > **[Improving LLM Chess Ability with Best-of-N Sampling](https://github.com/tensorzero/tensorzero/tree/main/examples/chess-puzzles-best-of-n-sampling/)**
 >
 > This example showcases how best-of-N sampling can significantly enhance an LLM's chess-playing abilities by selecting the most promising moves from multiple generated options.
-
-> **[Improving Data Extraction (NER) with Dynamic In-Context Learning](https://github.com/tensorzero/tensorzero/tree/main/examples/ner-dicl)**
->
-> This example demonstrates how Dynamic In-Context Learning (DICL) can enhance Named Entity Recognition (NER) performance by leveraging relevant historical examples to improve data extraction accuracy and consistency without having to fine-tune a model.
 
 > **[Improving Math Reasoning with a Custom Recipe for Automated Prompt Engineering (DSPy)](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)**
 >
