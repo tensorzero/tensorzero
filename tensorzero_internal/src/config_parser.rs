@@ -1457,10 +1457,7 @@ mod tests {
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
 
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Provider name cannot start with 'tensorzero::': tensorzero::openai"));
+        assert!(result.unwrap_err().to_string().contains("`models.gpt-3.5-turbo.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
     }
 
     /// Ensure that get_templates returns the correct templates
