@@ -1,7 +1,7 @@
 /// Implements a Python tensorzero client, using `pyo3` to wrap the existing Rust client.
 /// Overall structure of the crate:
 /// * `src/lib.rs` - the main entrypoint of the Python native module - the `#[pymodule]` function
-/// initializes the Python module.
+///   initializes the Python module.
 /// * `tensorzero/` - this contains the Python code for the overall `tensorzero` package.
 ///   This re-exports types from the Rust native module, and also defines several pure-Python
 ///   classes/functions used by the Rust code.
