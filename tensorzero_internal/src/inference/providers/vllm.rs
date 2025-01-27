@@ -60,7 +60,7 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("VLLM_API_KEY".to_string())
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum VLLMCredentials {
     Static(SecretString),
     Dynamic(String),

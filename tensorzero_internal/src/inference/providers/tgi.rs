@@ -70,7 +70,7 @@ impl TGIProvider {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum TGICredentials {
     Static(SecretString),
     Dynamic(String),
