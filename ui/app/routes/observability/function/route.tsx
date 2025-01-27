@@ -67,15 +67,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     function_name,
     function_config,
   });
-  const variantPerformancesPromise = metric_name
-    ? getVariantPerformances({
-        function_name,
-        function_config,
-        metric_name,
-        metric_config: config.metrics[metric_name],
-        time_window_unit: time_granularity as TimeWindowUnit,
-      })
-    : undefined;
+  const variantPerformancesPromise =
+    // Only get variant performances if metric_name is provided and valid
+    metric_name && config.metrics[metric_name]
+      ? getVariantPerformances({
+          function_name,
+          function_config,
+          metric_name,
+          metric_config: config.metrics[metric_name],
+          time_window_unit: time_granularity as TimeWindowUnit,
+        })
+      : undefined;
 
   const [
     inferences,
@@ -93,7 +95,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variantCountsPromise,
   ]);
   const variant_counts_with_metadata = variant_counts.map((variant_count) => {
-    const variant_config = function_config.variants[variant_count.variant_name];
+    const variant_config = function_config.variants[
+      variant_count.variant_name
+    ] || {
+      // In case the variant is not found, we still want to display the variant name
+      type: "unknown",
+      weight: 0,
+    };
     return {
       ...variant_count,
       type: variant_config.type,
