@@ -27,6 +27,7 @@ tokio = { version = "1.38.1", features = ["full"] }
 pyo3 = { version = "0.23.3", features = ["experimental-async"] }
 axum = { version = "0.7.5", features = ["macros"] }
 futures = "0.3.30"
+url = "2.5.4"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

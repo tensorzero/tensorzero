@@ -23,7 +23,7 @@ tensorzero_rust = { package = "tensorzero", path = "../rust", features = [
     "pyo3",
 ] }
 tokio.workspace = true
-url = "2.5.4"
+url.workspace = true
 uuid.workspace = true
 
 [features]

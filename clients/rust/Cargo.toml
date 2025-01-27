@@ -13,7 +13,7 @@ reqwest-eventsource = { workspace = true }
 async-stream = { workspace = true }
 tokio-stream = { workspace = true }
 tensorzero_internal = { path = "../../tensorzero_internal" }
-url = "2.5.4"
+url = { workspace = true }
 thiserror = "2.0.11"
 pyo3 = { workspace = true, optional = true }
 
