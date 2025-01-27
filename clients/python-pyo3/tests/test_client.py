@@ -22,6 +22,7 @@ from copy import deepcopy
 from enum import Enum
 from time import time
 from uuid import UUID
+import os
 
 import pytest
 import pytest_asyncio
@@ -39,6 +40,9 @@ from tensorzero import (
 from uuid_utils import uuid7
 
 
+PWD = os.path.dirname(os.path.abspath(__file__))
+TEST_CONFIG_PATH = os.path.join(PWD, "../../../tensorzero_internal/tests/e2e/tensorzero.toml")
+
 class ClientType(Enum):
     HttpGateway = 0
     EmbeddedGateway = 1
@@ -51,7 +55,7 @@ async def async_client(request):
             yield client
     else:
         async with await AsyncTensorZeroGateway.create_embedded_gateway(
-            config_path="/home/aaron/repos/tensorzero/tensorzero_internal/tests/e2e/tensorzero.toml",
+            config_path=TEST_CONFIG_PATH,
             clickhouse_url="http://localhost:8123/tensorzero-python-e2e",
         ) as client:
             yield client
@@ -478,7 +482,7 @@ def sync_client(request):
             yield client
     else:
         with TensorZeroGateway.create_embedded_gateway(
-            config_path="/home/aaron/repos/tensorzero/tensorzero_internal/tests/e2e/tensorzero.toml",
+            config_path=TEST_CONFIG_PATH,
             clickhouse_url="http://localhost:8123/tensorzero-python-e2e",
         ) as client:
             yield client
