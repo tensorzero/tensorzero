@@ -149,8 +149,6 @@ urllib3==2.2.3
     # via clickhouse-connect
 uuid-utils==0.10.0
     # via tensorzero
-uuid7==0.1.0
-    # via -r requirements.in
 wcwidth==0.2.13
     # via prompt-toolkit
 zstandard==0.23.0
