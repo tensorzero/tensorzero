@@ -7,7 +7,7 @@ on:
 
 env:
   FORCE_COLOR: 1
-  CLICKHOUSE_URL: "http://localhost:8123/tensorzero"
+  TENSORZERO_CLICKHOUSE_URL: "http://localhost:8123/tensorzero"
 
 jobs:
   validate:
@@ -108,15 +108,15 @@ jobs:
       - name: pnpm TypeScript type checking
         working-directory: ui
         run: pnpm run typecheck
-
+      
       - name: Start services for ui tests
         working-directory: ui
         run: |
           echo "OPENAI_API_KEY=not_used" >> .env
           echo "FIREWORKS_API_KEY=not_used" >> .env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
-          echo "CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> .env
-          docker compose -f fixtures/docker-compose.yml up -d
+          echo "TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero" >> .env
+          docker compose -f fixtures/docker-compose.yml up -d --build
 
       - name: Run ui tests
         working-directory: ui
