@@ -69,6 +69,9 @@ pub enum ErrorDetails {
     AllVariantsFailed {
         errors: HashMap<String, Error>,
     },
+    InvalidInferenceTarget {
+        message: String,
+    },
     ApiKeyMissing {
         provider_name: String,
     },
@@ -282,6 +285,7 @@ impl ErrorDetails {
             ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
             ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::AppState { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidInferenceTarget { .. } => tracing::Level::ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
@@ -363,6 +367,7 @@ impl ErrorDetails {
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceClient { status_code, .. } => {
                 status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
@@ -445,6 +450,9 @@ impl std::fmt::Display for ErrorDetails {
                         .collect::<Vec<_>>()
                         .join("\n")
                 )
+            }
+            ErrorDetails::InvalidInferenceTarget { message } => {
+                write!(f, "Invalid inference target: {message}")
             }
             ErrorDetails::ApiKeyMissing { provider_name } => {
                 write!(f, "API key missing for provider: {}", provider_name)

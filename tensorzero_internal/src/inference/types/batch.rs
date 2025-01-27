@@ -40,22 +40,22 @@ pub struct StartBatchProviderInferenceResponse {
 
 /// Returned from start_batch_inference from a model
 /// Adds the model provider name to the response
-pub struct StartBatchModelInferenceResponse<'a> {
+pub struct StartBatchModelInferenceResponse {
     pub batch_id: Uuid,
     pub inference_ids: Vec<Uuid>,
     pub raw_requests: Vec<String>,
     pub batch_params: Value,
     pub raw_request: String,  // The raw text of the batch request body
     pub raw_response: String, // The raw text of the response from the batch request
-    pub model_provider_name: &'a str,
+    pub model_provider_name: Arc<str>,
     pub status: BatchStatus,
     pub errors: Vec<Value>,
 }
 
-impl<'a> StartBatchModelInferenceResponse<'a> {
+impl StartBatchModelInferenceResponse {
     pub fn new(
         provider_batch_response: StartBatchProviderInferenceResponse,
-        model_provider_name: &'a str,
+        model_provider_name: Arc<str>,
     ) -> Self {
         Self {
             batch_id: provider_batch_response.batch_id,
@@ -87,14 +87,14 @@ pub struct StartBatchModelInferenceWithMetadata<'a> {
     pub raw_request: String,
     pub raw_response: String,
     pub batch_params: Value,
-    pub model_provider_name: &'a str,
+    pub model_provider_name: Arc<str>,
     pub model_name: &'a str,
     pub status: BatchStatus,
 }
 
 impl<'a> StartBatchModelInferenceWithMetadata<'a> {
     pub fn new(
-        model_batch_response: StartBatchModelInferenceResponse<'a>,
+        model_batch_response: StartBatchModelInferenceResponse,
         model_inference_requests: Vec<ModelInferenceRequest<'a>>,
         model_name: &'a str,
         inference_params: Vec<InferenceParams>,

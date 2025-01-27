@@ -21,8 +21,8 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
 use crate::embeddings::EmbeddingModelConfig;
 use crate::error::{Error, ErrorDetails};
-use crate::function::sample_variant;
 use crate::function::FunctionConfig;
+use crate::function::{sample_variant, FunctionConfigChat};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, ChatInferenceDatabaseInsert, CollectChunksArgs, ContentBlockChunk,
@@ -32,9 +32,10 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
-use crate::tool::{DynamicToolParams, ToolCallConfig};
+use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::uuid_util::validate_episode_id;
-use crate::variant::{InferenceConfig, Variant};
+use crate::variant::chat_completion::ChatCompletionConfig;
+use crate::variant::{InferenceConfig, Variant, VariantConfig};
 
 use super::validate_tags;
 
@@ -42,8 +43,10 @@ use super::validate_tags;
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
-    // the function name
-    pub function_name: String,
+    // The function name. Exactly one of `function_name` or `model_name` must be provided.
+    pub function_name: Option<String>,
+    // The model name to run using a default function. Exactly one of `function_name` or `model_name` must be provided.
+    pub model_name: Option<String>,
     // the episode ID (if not provided, it'll be set to inference_id)
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
     pub episode_id: Option<Uuid>,
@@ -136,11 +139,14 @@ pub enum InferenceOutput {
     Streaming(InferenceStream),
 }
 
+const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
+
 #[instrument(
     name="inference",
     skip(config, http_client, clickhouse_connection_info, params),
     fields(
-        function_name = %params.function_name,
+        function_name = ?params.function_name,
+        model_name = ?params.model_name,
         variant_name = ?params.variant_name,
     )
 )]
@@ -153,8 +159,7 @@ pub async fn inference(
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     validate_tags(&params.tags)?;
-    // Get the function config or return an error if it doesn't exist
-    let function = config.get_function(&params.function_name)?.clone();
+    let (function, function_name) = find_function(&params, &config)?;
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =
@@ -163,7 +168,7 @@ pub async fn inference(
     // If the function has no variants, return an error
     if candidate_variant_names.is_empty() {
         return Err(ErrorDetails::InvalidFunctionVariants {
-            message: format!("Function `{}` has no variants", params.function_name),
+            message: format!("Function `{}` has no variants", function_name),
         }
         .into());
     }
@@ -193,16 +198,17 @@ pub async fn inference(
 
     // Increment the request count if we're not in dryrun mode
     if !dryrun {
+        // TODO - should we include the `model_name` parameter here?
         counter!(
             "request_count",
             "endpoint" => "inference",
-            "function_name" => params.function_name.to_string(),
+            "function_name" => function_name.clone(),
         )
         .increment(1);
         counter!(
             "inference_count",
             "endpoint" => "inference",
-            "function_name" => params.function_name.to_string(),
+            "function_name" => function_name.clone(),
         )
         .increment(1);
     }
@@ -216,7 +222,7 @@ pub async fn inference(
     // Set up inference config
     let output_schema = params.output_schema.map(DynamicJSONSchema::new);
     let mut inference_config = InferenceConfig {
-        function_name: &params.function_name,
+        function_name: &function_name,
         variant_name: None,
         templates: &config.templates,
         tool_config: tool_config.as_ref(),
@@ -238,7 +244,7 @@ pub async fn inference(
         let (variant_name, variant) = sample_variant(
             &mut candidate_variant_names,
             function.variants(),
-            &params.function_name,
+            &function_name,
             &episode_id,
         )?;
         // Will be edited by the variant as part of making the request so we must clone here
@@ -273,7 +279,7 @@ pub async fn inference(
 
             // Create InferenceMetadata for a streaming inference
             let inference_metadata = InferenceMetadata {
-                function_name: params.function_name.clone(),
+                function_name: function_name.to_string(),
                 variant_name: variant_name.to_string(),
                 episode_id,
                 input: params.input.clone(),
@@ -318,7 +324,7 @@ pub async fn inference(
                 Err(e) => {
                     tracing::warn!(
                         "functions.{function_name}.variants.{variant_name} failed during inference: {e}",
-                        function_name = params.function_name,
+                        function_name = function_name,
                         variant_name = variant_name,
                     );
                     variant_errors.insert(variant_name.to_string(), e);
@@ -331,7 +337,7 @@ pub async fn inference(
 
                 let result_to_write = result.clone();
                 let write_metadata = InferenceDatabaseInsertMetadata {
-                    function_name: params.function_name.clone(),
+                    function_name: function_name.to_string(),
                     variant_name: variant_name.to_string(),
                     episode_id,
                     tool_config,
@@ -361,6 +367,63 @@ pub async fn inference(
         errors: variant_errors,
     }
     .into())
+}
+
+/// Finds a function by `function_name` or `model_name`, erroring if an
+/// invalid combination of parameters is provided.
+/// If `model_name` is specified, then we use the special 'default' function
+fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig>, String), Error> {
+    match (&params.function_name, &params.model_name) {
+        // Get the function config or return an error if it doesn't exist
+        (Some(function_name), None) => Ok((
+            config.get_function(function_name)?.clone(),
+            function_name.to_string(),
+        )),
+        (None, Some(model_name)) => {
+            if params.variant_name.is_some() {
+                return Err(ErrorDetails::InvalidInferenceTarget {
+                    message: "`variant_name` cannot be provided when using `model_name`"
+                        .to_string(),
+                }
+                .into());
+            }
+            if let Err(e) = config.models.validate(model_name) {
+                return Err(ErrorDetails::InvalidInferenceTarget {
+                    message: format!("Invalid model name: {e}"),
+                }
+                .into());
+            }
+
+            Ok((
+                Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+                    variants: [(
+                        model_name.clone(),
+                        VariantConfig::ChatCompletion(ChatCompletionConfig {
+                            model: (&**model_name).into(),
+                            ..Default::default()
+                        }),
+                    )]
+                    .into_iter()
+                    .collect(),
+                    system_schema: None,
+                    user_schema: None,
+                    assistant_schema: None,
+                    tools: vec![],
+                    tool_choice: ToolChoice::None,
+                    parallel_tool_calls: false,
+                })),
+                DEFAULT_FUNCTION_NAME.to_string(),
+            ))
+        }
+        (Some(_), Some(_)) => Err(ErrorDetails::InvalidInferenceTarget {
+            message: "Only one of `function_name` or `model_name` can be provided".to_string(),
+        }
+        .into()),
+        (None, None) => Err(ErrorDetails::InvalidInferenceTarget {
+            message: "Either `function_name` or `model_name` must be provided".to_string(),
+        }
+        .into()),
+    }
 }
 
 fn create_stream(

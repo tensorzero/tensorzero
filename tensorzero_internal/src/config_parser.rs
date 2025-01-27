@@ -9,7 +9,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
-use crate::model::{ModelConfig, ModelTable};
+use crate::model::{CowNoClone, ModelConfig, ModelTable};
 use crate::tool::{
     ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
     IMPLICIT_TOOL_NAME,
@@ -230,7 +230,7 @@ impl<'c> Config<'c> {
         }
 
         // Validate each model
-        for (model_name, model) in self.models.iter() {
+        for (model_name, model) in self.models.iter_static_models() {
             if model_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
                     message: format!("Model name cannot start with 'tensorzero::': {model_name}"),
@@ -299,8 +299,11 @@ impl<'c> Config<'c> {
     }
 
     /// Get a model by name
-    pub fn get_model<'a>(&'a self, model_name: &Arc<str>) -> Result<&'a ModelConfig, Error> {
-        self.models.get(model_name).ok_or_else(|| {
+    pub fn get_model<'a>(
+        &'a self,
+        model_name: &Arc<str>,
+    ) -> Result<CowNoClone<'a, ModelConfig>, Error> {
+        self.models.get(model_name)?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: model_name.to_string(),
             })
