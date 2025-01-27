@@ -1633,7 +1633,7 @@ mod tests {
         .expect_err("Test error");
         assert!(
             lock.get().is_none(),
-            "OnceLock was initiazed after an error"
+            "OnceLock was initialized after an error"
         );
 
         racy_get_or_try_init(&lock, || Ok::<_, Box<dyn std::error::Error>>(true))
