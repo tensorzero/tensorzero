@@ -1,6 +1,5 @@
 services:
   clickhouse:
-    container_name: tensorzero-clickhouse-data-extraction-ner
     image: clickhouse/clickhouse-server:latest
     ports:
       - "8123:8123" # HTTP port
@@ -24,13 +23,12 @@ services:
       timeout: 1s
 
   gateway:
-    container_name: tensorzero-gateway
     image: tensorzero/gateway
     volumes:
       - ./config:/app/config:ro
       - ${GCP_VERTEX_CREDENTIALS_PATH:-/dev/null}:/app/gcp-credentials.json:ro
     environment:
-      - CLICKHOUSE_URL=http://tensorzero-clickhouse-data-extraction-ner:8123/tensorzero
+      - CLICKHOUSE_URL=http://clickhouse:8123/tensorzero
       - GCP_VERTEX_CREDENTIALS_PATH=${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
     env_file:
       - ${ENV_FILE:-.env}
@@ -41,12 +39,11 @@ services:
         condition: service_healthy
 
   ui:
-    container_name: tensorzero-ui-data-extraction-ner
     image: tensorzero/ui
     volumes:
       - ./config:/app/config:ro
     environment:
-      - CLICKHOUSE_URL=http://tensorzero-clickhouse-data-extraction-ner:8123/tensorzero
+      - CLICKHOUSE_URL=http://clickhouse:8123/tensorzero
     env_file:
       - ${ENV_FILE:-.env}
     ports:
