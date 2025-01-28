@@ -1067,7 +1067,6 @@ dependencies = [
  "tensorzero_internal",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -2809,14 +2808,12 @@ dependencies = [
  "bytes",
  "derive_builder",
  "futures",
- "futures-core",
  "itertools",
  "jsonschema",
  "jsonwebtoken",
  "lazy_static",
  "metrics",
  "metrics-exporter-prometheus",
- "mimalloc",
  "minijinja",
  "paste",
  "rand",
@@ -2828,7 +2825,6 @@ dependencies = [
  "serde_path_to_error",
  "sha2",
  "strum",
- "strum_macros",
  "tempfile",
  "tensorzero",
  "tokio",

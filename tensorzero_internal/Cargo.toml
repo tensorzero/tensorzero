@@ -42,7 +42,6 @@ backon = { version = "1.2.0", features = ["tokio-sleep"] }
 bytes = "1.6.1"
 derive_builder = "0.20.0"
 futures = "0.3.30"
-futures-core = "0.3.30"
 itertools = "0.13.0"
 jsonschema = "0.18.0"
 jsonwebtoken = "9.3.0"
@@ -51,7 +50,6 @@ metrics = "0.23.0"
 metrics-exporter-prometheus = { version = "0.15.3", features = [
     "http-listener",
 ], default-features = false }
-mimalloc = "0.1.43"
 minijinja = { version = "2.1.0", features = [
     "loader",
     "debug",
@@ -68,7 +66,6 @@ serde_json = { workspace = true }
 serde_path_to_error = "0.1.16"
 sha2 = "0.10.8"
 strum = { version = "0.26.3", features = ["derive"] }
-strum_macros = "0.26.3"
 tokio = { version = "1.38.1", features = ["full"] }
 tokio-stream = { workspace = true }
 toml = "0.8.15"

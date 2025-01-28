@@ -25,6 +25,7 @@ tokio = { version = "1.38.1", features = ["full"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+unused_crate_dependencies = "deny"
 
 
 [workspace.lints.clippy]
