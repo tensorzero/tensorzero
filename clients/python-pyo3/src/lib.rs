@@ -294,7 +294,7 @@ impl BaseTensorZeroGateway {
         let input: Input = deserialize_from_json(py, &input)?;
 
         Ok(ClientInferenceParams {
-            function_name,
+            function_name: Some(function_name),
             stream,
             episode_id,
             variant_name,
