@@ -325,7 +325,7 @@ impl TensorZeroGateway {
     /// :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     #[allow(unused_variables)]
     fn __init__(this: Py<Self>, base_url: &str) -> Py<Self> {
-        // The actual logic is in the 'new' method - this method just exists to generate a docstrin
+        // The actual logic is in the 'new' method - this method just exists to generate a docstring
         this
     }
 
@@ -385,7 +385,7 @@ impl TensorZeroGateway {
     }
 
     #[pyo3(signature = (*, metric_name, value, inference_id=None, episode_id=None, dryrun=None, tags=None))]
-    /// Make a POST request to the /feedback endpoint.
+    /// Make a request to the /feedback endpoint of the gateway
     ///
     /// :param metric_name: The name of the metric to provide feedback for
     /// :param value: The value of the feedback. It should correspond to the metric type.
@@ -431,7 +431,7 @@ impl TensorZeroGateway {
 
     #[pyo3(signature = (*, function_name, input, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None))]
     #[allow(clippy::too_many_arguments)]
-    /// Make a POST request to the /inference endpoint.
+    /// Make a request to the /inference endpoint.
     ///
     /// :param function_name: The name of the function to call
     /// :param input: The input to the function
@@ -529,7 +529,7 @@ impl AsyncTensorZeroGateway {
     /// :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     #[allow(unused_variables)]
     fn __init__(this: Py<Self>, base_url: &str) -> Py<Self> {
-        // The actual logic is in the 'new' method - this method just exists to generate a docstrin
+        // The actual logic is in the 'new' method - this method just exists to generate a docstring
         this
     }
 
@@ -607,7 +607,7 @@ impl AsyncTensorZeroGateway {
 
     #[pyo3(signature = (*, function_name, input, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None))]
     #[allow(clippy::too_many_arguments)]
-    /// Make a POST request to the /inference endpoint.
+    /// Make a request to the /inference endpoint.
     ///
     /// :param function_name: The name of the function to call
     /// :param input: The input to the function
@@ -686,7 +686,7 @@ impl AsyncTensorZeroGateway {
     }
 
     #[pyo3(signature = (*, metric_name, value, inference_id=None, episode_id=None, dryrun=None, tags=None))]
-    /// Make a POST request to the /feedback endpoint.
+    /// Make a request to the /feedback endpoint.
     ///
     /// :param metric_name: The name of the metric to provide feedback for
     /// :param value: The value of the feedback. It should correspond to the metric type.
@@ -745,7 +745,7 @@ fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyResult<PyErr> {
         TensorZeroError::Other { source } => tensorzero_internal_error(py, &source.to_string()),
         // Required due to the `#[non_exhaustive]` attribute on `TensorZeroError` - we want to force
         // downstream consumers to handle all possible error types, but the compiler also requires us
-        // to do this (since our python bindings are in a different crates from the Rust client.)
+        // to do this (since our python bindings are in a different crate from the Rust client.)
         _ => unreachable!(),
     }
 }
