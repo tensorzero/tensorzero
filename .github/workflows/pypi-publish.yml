@@ -41,9 +41,8 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          working-directory: ./clients/python-pyo3
           name: wheels-linux-${{ matrix.platform.target }}
-          path: dist
+          path: ./clients/python-pyo3/dist
 
   musllinux:
     runs-on: ${{ matrix.platform.runner }}
@@ -70,9 +69,8 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          
           name: wheels-musllinux-${{ matrix.platform.target }}
-          path: dist
+          path: ./clients/python-pyo3/dist
 
   windows:
     runs-on: ${{ matrix.platform.runner }}
@@ -97,9 +95,8 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          working-directory: ./clients/python-pyo3
           name: wheels-windows-${{ matrix.platform.target }}
-          path: dist
+          path: ./clients/python-pyo3/dist
 
   macos:
     runs-on: ${{ matrix.platform.runner }}
@@ -125,9 +122,8 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          working-directory: ./clients/python-pyo3
           name: wheels-macos-${{ matrix.platform.target }}
-          path: dist
+          path: ./clients/python-pyo3/dist
 
   sdist:
     runs-on: ubuntu-latest
