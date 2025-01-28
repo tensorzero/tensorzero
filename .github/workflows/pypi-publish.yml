@@ -157,11 +157,10 @@ jobs:
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: 'clients/python-pyo3/wheels-*/*'
+          subject-path: 'wheels-*/*'
       - name: Publish to PyPI
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
         uses: PyO3/maturin-action@v1
         with:
           working-directory: ./clients/python-pyo3
           command: upload
-          args: -r testpypi --non-interactive --skip-existing wheels-*/*
+          args: -r testpypi --non-interactive --skip-existing ../../wheels-*/*
