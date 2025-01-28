@@ -21,7 +21,7 @@ See our **[API Reference](https://www.tensorzero.com/docs/gateway/api-reference)
 
 ## Installation
 
-This client is currently not publishd on `PyPI` - for production code, you most likely want to
+This client is currently not published on `PyPI` - for production code, you most likely want to
 use the Python client in `<repository root>/clients/python`
 
 To try out the new Rust-based client implementation, run:
@@ -41,6 +41,30 @@ uv run python
 ```
 
 ## Basic Usage
+
+### Initializing the client
+
+The TensorZero client comes in both synchronous (`TensorZeroGateway`) and asynchronous (`AsyncTensorZeroGateway`) variants.
+Each of these classes can be constructed in one of two ways:
+
+* HTTP gateway mode. This constructs a client that makes requests to the specified TensorZero HTTP gateway:
+
+```python
+from tensorzero import TensorZeroGateway, AsyncTensorZeroGateway
+
+client = TensorZeroGateway(base_url="http://localhost:3000")
+async_client = AsyncTensorZeroGateway(base_url="http://localhost:3000")
+```
+
+* Embedded gateway mode. This starts an in-memory TensorZero gateway using the provided config file and Clickhouse url
+  Note that `AsyncTensorZeroGateway.create_embedded_gateway` returns a `Future`, which you must `await` to get the client.
+
+```python
+from tensorzero import TensorZeroGateway, AsyncTensorZeroGateway
+
+client = TensorZeroGateway.create_embedded_gateway(config_path="/path/to/tensorzero.toml", clickhouse_url="http://localhost:8123/tensorzero-python-e2e")
+async_client = await AsyncTensorZeroGateway.create_embedded_gateway(config_path="/path/to/tensorzero.toml", clickhouse_url="http://localhost:8123/tensorzero-python-e2e")
+```
 
 ### Non-Streaming Inference
 
