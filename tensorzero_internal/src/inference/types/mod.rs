@@ -32,7 +32,7 @@ pub mod batch;
  */
 
 /// A request is made that contains an Input
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -162,7 +162,7 @@ pub struct ProviderInferenceResponse {
     pub latency: Latency,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Usage {
     pub input_tokens: u32,
     pub output_tokens: u32,
@@ -269,20 +269,20 @@ pub struct ProviderInferenceResponseChunk {
     pub latency: Duration,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockChunk {
     Text(TextChunk),
     ToolCall(ToolCallChunk),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TextChunk {
     pub id: String,
     pub text: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ChatInferenceResultChunk {
     pub inference_id: Uuid,
     pub content: Vec<ContentBlockChunk>,

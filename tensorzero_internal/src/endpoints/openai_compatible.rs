@@ -53,7 +53,7 @@ pub async fn inference_handler(
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
     let params = (headers, openai_compatible_params).try_into()?;
-    let response = inference(config, http_client, clickhouse_connection_info, params).await?;
+    let response = inference(config, &http_client, clickhouse_connection_info, params).await?;
     match response {
         InferenceOutput::NonStreaming(response) => {
             let openai_compatible_response = OpenAICompatibleResponse::from(response);

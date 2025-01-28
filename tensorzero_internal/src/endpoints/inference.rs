@@ -115,7 +115,7 @@ pub async fn inference_handler(
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
     let inference_output =
-        inference(config, http_client, clickhouse_connection_info, params).await?;
+        inference(config, &http_client, clickhouse_connection_info, params).await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
         InferenceOutput::Streaming(stream) => {
@@ -146,7 +146,7 @@ pub enum InferenceOutput {
 )]
 pub async fn inference(
     config: Arc<Config<'static>>,
-    http_client: reqwest::Client,
+    http_client: &reqwest::Client,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
 ) -> Result<InferenceOutput, Error> {
@@ -224,7 +224,7 @@ pub async fn inference(
     };
 
     let inference_clients = InferenceClients {
-        http_client: &http_client,
+        http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
         credentials: &params.credentials,
     };
@@ -536,14 +536,14 @@ async fn write_inference(
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged, rename_all = "snake_case")]
 pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
     Json(JsonInferenceResponse),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ChatInferenceResponse {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -552,7 +552,7 @@ pub struct ChatInferenceResponse {
     pub usage: Usage,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct JsonInferenceResponse {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -589,14 +589,14 @@ impl InferenceResponse {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum InferenceResponseChunk {
     Chat(ChatInferenceResponseChunk),
     Json(JsonInferenceResponseChunk),
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatInferenceResponseChunk {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -606,7 +606,7 @@ pub struct ChatInferenceResponseChunk {
     pub usage: Option<Usage>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsonInferenceResponseChunk {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
