@@ -734,10 +734,10 @@ export async function countInferencesByFunction(): Promise<
         toUInt32(count()) AS count
     FROM (
         SELECT function_name, timestamp
-        FROM tensorzero.ChatInference
+        FROM ChatInference
         UNION ALL
         SELECT function_name, timestamp
-        FROM tensorzero.JsonInference
+        FROM JsonInference
     )
     GROUP BY function_name
     ORDER BY max_timestamp DESC`;
