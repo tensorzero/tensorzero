@@ -1,22 +1,4 @@
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                                   MODELS                                   │
-# └────────────────────────────────────────────────────────────────────────────┘
-
-[models."gpt-4o-2024-08-06"]
-routing = ["openai"]
-
-[models."gpt-4o-2024-08-06".providers.openai]
-type = "openai"
-model_name = "gpt-4o-2024-08-06"
-
-[models."llama-3.1-8b-instruct"]
-routing = ["fireworks"]
-
-[models."llama-3.1-8b-instruct".providers.fireworks]
-type = "fireworks"
-model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
-
-# ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
@@ -24,18 +6,29 @@ model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
 type = "json"
 output_schema = "functions/extract_entities/output_schema.json"
 
-[functions.extract_entities.variants.gpt4o_initial_prompt]
-weight = 1
+[functions.extract_entities.variants.gpt_4o]
 type = "chat_completion"
-model = "gpt-4o-2024-08-06"
+model = "openai::gpt-4o-2024-08-06"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
-json_mode = "strict"
 
-[functions.extract_entities.variants.llama_8b_initial_prompt]
-weight = 1
+[functions.extract_entities.variants.gpt_4o_mini]
 type = "chat_completion"
-model = "llama-3.1-8b-instruct"
+model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
+# TODO: Once you've fine-tuned your model, add it here like the commented example below
+
+# [functions.extract_entities.variants.gpt_4o_mini_fine_tuned]
+# type = "chat_completion"
+# model = "openai::ft:gpt-4o-mini-2024-07-18:xxxxxxxx::xxxxxxxx"
+# system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
+
+# [functions.extract_entities.variants.gpt_4o_mini_dicl]
+# type = "experimental_dynamic_in_context_learning"
+# embedding_model = "openai::text-embedding-3-small"
+# model = "openai::gpt-4o-mini-2024-07-18"
+# k = 10
+# system_instructions = "functions/extract_entities/initial_prompt/system_template.minijinja"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
@@ -51,7 +44,7 @@ type = "float"
 level = "inference"
 optimize = "max"
 
-[metrics.valid_json]
+[metrics.valid_output]
 type = "boolean"
 level = "inference"
 optimize = "max"

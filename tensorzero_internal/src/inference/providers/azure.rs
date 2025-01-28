@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
@@ -15,7 +17,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
@@ -34,19 +36,24 @@ pub struct AzureProvider {
     credentials: AzureCredentials,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<AzureCredentials> = OnceLock::new();
+
 impl AzureProvider {
     pub fn new(
         deployment_id: String,
         endpoint: Url,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = AzureCredentials::try_from(generic_credentials)?;
+        let credentials = build_creds_caching_default(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+        )?;
         Ok(AzureProvider {
             deployment_id,
             endpoint,
-            credentials: provider_credentials,
+            credentials,
         })
     }
 }

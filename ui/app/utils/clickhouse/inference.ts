@@ -627,7 +627,10 @@ export async function queryInferenceById(
   IF(i.function_type = 'json', j.output_schema, '') AS output_schema,
 
   -- Timestamps & tags
-  IF(i.function_type = 'chat', c.timestamp, j.timestamp) AS timestamp,
+  IF(i.function_type = 'chat',
+   formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ'),
+   formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ')
+) AS timestamp,
   IF(i.function_type = 'chat', c.tags,      j.tags)      AS tags,
 
   -- Discriminator itself

@@ -1,4 +1,5 @@
 use reqwest::Client;
+use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,7 +17,7 @@ pub enum ClickHouseConnectionInfo {
         healthy: bool,
     },
     Production {
-        database_url: Url,
+        database_url: SecretString,
         database: String,
         client: Client,
     },
@@ -34,9 +35,9 @@ impl ClickHouseConnectionInfo {
     /// However, for tests that directly test ClickHouse behavior, you can directly create the struct.
     pub async fn new(database_url: &str) -> Result<Self, Error> {
         // Add a query string for the database using the URL crate
-        let mut database_url = Url::parse(database_url).map_err(|e| {
+        let mut database_url = Url::parse(database_url).map_err(|_| {
             Error::new(ErrorDetails::Config {
-                message: format!("Invalid ClickHouse database URL: {}", e),
+                message: "Invalid ClickHouse database URL".to_string(),
             })
         })?;
 
@@ -57,15 +58,16 @@ impl ClickHouseConnectionInfo {
         // Set ClickHouse format settings for some error checking on writes
         set_clickhouse_format_settings(&mut database_url);
 
-        let client = Client::new();
+        // Store the original URL as a SecretString
+        let database_url = SecretString::from(database_url.to_string());
+
         let connection_info = Self::Production {
             database_url,
             database,
-            client,
+            client: Client::new(),
         };
-        // Error will be constructed and logged in health()
-        // Don't need to do anything with the error here
-        let _ = connection_info.health().await;
+        // If the connection is unhealthy, we won't be able to run / check migrations. So we just fail here.
+        connection_info.health().await?;
         Ok(connection_info)
     }
 
@@ -147,19 +149,21 @@ impl ClickHouseConnectionInfo {
                 database_url,
                 client,
                 ..
-            } => match client
-                .get(database_url.clone())
-                // If ClickHouse is healthy, it should respond within 500ms
-                .timeout(std::time::Duration::from_millis(500))
-                .send()
-                .await
-            {
-                Ok(_) => Ok(()),
-                Err(e) => Err(ErrorDetails::ClickHouseConnection {
-                    message: format!("ClickHouse is not healthy: {}", e),
+            } => {
+                match client
+                    .get(database_url.expose_secret())
+                    // If ClickHouse is healthy, it should respond within 500ms
+                    .timeout(std::time::Duration::from_millis(500))
+                    .send()
+                    .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(e) => Err(ErrorDetails::ClickHouseConnection {
+                        message: format!("ClickHouse is not healthy: {}", e),
+                    }
+                    .into()),
                 }
-                .into()),
-            },
+            }
         }
     }
 
@@ -168,12 +172,13 @@ impl ClickHouseConnectionInfo {
             Self::Disabled => Ok("".to_string()),
             Self::Mock { .. } => Ok("".to_string()),
             Self::Production {
-                client,
                 database_url,
+                client,
                 ..
             } => {
+                let database_url = database_url.expose_secret();
                 let response = client
-                    .post(database_url.clone())
+                    .post(database_url)
                     .body(query)
                     .send()
                     .await
@@ -211,6 +216,11 @@ impl ClickHouseConnectionInfo {
                 client,
                 ..
             } => {
+                let database_url = Url::parse(database_url.expose_secret()).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: "Invalid ClickHouse database URL".to_string(),
+                    })
+                })?;
                 let query = format!("CREATE DATABASE IF NOT EXISTS {}", database);
                 // In order to create the database, we need to remove the database query parameter from the URL
                 // Otherwise, ClickHouse will throw an error
@@ -271,13 +281,13 @@ async fn write_mock(
 }
 
 async fn write_production(
-    database_url: &Url,
+    database_url: &SecretString,
     client: &Client,
     rows: &[impl Serialize + Send + Sync],
     table: &str,
 ) -> Result<(), Error> {
+    // Empty rows is a no-op
     if rows.is_empty() {
-        // Empty rows is a no-op
         return Ok(());
     }
 
@@ -291,8 +301,8 @@ async fn write_production(
             })
         })
         .collect();
-    let rows_json = rows_json?;
-    let rows_json = rows_json.join("\n");
+
+    let rows_json = rows_json?.join("\n");
 
     // We can wait for the async insert since we're spawning a new tokio task to do the insert
     let query = format!(
@@ -301,8 +311,9 @@ async fn write_production(
         FORMAT JSONEachRow\n\
         {rows_json}"
     );
+
     let response = client
-        .post(database_url.clone())
+        .post(database_url.expose_secret())
         .body(query)
         .send()
         .await
@@ -311,13 +322,14 @@ async fn write_production(
                 message: e.to_string(),
             })
         })?;
+
     match response.status() {
         reqwest::StatusCode::OK => Ok(()),
         _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
             message: response
                 .text()
                 .await
-                .unwrap_or_else(|e| format!("Failed to get response text: {}", e)),
+                .unwrap_or_else(|e| format!("Failed to get response text: {e}")),
         })),
     }
 }
