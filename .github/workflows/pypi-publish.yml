@@ -14,10 +14,6 @@ permissions:
   contents: read
   id-token: write
 
-defaults:
-  run:
-    working-directory: ./clients/python-pyo3
-
 
 jobs:
   linux:
@@ -37,6 +33,7 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
+          working-directory: ./clients/python-pyo3
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
           sccache: 'true'
@@ -44,6 +41,7 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
+          working-directory: ./clients/python-pyo3
           name: wheels-linux-${{ matrix.platform.target }}
           path: dist
 
@@ -64,6 +62,7 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
+          working-directory: ./clients/python-pyo3
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
           sccache: 'true'
@@ -71,6 +70,7 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
+          
           name: wheels-musllinux-${{ matrix.platform.target }}
           path: dist
 
@@ -90,12 +90,14 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
+          working-directory: ./clients/python-pyo3
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
           sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
+          working-directory: ./clients/python-pyo3
           name: wheels-windows-${{ matrix.platform.target }}
           path: dist
 
@@ -122,6 +124,7 @@ jobs:
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
+          working-directory: ./clients/python-pyo3
           name: wheels-macos-${{ matrix.platform.target }}
           path: dist
 
@@ -132,11 +135,13 @@ jobs:
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
+          working-directory: ./clients/python-pyo3
           command: sdist
           args: --out dist
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
+          working-directory: ./clients/python-pyo3
           name: wheels-sdist
           path: dist
 
@@ -157,10 +162,12 @@ jobs:
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
+          working-directory: ./clients/python-pyo3
           subject-path: 'wheels-*/*'
       - name: Publish to PyPI
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         uses: PyO3/maturin-action@v1
         with:
+          working-directory: ./clients/python-pyo3
           command: upload
           args: -r testpypi --non-interactive --skip-existing wheels-*/*
