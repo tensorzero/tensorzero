@@ -4,14 +4,13 @@ use futures::StreamExt;
 use itertools::izip;
 use serde::Deserialize;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::Error;
 use crate::error::ErrorDetails;
@@ -126,7 +125,7 @@ pub trait Variant {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
+        embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -322,7 +321,7 @@ impl Variant for VariantConfig {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
+        embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,

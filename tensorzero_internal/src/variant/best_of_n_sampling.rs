@@ -1,6 +1,5 @@
 use std::borrow::Cow;
-use std::sync::Arc;
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use backon::Retryable;
 use futures::future::join_all;
@@ -10,7 +9,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::{
@@ -118,7 +117,7 @@ impl Variant for BestOfNSamplingConfig {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
+        embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -646,6 +645,8 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use reqwest::Client;
     use uuid::Uuid;
 
