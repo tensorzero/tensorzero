@@ -1,5 +1,5 @@
 pytest
 pytest-asyncio
-maturin[patchelf]
+maturin
 uuid_utils
 httpx
