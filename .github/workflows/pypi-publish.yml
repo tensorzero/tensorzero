@@ -14,6 +14,11 @@ permissions:
   contents: read
   id-token: write
 
+defaults:
+  run:
+    working-directory: ./clients/python-pyo3
+
+
 jobs:
   linux:
     runs-on: ${{ matrix.platform.runner }}
