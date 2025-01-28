@@ -14,7 +14,6 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
-#[cfg(feature = "e2e_tests")]
 use crate::common::get_gateway_endpoint;
 use crate::common::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
