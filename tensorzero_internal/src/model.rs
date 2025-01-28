@@ -1052,7 +1052,6 @@ impl ModelTable {
             return Ok(Some(CowNoClone::Borrowed(model_config)));
         }
         if let Some(shorthand) = check_shorthand(key) {
-            // TODO - should we cache this?
             return Ok(Some(CowNoClone::Owned(model_config_from_shorthand(
                 shorthand.provider_type,
                 shorthand.model_name,

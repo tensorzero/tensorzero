@@ -40,7 +40,7 @@ use crate::variant::{InferenceConfig, Variant, VariantConfig};
 use super::validate_tags;
 
 /// The expected payload is a JSON object with the following fields:
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
     // The function name. Exactly one of `function_name` or `model_name` must be provided.
@@ -198,19 +198,15 @@ pub async fn inference(
 
     // Increment the request count if we're not in dryrun mode
     if !dryrun {
-        // TODO - should we include the `model_name` parameter here?
-        counter!(
-            "request_count",
-            "endpoint" => "inference",
-            "function_name" => function_name.clone(),
-        )
-        .increment(1);
-        counter!(
-            "inference_count",
-            "endpoint" => "inference",
-            "function_name" => function_name.clone(),
-        )
-        .increment(1);
+        let mut labels = vec![
+            ("endpoint", "inference".to_string()),
+            ("function_name", function_name.clone()),
+        ];
+        if let Some(model_name) = params.model_name {
+            labels.push(("model_name", model_name.clone()));
+        }
+        counter!("request_count", &labels).increment(1);
+        counter!("inference_count", &labels).increment(1);
     }
 
     // Should we stream the inference?
@@ -372,6 +368,7 @@ pub async fn inference(
 /// Finds a function by `function_name` or `model_name`, erroring if an
 /// invalid combination of parameters is provided.
 /// If `model_name` is specified, then we use the special 'default' function
+/// Returns the function config and the function name
 fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig>, String), Error> {
     match (&params.function_name, &params.model_name) {
         // Get the function config or return an error if it doesn't exist
@@ -887,5 +884,96 @@ mod tests {
                 panic!("Expected JsonInferenceResponseChunk, got ChatInferenceResponseChunk");
             }
         }
+    }
+
+    #[test]
+    fn test_find_function_no_function_model() {
+        let err = find_function(
+            &Params {
+                function_name: None,
+                model_name: None,
+                ..Default::default()
+            },
+            &Config::default(),
+        )
+        .expect_err("find_function should fail without either arg");
+        assert!(
+            err.to_string()
+                .contains("Either `function_name` or `model_name` must be provided"),
+            "Unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_find_function_both_function_model() {
+        let err = find_function(
+            &Params {
+                function_name: Some("my_function".to_string()),
+                model_name: Some("my_model".to_string()),
+                ..Default::default()
+            },
+            &Config::default(),
+        )
+        .expect_err("find_function should fail with both args provided");
+        assert!(
+            err.to_string()
+                .contains("Only one of `function_name` or `model_name` can be provided"),
+            "Unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_find_function_model_and_variant() {
+        let err = find_function(
+            &Params {
+                function_name: None,
+                model_name: Some("my_model".to_string()),
+                variant_name: Some("my_variant".to_string()),
+                ..Default::default()
+            },
+            &Config::default(),
+        )
+        .expect_err("find_function should fail without model_name");
+        assert!(
+            err.to_string()
+                .contains("`variant_name` cannot be provided when using `model_name`"),
+            "Unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_find_function_shorthand_model() {
+        let (function_config, function_name) = find_function(
+            &Params {
+                function_name: None,
+                model_name: Some("openai::gpt-9000".to_string()),
+                ..Default::default()
+            },
+            &Config::default(),
+        )
+        .expect("Failed to find shorthand function");
+        assert_eq!(function_name, "tensorzero::default");
+        assert_eq!(function_config.variants().len(), 1);
+        assert_eq!(
+            function_config.variants().keys().next().unwrap(),
+            "openai::gpt-9000"
+        );
+    }
+
+    #[test]
+    fn test_find_function_shorthand_missing_provider() {
+        let err = find_function(
+            &Params {
+                model_name: Some("fake_provider::gpt-9000".to_string()),
+                ..Default::default()
+            },
+            &Config::default(),
+        )
+        .expect_err("find_function should fail with invalid provider");
+        assert!(
+            err.to_string()
+                .contains("Model name 'fake_provider::gpt-9000' not found in model table"),
+            "Unexpected error: {err}"
+        );
     }
 }
