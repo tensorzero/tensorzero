@@ -159,7 +159,7 @@ impl ClickHouseConnectionInfo {
                 {
                     Ok(_) => Ok(()),
                     Err(e) => Err(ErrorDetails::ClickHouseConnection {
-                        message: format!("ClickHouse is not healthy: {}", e),
+                        message: format!("ClickHouse is not healthy: {e:?}"),
                     }
                     .into()),
                 }
