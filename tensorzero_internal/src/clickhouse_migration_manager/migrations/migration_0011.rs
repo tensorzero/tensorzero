@@ -52,11 +52,11 @@ impl Migration for Migration0011<'_> {
                 output String,
                 raw_request String,
                 raw_response String,
-                INDEX idx_long_cache_key long_cache_key TYPE bloom_filter GRANULARITY 1
+                INDEX idx_long_cache_key long_cache_key TYPE bloom_filter GRANULARITY 100
             ) ENGINE = ReplacingMergeTree(timestamp)
             ORDER BY (short_cache_key, long_cache_key)
             PRIMARY KEY (short_cache_key)
-            SETTINGS index_granularity = 1024
+            SETTINGS index_granularity = 256
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
