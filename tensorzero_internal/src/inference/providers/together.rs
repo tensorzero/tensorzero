@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::OnceLock};
 
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -18,7 +18,7 @@ use crate::{
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
-    model::{Credential, CredentialLocation},
+    model::{build_creds_caching_default, Credential, CredentialLocation},
 };
 
 use super::{
@@ -46,17 +46,22 @@ pub struct TogetherProvider {
     credentials: TogetherCredentials,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<TogetherCredentials> = OnceLock::new();
+
 impl TogetherProvider {
     pub fn new(
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = TogetherCredentials::try_from(generic_credentials)?;
+        let credentials = build_creds_caching_default(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+        )?;
         Ok(TogetherProvider {
             model_name,
-            credentials: provider_credentials,
+            credentials,
         })
     }
 }
@@ -65,7 +70,7 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("TOGETHER_API_KEY".to_string())
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum TogetherCredentials {
     Static(SecretString),
     Dynamic(String),
