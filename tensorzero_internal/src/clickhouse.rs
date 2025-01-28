@@ -66,10 +66,8 @@ impl ClickHouseConnectionInfo {
             database,
             client: Client::new(),
         };
-
-        // Error will be constructed and logged in health()
-        // Don't need to do anything with the error here
-        let _ = connection_info.health().await;
+        // If the connection is unhealthy, we won't be able to run / check migrations. So we just fail here.
+        connection_info.health().await?;
         Ok(connection_info)
     }
 
@@ -161,7 +159,7 @@ impl ClickHouseConnectionInfo {
                 {
                     Ok(_) => Ok(()),
                     Err(e) => Err(ErrorDetails::ClickHouseConnection {
-                        message: format!("ClickHouse is not healthy: {}", e),
+                        message: format!("ClickHouse is not healthy: {e:?}"),
                     }
                     .into()),
                 }
@@ -321,7 +319,7 @@ async fn write_production(
         .await
         .map_err(|e| {
             Error::new(ErrorDetails::ClickHouseQuery {
-                message: e.to_string(),
+                message: format!("{e:?}"),
             })
         })?;
 
@@ -378,14 +376,14 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
                     url.scheme()
                 ),
             }
-            .into())
+            .into());
         }
         _ => {
             return Err(ErrorDetails::Config {
                 message: format!(
                 "Invalid scheme in ClickHouse URL: '{}'. Only 'http' and 'https' are supported.",
-                    url.scheme()
-                ),
+                url.scheme()
+            ),
             }
             .into())
         }
@@ -450,11 +448,17 @@ mod tests {
     fn test_set_clickhouse_format_settings() {
         let mut database_url = Url::parse("http://localhost:8123/").unwrap();
         set_clickhouse_format_settings(&mut database_url);
-        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_defaults_for_omitted_fields=0&input_format_null_as_default=0");
+        assert_eq!(
+            database_url.to_string(),
+            "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_defaults_for_omitted_fields=0&input_format_null_as_default=0"
+        );
 
         let mut database_url = Url::parse("http://localhost:8123/?input_format_skip_unknown_fields=1&input_format_defaults_for_omitted_fields=1&input_format_null_as_default=1").unwrap();
         set_clickhouse_format_settings(&mut database_url);
-        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_defaults_for_omitted_fields=0&input_format_null_as_default=0");
+        assert_eq!(
+            database_url.to_string(),
+            "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_defaults_for_omitted_fields=0&input_format_null_as_default=0"
+        );
     }
 
     #[test]

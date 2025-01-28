@@ -31,14 +31,56 @@ pub struct Config<'c> {
     pub templates: TemplateConfig<'c>,
 }
 
+#[derive(Debug, Default)]
+pub struct GatewayConfig {
+    pub bind_address: Option<std::net::SocketAddr>,
+    pub observability: ObservabilityConfig,
+    pub debug: bool,
+}
+
+/// Note: This struct and the impl below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag
+/// TODO (#797): Remove this once we have removed the `disable_observability` flag
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct GatewayConfig {
+pub struct UninitializedGatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
     pub disable_observability: bool,
     #[serde(default)]
+    pub observability: ObservabilityConfig,
+    #[serde(default)]
     pub debug: bool,
+}
+
+impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
+    type Error = Error;
+    fn try_from(config: UninitializedGatewayConfig) -> Result<Self, Self::Error> {
+        let enabled = match (config.disable_observability, config.observability.enabled) {
+            (true, Some(_)) => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: "Configuration flag `gateway.disable_observability` and `gateway.observability.enabled` are mutually exclusive. We are deprecating `gateway.disable_observability` in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.".to_string(),
+                }));
+            }
+            (true, None) => {
+                tracing::warn!("Deprecation Warning: The configuration flag `gateway.disable_observability.enabled` is deprecated in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.");
+                Some(false)
+            }
+            (false, Some(enabled)) => Some(enabled),
+            (false, None) => None,
+        };
+        Ok(Self {
+            bind_address: config.bind_address,
+            observability: ObservabilityConfig { enabled },
+            debug: config.debug,
+        })
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObservabilityConfig {
+    #[serde(default)]
+    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,16 +124,21 @@ impl<'c> Config<'c> {
     #[instrument]
     pub fn load() -> Result<Config<'c>, Error> {
         let config_path = UninitializedConfig::get_config_path();
-        let config_table = UninitializedConfig::read_toml_config(&config_path)?;
+        let config_path = Path::new(&config_path);
+        Self::load_from_path(config_path)
+    }
+
+    pub fn load_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
+        let config_table = UninitializedConfig::read_toml_config(config_path)?;
         let base_path = match PathBuf::from(&config_path).parent() {
             Some(base_path) => base_path.to_path_buf(),
             None => {
                 return Err(ErrorDetails::Config {
                     message: format!(
-                        "Failed to get parent directory of config file: {config_path}"
+                        "Failed to get parent directory of config file: {config_path:?}"
                     ),
                 }
-                .into())
+                .into());
             }
         };
         let config = Self::load_from_toml(config_table, base_path)?;
@@ -101,7 +148,7 @@ impl<'c> Config<'c> {
     fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config<'c>, Error> {
         let config = UninitializedConfig::try_from(table)?;
 
-        let gateway = config.gateway.unwrap_or_default();
+        let gateway = config.gateway.unwrap_or_default().try_into()?;
 
         let templates = TemplateConfig::new();
 
@@ -292,7 +339,7 @@ impl<'c> Config<'c> {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
-    pub gateway: Option<GatewayConfig>,
+    pub gateway: Option<UninitializedGatewayConfig>,
     #[serde(default)]
     pub models: ModelTable, // model name => model config
     #[serde(default)]
@@ -316,17 +363,20 @@ impl UninitializedConfig {
     }
 
     /// Read a file from the file system and parse it as TOML
-    fn read_toml_config(path: &str) -> Result<toml::Table, Error> {
+    fn read_toml_config(path: &Path) -> Result<toml::Table, Error> {
         std::fs::read_to_string(path)
             .map_err(|_| {
                 Error::new(ErrorDetails::Config {
-                    message: format!("Failed to read config file: {path}"),
+                    message: format!("Failed to read config file: {}", path.to_string_lossy()),
                 })
             })?
             .parse::<toml::Table>()
             .map_err(|_| {
                 Error::new(ErrorDetails::Config {
-                    message: format!("Failed to parse config file as valid TOML: {path}"),
+                    message: format!(
+                        "Failed to parse config file as valid TOML: {}",
+                        path.to_string_lossy()
+                    ),
                 })
             })
     }
@@ -1472,25 +1522,31 @@ mod tests {
 
         // Check if all expected templates are present
         assert_eq!(
-            templates.get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
+            templates
+                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
             Some(&PathBuf::from(
                 "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
             ))
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
+            templates
+                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
             Some(&PathBuf::from(
                 "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
             ))
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"),
+            templates.get(
+                "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
+            ),
             Some(&PathBuf::from(
                 "/base/path/fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
             ))
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"),
+            templates.get(
+                "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
+            ),
             Some(&PathBuf::from(
                 "/base/path/fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
             ))
@@ -1763,7 +1819,7 @@ mod tests {
         let base_path = config_pathbuf
             .parent()
             .expect("Failed to get parent directory of config file");
-        let config_table = UninitializedConfig::read_toml_config(&config_path)
+        let config_table = UninitializedConfig::read_toml_config(Path::new(&config_path))
             .expect("Failed to read tensorzero.example.toml");
 
         Config::load_from_toml(config_table, base_path.to_path_buf())

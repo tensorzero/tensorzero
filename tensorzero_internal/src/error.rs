@@ -230,6 +230,9 @@ pub enum ErrorDetails {
     Serialization {
         message: String,
     },
+    StreamError {
+        source: Box<Error>,
+    },
     ToolNotFound {
         name: String,
     },
@@ -326,6 +329,7 @@ impl ErrorDetails {
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
+            ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ToolNotLoaded { .. } => tracing::Level::ERROR,
             ErrorDetails::TypeConversion { .. } => tracing::Level::ERROR,
@@ -397,6 +401,7 @@ impl ErrorDetails {
             ErrorDetails::OutputValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -684,6 +689,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {}", provider_name)
+            }
+            ErrorDetails::StreamError { source } => {
+                write!(f, "Error in streaming response: {source}")
             }
             ErrorDetails::Serialization { message } => write!(f, "{}", message),
             ErrorDetails::TypeConversion { message } => write!(f, "{}", message),

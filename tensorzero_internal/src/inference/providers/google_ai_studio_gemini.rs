@@ -1,3 +1,4 @@
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -22,7 +23,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
@@ -36,14 +37,19 @@ pub struct GoogleAIStudioGeminiProvider {
     credentials: GoogleAIStudioCredentials,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<GoogleAIStudioCredentials> = OnceLock::new();
+
 impl GoogleAIStudioGeminiProvider {
     pub fn new(
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = GoogleAIStudioCredentials::try_from(generic_credentials)?;
+        let credentials = build_creds_caching_default(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+        )?;
 
         let request_url = Url::parse(&format!(
             "https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
@@ -64,7 +70,7 @@ impl GoogleAIStudioGeminiProvider {
         Ok(GoogleAIStudioGeminiProvider {
             request_url,
             streaming_request_url,
-            credentials: provider_credentials,
+            credentials,
         })
     }
 }
@@ -73,7 +79,7 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("GOOGLE_AI_STUDIO_API_KEY".to_string())
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum GoogleAIStudioCredentials {
     Static(SecretString),
     Dynamic(String),
