@@ -38,14 +38,12 @@ const PROVIDER_TYPE: &str = "openrouter";
 #[derive(Debug)]
 pub struct OpenRouterProvider {
     model_name: String,
-    api_base: Option<Url>,
     credentials: OpenRouterCredentials,
 }
 
 impl OpenRouterProvider {
     pub fn new(
         model_name: String,
-        api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
         let credential_location = api_key_location.unwrap_or(default_api_key_location());
@@ -53,7 +51,6 @@ impl OpenRouterProvider {
         let provider_credentials = OpenRouterCredentials::try_from(generic_credentials)?;
         Ok(OpenRouterProvider {
             model_name,
-            api_base,
             credentials: provider_credentials,
         })
     }
@@ -117,18 +114,10 @@ impl InferenceProvider for OpenRouterProvider {
         let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let mut request_builder = http_client
+        let request_builder = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret());
-
-        // Add optional headers if provided
-        if let Some(ref site_url) = self.site_url {
-            request_builder = request_builder.header("HTTP-Referer", site_url);
-        }
-        if let Some(ref site_name) = self.site_name {
-            request_builder = request_builder.header("X-Title", site_name);
-        }
 
         let res = request_builder
             .json(&request_body)
@@ -212,18 +201,10 @@ impl InferenceProvider for OpenRouterProvider {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
 
-        let mut request_builder = http_client
+        let request_builder = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret());
-
-        // Add optional headers if provided
-        if let Some(ref site_url) = self.site_url {
-            request_builder = request_builder.header("HTTP-Referer", site_url);
-        }
-        if let Some(ref site_name) = self.site_name {
-            request_builder = request_builder.header("X-Title", site_name);
-        }
 
         let event_source = request_builder
             .json(&request_body)

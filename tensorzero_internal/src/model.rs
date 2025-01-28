@@ -334,7 +334,6 @@ enum ProviderConfigHelper {
     #[allow(clippy::upper_case_acronyms)]
     OpenRouter {
         model_name: String,
-        api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
@@ -476,10 +475,9 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             ),
             ProviderConfigHelper::OpenRouter {
                 model_name,
-                api_base,
                 api_key_location,
             } => ProviderConfig::OpenRouter(
-                OpenRouterProvider::new(model_name, api_base, api_key_location)
+                OpenRouterProvider::new(model_name, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
             #[cfg(any(test, feature = "e2e_tests"))]
@@ -1047,9 +1045,7 @@ fn model_config_from_shorthand(
         "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
         "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
         "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
-        "openrouter" => {
-            ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, None, None)?)
-        }
+        "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, None)?),
         #[cfg(any(test, feature = "e2e_tests"))]
         "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
         _ => {
