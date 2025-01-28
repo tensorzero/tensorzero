@@ -65,7 +65,7 @@ async fn main() {
 
     let res = client
         .inference(ClientInferenceParams {
-            function_name: args.function_name,
+            function_name: Some(args.function_name),
             stream: Some(args.streaming),
             input: Input {
                 messages: vec![InputMessage {
