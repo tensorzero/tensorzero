@@ -136,14 +136,14 @@ jobs:
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
+          working-directory: ./clients/python-pyo3
           command: sdist
-          args: --out ./clients/python-pyo3
+          args: --out dist
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
-          working-directory: ./clients/python-pyo3
           name: wheels-sdist
-          path: dist
+          path: ./clients/python-pyo3/dist
 
   release:
     name: Release
