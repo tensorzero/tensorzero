@@ -15,6 +15,7 @@ use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
 use crate::inference::providers::hyperbolic::HyperbolicProvider;
+use crate::inference::providers::openrouter::OpenRouterProvider;
 use crate::inference::providers::sglang::SGLangProvider;
 use crate::inference::providers::tgi::TGIProvider;
 use crate::inference::types::batch::{
@@ -233,6 +234,7 @@ pub enum ProviderConfig {
     XAI(XAIProvider),
     TGI(TGIProvider),
     SGLang(SGLangProvider),
+    OpenRouter(OpenRouterProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -327,6 +329,12 @@ enum ProviderConfigHelper {
     SGLang {
         model_name: String,
         api_base: Url,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[allow(clippy::upper_case_acronyms)]
+    OpenRouter {
+        model_name: String,
+        api_base: Option<Url>,
         api_key_location: Option<CredentialLocation>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
@@ -466,6 +474,14 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 TGIProvider::new(api_base, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
+            ProviderConfigHelper::OpenRouter {
+                model_name,
+                api_base,
+                api_key_location,
+            } => ProviderConfig::OpenRouter(
+                OpenRouterProvider::new(model_name, api_base, api_key_location)
+                    .map_err(|e| D::Error::custom(e.to_string()))?,
+            ),
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfigHelper::Dummy {
                 model_name,
@@ -507,6 +523,7 @@ impl ProviderConfig {
             ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::TGI(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::OpenRouter(provider) => provider.infer(request, client, api_keys).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => provider.infer(request, client, api_keys).await,
         }
@@ -567,6 +584,9 @@ impl ProviderConfig {
                 provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::TGI(provider) => provider.infer_stream(request, client, api_keys).await,
+            ProviderConfig::OpenRouter(provider) => {
+                provider.infer_stream(request, client, api_keys).await
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider.infer_stream(request, client, api_keys).await
@@ -652,6 +672,11 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::TGI(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::OpenRouter(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -743,6 +768,11 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::XAI(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::OpenRouter(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -926,6 +956,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "together::",
     "xai::",
     "dummy::",
+    "openrouter::",
 ];
 
 #[derive(Debug, Default, Deserialize)]
@@ -1016,6 +1047,9 @@ fn model_config_from_shorthand(
         "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
         "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
         "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
+        "openrouter" => {
+            ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, None, None)?)
+        }
         #[cfg(any(test, feature = "e2e_tests"))]
         "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
         _ => {
