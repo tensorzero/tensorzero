@@ -164,7 +164,7 @@ impl Variant for ChatCompletionConfig {
             false,
             &mut inference_params,
         )?;
-        let model_config = models.models.get(&self.model).ok_or_else(|| {
+        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -172,7 +172,7 @@ impl Variant for ChatCompletionConfig {
         let args = InferModelRequestArgs {
             request,
             model_name: self.model.clone(),
-            model_config,
+            model_config: &model_config,
             function,
             inference_config,
             clients,
@@ -199,7 +199,7 @@ impl Variant for ChatCompletionConfig {
             true,
             &mut inference_params,
         )?;
-        let model_config = models.models.get(&self.model).ok_or_else(|| {
+        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -207,7 +207,7 @@ impl Variant for ChatCompletionConfig {
         infer_model_request_stream(
             request,
             self.model.clone(),
-            model_config,
+            &model_config,
             function,
             clients,
             inference_params,
@@ -240,7 +240,7 @@ impl Variant for ChatCompletionConfig {
                 ),
             }.into());
         }
-        models.validate_or_create(&self.model)?;
+        models.validate(&self.model)?;
 
         // Validate the system template matches the system schema (best effort, we cannot check the variables comprehensively)
         validate_template_and_schema(
@@ -323,7 +323,7 @@ impl Variant for ChatCompletionConfig {
                 self.prepare_request(input, function, inference_config, false, inference_param)?;
             inference_requests.push(request);
         }
-        let model_config = models.models.get(&self.model).ok_or_else(|| {
+        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })

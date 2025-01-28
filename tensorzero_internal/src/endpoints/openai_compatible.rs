@@ -331,7 +331,8 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             _ => None,
         };
         Ok(Params {
-            function_name: function_name.to_string(),
+            function_name: Some(function_name.to_string()),
+            model_name: None,
             episode_id,
             input,
             stream: openai_compatible_params.stream,
@@ -753,7 +754,7 @@ mod tests {
         )
             .try_into()
             .unwrap();
-        assert_eq!(params.function_name, "test_function");
+        assert_eq!(params.function_name, Some("test_function".to_string()));
         assert_eq!(params.episode_id, Some(episode_id));
         assert_eq!(params.variant_name, Some("test_variant".to_string()));
         assert_eq!(params.input.messages.len(), 1);
