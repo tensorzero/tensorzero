@@ -230,9 +230,6 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/ui_fixtures" >> .env
           docker compose -f fixtures/docker-compose.yml up -d --build
 
-      - name: Debugging with ssh
-        uses: lhotari/action-upterm@v1
-
       - name: Run ui tests
         working-directory: ui
         run: TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/ui_fixtures pnpm test
