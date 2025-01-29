@@ -39,6 +39,7 @@ pub(crate) static TENSORZERO_INTERNAL_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCel
 
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    tensorzero_rust::observability::setup_logs(false);
     m.add_class::<BaseTensorZeroGateway>()?;
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;

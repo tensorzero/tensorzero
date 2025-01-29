@@ -20,7 +20,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[tokio::main]
 async fn main() {
     // Set up logs and metrics
-    observability::setup_logs();
+    observability::setup_logs(true);
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Load config

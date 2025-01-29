@@ -394,6 +394,9 @@ pub fn err_to_http(e: tensorzero_internal::error::Error) -> TensorZeroError {
     }
 }
 
+#[cfg(feature = "pyo3")]
+pub use tensorzero_internal::observability;
+
 #[cfg(test)]
 mod tests {
     use super::*;
