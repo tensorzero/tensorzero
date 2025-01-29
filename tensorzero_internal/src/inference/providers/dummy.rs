@@ -318,7 +318,6 @@ impl InferenceProvider for DummyProvider {
             }
             .into());
         }
-        let id = Uuid::now_v7();
         let created = current_timestamp();
 
         let (content_chunks, is_tool_call) = if self.model_name == "tool" {
@@ -330,7 +329,6 @@ impl InferenceProvider for DummyProvider {
         let total_tokens = content_chunks.len() as u32;
 
         let initial_chunk = ProviderInferenceResponseChunk {
-            inference_id: id,
             created,
             content: vec![if is_tool_call {
                 ContentBlockChunk::ToolCall(ToolCallChunk {
@@ -352,7 +350,6 @@ impl InferenceProvider for DummyProvider {
         let stream = tokio_stream::iter(content_chunks.into_iter().skip(1).enumerate())
             .map(move |(i, chunk)| {
                 Ok(ProviderInferenceResponseChunk {
-                    inference_id: id,
                     created,
                     content: vec![if is_tool_call {
                         ContentBlockChunk::ToolCall(ToolCallChunk {
@@ -372,7 +369,6 @@ impl InferenceProvider for DummyProvider {
                 })
             })
             .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
-                inference_id: id,
                 created,
                 content: vec![],
                 usage: Some(crate::inference::types::Usage {
@@ -397,14 +393,12 @@ impl InferenceProvider for DummyProvider {
         _client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
-        let inference_ids: Vec<Uuid> = requests.iter().map(|_| Uuid::now_v7()).collect();
         let file_id = Uuid::now_v7();
         let batch_id = Uuid::now_v7();
         let raw_requests: Vec<String> =
             requests.iter().map(|_| "raw_request".to_string()).collect();
         Ok(StartBatchProviderInferenceResponse {
             batch_id,
-            inference_ids,
             batch_params: json!({"file_id": file_id, "batch_id": batch_id}),
             status: BatchStatus::Pending,
             raw_requests,

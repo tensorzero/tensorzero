@@ -380,10 +380,13 @@ mod tests {
     use futures::StreamExt;
     use reqwest::Client;
     use serde_json::{json, Value};
+    use uuid::Uuid;
 
     use crate::clickhouse::ClickHouseConnectionInfo;
     use crate::embeddings::EmbeddingModelTable;
-    use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
+    use crate::endpoints::inference::{
+        ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,
+    };
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
@@ -772,6 +775,10 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
         };
         let models = ModelTable::default();
         let inference_models = InferenceModels {
@@ -820,6 +827,10 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
         };
         let result = chat_completion_config
             .infer(
@@ -859,6 +870,10 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
         };
         let err = chat_completion_config
             .infer(
@@ -918,6 +933,10 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
         };
         let result = chat_completion_config
             .infer(
@@ -990,6 +1009,10 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
         };
         let result = chat_completion_config
             .infer(
@@ -1070,6 +1093,10 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
         };
         let inference_params = InferenceParams::default();
         let result = chat_completion_config
@@ -1120,6 +1147,10 @@ mod tests {
             embedding_models: &EmbeddingModelTable::default(),
         };
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             templates: &templates,
             tool_config: None,
             function_name: "",
@@ -1212,6 +1243,10 @@ mod tests {
             "required": ["answer"]
         }));
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             templates: &templates,
             tool_config: None,
             function_name: "",
@@ -1295,6 +1330,10 @@ mod tests {
             "required": ["response"]
         }));
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             templates: &templates,
             tool_config: None,
             function_name: "",
@@ -1427,6 +1466,10 @@ mod tests {
             embedding_models,
         };
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             templates,
             tool_config: None,
             dynamic_output_schema: None,
@@ -1479,6 +1522,10 @@ mod tests {
             embedding_models,
         };
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             templates,
             tool_config: None,
             function_name: "",
@@ -1574,6 +1621,10 @@ mod tests {
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             templates,
             tool_config: None,
             function_name: "",
@@ -1672,6 +1723,10 @@ mod tests {
             },
         });
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             templates,
             tool_config: None,
             dynamic_output_schema: None,
@@ -1750,6 +1805,10 @@ mod tests {
             dynamic_output_schema: Some(&dynamic_output_schema),
             function_name: "",
             variant_name: Some(""),
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
         };
         let model_request = chat_completion_config
             .prepare_request(

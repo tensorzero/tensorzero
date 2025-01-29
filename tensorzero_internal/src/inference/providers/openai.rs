@@ -278,12 +278,10 @@ impl InferenceProvider for OpenAIProvider {
             self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
             None,
         )?;
-        let inference_ids: Vec<Uuid> = requests.iter().map(|_| Uuid::now_v7()).collect();
         let batch_requests: Result<Vec<OpenAIBatchFileInput>, Error> = requests
             .iter()
-            .zip(&inference_ids)
-            .map(|(request, inference_id)| {
-                OpenAIBatchFileInput::new(*inference_id, &self.model_name, request)
+            .map(|request| {
+                OpenAIBatchFileInput::new(request.inference_id, &self.model_name, request)
             })
             .collect();
         let batch_requests = batch_requests?;
@@ -415,7 +413,6 @@ impl InferenceProvider for OpenAIProvider {
         };
         Ok(StartBatchProviderInferenceResponse {
             batch_id: Uuid::now_v7(),
-            inference_ids,
             batch_params,
             raw_requests,
             raw_request,
@@ -597,7 +594,6 @@ pub fn stream_openai(
     let mut tool_call_ids = Vec::new();
     let mut tool_call_names = Vec::new();
     async_stream::stream! {
-        let inference_id = Uuid::now_v7();
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -627,7 +623,7 @@ pub fn stream_openai(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            openai_to_tensorzero_chunk(d, inference_id, latency, &mut tool_call_ids, &mut tool_call_names)
+                            openai_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names)
                         });
                         yield stream_message;
                     }
@@ -1545,7 +1541,6 @@ struct OpenAIChatChunk {
 /// Maps an OpenAI chunk to a TensorZero chunk for streaming inferences
 fn openai_to_tensorzero_chunk(
     mut chunk: OpenAIChatChunk,
-    inference_id: Uuid,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
     tool_names: &mut Vec<String>,
@@ -1623,7 +1618,6 @@ fn openai_to_tensorzero_chunk(
     }
 
     Ok(ProviderInferenceResponseChunk::new(
-        inference_id,
         content,
         usage,
         raw_message,
@@ -2006,6 +2000,7 @@ mod tests {
     fn test_openai_request_new() {
         // Test basic request
         let basic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![
                 RequestMessage {
                     role: Role::User,
@@ -2051,6 +2046,7 @@ mod tests {
 
         // Test request with tools and JSON mode
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -2100,6 +2096,7 @@ mod tests {
 
         // Test request with strict JSON mode with no output schema
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -2138,6 +2135,7 @@ mod tests {
         // Test request with strict JSON mode with an output schema
         let output_schema = json!({});
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -2179,6 +2177,7 @@ mod tests {
     #[test]
     fn test_openai_new_request_o1() {
         let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["Hello".to_string().into()],
@@ -2213,6 +2212,7 @@ mod tests {
 
         // Test case: System message is converted to User message
         let request_with_system = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["Hello".to_string().into()],
@@ -2254,6 +2254,7 @@ mod tests {
 
         // Test case: Tool config errors on O1 models
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["Hello".to_string().into()],
@@ -2310,6 +2311,7 @@ mod tests {
             },
         };
         let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["test_user".to_string().into()],
@@ -2399,6 +2401,7 @@ mod tests {
             },
         };
         let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
@@ -2565,6 +2568,7 @@ mod tests {
     #[test]
     fn test_prepare_openai_tools() {
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -2604,6 +2608,7 @@ mod tests {
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -2711,10 +2716,8 @@ mod tests {
         };
         let mut tool_call_ids = vec!["id1".to_string()];
         let mut tool_call_names = vec!["name1".to_string()];
-        let inference_id = Uuid::now_v7();
         let message = openai_to_tensorzero_chunk(
             chunk.clone(),
-            inference_id,
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut tool_call_names,
@@ -2746,7 +2749,6 @@ mod tests {
         };
         let message = openai_to_tensorzero_chunk(
             chunk.clone(),
-            inference_id,
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut tool_call_names,
@@ -2779,7 +2781,6 @@ mod tests {
         };
         let error = openai_to_tensorzero_chunk(
             chunk.clone(),
-            inference_id,
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut tool_call_names,
@@ -2814,7 +2815,6 @@ mod tests {
         };
         let message = openai_to_tensorzero_chunk(
             chunk.clone(),
-            inference_id,
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut tool_call_names,
@@ -2847,7 +2847,6 @@ mod tests {
         };
         let message = openai_to_tensorzero_chunk(
             chunk.clone(),
-            inference_id,
             Duration::from_millis(50),
             &mut tool_call_ids,
             &mut tool_call_names,

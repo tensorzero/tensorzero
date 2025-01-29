@@ -8,7 +8,6 @@ use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
-use uuid::Uuid;
 
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
@@ -243,7 +242,6 @@ fn stream_anthropic(
     start_time: Instant,
 ) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     async_stream::stream! {
-        let inference_id = Uuid::now_v7();
         let mut current_tool_id : Option<String> = None;
         let mut current_tool_name: Option<String> = None;
         while let Some(ev) = event_source.next().await {
@@ -277,7 +275,6 @@ fn stream_anthropic(
                         let response = data.and_then(|data| {
                             anthropic_to_tensorzero_stream_message(
                                 data,
-                                inference_id,
                                 start_time.elapsed(),
                                 &mut current_tool_id,
                                 &mut current_tool_name,
@@ -839,7 +836,6 @@ enum GCPVertexAnthropicStreamMessage {
 /// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
 fn anthropic_to_tensorzero_stream_message(
     message: GCPVertexAnthropicStreamMessage,
-    inference_id: Uuid,
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
@@ -853,7 +849,6 @@ fn anthropic_to_tensorzero_stream_message(
         GCPVertexAnthropicStreamMessage::ContentBlockDelta { delta, index } => match delta {
             GCPVertexAnthropicMessageBlock::TextDelta { text } => {
                 Ok(Some(ProviderInferenceResponseChunk::new(
-                    inference_id,
                     vec![ContentBlockChunk::Text(TextChunk {
                         text,
                         id: index.to_string(),
@@ -865,7 +860,6 @@ fn anthropic_to_tensorzero_stream_message(
             }
             GCPVertexAnthropicMessageBlock::InputJsonDelta { partial_json } => {
                 Ok(Some(ProviderInferenceResponseChunk::new(
-                    inference_id,
                     // Take the current tool name and ID and use them to create a ToolCallChunk
                     // This is necessary because the ToolCallChunk must always contain the tool name and ID
                     // even though Anthropic only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
@@ -907,7 +901,6 @@ fn anthropic_to_tensorzero_stream_message(
                     id: index.to_string(),
                 });
                 Ok(Some(ProviderInferenceResponseChunk::new(
-                    inference_id,
                     vec![text_chunk],
                     None,
                     raw_message,
@@ -919,7 +912,6 @@ fn anthropic_to_tensorzero_stream_message(
                 *current_tool_id = Some(id.clone());
                 *current_tool_name = Some(name.clone());
                 Ok(Some(ProviderInferenceResponseChunk::new(
-                    inference_id,
                     vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                         id,
                         raw_name: name,
@@ -950,7 +942,6 @@ fn anthropic_to_tensorzero_stream_message(
         GCPVertexAnthropicStreamMessage::MessageDelta { usage, .. } => {
             let usage = parse_usage_info(&usage);
             Ok(Some(ProviderInferenceResponseChunk::new(
-                inference_id,
                 vec![],
                 Some(usage.into()),
                 raw_message,
@@ -961,7 +952,6 @@ fn anthropic_to_tensorzero_stream_message(
             if let Some(usage_info) = message.get("usage") {
                 let usage = parse_usage_info(usage_info);
                 Ok(Some(ProviderInferenceResponseChunk::new(
-                    inference_id,
                     vec![],
                     Some(usage.into()),
                     raw_message,
@@ -999,6 +989,7 @@ mod tests {
     use super::*;
 
     use serde_json::json;
+    use uuid::Uuid;
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
@@ -1164,6 +1155,7 @@ mod tests {
         };
         // Test Case 1: Empty message list
         let inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: None,
@@ -1199,6 +1191,7 @@ mod tests {
             },
         ];
         let inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: messages.clone(),
             system: Some("test_system".to_string()),
             tool_config: None,
@@ -1251,6 +1244,7 @@ mod tests {
             },
         ];
         let inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: messages.clone(),
             system: Some("test_system".to_string()),
             tool_config: None,
@@ -1313,6 +1307,7 @@ mod tests {
         ];
 
         let inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: messages.clone(),
             system: Some("test_system".to_string()),
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
@@ -1676,6 +1671,7 @@ mod tests {
             response_time: Duration::from_millis(100),
         };
         let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             system: Some("system".to_string()),
             messages: vec![RequestMessage {
                 role: Role::User,
@@ -1753,6 +1749,7 @@ mod tests {
             },
         };
         let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             system: None,
             messages: vec![RequestMessage {
                 role: Role::Assistant,
@@ -1840,6 +1837,7 @@ mod tests {
             },
         };
         let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             system: None,
             messages: vec![RequestMessage {
                 role: Role::Assistant,
@@ -1912,9 +1910,6 @@ mod tests {
     #[test]
     fn test_anthropic_to_tensorzero_stream_message() {
         use serde_json::json;
-        use uuid::Uuid;
-
-        let inference_id = Uuid::now_v7();
 
         // Test ContentBlockDelta with TextDelta
         let mut current_tool_id = None;
@@ -1928,7 +1923,6 @@ mod tests {
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
             content_block_delta,
-            inference_id,
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
@@ -1957,7 +1951,6 @@ mod tests {
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
             content_block_delta,
-            inference_id,
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
@@ -1985,7 +1978,6 @@ mod tests {
         let latency = Duration::from_millis(100);
         let result = anthropic_to_tensorzero_stream_message(
             content_block_delta,
-            inference_id,
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
@@ -2016,7 +2008,6 @@ mod tests {
         let latency = Duration::from_millis(110);
         let result = anthropic_to_tensorzero_stream_message(
             content_block_start,
-            inference_id,
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
@@ -2047,7 +2038,6 @@ mod tests {
         let latency = Duration::from_millis(120);
         let result = anthropic_to_tensorzero_stream_message(
             content_block_start,
-            inference_id,
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
@@ -2075,7 +2065,6 @@ mod tests {
         let latency = Duration::from_millis(130);
         let result = anthropic_to_tensorzero_stream_message(
             content_block_start,
-            inference_id,
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
@@ -2096,7 +2085,6 @@ mod tests {
         let latency = Duration::from_millis(120);
         let result = anthropic_to_tensorzero_stream_message(
             content_block_stop,
-            inference_id,
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
@@ -2111,7 +2099,6 @@ mod tests {
         let latency = Duration::from_millis(130);
         let result = anthropic_to_tensorzero_stream_message(
             error_message,
-            inference_id,
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
@@ -2135,7 +2122,6 @@ mod tests {
         let latency = Duration::from_millis(140);
         let result = anthropic_to_tensorzero_stream_message(
             message_delta,
-            inference_id,
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
@@ -2156,7 +2142,6 @@ mod tests {
         let latency = Duration::from_millis(150);
         let result = anthropic_to_tensorzero_stream_message(
             message_start,
-            inference_id,
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
@@ -2175,7 +2160,6 @@ mod tests {
         let latency = Duration::from_millis(160);
         let result = anthropic_to_tensorzero_stream_message(
             message_stop,
-            inference_id,
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
@@ -2188,7 +2172,6 @@ mod tests {
         let latency = Duration::from_millis(170);
         let result = anthropic_to_tensorzero_stream_message(
             ping,
-            inference_id,
             latency,
             &mut current_tool_id,
             &mut current_tool_name,
