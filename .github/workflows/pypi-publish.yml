@@ -159,7 +159,5 @@ jobs:
         with:
           subject-path: 'wheels-*/*'
       - name: Publish to PyPI
-        uses: PyO3/maturin-action@v1
-        with:
-          command: upload
-          args: --repository testpypi --non-interactive --skip-existing wheels-*/*
+        run: |
+          ./scripts/ci/upload-pyo3.sh
