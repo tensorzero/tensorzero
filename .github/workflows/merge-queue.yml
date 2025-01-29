@@ -93,7 +93,7 @@ jobs:
 
       - name: Wake up ClickHouse cloud (for batch tests)
         run: |
-          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES' &
+          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES' > clickhouse_wakeup_logs.txt &
 
       - name: Run all tests (including E2E tests)
         run: |
@@ -237,6 +237,10 @@ jobs:
       - name: Take down ui tests
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.yml down
+
+      - name: Print clickhouse wakeup logs
+        if: always()
+        run: cat clickhouse_wakeup_logs.txt
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for batch tests
         run: |
