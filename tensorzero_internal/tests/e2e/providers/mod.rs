@@ -4,6 +4,7 @@ mod azure;
 #[cfg(feature = "batch_tests")]
 mod batch;
 mod common;
+mod deepseek;
 mod fireworks;
 mod gcp_vertex_anthropic;
 mod gcp_vertex_gemini;
