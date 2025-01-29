@@ -153,7 +153,6 @@ jobs:
       # Used to generate artifact attestation
       attestations: write
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
@@ -162,6 +161,5 @@ jobs:
       - name: Publish to PyPI
         uses: PyO3/maturin-action@v1
         with:
-          working-directory: ./clients/python-pyo3
           command: upload
-          args: -r testpypi --non-interactive --skip-existing ../../wheels-*/*
+          args: -r testpypi --non-interactive --skip-existing wheels-*/*
