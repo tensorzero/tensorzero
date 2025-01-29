@@ -1,18 +1,19 @@
 use std::fs;
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::{collections::HashMap, path::PathBuf};
 
 use serde::Deserialize;
 
-use crate::embeddings::EmbeddingResponseWithMetadata;
+use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::model::ModelTable;
+use crate::model_table::ShorthandModelConfig;
 use crate::{
-    embeddings::{EmbeddingModelConfig, EmbeddingRequest},
+    embeddings::EmbeddingRequest,
     endpoints::inference::{InferenceClients, InferenceParams},
     error::{Error, ErrorDetails},
     function::FunctionConfig,
@@ -208,7 +209,7 @@ impl Variant for DiclConfig {
         &self,
         _function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
+        embedding_models: &EmbeddingModelTable,
         _templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -230,21 +231,23 @@ impl Variant for DiclConfig {
         // Validate that the generation model and embedding model are valid
         models.validate(&self.model)?;
         let embedding_model = embedding_models
-            .get(&self.embedding_model)
+            .get(&self.embedding_model)?
             .ok_or_else(|| Error::new(ErrorDetails::Config {
                 message: format!(
                     "`functions.{function_name}.variants.{variant_name}`: `embedding_model` must be a valid embedding model name"
                 ),
             }))?;
 
-        embedding_model.validate().map_err(|e| {
-            Error::new(ErrorDetails::Config {
-                message: format!(
+        embedding_model
+            .validate(&self.embedding_model)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Config {
+                    message: format!(
                 "`functions.{function_name}.variants.{variant_name}` and embedding model `{}`: {e}",
                 self.embedding_model
                 ),
-            })
-        })?;
+                })
+            })?;
         Ok(())
     }
 
@@ -295,7 +298,7 @@ impl DiclConfig {
     async fn retrieve_relevant_examples<'a>(
         &'a self,
         input: &Input,
-        embedding_models: &'a HashMap<Arc<str>, EmbeddingModelConfig>,
+        embedding_models: &'a EmbeddingModelTable,
         clients: &InferenceClients<'_>,
         function_name: &str,
         variant_name: &str,
@@ -311,11 +314,13 @@ impl DiclConfig {
             })
         })?;
 
-        let embedding_model = embedding_models.get(&self.embedding_model).ok_or_else(|| {
-            Error::new(ErrorDetails::Inference {
-                message: format!("Embedding model {} not found", self.embedding_model),
-            })
-        })?;
+        let embedding_model = embedding_models
+            .get(&self.embedding_model)?
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Inference {
+                    message: format!("Embedding model {} not found", self.embedding_model),
+                })
+            })?;
 
         let embedding_request = EmbeddingRequest {
             input: serialized_input.to_string(),

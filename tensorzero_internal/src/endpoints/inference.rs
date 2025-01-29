@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
@@ -712,7 +712,7 @@ pub struct InferenceClients<'a> {
 #[derive(Debug)]
 pub struct InferenceModels<'a> {
     pub models: &'a ModelTable,
-    pub embedding_models: &'a HashMap<Arc<str>, EmbeddingModelConfig>,
+    pub embedding_models: &'a EmbeddingModelTable,
 }
 
 /// InferenceParams is the top-level struct for inference parameters.

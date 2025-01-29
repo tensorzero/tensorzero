@@ -590,6 +590,7 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::config_parser::{Config, GatewayConfig, MetricConfig, MetricConfigOptimize};
+    use crate::embeddings::EmbeddingModelTable;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::TemplateConfig;
@@ -612,7 +613,7 @@ mod tests {
         let config = Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -734,7 +735,7 @@ mod tests {
         let config = Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -766,7 +767,7 @@ mod tests {
         let config = Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -791,7 +792,7 @@ mod tests {
         let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics: HashMap::new(),
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -874,7 +875,7 @@ mod tests {
         let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -934,7 +935,7 @@ mod tests {
         let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),

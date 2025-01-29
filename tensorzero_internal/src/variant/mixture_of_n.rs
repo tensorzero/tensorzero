@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use futures::future::join_all;
 use rand::Rng;
@@ -7,7 +6,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
@@ -92,7 +91,7 @@ impl Variant for MixtureOfNConfig {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
+        embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -494,6 +493,8 @@ impl FuserConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use reqwest::Client;
     use uuid::Uuid;
 
