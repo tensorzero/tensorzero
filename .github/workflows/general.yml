@@ -120,4 +120,4 @@ jobs:
 
       - name: Run ui tests
         working-directory: ui
-        run: pnpm test
+        run: TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/ui_fixtures pnpm test
