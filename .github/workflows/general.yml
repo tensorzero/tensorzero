@@ -30,15 +30,15 @@ jobs:
           version: 10
 
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/0.3.3/install.sh | sh
+        run: curl -LsSf https://astral.sh/uv/0.5.4/install.sh | sh
 
       - name: Configure Namespace cache for Rust, Python (pip), and pnpm
         uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: |
             pnpm
-            uv
             rust
+            uv
 
       - name: Install cargo-nextest and cargo-deny
         uses: taiki-e/install-action@v2
