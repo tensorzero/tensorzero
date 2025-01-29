@@ -93,7 +93,7 @@ jobs:
 
       - name: Wake up ClickHouse cloud (for batch tests)
         run: |
-          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }}/ping &
+          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES' &
 
       - name: Run all tests (including E2E tests)
         run: |
