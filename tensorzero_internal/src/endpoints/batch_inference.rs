@@ -9,7 +9,6 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::iter::repeat;
-use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -36,7 +35,7 @@ use crate::inference::types::{
     ModelInferenceResponseWithMetadata, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
-use crate::model::ModelConfig;
+use crate::model::ModelTable;
 use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
@@ -493,13 +492,13 @@ pub async fn get_batch_request(
 async fn poll_batch_inference(
     batch_request: &BatchRequestRow<'static>,
     http_client: reqwest::Client,
-    models: &HashMap<Arc<str>, ModelConfig>,
+    models: &ModelTable,
     credentials: &InferenceCredentials,
 ) -> Result<PollBatchInferenceResponse, Error> {
     // Retrieve the relevant model provider
     // Call model.poll_batch_inference on it
     let model_config = models
-        .get(batch_request.model_name.as_ref())
+        .get(batch_request.model_name.as_ref())?
         .ok_or_else(|| {
             Error::new(ErrorDetails::InvalidModel {
                 model_name: batch_request.model_name.to_string(),
@@ -601,7 +600,7 @@ async fn write_start_batch_inference<'a>(
             output_schema: row.output_schema.map(|s| s.to_string()),
             raw_request: Cow::Borrowed(row.raw_request),
             model_name: Cow::Borrowed(result.model_name),
-            model_provider_name: Cow::Borrowed(result.model_provider_name),
+            model_provider_name: Cow::Borrowed(&result.model_provider_name),
             tags: row.tags.unwrap_or_default(),
         });
     }
@@ -618,7 +617,7 @@ async fn write_start_batch_inference<'a>(
         raw_request: &result.raw_request,
         raw_response: &result.raw_response,
         model_name: result.model_name,
-        model_provider_name: result.model_provider_name,
+        model_provider_name: &result.model_provider_name,
         status: BatchStatus::Pending,
         errors: result.errors,
     });

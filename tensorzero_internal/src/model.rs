@@ -3,6 +3,7 @@ use reqwest::Client;
 use secrecy::SecretString;
 use serde::de::Error as SerdeError;
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::sync::{Arc, OnceLock};
 use std::{env, fs};
 use strum::VariantNames;
@@ -45,6 +46,23 @@ use serde::Deserialize;
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, ProviderConfig>, // provider name => provider config
+}
+
+/// This is `Cow` without the `T: Clone` bound.
+/// Useful when we want a `Cow`, but don't want to (or can't) implement `Clone`
+pub enum CowNoClone<'a, T> {
+    Borrowed(&'a T),
+    Owned(T),
+}
+
+impl<T> Deref for CowNoClone<'_, T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            CowNoClone::Borrowed(t) => t,
+            CowNoClone::Owned(t) => t,
+        }
+    }
 }
 
 impl ModelConfig {
@@ -128,12 +146,12 @@ impl ModelConfig {
         }))
     }
 
-    pub async fn start_batch_inference<'a, 'request>(
-        &'a self,
+    pub async fn start_batch_inference<'request>(
+        &self,
         requests: &'request [ModelInferenceRequest<'request>],
         client: &'request Client,
         api_keys: &'request InferenceCredentials,
-    ) -> Result<StartBatchModelInferenceResponse<'a>, Error> {
+    ) -> Result<StartBatchModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
@@ -153,7 +171,7 @@ impl ModelConfig {
                 Ok(response) => {
                     return Ok(StartBatchModelInferenceResponse::new(
                         response,
-                        provider_name,
+                        provider_name.clone(),
                     ));
                 }
                 Err(error) => {
@@ -1009,19 +1027,41 @@ impl TryFrom<HashMap<Arc<str>, ModelConfig>> for ModelTable {
     }
 }
 
-impl std::ops::Deref for ModelTable {
-    type Target = HashMap<Arc<str>, ModelConfig>;
+pub struct Shorthand<'a> {
+    pub provider_type: &'a str,
+    pub model_name: &'a str,
+}
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+fn check_shorthand(key: &str) -> Option<Shorthand> {
+    for prefix in SHORTHAND_MODEL_PREFIXES {
+        if let Some(model_name) = key.strip_prefix(prefix) {
+            // Remove the last two characters of the prefix to get the provider type
+            let provider_type = &prefix[..prefix.len() - 2];
+            return Some(Shorthand {
+                provider_type,
+                model_name,
+            });
+        }
     }
+    None
 }
 
 impl ModelTable {
+    pub fn get(&self, key: &str) -> Result<Option<CowNoClone<'_, ModelConfig>>, Error> {
+        if let Some(model_config) = self.0.get(key) {
+            return Ok(Some(CowNoClone::Borrowed(model_config)));
+        }
+        if let Some(shorthand) = check_shorthand(key) {
+            return Ok(Some(CowNoClone::Owned(model_config_from_shorthand(
+                shorthand.provider_type,
+                shorthand.model_name,
+            )?)));
+        }
+        Ok(None)
+    }
     /// Check that a model name is valid
     /// This is either true because it's in the table, or because it's a valid shorthand name
-    /// In the latter case, we actually create a new model config in the table corresponding to the shorthand
-    pub fn validate_or_create(&mut self, key: &str) -> Result<(), Error> {
+    pub fn validate(&self, key: &str) -> Result<(), Error> {
         // Try direct lookup (if it's blacklisted, it's not in the table)
         // If it's shorthand and already in the table, it's valid
         if let Some(model_config) = self.0.get(key) {
@@ -1029,28 +1069,7 @@ impl ModelTable {
             return Ok(());
         }
 
-        // Try matching shorthand prefixes
-        if let Some(prefix) = SHORTHAND_MODEL_PREFIXES
-            .iter()
-            .find(|&&prefix| key.starts_with(prefix))
-        {
-            let model_name = match key.strip_prefix(prefix) {
-                Some(name) => name,
-                None => {
-                    return Err(ErrorDetails::Config {
-                        message: format!(
-                            "Failed to strip prefix '{}' from model name '{}' This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/issues/new",
-                            prefix, key
-                        ),
-                    }
-                    .into());
-                }
-            };
-            // Remove the last two characters of the prefix to get the provider type
-            let provider_type = &prefix[..prefix.len() - 2];
-            let model_config = model_config_from_shorthand(provider_type, model_name)?;
-            model_config.validate(key)?;
-            self.0.insert(key.into(), model_config);
+        if check_shorthand(key).is_some() {
             return Ok(());
         }
 
@@ -1058,6 +1077,15 @@ impl ModelTable {
             message: format!("Model name '{}' not found in model table", key),
         }
         .into())
+    }
+
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub fn static_model_len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn iter_static_models(&self) -> impl Iterator<Item = (&Arc<str>, &ModelConfig)> {
+        self.0.iter()
     }
 }
 
@@ -1563,22 +1591,15 @@ mod tests {
 
     #[test]
     fn test_validate_or_create_model_config() {
-        let mut model_table = ModelTable::default();
+        let model_table = ModelTable::default();
         // Test that we can get or create a model config
-        model_table.validate_or_create("dummy::gpt-4o").unwrap();
-        assert_eq!(model_table.len(), 1);
-        let model_config = model_table.get("dummy::gpt-4o").unwrap();
-        assert_eq!(model_config.routing, vec!["dummy".into()]);
-        let provider_config = model_config.providers.get("dummy").unwrap();
-        match provider_config {
-            ProviderConfig::Dummy(provider) => assert_eq!(&*provider.model_name, "gpt-4o"),
-            _ => panic!("Expected Dummy provider"),
-        }
-
-        // Test that it is idempotent
-        model_table.validate_or_create("dummy::gpt-4o").unwrap();
-        assert_eq!(model_table.len(), 1);
-        let model_config = model_table.get("dummy::gpt-4o").unwrap();
+        model_table.validate("dummy::gpt-4o").unwrap();
+        // Shorthand models are not added to the model table
+        assert_eq!(model_table.static_model_len(), 0);
+        let model_config = model_table
+            .get("dummy::gpt-4o")
+            .unwrap()
+            .expect("Missing dummy model");
         assert_eq!(model_config.routing, vec!["dummy".into()]);
         let provider_config = model_config.providers.get("dummy").unwrap();
         match provider_config {
@@ -1587,7 +1608,7 @@ mod tests {
         }
 
         // Test that it fails if the model is not well-formed
-        let model_config = model_table.validate_or_create("foo::bar");
+        let model_config = model_table.validate("foo::bar");
         assert!(model_config.is_err());
         assert_eq!(
             model_config.unwrap_err(),
@@ -1603,12 +1624,11 @@ mod tests {
             routing: vec!["anthropic".into()],
             providers: HashMap::from([("anthropic".into(), anthropic_provider_config)]),
         };
-        let mut model_table: ModelTable =
-            HashMap::from([("claude".into(), anthropic_model_config)])
-                .try_into()
-                .unwrap();
+        let model_table: ModelTable = HashMap::from([("claude".into(), anthropic_model_config)])
+            .try_into()
+            .unwrap();
 
-        model_table.validate_or_create("dummy::claude").unwrap();
+        model_table.validate("dummy::claude").unwrap();
     }
 
     #[test]

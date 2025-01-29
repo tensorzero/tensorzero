@@ -109,7 +109,7 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config = models.models.get(&self.model).ok_or_else(|| {
+        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -119,7 +119,7 @@ impl Variant for DiclConfig {
         let args = InferModelRequestArgs {
             request: model_inference_request,
             model_name: self.model.clone(),
-            model_config,
+            model_config: &model_config,
             function,
             inference_config,
             clients,
@@ -174,7 +174,7 @@ impl Variant for DiclConfig {
             &mut inference_params,
         )?;
 
-        let model_config = models.models.get(&self.model).ok_or_else(|| {
+        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -185,7 +185,7 @@ impl Variant for DiclConfig {
             infer_model_request_stream(
                 request,
                 self.model.clone(),
-                model_config,
+                &model_config,
                 function,
                 clients,
                 inference_params,
@@ -228,7 +228,7 @@ impl Variant for DiclConfig {
             .into());
         }
         // Validate that the generation model and embedding model are valid
-        models.validate_or_create(&self.model)?;
+        models.validate(&self.model)?;
         let embedding_model = embedding_models
             .get(&self.embedding_model)
             .ok_or_else(|| Error::new(ErrorDetails::Config {

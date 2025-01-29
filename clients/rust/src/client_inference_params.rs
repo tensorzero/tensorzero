@@ -15,8 +15,10 @@ use uuid::Uuid;
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Serialize, Default)]
 pub struct ClientInferenceParams {
-    // the function name
-    pub function_name: String,
+    // The function name. Exactly one of `function_name` or `model_name` must be provided.
+    pub function_name: Option<String>,
+    // The model name to run using a default function. Exactly one of `function_name` or `model_name` must be provided.
+    pub model_name: Option<String>,
     // the episode ID (if not provided, it'll be set to inference_id)
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
     pub episode_id: Option<Uuid>,
@@ -56,6 +58,7 @@ impl From<ClientInferenceParams> for Params {
     fn from(this: ClientInferenceParams) -> Self {
         Params {
             function_name: this.function_name,
+            model_name: this.model_name,
             episode_id: this.episode_id,
             input: this.input,
             stream: this.stream,
@@ -82,6 +85,7 @@ impl From<ClientInferenceParams> for Params {
 fn assert_params_match(client_params: ClientInferenceParams) {
     let ClientInferenceParams {
         function_name,
+        model_name,
         episode_id,
         input,
         stream,
@@ -95,6 +99,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
     } = client_params;
     let _ = Params {
         function_name,
+        model_name,
         episode_id,
         input,
         stream,

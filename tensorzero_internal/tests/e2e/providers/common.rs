@@ -5504,7 +5504,8 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
     let episode_id = Uuid::now_v7();
 
     let response = client.inference(tensorzero::ClientInferenceParams {
-        function_name: "basic_test".to_string(),
+        function_name: Some("basic_test".to_string()),
+        model_name: None,
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
         input: tensorzero::Input {
@@ -5804,7 +5805,8 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let input_function_name = "basic_test";
 
     let stream = client.inference(tensorzero::ClientInferenceParams {
-        function_name: input_function_name.to_string(),
+        function_name: Some(input_function_name.to_string()),
+        model_name: None,
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
         input: tensorzero::Input {

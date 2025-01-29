@@ -1713,3 +1713,183 @@ async fn test_inference_invalid_params() {
     // Should succeed with 200 OK
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn test_inference_invalid_default_function_arg() {
+    // We cannot provide both `function_name` and `model_name`
+    let func_and_model = json!({
+        "function_name": "basic_test",
+        "model_name": "dummy::my-model",
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital city of Japan?"
+                }
+            ]},
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&func_and_model)
+        .send()
+        .await
+        .unwrap();
+
+    // Should fail with 400 Bad Request
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_text = response.text().await.unwrap();
+    assert!(
+        response_text.contains("Only one of `function_name` or `model_name` can be provided"),
+        "Unexpected error message: {response_text}",
+    );
+
+    // We cannot provide both `function_name` and `model_name`
+    let func_and_model = json!({
+        "function_name": "basic_test",
+        "model_name": "dummy::my-model",
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital city of Japan?"
+                }
+            ]},
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&func_and_model)
+        .send()
+        .await
+        .unwrap();
+
+    // Should fail with 400 Bad Request
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_text = response.text().await.unwrap();
+    assert!(
+        response_text.contains("Only one of `function_name` or `model_name` can be provided"),
+        "Unexpected error message: {response_text}",
+    );
+
+    // We must provide `function_name` or `model_name`
+    let neither_nor = json!({
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital city of Japan?"
+                }
+            ]},
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&neither_nor)
+        .send()
+        .await
+        .unwrap();
+
+    // Should fail with 400 Bad Request
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_text = response.text().await.unwrap();
+    assert!(
+        response_text.contains("Either `function_name` or `model_name` must be provided"),
+        "Unexpected error message: {response_text}",
+    );
+
+    // We cannot specify both `model_name` and `variant_name`
+    let model_and_variant = json!({
+        "model_name": "dummy::my-model",
+        "variant_name": "test_variant",
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital city of Japan?"
+                }
+            ]},
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&model_and_variant)
+        .send()
+        .await
+        .unwrap();
+
+    // Should fail with 400 Bad Request
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_text = response.text().await.unwrap();
+    assert!(
+        response_text.contains("`variant_name` cannot be provided when using `model_name`"),
+        "Unexpected error message: {response_text}",
+    );
+
+    // We cannot specify a missing model name
+    let missing_model = json!({
+        "model_name": "missing_model",
+        "input":
+            {
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital city of Japan?"
+                }
+            ]},
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&missing_model)
+        .send()
+        .await
+        .unwrap();
+
+    // Should fail with 400 Bad Request
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_text = response.text().await.unwrap();
+    assert!(
+        response_text.contains("Model name 'missing_model' not found in model table"),
+        "Unexpected error message: {response_text}",
+    );
+
+    // We cannot specify a system prompt
+    let bad_system_prompt = json!({
+        "model_name": "openai::tensorzero-invalid-model",
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital city of Japan?"
+                }
+            ]},
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&bad_system_prompt)
+        .send()
+        .await
+        .unwrap();
+
+    // Should fail with 400 Bad Request
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_text = response.text().await.unwrap();
+    assert!(
+        response_text.contains(
+            "Message has non-string content but there is no schema given for role system."
+        ),
+        "Unexpected error message: {response_text}",
+    );
+}
