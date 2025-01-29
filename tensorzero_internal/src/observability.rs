@@ -7,7 +7,7 @@ use crate::error::{Error, ErrorDetails};
 pub fn setup_logs() {
     // Get the current log level from the environment variable `RUST_LOG`
     let log_level = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "gateway=debug,warn".into());
+        .unwrap_or_else(|_| "gateway=debug,warn,tensorzero_internal=debug,warn".into());
 
     tracing_subscriber::registry()
         .with(log_level)
