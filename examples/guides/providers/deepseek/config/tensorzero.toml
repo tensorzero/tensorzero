@@ -1,0 +1,17 @@
+[models.deepseek-chat]
+routing = ["deepseek"]
+
+[models.deepseek-chat.providers.deepseek]
+type = "deepseek"
+model_name = "deepseek-chat"
+
+[functions.mischievous_chatbot]
+type = "chat"
+
+[functions.mischievous_chatbot.variants.my_variant_name]
+type = "chat_completion"
+model = "deepseek-chat"
+
+# Disable observability to keep this example minimal (not recommended in production)
+[gateway]
+disable_observability = true
