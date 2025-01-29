@@ -110,7 +110,6 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
             return Ok(Some(CowNoClone::Borrowed(model_config)));
         }
         if let Some(shorthand) = check_shorthand(T::SHORTHAND_MODEL_PREFIXES, key) {
-            // TODO - should we cache this?
             return Ok(Some(CowNoClone::Owned(T::from_shorthand(
                 shorthand.provider_type,
                 shorthand.model_name,
