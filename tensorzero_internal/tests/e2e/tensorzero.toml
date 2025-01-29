@@ -290,6 +290,12 @@ type = "hyperbolic"
 model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
 api_key_location = "dynamic::hyperbolic_api_key"
 
+[models."openai/gpt-3.5-turbo"]
+routing = ["openrouter"]
+
+[models."openai/gpt-3.5-turbo".providers.openrouter]
+type = "openrouter"
+model_name = "openai/gpt-3.5-turbo"
 
 [models.test]
 routing = ["good"]
