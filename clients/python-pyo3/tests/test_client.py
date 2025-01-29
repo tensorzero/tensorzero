@@ -26,6 +26,9 @@ from uuid import UUID
 
 import pytest
 import pytest_asyncio
+import threading
+import time
+from dataclasses import dataclass
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
@@ -61,6 +64,78 @@ async def async_client(request):
             clickhouse_url="http://localhost:8123/tensorzero-python-e2e",
         ) as client:
             yield client
+
+
+@dataclass
+class CountData:
+    count: int
+
+
+@pytest.mark.asyncio
+async def test_async_gil_unlock(async_client):
+    input = {
+        "system": {"assistant_name": "Alfred Pennyworth"},
+        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+    }
+
+    count_data = CountData(count=0)
+
+    # pass 'count_data' to the thread
+    def incr_count(count_data: CountData):
+        while True:
+            count_data.count += 1
+            time.sleep(0.1)
+
+    thread = threading.Thread(target=incr_count, args=(count_data,), daemon=True)
+
+    start = time.time()
+    thread.start()
+    await async_client.inference(
+        function_name="basic_test",
+        input=input,
+        variant_name="slow",
+        tags={"key": "value"},
+    )
+    val = count_data.count
+    end = time.time()
+
+    # The special 'slow' variant should take at least 5 seconds to run
+    assert end - start >= 5
+    # Verify that our thread was still looping during this time
+    assert val >= 20
+
+
+def test_sync_gil_unlock(sync_client):
+    input = {
+        "system": {"assistant_name": "Alfred Pennyworth"},
+        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+    }
+
+    count_data = CountData(count=0)
+
+    # pass 'count_data' to the thread
+    def incr_count(count_data: CountData):
+        while True:
+            count_data.count += 1
+            time.sleep(0.1)
+
+    thread = threading.Thread(target=incr_count, args=(count_data,), daemon=True)
+
+    start = time.time()
+    thread.start()
+    sync_client.inference(
+        function_name="basic_test",
+        input=input,
+        variant_name="slow",
+        tags={"key": "value"},
+    )
+    val = count_data.count
+    end = time.time()
+
+    # The special 'slow' variant should take at least 5 seconds to run
+    assert end - start >= 5
+    # Verify that our thread was still looping during this time
+    assert val >= 20
 
 
 @pytest.mark.asyncio
