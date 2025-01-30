@@ -391,6 +391,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     println!("API response: {response_json:#?}");
 
     check_simple_inference_response(response_json, Some(episode_id), &provider, false, false).await;
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     let episode_id = Uuid::now_v7();
 
