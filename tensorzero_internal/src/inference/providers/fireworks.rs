@@ -469,6 +469,8 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
 mod tests {
     use std::borrow::Cow;
 
+    use uuid::Uuid;
+
     use super::*;
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
@@ -479,6 +481,7 @@ mod tests {
     #[test]
     fn test_fireworks_request_new() {
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],

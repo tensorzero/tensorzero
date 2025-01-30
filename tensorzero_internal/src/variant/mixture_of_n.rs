@@ -500,7 +500,7 @@ mod tests {
 
     use crate::{
         clickhouse::ClickHouseConnectionInfo,
-        endpoints::inference::InferenceCredentials,
+        endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::{
             providers::dummy::DummyProvider,
@@ -955,6 +955,10 @@ mod tests {
             messages: vec![],
         };
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,

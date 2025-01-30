@@ -450,6 +450,7 @@ mod tests {
     use std::borrow::Cow;
 
     use serde_json::json;
+    use uuid::Uuid;
 
     use crate::inference::{
         providers::common::WEATHER_TOOL_CONFIG,
@@ -462,6 +463,7 @@ mod tests {
     fn test_sglang_request_new() {
         let model_name = PROVIDER_TYPE.to_string();
         let basic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![
                 RequestMessage {
                     role: Role::User,
@@ -502,6 +504,7 @@ mod tests {
 
         // Test that non-strict JSON mode requires an output schema
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -523,6 +526,7 @@ mod tests {
 
         // Test request with in strict JSON mode requires an no output schema
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -545,6 +549,7 @@ mod tests {
         // Test request with strict JSON mode with an output schema
         let output_schema = json!({});
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],

@@ -464,6 +464,7 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use crate::endpoints::inference::InferenceIds;
     use crate::inference::types::InputMessage;
     use crate::inference::types::Latency;
     use crate::jsonschema_util::DynamicJSONSchema;
@@ -1304,6 +1305,10 @@ mod tests {
         };
         let templates = TemplateConfig::default();
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             tool_config: None,
             function_name: "",
             variant_name: Some(""),
@@ -1581,6 +1586,10 @@ mod tests {
             "required": ["answer"]
         }));
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             tool_config: None,
             function_name: "",
             variant_name: Some(""),
