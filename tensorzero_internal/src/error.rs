@@ -353,7 +353,7 @@ impl ErrorDetails {
     /// Defines the HTTP status code for responses involving this error
     fn status_code(&self) -> StatusCode {
         match self {
-            ErrorDetails::AllVariantsFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
