@@ -815,8 +815,8 @@ export async function queryMetricsWithFeedback(params: {
         bmf.metric_name,
         'boolean' as metric_type,
         COUNT(DISTINCT i.id) as feedback_count
-      FROM tensorzero.${inference_table} i
-      JOIN tensorzero.BooleanMetricFeedback bmf ON bmf.target_id = i.id
+      FROM ${inference_table} i
+      JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
         AND bmf.metric_name ${idInClause}
@@ -830,8 +830,8 @@ export async function queryMetricsWithFeedback(params: {
         bmf.metric_name,
         'boolean' as metric_type,
         COUNT(DISTINCT i.id) as feedback_count
-      FROM tensorzero.${inference_table} i
-      JOIN tensorzero.BooleanMetricFeedback bmf ON bmf.target_id = i.episode_id
+      FROM ${inference_table} i
+      JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.episode_id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
         AND bmf.metric_name ${episodeIdInClause}
@@ -845,8 +845,8 @@ export async function queryMetricsWithFeedback(params: {
         fmf.metric_name,
         'float' as metric_type,
         COUNT(DISTINCT i.id) as feedback_count
-      FROM tensorzero.${inference_table} i
-      JOIN tensorzero.FloatMetricFeedback fmf ON fmf.target_id = i.id
+      FROM ${inference_table} i
+      JOIN FloatMetricFeedback fmf ON fmf.target_id = i.id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
         AND fmf.metric_name ${idInClause}
@@ -860,8 +860,8 @@ export async function queryMetricsWithFeedback(params: {
         fmf.metric_name,
         'float' as metric_type,
         COUNT(DISTINCT i.id) as feedback_count
-      FROM tensorzero.${inference_table} i
-      JOIN tensorzero.FloatMetricFeedback fmf ON fmf.target_id = i.episode_id
+      FROM ${inference_table} i
+      JOIN FloatMetricFeedback fmf ON fmf.target_id = i.episode_id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
         AND fmf.metric_name ${episodeIdInClause}
@@ -874,8 +874,8 @@ export async function queryMetricsWithFeedback(params: {
         'demonstration' as metric_name,
         'demonstration' as metric_type,
         COUNT(DISTINCT i.id) as feedback_count
-      FROM tensorzero.${inference_table} i
-      JOIN tensorzero.DemonstrationFeedback df ON df.inference_id = i.id
+      FROM ${inference_table} i
+      JOIN DemonstrationFeedback df ON df.inference_id = i.id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
       GROUP BY i.function_name

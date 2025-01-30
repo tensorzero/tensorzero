@@ -4,12 +4,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::instrument;
 
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
-use crate::model::{CowNoClone, ModelConfig, ModelTable};
+use crate::model::{ModelConfig, ModelTable};
+use crate::model_table::{CowNoClone, ShorthandModelConfig};
 use crate::tool::{
     ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
     IMPLICIT_TOOL_NAME,
@@ -23,11 +24,11 @@ use crate::variant::{Variant, VariantConfig};
 #[derive(Debug, Default)]
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
-    pub models: ModelTable, // model name => model config
-    pub embedding_models: HashMap<Arc<str>, EmbeddingModelConfig>, // embedding model name => embedding model config
+    pub models: ModelTable,                    // model name => model config
+    pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
-    pub metrics: HashMap<String, MetricConfig>,          // metric name => metric config
-    pub tools: HashMap<String, Arc<StaticToolConfig>>,   // tool name => tool config
+    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub templates: TemplateConfig<'c>,
 }
 
@@ -346,7 +347,7 @@ struct UninitializedConfig {
     #[serde(default)]
     pub models: ModelTable, // model name => model config
     #[serde(default)]
-    pub embedding_models: HashMap<Arc<str>, EmbeddingModelConfig>, // embedding model name => embedding model config
+    pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
@@ -674,6 +675,7 @@ mod tests {
         let embedding_model = config
             .embedding_models
             .get("text-embedding-3-small")
+            .expect("Error getting embedding model")
             .unwrap();
         assert_eq!(embedding_model.routing, vec!["openai".into()]);
         assert_eq!(embedding_model.providers.len(), 1);
@@ -1418,7 +1420,7 @@ mod tests {
                 result.unwrap_err(),
                 Error::new(ErrorDetails::Config {
                     message:
-                        "Embedding model name cannot start with 'tensorzero::': tensorzero::bad_embedding_model"
+                        "Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix\nin `embedding_models`\n"
                             .to_string()
                 })
             );

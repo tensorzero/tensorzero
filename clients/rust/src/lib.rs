@@ -4,8 +4,7 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use std::fmt::Debug;
 use tensorzero_internal::{
     config_parser::Config,
-    endpoints::inference::InferenceStream,
-    error::{Error, ErrorDetails},
+    error::ErrorDetails,
     gateway_util::{setup_clickhouse, AppStateData},
 };
 use thiserror::Error;
@@ -14,10 +13,12 @@ use url::Url;
 
 mod client_inference_params;
 
-pub use client_inference_params::ClientInferenceParams;
+pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 
+pub use tensorzero_internal::endpoints::feedback::FeedbackResponse;
+pub use tensorzero_internal::endpoints::feedback::Params as FeedbackParams;
 pub use tensorzero_internal::endpoints::inference::{
-    InferenceOutput, InferenceResponse, InferenceResponseChunk,
+    InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
 };
 pub use tensorzero_internal::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role,
@@ -55,10 +56,27 @@ pub struct ClientBuilder {
     http_client: Option<reqwest::Client>,
 }
 
-/// An opaque error type representing an error from within the TensorZero gateway
+/// An error type representing an error from within the TensorZero gateway
 #[derive(Error, Debug)]
+#[non_exhaustive]
+pub enum TensorZeroError {
+    #[error("HTTP error: {status_code} {text:?}")]
+    Http {
+        status_code: u16,
+        text: Option<String>,
+        #[source]
+        source: TensorZeroInternalError,
+    },
+    #[error("Internal error: {source}")]
+    Other {
+        #[source]
+        source: TensorZeroInternalError,
+    },
+}
+
+#[derive(Debug, Error)]
 #[error("Internal TensorZero error: {0}")]
-pub struct TensorZeroError(#[from] Error);
+pub struct TensorZeroInternalError(#[from] tensorzero_internal::error::Error);
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
@@ -71,6 +89,8 @@ pub enum ClientBuilderError {
         "Missing gateway URL - you must call `with_gateway_url` before calling `build` in HTTPGateway mode"
     )]
     MissingGatewayUrl,
+    #[error("Called ClientBuilder.build_http() when not in HTTPGateway mode")]
+    NotHTTPGateway,
     #[error("Failed to configure ClickHouse: {0}")]
     Clickhouse(TensorZeroError),
     #[error("Failed to parse config: {0}")]
@@ -109,24 +129,20 @@ impl ClientBuilder {
 
     /// Constructs a `Client`, returning an error if the configuration is invalid.
     pub async fn build(self) -> Result<Client, ClientBuilderError> {
-        match self.mode {
-            ClientBuilderMode::HTTPGateway { url } => Ok(Client {
-                mode: ClientMode::HTTPGateway(HTTPGateway {
-                    base_url: url,
-                    http_client: self.http_client.unwrap_or_default(),
-                }),
-            }),
+        match &self.mode {
+            ClientBuilderMode::HTTPGateway { .. } => self.build_http(),
             ClientBuilderMode::EmbeddedGateway {
                 config_path,
                 clickhouse_url,
             } => {
-                let config = Arc::new(
-                    Config::load_from_path(&config_path)
-                        .map_err(|e| ClientBuilderError::ConfigParsing(TensorZeroError(e)))?,
-                );
-                let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url)
+                let config = Arc::new(Config::load_from_path(config_path).map_err(|e| {
+                    ClientBuilderError::ConfigParsing(TensorZeroError::Other { source: e.into() })
+                })?);
+                let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url.clone())
                     .await
-                    .map_err(|e| ClientBuilderError::Clickhouse(TensorZeroError(e)))?;
+                    .map_err(|e| {
+                        ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
+                    })?;
                 Ok(Client {
                     mode: ClientMode::EmbeddedGateway(EmbeddedGateway {
                         state: AppStateData {
@@ -139,6 +155,20 @@ impl ClientBuilder {
             }
         }
     }
+
+    /// Builds a `Client` in HTTPGateway mode, erroring if the mode is not HTTPGateway
+    /// This allows avoiding calling the async `build` method
+    pub fn build_http(self) -> Result<Client, ClientBuilderError> {
+        let ClientBuilderMode::HTTPGateway { url } = self.mode else {
+            return Err(ClientBuilderError::NotHTTPGateway);
+        };
+        Ok(Client {
+            mode: ClientMode::HTTPGateway(HTTPGateway {
+                base_url: url,
+                http_client: self.http_client.unwrap_or_default(),
+            }),
+        })
+    }
 }
 
 /// A TensorZero client. This is constructed using `ClientBuilder`
@@ -150,74 +180,185 @@ pub struct Client {
 impl Client {
     /// Queries the health of the ClickHouse database
     /// This does nothing in `ClientMode::HTTPGateway`
-    pub async fn clickhouse_health(&self) -> Result<(), Error> {
+    pub async fn clickhouse_health(&self) -> Result<(), TensorZeroError> {
         match &self.mode {
             ClientMode::HTTPGateway(_) => Ok(()),
-            ClientMode::EmbeddedGateway(client) => {
-                Ok(client.state.clickhouse_connection_info.health().await?)
+            ClientMode::EmbeddedGateway(client) => client
+                .state
+                .clickhouse_connection_info
+                .health()
+                .await
+                .map_err(|e| TensorZeroError::Other { source: e.into() }),
+        }
+    }
+
+    /// Assigns feedback for a TensorZero inference.
+    /// See https://www.tensorzero.com/docs/gateway/api-reference#post-feedback
+    pub async fn feedback(
+        &self,
+        params: FeedbackParams,
+    ) -> Result<FeedbackResponse, TensorZeroError> {
+        match &self.mode {
+            ClientMode::HTTPGateway(client) => {
+                let url = client
+                    .base_url
+                    .join("feedback")
+                    .map_err(|e| TensorZeroError::Other {
+                        source: tensorzero_internal::error::Error::new(
+                            ErrorDetails::InvalidBaseUrl {
+                                message: format!(
+                                    "Failed to join base URL with /feedback endpoint: {}",
+                                    e
+                                ),
+                            },
+                        )
+                        .into(),
+                    })?;
+                let builder = client.http_client.post(url).json(&params);
+                self.parse_http_response(builder.send().await).await
             }
+            ClientMode::EmbeddedGateway(client) => Ok(
+                tensorzero_internal::endpoints::feedback::feedback(client.state.clone(), params)
+                    .await
+                    .map_err(err_to_http)?
+                    .0,
+            ),
         }
     }
 
     // Runs a TensorZero inference.
     // See https://www.tensorzero.com/docs/gateway/api-reference#post-inference
-    pub async fn inference(&self, params: ClientInferenceParams) -> Result<InferenceOutput, Error> {
+    pub async fn inference(
+        &self,
+        params: ClientInferenceParams,
+    ) -> Result<InferenceOutput, TensorZeroError> {
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join("inference").map_err(|e| {
-                    Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /inference endpoint: {}", e),
-                    })
-                })?;
+                let url =
+                    client
+                        .base_url
+                        .join("inference")
+                        .map_err(|e| TensorZeroError::Other {
+                            source: tensorzero_internal::error::Error::new(
+                                ErrorDetails::InvalidBaseUrl {
+                                    message: format!(
+                                        "Failed to join base URL with /inference endpoint: {}",
+                                        e
+                                    ),
+                                },
+                            )
+                            .into(),
+                        })?;
                 let builder = client.http_client.post(url).json(&params);
                 if params.stream.unwrap_or(false) {
                     let event_source =
-                        builder
-                            .eventsource()
-                            .map_err(|e| ErrorDetails::JsonRequest {
-                                message: format!("Error constructing event stream: {e:?}"),
-                            })?;
-                    Ok(InferenceOutput::Streaming(Self::http_inference_stream(
-                        event_source,
-                    )))
-                } else {
-                    let resp: InferenceResponse = builder
-                        .send()
-                        .await
-                        .map_err(|e| {
-                            Error::new(ErrorDetails::JsonRequest {
-                                message: format!("Error from server: {e}"),
-                            })
-                        })?
-                        .json()
-                        .await
-                        .map_err(|e| ErrorDetails::Serialization {
-                            message: format!("Error deserializing inference response: {e}"),
+                        builder.eventsource().map_err(|e| TensorZeroError::Other {
+                            source: tensorzero_internal::error::Error::new(
+                                ErrorDetails::JsonRequest {
+                                    message: format!("Error constructing event stream: {e:?}"),
+                                },
+                            )
+                            .into(),
                         })?;
-                    Ok(InferenceOutput::NonStreaming(resp))
+                    Ok(InferenceOutput::Streaming(
+                        Self::http_inference_stream(event_source).await?,
+                    ))
+                } else {
+                    Ok(InferenceOutput::NonStreaming(
+                        self.parse_http_response(builder.send().await).await?,
+                    ))
                 }
             }
             ClientMode::EmbeddedGateway(client) => {
-                tensorzero_internal::endpoints::inference::inference(
+                Ok(tensorzero_internal::endpoints::inference::inference(
                     client.state.config.clone(),
                     &client.state.http_client,
                     client.state.clickhouse_connection_info.clone(),
                     params.into(),
                 )
                 .await
+                .map_err(err_to_http)?)
             }
         }
     }
 
-    fn http_inference_stream(mut event_source: EventSource) -> InferenceStream {
-        Box::pin(async_stream::stream! {
+    async fn parse_http_response<T: serde::de::DeserializeOwned>(
+        &self,
+        resp: Result<reqwest::Response, reqwest::Error>,
+    ) -> Result<T, TensorZeroError> {
+        let resp = resp.map_err(|e| TensorZeroError::Other {
+            source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
+                message: format!("Error from server: {e}"),
+            })
+            .into(),
+        })?;
+
+        if let Err(e) = resp.error_for_status_ref() {
+            let status_code = resp.status().as_u16();
+            let text = resp.text().await.ok();
+            return Err(TensorZeroError::Http {
+                status_code,
+                text,
+                source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
+                    message: format!("Request failed: {e}"),
+                })
+                .into(),
+            });
+        }
+
+        resp.json().await.map_err(|e| TensorZeroError::Other {
+            source: tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                message: format!("Error deserializing inference response: {e:?}"),
+            })
+            .into(),
+        })
+    }
+
+    async fn http_inference_stream(
+        event_source: EventSource,
+    ) -> Result<InferenceStream, TensorZeroError> {
+        let mut event_source = event_source.peekable();
+        let first = event_source.peek().await;
+        if let Some(Err(_)) = first {
+            // Discard the stream if it has an error
+            let res = event_source.next().await;
+            #[allow(clippy::panic)]
+            let Some(Err(e)) = res
+            else {
+                panic!("Peeked error but got non-err {res:?}");
+            };
+            let err_str = format!("Error in streaming response: {e:?}");
+            let inner_err = tensorzero_internal::error::Error::new(ErrorDetails::StreamError {
+                source: Box::new(tensorzero_internal::error::Error::new(
+                    ErrorDetails::Serialization { message: err_str },
+                )),
+            });
+            if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = e {
+                return Err(TensorZeroError::Http {
+                    status_code: code.as_u16(),
+                    text: resp.text().await.ok(),
+                    source: inner_err.into(),
+                });
+            }
+            return Err(TensorZeroError::Other {
+                source: tensorzero_internal::error::Error::new(ErrorDetails::StreamError {
+                    source: Box::new(inner_err),
+                })
+                .into(),
+            });
+        }
+        Ok(Box::pin(async_stream::stream! {
             while let Some(ev) = event_source.next().await {
                 match ev {
                     Err(e) => {
                         if matches!(e, reqwest_eventsource::Error::StreamEnded) {
                             break;
                         }
-                        yield Err(Error::new(ErrorDetails::StreamError { source: Box::new(Error::new(ErrorDetails::Serialization { message: format!("Error in streaming response: {e:?}") })) }))
+                        yield Err(tensorzero_internal::error::Error::new(ErrorDetails::StreamError {
+                            source: Box::new(tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                                message: format!("Error in streaming response: {e:?}")
+                            }))
+                        }))
                     }
                     Ok(e) => match e {
                         Event::Open => continue,
@@ -227,7 +368,7 @@ impl Client {
                             }
                             let data: InferenceResponseChunk =
                                 serde_json::from_str(&message.data).map_err(|e| {
-                                    Error::new(ErrorDetails::Serialization {
+                                    tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
                                         message: format!("Error deserializing inference response chunk: {e:?}"),
                                     })
                                 })?;
@@ -237,9 +378,24 @@ impl Client {
                     }
                 }
             }
-        })
+        }))
     }
 }
+
+// This is intentionally not a `From` impl, since we only want to make fake HTTP
+// errors for certain embedded gateway errors. For example, a config parsing error
+// should be `TensorZeroError::Other`, not `TensorZeroError::Http`.
+#[doc(hidden)]
+pub fn err_to_http(e: tensorzero_internal::error::Error) -> TensorZeroError {
+    TensorZeroError::Http {
+        status_code: e.status_code().as_u16(),
+        text: Some(serde_json::json!({"error": e.to_string()}).to_string()),
+        source: e.into(),
+    }
+}
+
+#[cfg(feature = "pyo3")]
+pub use tensorzero_internal::observability;
 
 #[cfg(test)]
 mod tests {

@@ -1,9 +1,7 @@
-use lazy_static::lazy_static;
 use reqwest::Client;
 use secrecy::SecretString;
 use serde::de::Error as SerdeError;
 use std::collections::HashMap;
-use std::ops::Deref;
 use std::sync::{Arc, OnceLock};
 use std::{env, fs};
 use strum::VariantNames;
@@ -22,6 +20,7 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
+use crate::model_table::{BaseModelTable, ShorthandModelConfig};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -46,23 +45,6 @@ use serde::Deserialize;
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, ProviderConfig>, // provider name => provider config
-}
-
-/// This is `Cow` without the `T: Clone` bound.
-/// Useful when we want a `Cow`, but don't want to (or can't) implement `Clone`
-pub enum CowNoClone<'a, T> {
-    Borrowed(&'a T),
-    Owned(T),
-}
-
-impl<T> Deref for CowNoClone<'_, T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        match self {
-            CowNoClone::Borrowed(t) => t,
-            CowNoClone::Owned(t) => t,
-        }
-    }
 }
 
 impl ModelConfig {
@@ -183,55 +165,6 @@ impl ModelConfig {
             provider_errors,
         }))
     }
-
-    pub fn validate(&self, model_name: &str) -> Result<(), Error> {
-        // Ensure that the model has at least one provider
-        if self.routing.is_empty() {
-            return Err(ErrorDetails::Config {
-                message: format!("`models.{model_name}`: `routing` must not be empty"),
-            }
-            .into());
-        }
-
-        // Ensure that routing entries are unique and exist as keys in providers
-        let mut seen_providers = std::collections::HashSet::new();
-        for provider in &self.routing {
-            if provider.starts_with("tensorzero::") {
-                return Err(ErrorDetails::Config {
-                    message: format!("`models.{model_name}.routing`: Provider name cannot start with 'tensorzero::': {provider}"),
-                }
-                .into());
-            }
-            if !seen_providers.insert(provider) {
-                return Err(ErrorDetails::Config {
-                    message: format!("`models.{model_name}.routing`: duplicate entry `{provider}`"),
-                }
-                .into());
-            }
-
-            if !self.providers.contains_key(provider) {
-                return Err(ErrorDetails::Config {
-            message: format!(
-                "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
-            ),
-        }
-        .into());
-            }
-        }
-
-        // Validate each provider
-        for provider_name in self.providers.keys() {
-            if !seen_providers.contains(provider_name) {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                "`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"
-            ),
-                }
-                .into());
-            }
-        }
-        Ok(())
-    }
 }
 
 #[derive(Debug)]
@@ -264,7 +197,7 @@ pub enum ProviderConfig {
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-enum ProviderConfigHelper {
+pub(super) enum ProviderConfigHelper {
     Anthropic {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
@@ -984,17 +917,6 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
     }
 }
 
-lazy_static! {
-    static ref RESERVED_MODEL_PREFIXES: Vec<String> = {
-        let mut prefixes: Vec<String> = ProviderConfigHelper::VARIANTS
-            .iter()
-            .map(|&v| format!("{}::", v))
-            .collect();
-        prefixes.push("tensorzero::".to_string());
-        prefixes
-    };
-}
-
 const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "anthropic::",
     "fireworks::",
@@ -1007,131 +929,104 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "dummy::",
 ];
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(try_from = "HashMap<Arc<str>, ModelConfig>")]
-pub struct ModelTable(HashMap<Arc<str>, ModelConfig>);
+pub type ModelTable = BaseModelTable<ModelConfig>;
 
-impl TryFrom<HashMap<Arc<str>, ModelConfig>> for ModelTable {
-    type Error = String;
-
-    fn try_from(map: HashMap<Arc<str>, ModelConfig>) -> Result<Self, Self::Error> {
-        for key in map.keys() {
-            if RESERVED_MODEL_PREFIXES
-                .iter()
-                .any(|name| key.starts_with(name))
-            {
-                return Err(format!("Model name '{}' contains a reserved prefix", key));
+impl ShorthandModelConfig for ModelConfig {
+    const SHORTHAND_MODEL_PREFIXES: &[&str] = SHORTHAND_MODEL_PREFIXES;
+    const MODEL_TYPE: &str = "Model";
+    fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
+        let model_name = model_name.to_string();
+        let provider_config = match provider_type {
+            "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
+            "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(model_name, None)?),
+            "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
+                GoogleAIStudioGeminiProvider::new(model_name, None)?,
+            ),
+            "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
+            "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
+            "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
+            "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
+            "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
+            _ => {
+                return Err(ErrorDetails::Config {
+                    message: format!("Invalid provider type: {}", provider_type),
+                }
+                .into());
             }
-        }
-        Ok(ModelTable(map))
-    }
-}
-
-pub struct Shorthand<'a> {
-    pub provider_type: &'a str,
-    pub model_name: &'a str,
-}
-
-fn check_shorthand(key: &str) -> Option<Shorthand> {
-    for prefix in SHORTHAND_MODEL_PREFIXES {
-        if let Some(model_name) = key.strip_prefix(prefix) {
-            // Remove the last two characters of the prefix to get the provider type
-            let provider_type = &prefix[..prefix.len() - 2];
-            return Some(Shorthand {
-                provider_type,
-                model_name,
-            });
-        }
-    }
-    None
-}
-
-impl ModelTable {
-    pub fn get(&self, key: &str) -> Result<Option<CowNoClone<'_, ModelConfig>>, Error> {
-        if let Some(model_config) = self.0.get(key) {
-            return Ok(Some(CowNoClone::Borrowed(model_config)));
-        }
-        if let Some(shorthand) = check_shorthand(key) {
-            return Ok(Some(CowNoClone::Owned(model_config_from_shorthand(
-                shorthand.provider_type,
-                shorthand.model_name,
-            )?)));
-        }
-        Ok(None)
-    }
-    /// Check that a model name is valid
-    /// This is either true because it's in the table, or because it's a valid shorthand name
-    pub fn validate(&self, key: &str) -> Result<(), Error> {
-        // Try direct lookup (if it's blacklisted, it's not in the table)
-        // If it's shorthand and already in the table, it's valid
-        if let Some(model_config) = self.0.get(key) {
-            model_config.validate(key)?;
-            return Ok(());
-        }
-
-        if check_shorthand(key).is_some() {
-            return Ok(());
-        }
-
-        Err(ErrorDetails::Config {
-            message: format!("Model name '{}' not found in model table", key),
-        }
-        .into())
+        };
+        Ok(ModelConfig {
+            routing: vec![provider_type.to_string().into()],
+            providers: HashMap::from([(provider_type.to_string().into(), provider_config)]),
+        })
     }
 
-    #[cfg(any(test, feature = "e2e_tests"))]
-    pub fn static_model_len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn iter_static_models(&self) -> impl Iterator<Item = (&Arc<str>, &ModelConfig)> {
-        self.0.iter()
-    }
-}
-
-fn model_config_from_shorthand(
-    provider_type: &str,
-    model_name: &str,
-) -> Result<ModelConfig, Error> {
-    let model_name = model_name.to_string();
-    let provider_config = match provider_type {
-        "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
-        "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(model_name, None)?),
-        "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
-            GoogleAIStudioGeminiProvider::new(model_name, None)?,
-        ),
-        "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
-        "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
-        "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
-        "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
-        "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
-        #[cfg(any(test, feature = "e2e_tests"))]
-        "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
-        _ => {
+    fn validate(&self, model_name: &str) -> Result<(), Error> {
+        // Ensure that the model has at least one provider
+        if self.routing.is_empty() {
             return Err(ErrorDetails::Config {
-                message: format!("Invalid provider type: {}", provider_type),
+                message: format!("`models.{model_name}`: `routing` must not be empty"),
             }
             .into());
         }
-    };
-    Ok(ModelConfig {
-        routing: vec![provider_type.to_string().into()],
-        providers: HashMap::from([(provider_type.to_string().into(), provider_config)]),
-    })
+
+        // Ensure that routing entries are unique and exist as keys in providers
+        let mut seen_providers = std::collections::HashSet::new();
+        for provider in &self.routing {
+            if provider.starts_with("tensorzero::") {
+                return Err(ErrorDetails::Config {
+                    message: format!("`models.{model_name}.routing`: Provider name cannot start with 'tensorzero::': {provider}"),
+                }
+                .into());
+            }
+            if !seen_providers.insert(provider) {
+                return Err(ErrorDetails::Config {
+                    message: format!("`models.{model_name}.routing`: duplicate entry `{provider}`"),
+                }
+                .into());
+            }
+
+            if !self.providers.contains_key(provider) {
+                return Err(ErrorDetails::Config {
+            message: format!(
+                "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
+            ),
+        }
+        .into());
+            }
+        }
+
+        // Validate each provider
+        for provider_name in self.providers.keys() {
+            if !seen_providers.contains(provider_name) {
+                return Err(ErrorDetails::Config {
+                    message: format!(
+                "`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"
+            ),
+                }
+                .into());
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::{borrow::Cow, cell::Cell};
 
-    use crate::inference::{
-        providers::dummy::{
-            DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-            DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
-        },
-        types::{ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk},
-    };
     use crate::tool::{ToolCallConfig, ToolChoice};
+    use crate::{
+        inference::{
+            providers::dummy::{
+                DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
+                DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
+            },
+            types::{ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk},
+        },
+        model_table::RESERVED_MODEL_PREFIXES,
+    };
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
     use tracing_test::traced_test;
@@ -1411,8 +1306,8 @@ mod tests {
         let model_config = ModelConfig {
             routing: vec!["error_provider".into(), "good_provider".into()],
             providers: HashMap::from([
-                ("error_provider".into(), bad_provider_config),
-                ("good_provider".into(), good_provider_config),
+                ("error_provider".to_string().into(), bad_provider_config),
+                ("good_provider".to_string().into(), good_provider_config),
             ]),
         };
         let (initial_chunk, stream, raw_request, model_provider_name) = model_config

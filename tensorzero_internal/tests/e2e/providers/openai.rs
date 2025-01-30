@@ -353,7 +353,7 @@ async fn test_default_function_invalid_model_name() {
         text.contains("`my-bad-model-name` does not exist"),
         "Unexpected error: {text}"
     );
-    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
 }
 
 #[cfg(feature = "e2e_tests")]

@@ -1,9 +1,9 @@
 use serde::Deserialize;
 use serde_json::Value;
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::{collections::HashMap, path::PathBuf};
 
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -227,7 +227,7 @@ impl Variant for ChatCompletionConfig {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        _embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
+        _embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -373,6 +373,8 @@ pub fn validate_template_and_schema(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     use futures::StreamExt;
@@ -380,6 +382,7 @@ mod tests {
     use serde_json::{json, Value};
 
     use crate::clickhouse::ClickHouseConnectionInfo;
+    use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
@@ -773,7 +776,7 @@ mod tests {
         let models = ModelTable::default();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &HashMap::new(),
+            embedding_models: &EmbeddingModelTable::default(),
         };
         let result = chat_completion_config
             .infer(
@@ -809,7 +812,7 @@ mod tests {
             .unwrap();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &HashMap::new(),
+            embedding_models: &EmbeddingModelTable::default(),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -848,7 +851,7 @@ mod tests {
         let models = models.try_into().unwrap();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &HashMap::new(),
+            embedding_models: &EmbeddingModelTable::try_from(HashMap::new()).unwrap(),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -907,7 +910,7 @@ mod tests {
             .unwrap();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &HashMap::new(),
+            embedding_models: &EmbeddingModelTable::default(),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -978,7 +981,7 @@ mod tests {
             .unwrap();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &HashMap::new(),
+            embedding_models: &EmbeddingModelTable::default(),
         };
         let weather_tool_config = get_temperature_tool_config();
         let inference_config = InferenceConfig {
@@ -1114,7 +1117,7 @@ mod tests {
             .unwrap();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &HashMap::new(),
+            embedding_models: &EmbeddingModelTable::default(),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1418,7 +1421,7 @@ mod tests {
                 .try_into()
                 .unwrap(),
         ));
-        let embedding_models = Box::leak(Box::new(HashMap::new()));
+        let embedding_models = &EmbeddingModelTable::try_from(HashMap::new()).unwrap();
         let inference_models = InferenceModels {
             models,
             embedding_models,
