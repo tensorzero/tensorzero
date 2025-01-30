@@ -159,7 +159,7 @@ impl ClickHouseConnectionInfo {
                 {
                     Ok(_) => Ok(()),
                     Err(e) => Err(ErrorDetails::ClickHouseConnection {
-                        message: format!("ClickHouse is not healthy: {}", e),
+                        message: format!("ClickHouse is not healthy: {e:?}"),
                     }
                     .into()),
                 }
@@ -331,7 +331,7 @@ async fn write_production(
         .await
         .map_err(|e| {
             Error::new(ErrorDetails::ClickHouseQuery {
-                message: e.to_string(),
+                message: format!("{e:?}"),
             })
         })?;
 
@@ -387,14 +387,14 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
                     url.scheme()
                 ),
             }
-            .into())
+            .into());
         }
         _ => {
             return Err(ErrorDetails::Config {
                 message: format!(
                 "Invalid scheme in ClickHouse URL: '{}'. Only 'http' and 'https' are supported.",
-                    url.scheme()
-                ),
+                url.scheme()
+            ),
             }
             .into())
         }

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
@@ -248,7 +248,7 @@ impl FunctionConfig {
         &self,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
         models: &mut ModelTable,
-        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
+        embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
     ) -> Result<(), Error> {

@@ -5,7 +5,7 @@ use std::time::Duration;
 use axum::extract::State;
 use axum::{debug_handler, Json};
 use metrics::counter;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::instrument;
 use uuid::Uuid;
@@ -29,22 +29,22 @@ use super::validate_tags;
 const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
 
 /// The expected payload is a JSON object with the following fields:
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
     // the episode ID client is providing feedback for (either this or `inference_id` must be set but not both)
-    episode_id: Option<Uuid>,
+    pub episode_id: Option<Uuid>,
     // the inference ID client is providing feedback for (either this or `episode_id` must be set but not both)
-    inference_id: Option<Uuid>,
+    pub inference_id: Option<Uuid>,
     // the name of the Metric to provide feedback for (this can always also be "comment" or "demonstration")
-    metric_name: String,
+    pub metric_name: String,
     // the value of the feedback being provided
-    value: Value,
+    pub value: Value,
     // the tags to add to the feedback
     #[serde(default)]
-    tags: HashMap<String, String>,
+    pub tags: HashMap<String, String>,
     // if true, the feedback will not be stored
-    dryrun: Option<bool>,
+    pub dryrun: Option<bool>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -64,6 +64,11 @@ impl From<&MetricConfigType> for FeedbackType {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FeedbackResponse {
+    pub feedback_id: Uuid,
+}
+
 /// A handler for the feedback endpoint
 #[instrument(name="feedback",
   skip_all,
@@ -73,13 +78,21 @@ impl From<&MetricConfigType> for FeedbackType {
 )]
 #[debug_handler(state = AppStateData)]
 pub async fn feedback_handler(
-    State(AppStateData {
+    State(app_state): AppState,
+    StructuredJson(params): StructuredJson<Params>,
+) -> Result<Json<FeedbackResponse>, Error> {
+    feedback(app_state, params).await
+}
+
+// Helper function to avoid requiring axum types in the client
+pub async fn feedback(
+    AppStateData {
         config,
         clickhouse_connection_info,
         ..
-    }): AppState,
-    StructuredJson(params): StructuredJson<Params>,
-) -> Result<Json<Value>, Error> {
+    }: AppStateData,
+    params: Params,
+) -> Result<Json<FeedbackResponse>, Error> {
     validate_tags(&params.tags)?;
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
@@ -150,7 +163,7 @@ pub async fn feedback_handler(
         }
     }
 
-    Ok(Json(json!({"feedback_id": feedback_id})))
+    Ok(Json(FeedbackResponse { feedback_id }))
 }
 
 #[derive(Debug)]
@@ -581,6 +594,7 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::config_parser::{Config, GatewayConfig, MetricConfig, MetricConfigOptimize};
+    use crate::embeddings::EmbeddingModelTable;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::TemplateConfig;
@@ -603,7 +617,7 @@ mod tests {
         let config = Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -725,7 +739,7 @@ mod tests {
         let config = Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -757,7 +771,7 @@ mod tests {
         let config = Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -782,7 +796,7 @@ mod tests {
         let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics: HashMap::new(),
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -865,7 +879,7 @@ mod tests {
         let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -925,7 +939,7 @@ mod tests {
         let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),

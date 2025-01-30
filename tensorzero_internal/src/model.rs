@@ -1,9 +1,8 @@
-use lazy_static::lazy_static;
 use reqwest::Client;
 use secrecy::SecretString;
 use serde::de::Error as SerdeError;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::{env, fs};
 use strum::VariantNames;
 #[allow(unused_imports)]
@@ -23,6 +22,7 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
+use crate::model_table::{BaseModelTable, ShorthandModelConfig};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -163,12 +163,12 @@ impl ModelConfig {
         }))
     }
 
-    pub async fn start_batch_inference<'a, 'request>(
-        &'a self,
+    pub async fn start_batch_inference<'request>(
+        &self,
         requests: &'request [ModelInferenceRequest<'request>],
         client: &'request Client,
         api_keys: &'request InferenceCredentials,
-    ) -> Result<StartBatchModelInferenceResponse<'a>, Error> {
+    ) -> Result<StartBatchModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
@@ -188,7 +188,7 @@ impl ModelConfig {
                 Ok(response) => {
                     return Ok(StartBatchModelInferenceResponse::new(
                         response,
-                        provider_name,
+                        provider_name.clone(),
                     ));
                 }
                 Err(error) => {
@@ -199,55 +199,6 @@ impl ModelConfig {
         Err(Error::new(ErrorDetails::ModelProvidersExhausted {
             provider_errors,
         }))
-    }
-
-    pub fn validate(&self, model_name: &str) -> Result<(), Error> {
-        // Ensure that the model has at least one provider
-        if self.routing.is_empty() {
-            return Err(ErrorDetails::Config {
-                message: format!("`models.{model_name}`: `routing` must not be empty"),
-            }
-            .into());
-        }
-
-        // Ensure that routing entries are unique and exist as keys in providers
-        let mut seen_providers = std::collections::HashSet::new();
-        for provider in &self.routing {
-            if provider.starts_with("tensorzero::") {
-                return Err(ErrorDetails::Config {
-                    message: format!("`models.{model_name}.routing`: Provider name cannot start with 'tensorzero::': {provider}"),
-                }
-                .into());
-            }
-            if !seen_providers.insert(provider) {
-                return Err(ErrorDetails::Config {
-                    message: format!("`models.{model_name}.routing`: duplicate entry `{provider}`"),
-                }
-                .into());
-            }
-
-            if !self.providers.contains_key(provider) {
-                return Err(ErrorDetails::Config {
-            message: format!(
-                "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
-            ),
-        }
-        .into());
-            }
-        }
-
-        // Validate each provider
-        for provider_name in self.providers.keys() {
-            if !seen_providers.contains(provider_name) {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                "`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"
-            ),
-                }
-                .into());
-            }
-        }
-        Ok(())
     }
 }
 
@@ -281,7 +232,7 @@ pub enum ProviderConfig {
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-enum ProviderConfigHelper {
+pub(super) enum ProviderConfigHelper {
     Anthropic {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
@@ -829,6 +780,7 @@ impl<'de> Deserialize<'de> for CredentialLocation {
     }
 }
 
+#[derive(Clone)]
 pub enum Credential {
     Static(SecretString),
     FileContents(SecretString),
@@ -836,6 +788,66 @@ pub enum Credential {
     None,
     #[cfg(any(test, feature = "e2e_tests"))]
     Missing,
+}
+
+/// Builds a credential type from the provided `CredentialLocation` and default location.
+/// This is a convenience function that calls `get_creds_with_cache_and_fn` using
+/// the `TryFrom<Credential>` implementation for `T`.
+///
+/// Most providers should be able to use this function to build their credentials,
+/// unless they have special requirements (e.g. calling an `async fn`)
+pub fn build_creds_caching_default<T: Clone + TryFrom<Credential, Error = Error>>(
+    location: Option<CredentialLocation>,
+    default_location: CredentialLocation,
+    provider_type: &str,
+    cache: &OnceLock<T>,
+) -> Result<T, Error> {
+    build_creds_caching_default_with_fn(location, default_location, provider_type, cache, |creds| {
+        T::try_from(creds)
+    })
+}
+
+/// Builds a credential type from the provided `CredentialLocation` and default location.
+/// If the location is `None`, we'll use the provided `OnceLock` to cache the result
+/// of `f(default_location)`.
+/// Otherwise, we'll call `f(location)` without caching the result.
+///
+/// **NOTE** - `f` may be run multiple times in parallel even when `default_location` is used,
+/// due to a limitation of the current `OnceLock` api.
+pub fn build_creds_caching_default_with_fn<T: Clone, F: FnOnce(Credential) -> Result<T, Error>>(
+    location: Option<CredentialLocation>,
+    default_location: CredentialLocation,
+    provider_type: &str,
+    cache: &OnceLock<T>,
+    f: F,
+) -> Result<T, Error> {
+    let make_creds = |location| {
+        let creds = Credential::try_from((location, provider_type))?;
+        let provider_creds = f(creds)?;
+        Ok(provider_creds)
+    };
+    if let Some(location) = location {
+        make_creds(location)
+    } else {
+        racy_get_or_try_init(cache, || make_creds(default_location))
+    }
+}
+
+/// Gets the value from a `OnceLock` or initializes it with the result of `f`
+/// If this is called simultaneously from multiple threads, it may call `f` multiple times
+/// If `f` returns an error, the `OnceLock` will remain uninitialized
+fn racy_get_or_try_init<T: Clone, E>(
+    once_lock: &OnceLock<T>,
+    f: impl FnOnce() -> Result<T, E>,
+) -> Result<T, E> {
+    if let Some(val) = once_lock.get() {
+        Ok(val.clone())
+    } else {
+        let val = f()?;
+        // We don't care if the value was est
+        let _ = once_lock.set(val.clone());
+        Ok(val)
+    }
 }
 
 impl TryFrom<(CredentialLocation, &str)> for Credential {
@@ -940,17 +952,6 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
     }
 }
 
-lazy_static! {
-    static ref RESERVED_MODEL_PREFIXES: Vec<String> = {
-        let mut prefixes: Vec<String> = ProviderConfigHelper::VARIANTS
-            .iter()
-            .map(|&v| format!("{}::", v))
-            .collect();
-        prefixes.push("tensorzero::".to_string());
-        prefixes
-    };
-}
-
 const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "anthropic::",
     "fireworks::",
@@ -963,112 +964,92 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "dummy::",
 ];
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(try_from = "HashMap<Arc<str>, ModelConfig>")]
-pub struct ModelTable(HashMap<Arc<str>, ModelConfig>);
+pub type ModelTable = BaseModelTable<ModelConfig>;
 
-impl TryFrom<HashMap<Arc<str>, ModelConfig>> for ModelTable {
-    type Error = String;
-
-    fn try_from(map: HashMap<Arc<str>, ModelConfig>) -> Result<Self, Self::Error> {
-        for key in map.keys() {
-            if RESERVED_MODEL_PREFIXES
-                .iter()
-                .any(|name| key.starts_with(name))
-            {
-                return Err(format!("Model name '{}' contains a reserved prefix", key));
-            }
-        }
-        Ok(ModelTable(map))
-    }
-}
-
-impl std::ops::Deref for ModelTable {
-    type Target = HashMap<Arc<str>, ModelConfig>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl ModelTable {
-    /// Check that a model name is valid
-    /// This is either true because it's in the table, or because it's a valid shorthand name
-    /// In the latter case, we actually create a new model config in the table corresponding to the shorthand
-    pub fn validate_or_create(&mut self, key: &str) -> Result<(), Error> {
-        // Try direct lookup (if it's blacklisted, it's not in the table)
-        // If it's shorthand and already in the table, it's valid
-        if let Some(model_config) = self.0.get(key) {
-            model_config.validate(key)?;
-            return Ok(());
-        }
-
-        // Try matching shorthand prefixes
-        if let Some(prefix) = SHORTHAND_MODEL_PREFIXES
-            .iter()
-            .find(|&&prefix| key.starts_with(prefix))
-        {
-            let model_name = match key.strip_prefix(prefix) {
-                Some(name) => name,
-                None => {
-                    return Err(ErrorDetails::Config {
-                        message: format!(
-                            "Failed to strip prefix '{}' from model name '{}' This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/issues/new",
-                            prefix, key
-                        ),
-                    }
-                    .into());
+impl ShorthandModelConfig for ModelConfig {
+    const SHORTHAND_MODEL_PREFIXES: &[&str] = SHORTHAND_MODEL_PREFIXES;
+    const MODEL_TYPE: &str = "Model";
+    fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
+        let model_name = model_name.to_string();
+        let provider_config = match provider_type {
+            "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
+            "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(model_name, None)?),
+            "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
+                GoogleAIStudioGeminiProvider::new(model_name, None)?,
+            ),
+            "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
+            "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
+            "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
+            "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
+            "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
+            _ => {
+                return Err(ErrorDetails::Config {
+                    message: format!("Invalid provider type: {}", provider_type),
                 }
-            };
-            // Remove the last two characters of the prefix to get the provider type
-            let provider_type = &prefix[..prefix.len() - 2];
-            let model_config = model_config_from_shorthand(provider_type, model_name)?;
-            model_config.validate(key)?;
-            self.0.insert(key.into(), model_config);
-            return Ok(());
-        }
-
-        Err(ErrorDetails::Config {
-            message: format!("Model name '{}' not found in model table", key),
-        }
-        .into())
+                .into());
+            }
+        };
+        Ok(ModelConfig {
+            routing: vec![provider_type.to_string().into()],
+            providers: HashMap::from([(provider_type.to_string().into(), provider_config)]),
+        })
     }
-}
 
-fn model_config_from_shorthand(
-    provider_type: &str,
-    model_name: &str,
-) -> Result<ModelConfig, Error> {
-    let model_name = model_name.to_string();
-    let provider_config = match provider_type {
-        "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
-        "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(model_name, None)?),
-        "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
-            GoogleAIStudioGeminiProvider::new(model_name, None)?,
-        ),
-        "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
-        "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
-        "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
-        "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
-        "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
-        #[cfg(any(test, feature = "e2e_tests"))]
-        "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
-        _ => {
+    fn validate(&self, model_name: &str) -> Result<(), Error> {
+        // Ensure that the model has at least one provider
+        if self.routing.is_empty() {
             return Err(ErrorDetails::Config {
-                message: format!("Invalid provider type: {}", provider_type),
+                message: format!("`models.{model_name}`: `routing` must not be empty"),
             }
             .into());
         }
-    };
-    Ok(ModelConfig {
-        routing: vec![provider_type.to_string().into()],
-        providers: HashMap::from([(provider_type.to_string().into(), provider_config)]),
-    })
+
+        // Ensure that routing entries are unique and exist as keys in providers
+        let mut seen_providers = std::collections::HashSet::new();
+        for provider in &self.routing {
+            if provider.starts_with("tensorzero::") {
+                return Err(ErrorDetails::Config {
+                    message: format!("`models.{model_name}.routing`: Provider name cannot start with 'tensorzero::': {provider}"),
+                }
+                .into());
+            }
+            if !seen_providers.insert(provider) {
+                return Err(ErrorDetails::Config {
+                    message: format!("`models.{model_name}.routing`: duplicate entry `{provider}`"),
+                }
+                .into());
+            }
+
+            if !self.providers.contains_key(provider) {
+                return Err(ErrorDetails::Config {
+            message: format!(
+                "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
+            ),
+        }
+        .into());
+            }
+        }
+
+        // Validate each provider
+        for provider_name in self.providers.keys() {
+            if !seen_providers.contains(provider_name) {
+                return Err(ErrorDetails::Config {
+                    message: format!(
+                "`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"
+            ),
+                }
+                .into());
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
+    use std::{borrow::Cow, cell::Cell};
 
     use crate::cache::CacheEnabledMode;
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -1082,6 +1063,7 @@ mod tests {
             },
             types::{ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk},
         },
+        model_table::RESERVED_MODEL_PREFIXES,
     };
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
@@ -1386,8 +1368,8 @@ mod tests {
         let model_config = ModelConfig {
             routing: vec!["error_provider".into(), "good_provider".into()],
             providers: HashMap::from([
-                ("error_provider".into(), bad_provider_config),
-                ("good_provider".into(), good_provider_config),
+                ("error_provider".to_string().into(), bad_provider_config),
+                ("good_provider".to_string().into(), good_provider_config),
             ]),
         };
         let (initial_chunk, stream, raw_request, model_provider_name) = model_config
@@ -1607,22 +1589,15 @@ mod tests {
 
     #[test]
     fn test_validate_or_create_model_config() {
-        let mut model_table = ModelTable::default();
+        let model_table = ModelTable::default();
         // Test that we can get or create a model config
-        model_table.validate_or_create("dummy::gpt-4o").unwrap();
-        assert_eq!(model_table.len(), 1);
-        let model_config = model_table.get("dummy::gpt-4o").unwrap();
-        assert_eq!(model_config.routing, vec!["dummy".into()]);
-        let provider_config = model_config.providers.get("dummy").unwrap();
-        match provider_config {
-            ProviderConfig::Dummy(provider) => assert_eq!(&*provider.model_name, "gpt-4o"),
-            _ => panic!("Expected Dummy provider"),
-        }
-
-        // Test that it is idempotent
-        model_table.validate_or_create("dummy::gpt-4o").unwrap();
-        assert_eq!(model_table.len(), 1);
-        let model_config = model_table.get("dummy::gpt-4o").unwrap();
+        model_table.validate("dummy::gpt-4o").unwrap();
+        // Shorthand models are not added to the model table
+        assert_eq!(model_table.static_model_len(), 0);
+        let model_config = model_table
+            .get("dummy::gpt-4o")
+            .unwrap()
+            .expect("Missing dummy model");
         assert_eq!(model_config.routing, vec!["dummy".into()]);
         let provider_config = model_config.providers.get("dummy").unwrap();
         match provider_config {
@@ -1631,7 +1606,7 @@ mod tests {
         }
 
         // Test that it fails if the model is not well-formed
-        let model_config = model_table.validate_or_create("foo::bar");
+        let model_config = model_table.validate("foo::bar");
         assert!(model_config.is_err());
         assert_eq!(
             model_config.unwrap_err(),
@@ -1647,12 +1622,11 @@ mod tests {
             routing: vec!["anthropic".into()],
             providers: HashMap::from([("anthropic".into(), anthropic_provider_config)]),
         };
-        let mut model_table: ModelTable =
-            HashMap::from([("claude".into(), anthropic_model_config)])
-                .try_into()
-                .unwrap();
+        let model_table: ModelTable = HashMap::from([("claude".into(), anthropic_model_config)])
+            .try_into()
+            .unwrap();
 
-        model_table.validate_or_create("dummy::claude").unwrap();
+        model_table.validate("dummy::claude").unwrap();
     }
 
     #[test]
@@ -1664,5 +1638,83 @@ mod tests {
                 shorthand
             );
         }
+    }
+
+    #[test]
+    fn test_racy_get_or_try_init() {
+        let lock: OnceLock<bool> = OnceLock::new();
+
+        // If the closure returns an error, `racy_get_or_try_init` should return an error
+        racy_get_or_try_init(&lock, || {
+            Err::<_, Box<dyn std::error::Error>>("Test error".into())
+        })
+        .expect_err("Test error");
+        assert!(
+            lock.get().is_none(),
+            "OnceLock was initialized after an error"
+        );
+
+        racy_get_or_try_init(&lock, || Ok::<_, Box<dyn std::error::Error>>(true))
+            .expect("racy_get_or_try_init should succeed with successful closure");
+
+        assert_eq!(lock.get(), Some(&true));
+    }
+
+    #[test]
+    fn test_cache_default_creds() {
+        let make_creds_call_count = Cell::new(0);
+        let make_creds = |_| {
+            make_creds_call_count.set(make_creds_call_count.get() + 1);
+            Ok(())
+        };
+
+        let cache = OnceLock::new();
+
+        build_creds_caching_default_with_fn(
+            None,
+            CredentialLocation::None,
+            "test",
+            &cache,
+            make_creds,
+        )
+        .expect("Failed to build creds");
+        // The first call should initialize the OnceLock, and call `make_creds`
+        assert_eq!(make_creds_call_count.get(), 1);
+        assert_eq!(cache.get(), Some(&()));
+
+        // Subsequent calls should not call `make_creds`
+        build_creds_caching_default_with_fn(
+            None,
+            CredentialLocation::None,
+            "test",
+            &cache,
+            make_creds,
+        )
+        .expect("Failed to build creds");
+        assert_eq!(make_creds_call_count.get(), 1);
+    }
+
+    #[test]
+    fn test_dont_cache_non_default_creds() {
+        let make_creds_call_count = Cell::new(0);
+        let make_creds = |_| {
+            make_creds_call_count.set(make_creds_call_count.get() + 1);
+            Ok(())
+        };
+
+        let cache = OnceLock::new();
+
+        // When we provide a `Some(credential_location)`, we should not cache the creds.
+        build_creds_caching_default_with_fn(
+            Some(CredentialLocation::None),
+            CredentialLocation::None,
+            "test",
+            &cache,
+            make_creds,
+        )
+        .expect("Failed to build creds");
+
+        assert_eq!(cache.get(), None);
+        assert_eq!(make_creds_call_count.get(), 1);
     }
 }

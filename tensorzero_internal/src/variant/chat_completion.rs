@@ -1,9 +1,9 @@
 use serde::Deserialize;
 use serde_json::Value;
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::{collections::HashMap, path::PathBuf};
 
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -164,7 +164,7 @@ impl Variant for ChatCompletionConfig {
             false,
             &mut inference_params,
         )?;
-        let model_config = models.models.get(&self.model).ok_or_else(|| {
+        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -172,7 +172,7 @@ impl Variant for ChatCompletionConfig {
         let args = InferModelRequestArgs {
             request,
             model_name: self.model.clone(),
-            model_config,
+            model_config: &model_config,
             function,
             inference_config,
             clients,
@@ -199,7 +199,7 @@ impl Variant for ChatCompletionConfig {
             true,
             &mut inference_params,
         )?;
-        let model_config = models.models.get(&self.model).ok_or_else(|| {
+        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -207,7 +207,7 @@ impl Variant for ChatCompletionConfig {
         infer_model_request_stream(
             request,
             self.model.clone(),
-            model_config,
+            &model_config,
             function,
             clients,
             inference_params,
@@ -227,7 +227,7 @@ impl Variant for ChatCompletionConfig {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        _embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
+        _embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -240,7 +240,7 @@ impl Variant for ChatCompletionConfig {
                 ),
             }.into());
         }
-        models.validate_or_create(&self.model)?;
+        models.validate(&self.model)?;
 
         // Validate the system template matches the system schema (best effort, we cannot check the variables comprehensively)
         validate_template_and_schema(
@@ -323,7 +323,7 @@ impl Variant for ChatCompletionConfig {
                 self.prepare_request(input, function, inference_config, false, inference_param)?;
             inference_requests.push(request);
         }
-        let model_config = models.models.get(&self.model).ok_or_else(|| {
+        let model_config = models.models.get(&self.model)?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: self.model.to_string(),
             })
@@ -373,6 +373,8 @@ pub fn validate_template_and_schema(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     use futures::StreamExt;
@@ -381,6 +383,7 @@ mod tests {
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
     use crate::clickhouse::ClickHouseConnectionInfo;
+    use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
@@ -778,7 +781,7 @@ mod tests {
         let models = ModelTable::default();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &HashMap::new(),
+            embedding_models: &EmbeddingModelTable::default(),
         };
         let result = chat_completion_config
             .infer(
@@ -814,7 +817,7 @@ mod tests {
             .unwrap();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &HashMap::new(),
+            embedding_models: &EmbeddingModelTable::default(),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -853,7 +856,7 @@ mod tests {
         let models = models.try_into().unwrap();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &HashMap::new(),
+            embedding_models: &EmbeddingModelTable::try_from(HashMap::new()).unwrap(),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -912,7 +915,7 @@ mod tests {
             .unwrap();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &HashMap::new(),
+            embedding_models: &EmbeddingModelTable::default(),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -983,7 +986,7 @@ mod tests {
             .unwrap();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &HashMap::new(),
+            embedding_models: &EmbeddingModelTable::default(),
         };
         let weather_tool_config = get_temperature_tool_config();
         let inference_config = InferenceConfig {
@@ -1119,7 +1122,7 @@ mod tests {
             .unwrap();
         let inference_models = InferenceModels {
             models: &models,
-            embedding_models: &HashMap::new(),
+            embedding_models: &EmbeddingModelTable::default(),
         };
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1427,7 +1430,7 @@ mod tests {
                 .try_into()
                 .unwrap(),
         ));
-        let embedding_models = Box::leak(Box::new(HashMap::new()));
+        let embedding_models = &EmbeddingModelTable::try_from(HashMap::new()).unwrap();
         let inference_models = InferenceModels {
             models,
             embedding_models,

@@ -20,10 +20,10 @@ use uuid::Uuid;
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
-use crate::function::sample_variant;
 use crate::function::FunctionConfig;
+use crate::function::{sample_variant, FunctionConfigChat};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, ChatInferenceDatabaseInsert, CollectChunksArgs, ContentBlockChunk,
@@ -33,18 +33,21 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
-use crate::tool::{DynamicToolParams, ToolCallConfig};
+use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::uuid_util::validate_episode_id;
-use crate::variant::{InferenceConfig, Variant};
+use crate::variant::chat_completion::ChatCompletionConfig;
+use crate::variant::{InferenceConfig, Variant, VariantConfig};
 
 use super::validate_tags;
 
 /// The expected payload is a JSON object with the following fields:
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Params {
-    // the function name
-    pub function_name: String,
+    // The function name. Exactly one of `function_name` or `model_name` must be provided.
+    pub function_name: Option<String>,
+    // The model name to run using a default function. Exactly one of `function_name` or `model_name` must be provided.
+    pub model_name: Option<String>,
     // the episode ID (if not provided, it'll be set to inference_id)
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
     pub episode_id: Option<Uuid>,
@@ -118,7 +121,7 @@ pub async fn inference_handler(
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
     let inference_output =
-        inference(config, http_client, clickhouse_connection_info, params).await?;
+        inference(config, &http_client, clickhouse_connection_info, params).await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
         InferenceOutput::Streaming(stream) => {
@@ -139,25 +142,27 @@ pub enum InferenceOutput {
     Streaming(InferenceStream),
 }
 
+const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
+
 #[instrument(
     name="inference",
     skip(config, http_client, clickhouse_connection_info, params),
     fields(
-        function_name = %params.function_name,
+        function_name = ?params.function_name,
+        model_name = ?params.model_name,
         variant_name = ?params.variant_name,
     )
 )]
 pub async fn inference(
     config: Arc<Config<'static>>,
-    http_client: reqwest::Client,
+    http_client: &reqwest::Client,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     params: Params,
 ) -> Result<InferenceOutput, Error> {
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
     validate_tags(&params.tags)?;
-    // Get the function config or return an error if it doesn't exist
-    let function = config.get_function(&params.function_name)?.clone();
+    let (function, function_name) = find_function(&params, &config)?;
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =
@@ -166,7 +171,7 @@ pub async fn inference(
     // If the function has no variants, return an error
     if candidate_variant_names.is_empty() {
         return Err(ErrorDetails::InvalidFunctionVariants {
-            message: format!("Function `{}` has no variants", params.function_name),
+            message: format!("Function `{}` has no variants", function_name),
         }
         .into());
     }
@@ -196,18 +201,15 @@ pub async fn inference(
 
     // Increment the request count if we're not in dryrun mode
     if !dryrun {
-        counter!(
-            "request_count",
-            "endpoint" => "inference",
-            "function_name" => params.function_name.to_string(),
-        )
-        .increment(1);
-        counter!(
-            "inference_count",
-            "endpoint" => "inference",
-            "function_name" => params.function_name.to_string(),
-        )
-        .increment(1);
+        let mut labels = vec![
+            ("endpoint", "inference".to_string()),
+            ("function_name", function_name.clone()),
+        ];
+        if let Some(model_name) = params.model_name {
+            labels.push(("model_name", model_name.clone()));
+        }
+        counter!("request_count", &labels).increment(1);
+        counter!("inference_count", &labels).increment(1);
     }
 
     // Should we stream the inference?
@@ -219,14 +221,14 @@ pub async fn inference(
     // Set up inference config
     let output_schema = params.output_schema.map(DynamicJSONSchema::new);
     let mut inference_config = InferenceConfig {
-        function_name: &params.function_name,
+        function_name: &function_name,
         variant_name: None,
         templates: &config.templates,
         tool_config: tool_config.as_ref(),
         dynamic_output_schema: output_schema.as_ref(),
     };
     let inference_clients = InferenceClients {
-        http_client: &http_client,
+        http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
         credentials: &params.credentials,
         cache_options: &(params.cache_options, dryrun).into(),
@@ -241,7 +243,7 @@ pub async fn inference(
         let (variant_name, variant) = sample_variant(
             &mut candidate_variant_names,
             function.variants(),
-            &params.function_name,
+            &function_name,
             &episode_id,
         )?;
         // Will be edited by the variant as part of making the request so we must clone here
@@ -276,7 +278,7 @@ pub async fn inference(
 
             // Create InferenceMetadata for a streaming inference
             let inference_metadata = InferenceMetadata {
-                function_name: params.function_name.clone(),
+                function_name: function_name.to_string(),
                 variant_name: variant_name.to_string(),
                 episode_id,
                 input: params.input.clone(),
@@ -321,7 +323,7 @@ pub async fn inference(
                 Err(e) => {
                     tracing::warn!(
                         "functions.{function_name}.variants.{variant_name} failed during inference: {e}",
-                        function_name = params.function_name,
+                        function_name = function_name,
                         variant_name = variant_name,
                     );
                     variant_errors.insert(variant_name.to_string(), e);
@@ -334,7 +336,7 @@ pub async fn inference(
 
                 let result_to_write = result.clone();
                 let write_metadata = InferenceDatabaseInsertMetadata {
-                    function_name: params.function_name.clone(),
+                    function_name: function_name.to_string(),
                     variant_name: variant_name.to_string(),
                     episode_id,
                     tool_config,
@@ -364,6 +366,64 @@ pub async fn inference(
         errors: variant_errors,
     }
     .into())
+}
+
+/// Finds a function by `function_name` or `model_name`, erroring if an
+/// invalid combination of parameters is provided.
+/// If `model_name` is specified, then we use the special 'default' function
+/// Returns the function config and the function name
+fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig>, String), Error> {
+    match (&params.function_name, &params.model_name) {
+        // Get the function config or return an error if it doesn't exist
+        (Some(function_name), None) => Ok((
+            config.get_function(function_name)?.clone(),
+            function_name.to_string(),
+        )),
+        (None, Some(model_name)) => {
+            if params.variant_name.is_some() {
+                return Err(ErrorDetails::InvalidInferenceTarget {
+                    message: "`variant_name` cannot be provided when using `model_name`"
+                        .to_string(),
+                }
+                .into());
+            }
+            if let Err(e) = config.models.validate(model_name) {
+                return Err(ErrorDetails::InvalidInferenceTarget {
+                    message: format!("Invalid model name: {e}"),
+                }
+                .into());
+            }
+
+            Ok((
+                Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+                    variants: [(
+                        model_name.clone(),
+                        VariantConfig::ChatCompletion(ChatCompletionConfig {
+                            model: (&**model_name).into(),
+                            ..Default::default()
+                        }),
+                    )]
+                    .into_iter()
+                    .collect(),
+                    system_schema: None,
+                    user_schema: None,
+                    assistant_schema: None,
+                    tools: vec![],
+                    tool_choice: ToolChoice::None,
+                    parallel_tool_calls: false,
+                })),
+                DEFAULT_FUNCTION_NAME.to_string(),
+            ))
+        }
+        (Some(_), Some(_)) => Err(ErrorDetails::InvalidInferenceTarget {
+            message: "Only one of `function_name` or `model_name` can be provided".to_string(),
+        }
+        .into()),
+        (None, None) => Err(ErrorDetails::InvalidInferenceTarget {
+            message: "Either `function_name` or `model_name` must be provided".to_string(),
+        }
+        .into()),
+    }
 }
 
 fn create_stream(
@@ -539,14 +599,14 @@ async fn write_inference(
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged, rename_all = "snake_case")]
 pub enum InferenceResponse {
     Chat(ChatInferenceResponse),
     Json(JsonInferenceResponse),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ChatInferenceResponse {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -555,7 +615,7 @@ pub struct ChatInferenceResponse {
     pub usage: Usage,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct JsonInferenceResponse {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -592,14 +652,14 @@ impl InferenceResponse {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum InferenceResponseChunk {
     Chat(ChatInferenceResponseChunk),
     Json(JsonInferenceResponseChunk),
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatInferenceResponseChunk {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -609,7 +669,7 @@ pub struct ChatInferenceResponseChunk {
     pub usage: Option<Usage>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsonInferenceResponseChunk {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -656,7 +716,7 @@ pub struct InferenceClients<'a> {
 #[derive(Debug)]
 pub struct InferenceModels<'a> {
     pub models: &'a ModelTable,
-    pub embedding_models: &'a HashMap<Arc<str>, EmbeddingModelConfig>,
+    pub embedding_models: &'a EmbeddingModelTable,
 }
 
 /// InferenceParams is the top-level struct for inference parameters.
@@ -828,5 +888,96 @@ mod tests {
                 panic!("Expected JsonInferenceResponseChunk, got ChatInferenceResponseChunk");
             }
         }
+    }
+
+    #[test]
+    fn test_find_function_no_function_model() {
+        let err = find_function(
+            &Params {
+                function_name: None,
+                model_name: None,
+                ..Default::default()
+            },
+            &Config::default(),
+        )
+        .expect_err("find_function should fail without either arg");
+        assert!(
+            err.to_string()
+                .contains("Either `function_name` or `model_name` must be provided"),
+            "Unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_find_function_both_function_model() {
+        let err = find_function(
+            &Params {
+                function_name: Some("my_function".to_string()),
+                model_name: Some("my_model".to_string()),
+                ..Default::default()
+            },
+            &Config::default(),
+        )
+        .expect_err("find_function should fail with both args provided");
+        assert!(
+            err.to_string()
+                .contains("Only one of `function_name` or `model_name` can be provided"),
+            "Unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_find_function_model_and_variant() {
+        let err = find_function(
+            &Params {
+                function_name: None,
+                model_name: Some("my_model".to_string()),
+                variant_name: Some("my_variant".to_string()),
+                ..Default::default()
+            },
+            &Config::default(),
+        )
+        .expect_err("find_function should fail without model_name");
+        assert!(
+            err.to_string()
+                .contains("`variant_name` cannot be provided when using `model_name`"),
+            "Unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_find_function_shorthand_model() {
+        let (function_config, function_name) = find_function(
+            &Params {
+                function_name: None,
+                model_name: Some("openai::gpt-9000".to_string()),
+                ..Default::default()
+            },
+            &Config::default(),
+        )
+        .expect("Failed to find shorthand function");
+        assert_eq!(function_name, "tensorzero::default");
+        assert_eq!(function_config.variants().len(), 1);
+        assert_eq!(
+            function_config.variants().keys().next().unwrap(),
+            "openai::gpt-9000"
+        );
+    }
+
+    #[test]
+    fn test_find_function_shorthand_missing_provider() {
+        let err = find_function(
+            &Params {
+                model_name: Some("fake_provider::gpt-9000".to_string()),
+                ..Default::default()
+            },
+            &Config::default(),
+        )
+        .expect_err("find_function should fail with invalid provider");
+        assert!(
+            err.to_string()
+                .contains("Model name 'fake_provider::gpt-9000' not found in model table"),
+            "Unexpected error: {err}"
+        );
     }
 }

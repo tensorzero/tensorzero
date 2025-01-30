@@ -1,6 +1,8 @@
 use std::future::Future;
 use std::{collections::HashMap, sync::Arc};
 
+use crate::model_table::BaseModelTable;
+use crate::model_table::ShorthandModelConfig;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -20,6 +22,38 @@ use uuid::Uuid;
 
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
+
+pub type EmbeddingModelTable = BaseModelTable<EmbeddingModelConfig>;
+
+impl ShorthandModelConfig for EmbeddingModelConfig {
+    const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::"];
+    const MODEL_TYPE: &str = "Embedding model";
+    fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
+        let model_name = model_name.to_string();
+        let provider_config = match provider_type {
+            "openai" => {
+                EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?)
+            }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
+            _ => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!("Invalid provider type: {}", provider_type),
+                }));
+            }
+        };
+        Ok(EmbeddingModelConfig {
+            routing: vec![provider_type.to_string().into()],
+            providers: HashMap::from([(provider_type.to_string().into(), provider_config)]),
+        })
+    }
+
+    fn validate(&self, _key: &str) -> Result<(), Error> {
+        // Credentials are validated during deserialization
+        // We may add additional validation here in the future
+        Ok(())
+    }
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -58,12 +92,6 @@ impl EmbeddingModelConfig {
             }
         }
         Err(ErrorDetails::ModelProvidersExhausted { provider_errors }.into())
-    }
-
-    pub fn validate(&self) -> Result<(), Error> {
-        // Credentials are validated during deserialization
-        // We may add additional validation here in the future
-        Ok(())
     }
 }
 

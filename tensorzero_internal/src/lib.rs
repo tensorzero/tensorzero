@@ -11,6 +11,7 @@ pub mod inference; // model inference
 pub mod jsonschema_util; // utilities for working with JSON schemas
 mod minijinja_util; // utilities for working with MiniJinja templates
 pub mod model; // types and methods for working with TensorZero-supported models
+pub mod model_table;
 pub mod observability; // utilities for observability (logs, metrics, etc.)
 mod testing;
 pub mod tool; // types and methods for working with TensorZero tools

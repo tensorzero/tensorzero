@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::OnceLock};
 
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -12,13 +12,12 @@ use url::Url;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
-    inference::types::batch::PollBatchInferenceResponse,
     inference::types::{
-        batch::{BatchRequestRow, StartBatchProviderInferenceResponse},
+        batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
-    model::{Credential, CredentialLocation},
+    model::{build_creds_caching_default, Credential, CredentialLocation},
 };
 
 use super::{
@@ -47,17 +46,22 @@ pub struct FireworksProvider {
     credentials: FireworksCredentials,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<FireworksCredentials> = OnceLock::new();
+
 impl FireworksProvider {
     pub fn new(
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = FireworksCredentials::try_from(generic_credentials)?;
+        let credentials = build_creds_caching_default(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+        )?;
         Ok(FireworksProvider {
             model_name,
-            credentials: provider_credentials,
+            credentials,
         })
     }
 }

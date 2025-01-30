@@ -1,5 +1,5 @@
 #![allow(clippy::print_stdout)]
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
@@ -14,11 +14,10 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
-#[cfg(feature = "e2e_tests")]
 use crate::common::get_gateway_endpoint;
 use crate::common::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
-    select_json_inference_clickhouse, select_model_inference_clickhouse,
+    select_json_inference_clickhouse, select_model_inference_clickhouse, CLICKHOUSE_URL,
 };
 
 #[derive(Clone, Debug)]
@@ -48,6 +47,49 @@ pub struct E2ETestProviders {
     pub shorthand_inference: Vec<E2ETestProvider>,
     #[cfg(feature = "batch_tests")]
     pub supports_batch_inference: bool,
+}
+
+pub async fn make_http_gateway() -> tensorzero::Client {
+    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
+        url: get_gateway_endpoint("/"),
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
+pub async fn make_embedded_gateway() -> tensorzero::Client {
+    let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    config_path.push("tests/e2e/tensorzero.toml");
+    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+        config_path,
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
+// We use a multi-threaded runtime so that the embedded gateway can use 'block_on'.
+// For consistency, we also use a multi-threaded runtime for the http gateway test.
+#[cfg(feature = "e2e_tests")]
+#[macro_export]
+macro_rules! make_gateway_test_functions {
+    ($prefix:ident) => {
+        paste::paste! {
+            #[cfg(feature = "e2e_tests")]
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<$prefix _embedded_gateway>]() {
+                $prefix ($crate::providers::common::make_embedded_gateway().await).await;
+            }
+
+            #[cfg(feature = "e2e_tests")]
+            #[tokio::test(flavor = "multi_thread")]
+            async fn [<$prefix _http_gateway>]() {
+                $prefix ($crate::providers::common::make_http_gateway().await).await;
+            }
+        }
+    };
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -250,23 +292,22 @@ macro_rules! generate_provider_tests {
             }
         }
 
-        #[cfg(feature = "e2e_tests")]
-        #[tokio::test]
-        async fn test_dynamic_tool_use_inference_request() {
+        async fn test_dynamic_tool_use_inference_request(client: tensorzero::Client) {
             let providers = $func().await.dynamic_tool_use_inference;
             for provider in providers {
-                test_dynamic_tool_use_inference_request_with_provider(provider).await;
+                test_dynamic_tool_use_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_dynamic_tool_use_inference_request);
 
-        #[cfg(feature = "e2e_tests")]
-        #[tokio::test]
-        async fn test_dynamic_tool_use_streaming_inference_request() {
+
+        async fn test_dynamic_tool_use_streaming_inference_request(client: tensorzero::Client) {
             let providers = $func().await.dynamic_tool_use_inference;
             for provider in providers {
-                test_dynamic_tool_use_streaming_inference_request_with_provider(provider).await;
+                test_dynamic_tool_use_streaming_inference_request_with_provider(provider, &client).await;
             }
         }
+        $crate::make_gateway_test_functions!(test_dynamic_tool_use_streaming_inference_request);
 
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
@@ -5506,26 +5547,30 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
 }
 
 #[cfg(feature = "e2e_tests")]
-pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_dynamic_tool_use_inference_request_with_provider(
+    provider: E2ETestProvider,
+    client: &tensorzero::Client,
+) {
     let episode_id = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "basic_test",
-        "episode_id": episode_id,
-        "input":{
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
-                }
-            ]},
-        "stream": false,
-        "additional_tools": [
-            {
-                "name": "get_temperature",
-                "description": "Get the current temperature in a given location",
-                "parameters": {
+    let response = client.inference(tensorzero::ClientInferenceParams {
+        function_name: Some("basic_test".to_string()),
+        model_name: None,
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: tensorzero::Input {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![tensorzero::InputMessage {
+                role: Role::User,
+                content: vec![tensorzero::InputMessageContent::Text { value: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string().into() }],
+            }],
+        },
+        stream: Some(false),
+        dynamic_tool_params: tensorzero::DynamicToolParams {
+            additional_tools: Some(vec![tensorzero::Tool {
+                name: "get_temperature".to_string(),
+                description: "Get the current temperature in a given location".to_string(),
+                parameters: json!({
                     "$schema": "http://json-schema.org/draft-07/schema#",
                     "type": "object",
                     "properties": {
@@ -5541,26 +5586,32 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(provider: E2E
                     },
                     "required": ["location"],
                     "additionalProperties": false
-                }
-            }
-        ],
-        "variant_name": provider.variant_name,
-    });
+                }),
+                strict: false,
+            }]),
+            ..Default::default()
+        },
+        ..Default::default()
+    }).await.unwrap();
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
+    match response {
+        tensorzero::InferenceOutput::NonStreaming(response) => {
+            let response_json = serde_json::to_value(&response).unwrap();
 
-    // Check if the API response is fine
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
+            println!("API response: {response_json:#?}");
 
-    println!("API response: {response_json:#?}");
-    check_dynamic_tool_use_inference_response(response_json, &provider, Some(episode_id), false)
-        .await;
+            check_dynamic_tool_use_inference_response(
+                response_json,
+                &provider,
+                Some(episode_id),
+                false,
+            )
+            .await;
+        }
+        tensorzero::InferenceOutput::Streaming(_) => {
+            panic!("Unexpected streaming response");
+        }
+    }
 }
 
 pub async fn check_dynamic_tool_use_inference_response(
@@ -5797,26 +5848,30 @@ pub async fn check_dynamic_tool_use_inference_response(
 #[cfg(feature = "e2e_tests")]
 pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
+    client: &tensorzero::Client,
 ) {
     let episode_id = Uuid::now_v7();
 
-    let payload = json!({
-        "function_name": "basic_test",
-        "episode_id": episode_id,
-        "input":{
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
-                }
-            ]},
-        "stream": true,
-        "additional_tools": [
-            {
-                "name": "get_temperature",
-                "description": "Get the current temperature in a given location",
-                "parameters": {
+    let input_function_name = "basic_test";
+
+    let stream = client.inference(tensorzero::ClientInferenceParams {
+        function_name: Some(input_function_name.to_string()),
+        model_name: None,
+        variant_name: Some(provider.variant_name.clone()),
+        episode_id: Some(episode_id),
+        input: tensorzero::Input {
+            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            messages: vec![tensorzero::InputMessage {
+                role: Role::User,
+                content: vec![tensorzero::InputMessageContent::Text { value: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string().into() }],
+            }],
+        },
+        stream: Some(true),
+        dynamic_tool_params: tensorzero::DynamicToolParams {
+            additional_tools: Some(vec![tensorzero::Tool {
+                name: "get_temperature".to_string(),
+                description: "Get the current temperature in a given location".to_string(),
+                parameters: json!({
                     "$schema": "http://json-schema.org/draft-07/schema#",
                     "type": "object",
                     "properties": {
@@ -5832,34 +5887,23 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
                     },
                     "required": ["location"],
                     "additionalProperties": false
-                }
-            }
-        ],
-        "variant_name": provider.variant_name,
-    });
+                }),
+                strict: false,
+            }]),
+            ..Default::default()
+        },
+        ..Default::default()
+    }).await.unwrap();
 
-    let mut event_source = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .eventsource()
-        .unwrap();
+    let tensorzero::InferenceOutput::Streaming(mut stream) = stream else {
+        panic!("Expected streaming response");
+    };
 
     let mut chunks = vec![];
-    let mut found_done_chunk = false;
-    while let Some(event) = event_source.next().await {
-        let event = event.unwrap();
-        match event {
-            Event::Open => continue,
-            Event::Message(message) => {
-                if message.data == "[DONE]" {
-                    found_done_chunk = true;
-                    break;
-                }
-                chunks.push(message.data);
-            }
-        }
+    while let Some(event) = stream.next().await {
+        let chunk = event.unwrap();
+        chunks.push(serde_json::to_value(&chunk).unwrap());
     }
-    assert!(found_done_chunk);
 
     let mut inference_id = None;
     let mut tool_id: Option<String> = None;
@@ -5867,9 +5911,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let mut input_tokens = 0;
     let mut output_tokens = 0;
 
-    for chunk in chunks {
-        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
-
+    for chunk_json in chunks {
         println!("API response chunk: {chunk_json:#?}");
 
         let chunk_inference_id = chunk_json.get("inference_id").unwrap().as_str().unwrap();
@@ -5950,7 +5992,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, payload["function_name"]);
+    assert_eq!(function_name, input_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);

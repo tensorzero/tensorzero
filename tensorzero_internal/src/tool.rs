@@ -188,8 +188,7 @@ impl ToolCallConfig {
 /// if `allowed_tools` is not provided, all tools are allowed.
 /// `additional_tools` are the tools that are provided at runtime, which we compile on the fly.
 /// `tool_choice` and `parallel_tool_calls` are optional and will override the function-level values.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[cfg_attr(test, derive(Default))]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct DynamicToolParams {
     pub allowed_tools: Option<Vec<String>>,
@@ -198,7 +197,7 @@ pub struct DynamicToolParams {
     pub parallel_tool_calls: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, derive(Default))]
 pub struct BatchDynamicToolParams {
     pub allowed_tools: Option<Vec<Option<Vec<String>>>>,
@@ -302,7 +301,7 @@ pub enum ToolChoice {
     Specific(String),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ToolCallChunk {
     pub id: String,
     pub raw_name: String,

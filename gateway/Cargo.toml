@@ -5,14 +5,14 @@ edition = "2021"
 
 [dependencies]
 tensorzero_internal = { path = "../tensorzero_internal" }
-axum = { version = "0.7.5", features = ["macros"] }
+axum = { workspace = true }
 tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
 tracing-subscriber = { version = "0.3.18", features = [
     "env-filter",
     "fmt",
     "json",
 ] }
-tokio = { version = "1.38.1", features = ["full"] }
+tokio = { workspace = true }
 mimalloc = "0.1.43"
 
 [lints]
