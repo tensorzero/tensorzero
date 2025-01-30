@@ -90,6 +90,7 @@ struct InferenceMetadata {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
+    pub inference_id: Uuid,
     pub input: Input,
     pub dryrun: bool,
     pub start_time: Instant,
@@ -141,6 +142,12 @@ pub enum InferenceOutput {
 
 const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 
+#[derive(Copy, Clone, Debug)]
+pub struct InferenceIds {
+    pub inference_id: Uuid,
+    pub episode_id: Uuid,
+}
+
 #[instrument(
     name="inference",
     skip(config, http_client, clickhouse_connection_info, params),
@@ -148,6 +155,8 @@ const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
         function_name = ?params.function_name,
         model_name = ?params.model_name,
         variant_name = ?params.variant_name,
+        inference_id,
+        episode_id,
     )
 )]
 pub async fn inference(
@@ -158,6 +167,14 @@ pub async fn inference(
 ) -> Result<InferenceOutput, Error> {
     // To be used for the Inference table processing_time measurements
     let start_time = Instant::now();
+    let inference_id = Uuid::now_v7();
+    tracing::Span::current().record("inference_id", inference_id.to_string());
+
+    // Retrieve or generate the episode ID
+    let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
+    validate_episode_id(episode_id)?;
+    tracing::Span::current().record("episode_id", episode_id.to_string());
+
     validate_tags(&params.tags)?;
     let (function, function_name) = find_function(&params, &config)?;
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
@@ -189,10 +206,6 @@ pub async fn inference(
         }
     }
 
-    // Retrieve or generate the episode ID
-    let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
-    validate_episode_id(episode_id)?;
-
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
 
@@ -223,6 +236,10 @@ pub async fn inference(
         templates: &config.templates,
         tool_config: tool_config.as_ref(),
         dynamic_output_schema: output_schema.as_ref(),
+        ids: InferenceIds {
+            inference_id,
+            episode_id,
+        },
     };
 
     let inference_clients = InferenceClients {
@@ -277,6 +294,7 @@ pub async fn inference(
             let inference_metadata = InferenceMetadata {
                 function_name: function_name.to_string(),
                 variant_name: variant_name.to_string(),
+                inference_id,
                 episode_id,
                 input: params.input.clone(),
                 dryrun,
@@ -457,6 +475,7 @@ fn create_stream(
             let InferenceMetadata {
                 function_name,
                 variant_name,
+                inference_id,
                 episode_id,
                 input,
                 dryrun: _,
@@ -478,6 +497,8 @@ fn create_stream(
                 let templates = &config.templates;
                 let collect_chunks_args = CollectChunksArgs {
                     value: buffer,
+                    inference_id,
+                    episode_id,
                     system,
                     input_messages,
                     function,
@@ -524,7 +545,12 @@ fn prepare_response_chunk(
     metadata: &InferenceMetadata,
     chunk: InferenceResultChunk,
 ) -> InferenceResponseChunk {
-    InferenceResponseChunk::new(chunk, metadata.episode_id, metadata.variant_name.clone())
+    InferenceResponseChunk::new(
+        chunk,
+        metadata.inference_id,
+        metadata.episode_id,
+        metadata.variant_name.clone(),
+    )
 }
 
 // Prepares an Event for SSE on the way out of the gateway
@@ -677,11 +703,16 @@ pub struct JsonInferenceResponseChunk {
 }
 
 impl InferenceResponseChunk {
-    fn new(inference_result: InferenceResultChunk, episode_id: Uuid, variant_name: String) -> Self {
+    fn new(
+        inference_result: InferenceResultChunk,
+        inference_id: Uuid,
+        episode_id: Uuid,
+        variant_name: String,
+    ) -> Self {
         match inference_result {
             InferenceResultChunk::Chat(result) => {
                 InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
-                    inference_id: result.inference_id,
+                    inference_id,
                     episode_id,
                     variant_name,
                     content: result.content,
@@ -690,7 +721,7 @@ impl InferenceResponseChunk {
             }
             InferenceResultChunk::Json(result) => {
                 InferenceResponseChunk::Json(JsonInferenceResponseChunk {
-                    inference_id: result.inference_id,
+                    inference_id,
                     episode_id,
                     variant_name,
                     raw: result.raw,
@@ -785,13 +816,11 @@ mod tests {
     #[tokio::test]
     async fn test_prepare_event() {
         // Test case 1: Valid Chat ProviderInferenceResponseChunk
-        let inference_id = Uuid::now_v7();
         let content = vec![ContentBlockChunk::Text(TextChunk {
             text: "Test content".to_string(),
             id: "0".to_string(),
         })];
         let chunk = InferenceResultChunk::Chat(ChatInferenceResultChunk {
-            inference_id,
             content: content.clone(),
             created: 0,
             usage: None,
@@ -803,6 +832,7 @@ mod tests {
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
             episode_id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
             input: Input {
                 messages: vec![],
                 system: None,
@@ -824,7 +854,7 @@ mod tests {
         let result = prepare_response_chunk(&inference_metadata, chunk);
         match result {
             InferenceResponseChunk::Chat(c) => {
-                assert_eq!(c.inference_id, inference_id);
+                assert_eq!(c.inference_id, inference_metadata.inference_id);
                 assert_eq!(c.episode_id, inference_metadata.episode_id);
                 assert_eq!(c.variant_name, inference_metadata.variant_name);
                 assert_eq!(c.content, content);
@@ -840,9 +870,7 @@ mod tests {
         // This test doesn't do much so consider deleting or doing more.
 
         // Test case 2: Valid JSON ProviderInferenceResponseChunk
-        let inference_id = Uuid::now_v7();
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
-            inference_id,
             raw: "Test content".to_string(),
             created: 0,
             usage: None,
@@ -852,6 +880,7 @@ mod tests {
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
+            inference_id: Uuid::now_v7(),
             episode_id: Uuid::now_v7(),
             input: Input {
                 messages: vec![],
@@ -874,7 +903,7 @@ mod tests {
         let result = prepare_response_chunk(&inference_metadata, chunk);
         match result {
             InferenceResponseChunk::Json(c) => {
-                assert_eq!(c.inference_id, inference_id);
+                assert_eq!(c.inference_id, inference_metadata.inference_id);
                 assert_eq!(c.episode_id, inference_metadata.episode_id);
                 assert_eq!(c.variant_name, inference_metadata.variant_name);
                 assert_eq!(c.raw, "Test content");
