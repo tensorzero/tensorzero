@@ -217,6 +217,8 @@ pub async fn cache_lookup(
 #[cfg(test)]
 mod tests {
 
+    use uuid::Uuid;
+
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
 
     use super::*;
@@ -226,6 +228,7 @@ mod tests {
     #[test]
     fn test_get_cache_key() {
         let model_inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: None,
@@ -247,6 +250,7 @@ mod tests {
         };
         let cache_key = model_provider_request.get_cache_key().unwrap();
         let streaming_model_inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: None,

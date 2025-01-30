@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use super::inference::{
     ChatInferenceResponse, InferenceClients, InferenceCredentials, InferenceDatabaseInsertMetadata,
-    InferenceModels, InferenceParams, InferenceResponse, JsonInferenceResponse,
+    InferenceIds, InferenceModels, InferenceParams, InferenceResponse, JsonInferenceResponse,
 };
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::clickhouse::ClickHouseConnectionInfo;
@@ -134,6 +134,10 @@ pub async fn start_batch_inference_handler(
     let mut candidate_variant_names: Vec<&str> =
         function.variants().keys().map(AsRef::as_ref).collect();
 
+    let inference_ids = (0..num_inferences)
+        .map(|_| Uuid::now_v7())
+        .collect::<Vec<_>>();
+
     // If the function has no variants, return an error
     if candidate_variant_names.is_empty() {
         return Err(ErrorDetails::InvalidFunctionVariants {
@@ -227,7 +231,7 @@ pub async fn start_batch_inference_handler(
     // Spent a while fighting the borrow checker here, gave up
     // The issue is that inference_config holds the ToolConfigs and ModelInferenceRequest has lifetimes that conflict with the inference_config
     let cloned_config = inference_config.clone();
-    let inference_configs = cloned_config.inference_configs();
+    let inference_configs = cloned_config.inference_configs(&episode_ids, &inference_ids);
     while !candidate_variant_names.is_empty() {
         // We sample the same variant for the whole batch
         let (variant_name, variant) = sample_variant(
@@ -278,6 +282,7 @@ pub async fn start_batch_inference_handler(
             result,
             write_metadata,
             inference_config,
+            &inference_configs,
         )
         .await?;
 
@@ -544,10 +549,11 @@ async fn write_start_batch_inference<'a>(
     result: StartBatchModelInferenceWithMetadata<'a>,
     metadata: BatchInferenceDatabaseInsertMetadata<'a>,
     inference_config: BatchInferenceConfig<'a>,
+    inference_configs: &[InferenceConfig<'a, 'a>],
 ) -> Result<(Uuid, Vec<Uuid>), Error> {
     // Collect all the data into BatchInferenceRow structs
     let inference_rows = izip!(
-        result.inference_ids.iter(),
+        inference_configs.iter(),
         inputs,
         result.input_messages.into_iter(),
         result.systems.iter(),
@@ -563,7 +569,7 @@ async fn write_start_batch_inference<'a>(
     )
     .map(
         |(
-            inference_id,
+            inference_config,
             input,
             input_messages,
             system,
@@ -574,7 +580,7 @@ async fn write_start_batch_inference<'a>(
             tags,
         )| {
             BatchInferenceRowHelper {
-                inference_id,
+                inference_id: &inference_config.ids.inference_id,
                 input,
                 input_messages,
                 system: system.as_deref(),
@@ -629,7 +635,13 @@ async fn write_start_batch_inference<'a>(
     });
     write_batch_request_row(clickhouse_connection_info, &batch_request_insert).await?;
 
-    Ok((result.batch_id, result.inference_ids))
+    Ok((
+        result.batch_id,
+        inference_configs
+            .iter()
+            .map(|c| c.ids.inference_id)
+            .collect(),
+    ))
 }
 
 pub async fn write_batch_request_row(
@@ -832,6 +844,10 @@ pub async fn write_completed_batch_inference<'a>(
             templates: &config.templates,
             function_name,
             variant_name: None,
+            ids: InferenceIds {
+                inference_id,
+                episode_id,
+            },
         };
         let inference_result = function
             .prepare_response(

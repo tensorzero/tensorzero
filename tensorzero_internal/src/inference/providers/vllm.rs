@@ -440,6 +440,7 @@ mod tests {
     use std::borrow::Cow;
 
     use serde_json::json;
+    use uuid::Uuid;
 
     use super::*;
 
@@ -458,6 +459,7 @@ mod tests {
             }
         });
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -493,6 +495,7 @@ mod tests {
             }
         });
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],

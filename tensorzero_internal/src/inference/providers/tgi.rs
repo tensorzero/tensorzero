@@ -20,7 +20,6 @@ use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
-use uuid::Uuid;
 
 use super::openai::{
     get_chat_url, prepare_openai_messages, prepare_openai_tools, OpenAIRequestMessage, OpenAITool,
@@ -293,7 +292,6 @@ fn stream_tgi(
     start_time: Instant,
 ) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     async_stream::stream! {
-        let inference_id = Uuid::now_v7();
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -323,7 +321,7 @@ fn stream_tgi(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            tgi_to_tensorzero_chunk(d, inference_id, latency)
+                            tgi_to_tensorzero_chunk(d, latency)
                         });
                         yield stream_message;
                     }
@@ -622,7 +620,6 @@ struct TGIChatChunk {
 /// Maps an TGI chunk to a TensorZero chunk for streaming inferences
 fn tgi_to_tensorzero_chunk(
     mut chunk: TGIChatChunk,
-    inference_id: Uuid,
     latency: Duration,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
@@ -664,7 +661,6 @@ fn tgi_to_tensorzero_chunk(
     }
 
     Ok(ProviderInferenceResponseChunk::new(
-        inference_id,
         content,
         usage,
         raw_message,
@@ -677,6 +673,7 @@ mod tests {
     use std::borrow::Cow;
 
     use serde_json::json;
+    use uuid::Uuid;
 
     use crate::inference::{
         providers::{
@@ -692,6 +689,7 @@ mod tests {
     fn test_tgi_request_new() {
         let model_name = PROVIDER_TYPE.to_string();
         let basic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![
                 RequestMessage {
                     role: Role::User,
@@ -732,6 +730,7 @@ mod tests {
 
         // Test request with tools and JSON mode
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -777,6 +776,7 @@ mod tests {
 
         // Test request with strict JSON mode with no output schema
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -810,6 +810,7 @@ mod tests {
         // Test request with strict JSON mode with an output schema
         let output_schema = json!({});
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -852,10 +853,7 @@ mod tests {
             }],
             usage: None,
         };
-        let inference_id = Uuid::now_v7();
-        let message =
-            tgi_to_tensorzero_chunk(chunk.clone(), inference_id, Duration::from_millis(50))
-                .unwrap();
+        let message = tgi_to_tensorzero_chunk(chunk.clone(), Duration::from_millis(50)).unwrap();
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::Text(TextChunk {

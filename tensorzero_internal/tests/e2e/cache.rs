@@ -1,4 +1,5 @@
 use std::time::Duration;
+use uuid::Uuid;
 
 use tensorzero_internal::cache::cache_lookup;
 use tensorzero_internal::cache::start_cache_write;
@@ -24,6 +25,7 @@ async fn test_cache_write_and_read() {
     let seed = rand::random::<u32>();
     let max_age_s = 10;
     let model_inference_request = ModelInferenceRequest {
+        inference_id: Uuid::now_v7(),
         messages: vec![RequestMessage {
             role: Role::User,
             content: vec!["test message".to_string().into()],

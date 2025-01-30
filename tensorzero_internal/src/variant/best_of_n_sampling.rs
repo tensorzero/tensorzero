@@ -606,6 +606,7 @@ impl EvaluatorConfig {
         };
         Ok((
             ModelInferenceRequest {
+                inference_id: inference_config.ids.inference_id,
                 messages,
                 system,
                 tool_config,
@@ -653,7 +654,7 @@ mod tests {
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
         clickhouse::ClickHouseConnectionInfo,
-        endpoints::inference::InferenceCredentials,
+        endpoints::inference::{InferenceCredentials, InferenceIds},
         inference::{
             providers::dummy::DummyProvider,
             types::{ChatInferenceResult, JsonInferenceResult, Latency},
@@ -1133,6 +1134,10 @@ mod tests {
             messages: vec![],
         };
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,

@@ -1068,6 +1068,7 @@ mod tests {
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
     use tracing_test::traced_test;
+    use uuid::Uuid;
 
     use super::*;
 
@@ -1105,6 +1106,7 @@ mod tests {
 
         // Try inferring the good model only
         let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: Some(Cow::Borrowed(&tool_config)),
@@ -1190,6 +1192,7 @@ mod tests {
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: None,
@@ -1247,6 +1250,7 @@ mod tests {
         });
         let api_keys = InferenceCredentials::default();
         let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: None,
@@ -1349,6 +1353,7 @@ mod tests {
         });
         let api_keys = InferenceCredentials::default();
         let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: None,
@@ -1437,6 +1442,7 @@ mod tests {
         };
 
         let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: Some(Cow::Borrowed(&tool_config)),
@@ -1533,6 +1539,7 @@ mod tests {
 
         let request = ModelInferenceRequest {
             messages: vec![],
+            inference_id: Uuid::now_v7(),
             system: None,
             tool_config: Some(Cow::Borrowed(&tool_config)),
             temperature: None,
