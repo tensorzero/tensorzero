@@ -55,6 +55,7 @@ impl Migration for Migration0011<'_> {
                 is_deleted Bool DEFAULT false,
                 INDEX idx_long_cache_key long_cache_key TYPE bloom_filter GRANULARITY 100
             ) ENGINE = ReplacingMergeTree(timestamp, is_deleted)
+            PARTITION BY toYYYYMM(timestamp)
             ORDER BY (short_cache_key, long_cache_key)
             PRIMARY KEY (short_cache_key)
             SETTINGS index_granularity = 256
