@@ -73,7 +73,7 @@ impl Migration for Migration0012<'_> {
                 output String,
                 output_schema String,
                 tags Map(String, String),
-                auxiliary String, -- a JSON (unstructured, for now) 
+                auxiliary String, -- a JSON (unstructured, for now)
                 is_deleted Bool DEFAULT false,
                 inserted DateTime DEFAULT now()
             ) ENGINE = ReplacingMergeTree(inserted, is_deleted)
