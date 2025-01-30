@@ -89,11 +89,31 @@ impl ModelProviderRequest<'_> {
         hasher.update(&[0]); // null byte after model name to ensure data is prefix-free
         hasher.update(self.provider_name.as_bytes());
         hasher.update(&[0]); // null byte after provider name to ensure data is prefix-free
-        let serialized_request = serde_json::to_string(self.request).map_err(|e| {
+                             // Convert the request to a JSON Value, error if serialization fails
+        let mut request_value = serde_json::to_value(self.request).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize request: {e}"),
             })
         })?;
+
+        // Convert the Value to a mutable object and remove the inference_id field
+        // We remove inference_id since it's unique per request and would prevent cache hits
+        request_value
+            .as_object_mut()
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Serialization {
+                    message: "Failed to convert request to object".to_string(),
+                })
+            })?
+            .remove("inference_id");
+
+        // Convert the modified request back to a JSON string
+        let serialized_request = serde_json::to_string(&request_value).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize request: {e}"),
+            })
+        })?;
+        // Get the bytes of the serialized request to use in the hash
         let request_bytes = serialized_request.as_bytes();
         hasher.update(request_bytes);
         Ok(CacheKey(hasher.finalize().into()))
@@ -249,6 +269,30 @@ mod tests {
             provider_name: "test_provider",
         };
         let cache_key = model_provider_request.get_cache_key().unwrap();
+        let model_inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![],
+            system: None,
+            tool_config: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let model_provider_request = ModelProviderRequest {
+            request: &model_inference_request,
+            model_name: "test_model",
+            provider_name: "test_provider",
+        };
+        let new_cache_key = model_provider_request.get_cache_key().unwrap();
+        // Make sure the first two get the same cache key (and that we ignore the inference_id)
+        assert_eq!(cache_key, new_cache_key);
         let streaming_model_inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![],
