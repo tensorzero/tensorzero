@@ -200,7 +200,7 @@ pub struct ModelInferenceResponse {
     pub usage: Usage,
     pub latency: Latency,
     pub model_provider_name: Arc<str>,
-    pub cache_hit: bool,
+    pub cached: bool,
 }
 
 /// Finally, in the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
@@ -218,7 +218,7 @@ pub struct ModelInferenceResponseWithMetadata {
     pub latency: Latency,
     pub model_provider_name: Arc<str>,
     pub model_name: Arc<str>,
-    pub cache_hit: bool,
+    pub cached: bool,
 }
 
 /* As a Variant might make use of multiple model inferences, we then combine
@@ -370,7 +370,7 @@ pub struct ModelInferenceDatabaseInsert {
     pub model_name: String,
     pub model_provider_name: String,
     pub ttft_ms: Option<u32>,
-    pub cache_hit: bool,
+    pub cached: bool,
 }
 
 #[cfg(test)]
@@ -468,7 +468,7 @@ impl ModelInferenceResponse {
             usage: provider_inference_response.usage,
             latency: provider_inference_response.latency,
             model_provider_name,
-            cache_hit: false,
+            cached: false,
         }
     }
 
@@ -493,7 +493,7 @@ impl ModelInferenceResponse {
                 response_time: Duration::from_secs(0),
             },
             model_provider_name: Arc::from(model_provider_name),
-            cache_hit: true,
+            cached: true,
         }
     }
 }
@@ -512,7 +512,7 @@ impl ModelInferenceResponseWithMetadata {
             latency: model_inference_response.latency,
             model_provider_name: model_inference_response.model_provider_name,
             model_name,
-            cache_hit: model_inference_response.cache_hit,
+            cached: model_inference_response.cached,
         }
     }
 }
@@ -548,7 +548,7 @@ impl ModelInferenceDatabaseInsert {
             ttft_ms,
             model_provider_name: result.model_provider_name.to_string(),
             model_name: result.model_name.to_string(),
-            cache_hit: result.cache_hit,
+            cached: result.cached,
         }
     }
 }
@@ -1152,7 +1152,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
-            cache_hit: false,
+            cached: false,
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -1199,7 +1199,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
-            cache_hit: false,
+            cached: false,
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -1246,7 +1246,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
-            cache_hit: false,
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1292,7 +1292,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
-            cache_hit: false,
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1354,7 +1354,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
-            cache_hit: false,
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1438,7 +1438,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
-            cache_hit: false,
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1529,7 +1529,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
-            cache_hit: false,
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1578,7 +1578,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
-            cache_hit: false,
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1649,7 +1649,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
-            cache_hit: false,
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1704,7 +1704,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
-            cache_hit: false,
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(

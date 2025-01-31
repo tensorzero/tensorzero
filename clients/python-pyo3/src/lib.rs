@@ -159,12 +159,13 @@ impl BaseTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, function_name, input, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
     #[allow(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
-        function_name: String,
         input: Bound<'_, PyDict>,
+        function_name: Option<String>,
+        model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
@@ -180,8 +181,9 @@ impl BaseTensorZeroGateway {
     ) -> PyResult<Py<PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
             this.py(),
-            function_name,
             input,
+            function_name,
+            model_name,
             episode_id,
             stream,
             params,
@@ -245,8 +247,9 @@ impl BaseTensorZeroGateway {
     #[allow(clippy::too_many_arguments)]
     fn prepare_inference_params(
         py: Python<'_>,
-        function_name: String,
         input: Bound<'_, PyDict>,
+        function_name: Option<String>,
+        model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
@@ -304,7 +307,8 @@ impl BaseTensorZeroGateway {
         let input: Input = deserialize_from_json(py, &input)?;
 
         Ok(ClientInferenceParams {
-            function_name: Some(function_name),
+            function_name,
+            model_name,
             stream,
             episode_id,
             variant_name,
@@ -440,7 +444,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, function_name, input, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
     #[allow(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -473,8 +477,9 @@ impl TensorZeroGateway {
     fn inference(
         this: PyRef<'_, Self>,
         py: Python<'_>,
-        function_name: String,
         input: Bound<'_, PyDict>,
+        function_name: Option<String>,
+        model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
@@ -493,8 +498,9 @@ impl TensorZeroGateway {
                 .client
                 .inference(BaseTensorZeroGateway::prepare_inference_params(
                     py,
-                    function_name,
                     input,
+                    function_name,
+                    model_name,
                     episode_id,
                     stream,
                     params,
@@ -620,7 +626,7 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, function_name, input, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
     #[allow(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -653,8 +659,9 @@ impl AsyncTensorZeroGateway {
     fn inference<'a>(
         this: PyRef<'_, Self>,
         py: Python<'a>,
-        function_name: String,
         input: Bound<'_, PyDict>,
+        function_name: Option<String>,
+        model_name: Option<String>,
         episode_id: Option<Bound<'_, PyAny>>,
         stream: Option<bool>,
         params: Option<&Bound<'_, PyDict>>,
@@ -670,8 +677,9 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'a, PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
             py,
-            function_name,
             input,
+            function_name,
+            model_name,
             episode_id,
             stream,
             params,

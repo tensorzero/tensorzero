@@ -14,9 +14,6 @@ services:
 
   gateway:
     image: tensorzero/gateway
-    volumes:
-      # Mount our tensorzero.toml file into the container
-      - ./config:/app/config:ro
     environment:
       - TENSORZERO_CLICKHOUSE_URL=http://clickhouse:8123/tensorzero
       - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
@@ -28,9 +25,6 @@ services:
 
   ui:
     image: tensorzero/ui
-    volumes:
-      # Mount our tensorzero.toml file into the container
-      - ./config:/app/config:ro
     environment:
       - TENSORZERO_CLICKHOUSE_URL=http://clickhouse:8123/tensorzero
       - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
