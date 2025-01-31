@@ -27,7 +27,7 @@ services:
 
   gateway:
     build:
-      context: ../..
+      context: ../../gateway
       dockerfile: Dockerfile
       target: gateway
     volumes:
