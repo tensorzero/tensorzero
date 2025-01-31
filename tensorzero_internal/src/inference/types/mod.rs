@@ -13,6 +13,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::cache::CacheData;
+use crate::cache::NonStreamingCacheData;
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
@@ -266,7 +267,7 @@ pub struct JsonInferenceOutput {
 /// converted into an InferenceResponseChunk and sent to the client.
 /// We then collect all the InferenceResultChunks into an InferenceResult for validation and storage after the fact.
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProviderInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
@@ -473,14 +474,14 @@ impl ModelInferenceResponse {
     }
 
     pub fn from_cache(
-        cache_lookup: CacheData,
+        cache_lookup: CacheData<NonStreamingCacheData>,
         request: &ModelInferenceRequest<'_>,
         model_provider_name: &str,
     ) -> Self {
         Self {
             id: Uuid::now_v7(),
             created: current_timestamp(),
-            output: cache_lookup.output,
+            output: cache_lookup.output.chunks,
             system: request.system.clone(),
             input_messages: request.messages.clone(), // maybe we can clean this up
             raw_request: cache_lookup.raw_request,

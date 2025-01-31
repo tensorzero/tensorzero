@@ -107,6 +107,7 @@ struct InferenceMetadata {
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
+    pub cached: bool,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -313,6 +314,7 @@ pub async fn inference(
                 tags: params.tags,
                 tool_config,
                 dynamic_output_schema: output_schema,
+                cached: model_used_info.cached,
             };
 
             let stream = create_stream(
@@ -488,6 +490,7 @@ fn create_stream(
                 tags,
                 tool_config,
                 dynamic_output_schema,
+                cached: _,
             } = metadata;
 
             let config = config.clone();
@@ -548,6 +551,7 @@ fn prepare_response_chunk(
         metadata.inference_id,
         metadata.episode_id,
         metadata.variant_name.clone(),
+        metadata.cached,
     )
 }
 
@@ -691,6 +695,7 @@ pub struct ChatInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
+    pub cached: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -701,6 +706,7 @@ pub struct JsonInferenceResponseChunk {
     pub raw: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
+    pub cached: bool,
 }
 
 impl InferenceResponseChunk {
@@ -709,6 +715,7 @@ impl InferenceResponseChunk {
         inference_id: Uuid,
         episode_id: Uuid,
         variant_name: String,
+        cached: bool,
     ) -> Self {
         match inference_result {
             InferenceResultChunk::Chat(result) => {
@@ -718,6 +725,7 @@ impl InferenceResponseChunk {
                     variant_name,
                     content: result.content,
                     usage: result.usage,
+                    cached,
                 })
             }
             InferenceResultChunk::Json(result) => {
@@ -727,6 +735,7 @@ impl InferenceResponseChunk {
                     variant_name,
                     raw: result.raw,
                     usage: result.usage,
+                    cached,
                 })
             }
         }
@@ -851,6 +860,7 @@ mod tests {
             tags: HashMap::new(),
             tool_config: None,
             dynamic_output_schema: None,
+            cached: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -900,6 +910,7 @@ mod tests {
             tags: HashMap::new(),
             tool_config: None,
             dynamic_output_schema: None,
+            cached: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
