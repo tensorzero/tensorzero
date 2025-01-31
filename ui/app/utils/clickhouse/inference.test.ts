@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import {
   countInferencesForEpisode,
   queryEpisodeTable,
@@ -14,6 +14,7 @@ import {
   queryInferenceTableByFunctionName,
   queryInferenceTableBoundsByFunctionName,
   queryInferenceTableBoundsByVariantName,
+  queryModelInferencesByInferenceId,
 } from "./inference";
 import { countInferencesForFunction } from "./inference";
 import type {
@@ -649,4 +650,86 @@ test("countInferencesByFunction", async () => {
       count: 50,
     },
   ]);
+});
+
+describe("queryModelInferencesByInferenceId", () => {
+  test("returns model inferences for a given inference ID", async () => {
+    const inferences = await queryModelInferencesByInferenceId(
+      "01942e27-4937-7202-8000-e5dd0645d138",
+    );
+    expect(inferences.length).toBe(1);
+    const inference = inferences[0];
+    console.log(inference);
+    expect(inference.model_name).toBe("openai::gpt-4o-mini-2024-07-18");
+    expect(inference.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    expect(inference.inference_id).toBe("01942e27-4937-7202-8000-e5dd0645d138");
+    expect(inference.model_provider_name).toBe("openai");
+    expect(inference.input_tokens).toBe(462);
+    expect(inference.output_tokens).toBe(98);
+    expect(inference.response_time_ms).toBe(1882);
+    expect(inference.ttft_ms).toBe(null);
+    expect(inference.timestamp).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/,
+    );
+    expect(inference.system).toContain(
+      "You are asking questions in a game of 21 questions",
+    );
+    expect(inference.input_messages).toEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "Is it a living thing?" }],
+      },
+      { role: "assistant", content: [{ type: "text", text: "no." }] },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Is it typically found indoors?" }],
+      },
+      { role: "assistant", content: [{ type: "text", text: "yes." }] },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Is it an item that is used for writing or drawing?",
+          },
+        ],
+      },
+      { role: "assistant", content: [{ type: "text", text: "no." }] },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Is it a piece of furniture?" }],
+      },
+      { role: "assistant", content: [{ type: "text", text: "no." }] },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Is it an appliance or an electronic device?" },
+        ],
+      },
+      { role: "assistant", content: [{ type: "text", text: "no." }] },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Is it a decorative item?" }],
+      },
+      { role: "assistant", content: [{ type: "text", text: "no." }] },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Is it primarily used for storage?" }],
+      },
+      { role: "assistant", content: [{ type: "text", text: "no." }] },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Is it a type of container?" }],
+      },
+      { role: "assistant", content: [{ type: "text", text: "no." }] },
+    ]);
+    expect(inference.output).toEqual([
+      {
+        type: "text",
+        text: '{"thinking":"The object is not a living thing, not typically found indoors, not used for writing or drawing, not a piece of furniture, not an appliance or electronic device, not decorative, not primarily used for storage, and not a type of container. This narrows down the possible secrets significantly. I\'ll focus on other possible categories. Next, I\'ll ask if it has a specific function in terms of utility or purpose.","question":"Does it have a specific function or utility?"}',
+      },
+    ]);
+  });
 });

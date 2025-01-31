@@ -22,6 +22,7 @@ import { Tooltip } from "~/components/ui/tooltip";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import DatasetSelector from "./DatasetSelector";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -50,6 +51,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       status: 404,
     });
   }
+  console.log(model_inferences);
 
   return {
     inference,
@@ -103,6 +105,9 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         Inference{" "}
         <code className="rounded bg-gray-100 p-1 text-2xl">{inference.id}</code>
       </h2>
+      <div className="flex justify-end mb-4">
+        <DatasetSelector />
+      </div>
       <div className="mb-6 h-px w-full bg-gray-200"></div>
 
       <BasicInfo inference={inference} />
