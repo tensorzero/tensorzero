@@ -22,8 +22,9 @@ class BaseTensorZeroGateway:
     def inference(
         self,
         *,
-        function_name: str,
         input: InferenceInput,
+        function_name: Optional[str] = None,
+        model_name: Optional[str] = None,
         episode_id: Optional[UUID] = None,
         stream: Optional[bool] = None,
         params: Optional[Dict[str, Any]] = None,
@@ -60,8 +61,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     def inference(
         self,
         *,
-        function_name: str,
         input: InferenceInput,
+        function_name: Optional[str] = None,
+        model_name: Optional[str] = None,
         episode_id: Optional[UUID] = None,
         stream: Optional[bool] = None,
         params: Optional[Dict[str, Any]] = None,
@@ -167,8 +169,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     async def inference(  # type: ignore[override]
         self,
         *,
-        function_name: str,
         input: InferenceInput,
+        function_name: Optional[str] = None,
+        model_name: Optional[str] = None,
         episode_id: Optional[UUID] = None,
         stream: Optional[bool] = None,
         params: Optional[Dict[str, Any]] = None,
