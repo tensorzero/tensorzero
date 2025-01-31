@@ -27,7 +27,7 @@ use crate::{
     inference::{
         providers::{
             anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
-            deepseek::DeepseekProvider, fireworks::FireworksProvider,
+            deepseek::DeepSeekProvider, fireworks::FireworksProvider,
             gcp_vertex_anthropic::GCPVertexAnthropicProvider,
             gcp_vertex_gemini::GCPVertexGeminiProvider, mistral::MistralProvider,
             openai::OpenAIProvider, provider_trait::InferenceProvider, together::TogetherProvider,
@@ -234,7 +234,7 @@ pub enum ProviderConfig {
     XAI(XAIProvider),
     TGI(TGIProvider),
     SGLang(SGLangProvider),
-    Deepseek(DeepseekProvider),
+    DeepSeek(DeepSeekProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -332,7 +332,7 @@ enum ProviderConfigHelper {
         api_key_location: Option<CredentialLocation>,
     },
     #[allow(clippy::upper_case_acronyms)]
-    Deepseek {
+    DeepSeek {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     },
@@ -473,11 +473,11 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 TGIProvider::new(api_base, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
-            ProviderConfigHelper::Deepseek {
+            ProviderConfigHelper::DeepSeek {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::Deepseek(
-                DeepseekProvider::new(model_name, api_key_location)
+            } => ProviderConfig::DeepSeek(
+                DeepSeekProvider::new(model_name, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
             #[cfg(any(test, feature = "e2e_tests"))]
@@ -521,7 +521,7 @@ impl ProviderConfig {
             ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::TGI(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::Deepseek(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::DeepSeek(provider) => provider.infer(request, client, api_keys).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => provider.infer(request, client, api_keys).await,
         }
@@ -582,7 +582,7 @@ impl ProviderConfig {
                 provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::TGI(provider) => provider.infer_stream(request, client, api_keys).await,
-            ProviderConfig::Deepseek(provider) => {
+            ProviderConfig::DeepSeek(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
             #[cfg(any(test, feature = "e2e_tests"))]
@@ -669,7 +669,7 @@ impl ProviderConfig {
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
-            ProviderConfig::Deepseek(provider) => {
+            ProviderConfig::DeepSeek(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -770,7 +770,7 @@ impl ProviderConfig {
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
             }
-            ProviderConfig::Deepseek(provider) => {
+            ProviderConfig::DeepSeek(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -1106,7 +1106,7 @@ fn model_config_from_shorthand(
         "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
         "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
         "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
-        "deepseek" => ProviderConfig::Deepseek(DeepseekProvider::new(model_name, None)?),
+        "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(model_name, None)?),
         #[cfg(any(test, feature = "e2e_tests"))]
         "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
         _ => {

@@ -35,41 +35,41 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("DEEPSEEK_API_KEY".to_string())
 }
 
-const PROVIDER_NAME: &str = "Deepseek";
+const PROVIDER_NAME: &str = "DeepSeek";
 const PROVIDER_TYPE: &str = "deepseek";
 
 #[derive(Debug)]
-pub enum DeepseekCredentials {
+pub enum DeepSeekCredentials {
     Static(SecretString),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
-impl TryFrom<Credential> for DeepseekCredentials {
+impl TryFrom<Credential> for DeepSeekCredentials {
     type Error = Error;
 
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
-            Credential::Static(key) => Ok(DeepseekCredentials::Static(key)),
-            Credential::Dynamic(key_name) => Ok(DeepseekCredentials::Dynamic(key_name)),
-            Credential::None => Ok(DeepseekCredentials::None),
+            Credential::Static(key) => Ok(DeepSeekCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(DeepSeekCredentials::Dynamic(key_name)),
             #[cfg(any(test, feature = "e2e_tests"))]
-            Credential::Missing => Ok(DeepseekCredentials::None),
+            Credential::Missing => Ok(DeepSeekCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for Deepseek provider".to_string(),
+                message: "Invalid api_key_location for DeepSeek provider".to_string(),
             })),
         }
     }
 }
 
-impl DeepseekCredentials {
+impl DeepSeekCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<&'a SecretString, Error> {
         match self {
-            DeepseekCredentials::Static(api_key) => Ok(api_key),
-            DeepseekCredentials::Dynamic(key_name) => {
+            DeepSeekCredentials::Static(api_key) => Ok(api_key),
+            DeepSeekCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
                     ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
@@ -77,7 +77,8 @@ impl DeepseekCredentials {
                     .into()
                 })
             }
-            DeepseekCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            #[cfg(any(test, feature = "e2e_tests"))]
+            DeepSeekCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
             .into()),
@@ -86,35 +87,35 @@ impl DeepseekCredentials {
 }
 
 #[derive(Debug)]
-pub struct DeepseekProvider {
+pub struct DeepSeekProvider {
     model_name: String,
-    credentials: DeepseekCredentials,
+    credentials: DeepSeekCredentials,
 }
 
-impl DeepseekProvider {
+impl DeepSeekProvider {
     pub fn new(
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
         let credential_location = api_key_location.unwrap_or(default_api_key_location());
         let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = DeepseekCredentials::try_from(generic_credentials)?;
+        let provider_credentials = DeepSeekCredentials::try_from(generic_credentials)?;
 
-        Ok(DeepseekProvider {
+        Ok(DeepSeekProvider {
             model_name,
             credentials: provider_credentials,
         })
     }
 }
 
-impl InferenceProvider for DeepseekProvider {
+impl InferenceProvider for DeepSeekProvider {
     async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = DeepseekRequest::new(&self.model_name, request)?;
+        let request_body = DeepSeekRequest::new(&self.model_name, request)?;
         let request_url = get_chat_url(&DEEPSEEK_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -129,7 +130,7 @@ impl InferenceProvider for DeepseekProvider {
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to Deepseek: {e}"),
+                    message: format!("Error sending request to DeepSeek: {e}"),
                     status_code: e.status(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -159,7 +160,7 @@ impl InferenceProvider for DeepseekProvider {
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
             };
-            Ok(DeepseekResponseWithMetadata {
+            Ok(DeepSeekResponseWithMetadata {
                 response,
                 latency,
                 request: request_body,
@@ -194,7 +195,7 @@ impl InferenceProvider for DeepseekProvider {
         ),
         Error,
     > {
-        let request_body = DeepseekRequest::new(&self.model_name, request)?;
+        let request_body = DeepSeekRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
@@ -214,7 +215,7 @@ impl InferenceProvider for DeepseekProvider {
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to Deepseek: {e}"),
+                    message: format!("Error sending request: {e}"),
                     status_code: None,
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -248,7 +249,7 @@ impl InferenceProvider for DeepseekProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "Deepseek".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -269,24 +270,24 @@ impl InferenceProvider for DeepseekProvider {
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
-enum DeepseekResponseFormat {
+enum DeepSeekResponseFormat {
     #[default]
     Text,
     JsonObject,
 }
 
-impl DeepseekResponseFormat {
+impl DeepSeekResponseFormat {
     fn new(json_mode: &ModelInferenceRequestJsonMode) -> Self {
         match json_mode {
-            ModelInferenceRequestJsonMode::On => DeepseekResponseFormat::JsonObject,
-            ModelInferenceRequestJsonMode::Off => DeepseekResponseFormat::Text,
-            ModelInferenceRequestJsonMode::Strict => DeepseekResponseFormat::JsonObject,
+            ModelInferenceRequestJsonMode::On => DeepSeekResponseFormat::JsonObject,
+            ModelInferenceRequestJsonMode::Off => DeepSeekResponseFormat::Text,
+            ModelInferenceRequestJsonMode::Strict => DeepSeekResponseFormat::JsonObject,
         }
     }
 }
 
 #[derive(Debug, Serialize)]
-struct DeepseekRequest<'a> {
+struct DeepSeekRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
 
@@ -310,14 +311,14 @@ struct DeepseekRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<DeepseekResponseFormat>,
+    response_format: Option<DeepSeekResponseFormat>,
 }
 
-impl<'a> DeepseekRequest<'a> {
+impl<'a> DeepSeekRequest<'a> {
     pub fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest,
-    ) -> Result<DeepseekRequest<'a>, Error> {
+    ) -> Result<DeepSeekRequest<'a>, Error> {
         let ModelInferenceRequest {
             temperature,
             max_tokens,
@@ -338,18 +339,21 @@ impl<'a> DeepseekRequest<'a> {
 
         if request.json_mode == ModelInferenceRequestJsonMode::Strict {
             return Err(ErrorDetails::InvalidRequest {
-                message: "Deepseek model does not support strict JSON mode.".to_string(),
+                message: "DeepSeek model does not support strict JSON mode.".to_string(),
             }
             .into());
         }
 
-        let response_format = Some(DeepseekResponseFormat::new(&request.json_mode));
+        let response_format = Some(DeepSeekResponseFormat::new(&request.json_mode));
 
+        // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
+        // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check
+        // if a model is an R1 model and if so, remove the system prompt from the request and instead put it in the first user message.
         let messages = prepare_openai_messages(request);
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
 
-        Ok(DeepseekRequest {
+        Ok(DeepSeekRequest {
             messages,
             model,
             temperature,
@@ -367,17 +371,17 @@ impl<'a> DeepseekRequest<'a> {
     }
 }
 
-struct DeepseekResponseWithMetadata<'a> {
+struct DeepSeekResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
-    request: DeepseekRequest<'a>,
+    request: DeepSeekRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
-impl<'a> TryFrom<DeepseekResponseWithMetadata<'a>> for ProviderInferenceResponse {
+impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
-    fn try_from(value: DeepseekResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
-        let DeepseekResponseWithMetadata {
+    fn try_from(value: DeepSeekResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let DeepSeekResponseWithMetadata {
             mut response,
             latency,
             request: request_body,
@@ -478,7 +482,7 @@ mod tests {
             output_schema: None,
         };
 
-        let deepseek_request = DeepseekRequest::new("deepseek-chat", &request_with_tools)
+        let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools)
             .expect("failed to create Deepseek Request during test");
 
         assert_eq!(deepseek_request.messages.len(), 1);
@@ -521,7 +525,7 @@ mod tests {
             output_schema: None,
         };
 
-        let deepseek_request = DeepseekRequest::new("deepseek-chat", &request_with_tools)
+        let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools)
             .expect("failed to create Deepseek Request");
 
         assert_eq!(deepseek_request.messages.len(), 2);
@@ -554,7 +558,7 @@ mod tests {
             ..request_with_tools
         };
 
-        let deepseek_request = DeepseekRequest::new("deepseek-chat", &request_with_tools);
+        let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools);
         assert!(deepseek_request.is_err());
     }
 
@@ -570,25 +574,25 @@ mod tests {
     fn test_credential_to_deepseek_credentials() {
         // Test Static credential
         let generic = Credential::Static(SecretString::from("test_key"));
-        let creds: DeepseekCredentials = DeepseekCredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, DeepseekCredentials::Static(_)));
+        let creds: DeepSeekCredentials = DeepSeekCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, DeepSeekCredentials::Static(_)));
 
         // Test Dynamic credential
         let generic = Credential::Dynamic("key_name".to_string());
-        let creds = DeepseekCredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, DeepseekCredentials::Dynamic(_)));
+        let creds = DeepSeekCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, DeepSeekCredentials::Dynamic(_)));
 
         // Test Missing credential (test mode)
         #[cfg(any(test, feature = "e2e_tests"))]
         {
             let generic = Credential::Missing;
-            let creds = DeepseekCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, DeepseekCredentials::None));
+            let creds = DeepSeekCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, DeepSeekCredentials::None));
         }
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));
-        let result = DeepseekCredentials::try_from(generic);
+        let result = DeepSeekCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err().get_owned_details(),
