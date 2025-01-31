@@ -39,18 +39,247 @@ It provides a **data & learning flywheel for LLMs** by unifying:
   <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Configuration Reference</a></b>
 </p>
 
+## Features
+
+### 🌐 LLM Gateway
+
+> **Integrate with TensorZero once and access every major LLM provider.**
+
+<table>
+  <tr></tr> <!-- flip highlight order -->
+  <tr>
+    <td width="50%" align="center" valign="middle"><b>Model Providers</b></td>
+    <td width="50%" align="center" valign="middle"><b>Features</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="left" valign="top">
+      <p>
+        The TensorZero Gateway natively supports:
+      </p>
+      <ul>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/anthropic">Anthropic</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/aws-bedrock">AWS Bedrock</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/azure">Azure OpenAI Service</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/fireworks">Fireworks</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-anthropic">GCP Vertex AI Anthropic</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-gemini">GCP Vertex AI Gemini</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/google-ai-studio-gemini">Google AI Studio (Gemini API)</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/hyperbolic">Hyperbolic</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/mistral">Mistral</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openai">OpenAI</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/together">Together</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/vllm">vLLM</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/xai">xAI</a></b></li>
+      </ul>
+      <p>
+        <em>
+          Need something else?
+          Your provider is most likely supported because TensorZero integrates with <b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openai-compatible">any OpenAI-compatible API (e.g. Ollama)</a></b>.
+          </em>
+      </p>
+    </td>
+    <td width="50%" align="left" valign="top">
+      <p>
+        The TensorZero Gateway supports advanced features like:
+      </p>
+      <ul>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks">Retries & Fallbacks</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations">Inference-Time Optimizations</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/prompt-templates-schemas">Prompt Templates & Schemas</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/tutorial#experimentation">Experimentation (A/B Testing)</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/configuration-reference">Configuration-as-Code (GitOps)</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/batch-inference">Batch Inference</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/metrics-feedback">Metrics & Feedback</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/episodes">Multi-Step LLM Workflows (Episodes)</a></b></li>
+        <li><em>& a lot more...</em></li>
+      </ul>
+      <p>
+        The TensorZero Gateway is written in Rust 🦀 with <b>performance</b> in mind (&lt;1ms p99 latency overhead @ 10k QPS).
+        See <b><a href="https://www.tensorzero.com/docs/gateway/benchmarks">Benchmarks</a></b>.<br>
+      </p>
+      <p>
+        You can run inference using the <b>TensorZero client</b> (recommended), the <b>OpenAI client</b>, or the <b>HTTP API</b>.
+      </p>
+    </td>
+  </tr>
+</table>
+
+<br>
+
+<details open>
+<summary><b>Usage: TensorZero Python Client (Recommended)</b></summary>
+
+You can access any provider using the TensorZero Python client.
+
+1. Deploy `tensorzero/gateway` using Docker.
+   **[Detailed instructions →](https://www.tensorzero.com/docs/gateway/deployment)**
+2. Optional: Set up the TensorZero configuration.
+3. Run inference:
+
+```python
+from tensorzero import TensorZeroGateway
+
+
+with TensorZeroGateway(...) as client:
+    response = client.inference(
+        model_name="openai::gpt-4o-mini",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Write a haiku about artificial intelligence.",
+                }
+            ]
+        },
+    )
+```
+
+See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more information.
+
+</details>
+
+<details>
+<summary><b>Usage: OpenAI Python Client</b></summary>
+
+You can access any provider using the OpenAI Python client with TensorZero.
+
+1. Deploy `tensorzero/gateway` using Docker.
+   **[Detailed instructions →](https://www.tensorzero.com/docs/gateway/deployment)**
+2. Set up the TensorZero configuration.
+3. Run inference:
+
+```python
+from openai import OpenAI
+
+
+with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
+    response = client.chat.completions.create(
+        model="tensorzero::your_function_name",  # defined in configuration (step 2)
+        messages=[
+            {
+                "role": "user",
+                "content": "Write a haiku about artificial intelligence.",
+            }
+        ],
+    )
+```
+
+See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more information.
+
+</details>
+
+<details>
+<summary><b>Usage: Other Languages & Platforms (HTTP)</b></summary>
+
+TensorZero supports virtually any programming language or platform via its HTTP API.
+
+1. Deploy `tensorzero/gateway` using Docker.
+   **[Detailed instructions →](https://www.tensorzero.com/docs/gateway/deployment)**
+2. Optional: Set up the TensorZero configuration.
+3. Run inference:
+
+```bash
+curl -X POST "http://localhost:3000/inference" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "openai::gpt-4o-mini",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write a haiku about artificial intelligence."
+        }
+      ]
+    }
+  }'
+```
+
+See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more information.
+
+</details>
+
+<br>
+
+### 📈 LLM Optimization
+
+> **Send production metrics and human feedback to easily optimize your prompts, models, and inference strategies &mdash; using the UI or programmatically.**
+
+#### Model Optimization
+
+Optimize closed-source and open-source models using supervised fine-tuning (SFT) and preference fine-tuning (DPO).
+
+<table>
+  <tr></tr> <!-- flip highlight order -->
+  <tr>
+    <td width="50%" align="center" valign="middle"><b>Supervised Fine-tuning &mdash; UI</b></td>
+    <td width="50%" align="center" valign="middle"><b>Preference Fine-tuning (DPO) &mdash; Jupyter Notebook</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/cf7acf66-732b-43b3-af2a-5eba1ce40f6f"></td>
+    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/a67a0634-04a7-42b0-b934-9130cb7cdf51"></td>
+  </tr>
+</table>
+
+#### Inference-Time Optimization
+
+Boost performance by dynamically updating your prompts with relevant examples, combining responses from multiple inferences, and more.
+
+<table>
+  <tr></tr> <!-- flip highlight order -->
+  <tr>
+    <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#best-of-n-sampling">Best-of-N Sampling</a></b></td>
+    <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#mixture-of-n-sampling">Mixture-of-N Sampling</a></b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/c0edfa4c-713c-4996-9964-50c0d26e6970"></td>
+    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/75b5bf05-4c1f-43c4-b158-d69d1b8d05be"></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#dynamic-in-context-learning-dicl">Dynamic In-Context Learning (DICL)</a></b></td>
+    <td width="50%" align="center" valign="middle"></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/d8489e92-ce93-46ac-9aab-289ce19bb67d"></td>
+    <td width="50%" align="center" valign="middle"><em>More coming soon...</em></td>
+  </tr>
+</table>
+
+#### Prompt Optimization
+
+Optimize your prompts programmatically using research-driven optimization techniques.
+
+Today we provide a sample **[integration with DSPy](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)**.
+
+_More coming soon..._
+
+<br>
+
+### 🔍 LLM Observability
+
+> **Zoom in to debug individual API calls, or zoom out to monitor metrics across models and prompts over time &mdash; all using the open-source TensorZero UI.**
+
+<table>
+  <tr></tr> <!-- flip highlight order -->
+  <tr>
+    <td width="50%" align="center" valign="middle"><b>Observability » Inference</b></td>
+    <td width="50%" align="center" valign="middle"><b>Observability » Function</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/2cc3cc9a-f33f-4e94-b8de-07522326f80a"></td>
+    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/00ae6605-8fa0-4efd-8238-ae8ea589860f"></td>
+  </tr>
+</table>
+
 ## Demo
 
-> [!NOTE]
->
-> **Watch LLMs get better at data extraction in real time with TensorZero!**
+> **Watch LLMs get better at data extraction in real-time with TensorZero!**
 >
 > **[Dynamic in-context learning (DICL)](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#dynamic-in-context-learning-dicl)** is a powerful inference-time optimization available out of the box with TensorZero.
 > It enhances LLM performance by automatically incorporating relevant historical examples into the prompt, without the need for model fine-tuning.
 
 https://github.com/user-attachments/assets/4df1022e-886e-48c2-8f79-6af3cdad79cb
 
-## Overview
+## LLM Engineering with TensorZero
 
 <br>
 <p align="center" >
@@ -100,7 +329,7 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > We demonstrate techniques like fine-tuning and dynamic in-context learning (DICL).
 > In the end, a optimized GPT-4o Mini model outperforms GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.
 
-> **[Optimizing LLMs to Satisfy a Judge with Hidden Preferences](https://github.com/tensorzero/tensorzero/tree/main/examples/haiku-hidden-preferences)**
+> **[Writing Haikus to Satisfy a Judge with Hidden Preferences](https://github.com/tensorzero/tensorzero/tree/main/examples/haiku-hidden-preferences)**
 >
 > This example fine-tunes GPT-4o Mini to generate haikus tailored to a specific taste.
 > You'll see TensorZero's "data flywheel in a box" in action: better variants leads to better data, and better data leads to better variants.
