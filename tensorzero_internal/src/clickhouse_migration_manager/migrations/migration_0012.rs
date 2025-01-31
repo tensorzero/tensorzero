@@ -48,11 +48,12 @@ impl Migration for Migration0012<'_> {
                         -- sort and sorting expected dataset sizes should be cheap
                         -- If this example is generated from an inference then this
                         -- should be the inference ID
+                episode_id UUID,
                 input String,
                 output String,
                 tool_params String,
                 -- Don't think we need inference params, processing time,
-                -- timestamp, variant_name, episode_id
+                -- timestamp, variant_name
                 tags Map(String, String),
                 auxiliary String, -- a JSON (unstructured, for now)
                 is_deleted Bool DEFAULT false,
@@ -69,6 +70,7 @@ impl Migration for Migration0012<'_> {
                 dataset_name LowCardinality(String),
                 function_name LowCardinality(String),
                 id UUID, -- same comment as above
+                episode_id UUID,
                 input String,
                 output String,
                 output_schema String,
