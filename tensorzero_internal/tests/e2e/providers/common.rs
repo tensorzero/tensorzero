@@ -488,13 +488,18 @@ pub async fn check_simple_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        max_tokens
     );
 
     if !is_batch {
@@ -576,6 +581,11 @@ pub async fn check_simple_inference_response(
 
 #[cfg(feature = "e2e_tests")]
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
 
@@ -1601,6 +1611,11 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
 pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -2183,6 +2198,10 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -2764,6 +2783,11 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         return;
     }
 
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -3325,6 +3349,11 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
 pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     // NOTE: The xAI API occasionally returns a tool call despite receiving the "tool_choice": "none" parameter.
     // We'll leave this test running for now, so some flakiness is expected.
     // The bug has been reported to the xAI team.
@@ -3620,6 +3649,11 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     if provider.model_provider_name == "mistral"
         || provider.model_provider_name.contains("gcp_vertex")
     {
+        return;
+    }
+
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -3946,6 +3980,11 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     if provider.model_provider_name == "mistral"
         || provider.model_provider_name.contains("gcp_vertex")
     {
+        return;
+    }
+
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -4600,6 +4639,11 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         return;
     }
 
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -4916,6 +4960,11 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
         return;
     }
 
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -4935,7 +4984,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
                             "type": "tool_call",
                             "id": "123456789",
                             "name": "get_temperature",
-                            "arguments": "{\"location\": \"Tokyo\"}"
+                            "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
                         }
                     ]
                 },
@@ -5041,7 +5090,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
             },
             {
                 "role": "assistant",
-                "content": [{"type": "tool_call", "id": "123456789", "name": "get_temperature", "arguments": "{\"location\": \"Tokyo\"}"}]
+                "content": [{"type": "tool_call", "id": "123456789", "name": "get_temperature", "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"}]
             },
             {
                 "role": "user",
@@ -5080,13 +5129,18 @@ pub async fn check_tool_use_multi_turn_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        max_tokens,
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -5154,7 +5208,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
             content: vec![ContentBlock::ToolCall(ToolCall {
                 id: "123456789".to_string(),
                 name: "get_temperature".to_string(),
-                arguments: "{\"location\": \"Tokyo\"}".to_string(),
+                arguments: "{\"location\": \"Tokyo\", \"units\": \"celsius\"}".to_string(),
             })],
         },
         RequestMessage {
@@ -5190,6 +5244,11 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     // We skip this test for xAI until the fix is deployed.
     // https://gist.github.com/GabrielBianconi/47a4247cfd8b6689e7228f654806272d
     if provider.model_provider_name == "xai" {
+        return;
+    }
+
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -5800,6 +5859,11 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let input_function_name = "basic_test";
@@ -6986,13 +7050,18 @@ pub async fn check_json_mode_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        max_tokens
     );
 
     if !is_batch {
@@ -7235,13 +7304,18 @@ pub async fn check_dynamic_json_mode_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        max_tokens
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -7331,6 +7405,10 @@ pub async fn check_dynamic_json_mode_inference_response(
 pub async fn test_json_mode_streaming_inference_request_with_provider(provider: E2ETestProvider) {
     if provider.variant_name.contains("tgi") {
         // TGI does not support streaming in JSON mode (because it doesn't support streaming tools)
+        return;
+    }
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
         return;
     }
     let episode_id = Uuid::now_v7();

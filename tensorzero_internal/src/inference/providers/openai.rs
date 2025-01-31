@@ -210,12 +210,6 @@ impl InferenceProvider for OpenAIProvider {
         ),
         Error,
     > {
-        if self.model_name.to_lowercase().starts_with("o1") {
-            return Err(ErrorDetails::InvalidRequest {
-                message: "The OpenAI o1 family of models does not support streaming.".to_string(),
-            }
-            .into());
-        }
         let request_body = OpenAIRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -597,10 +591,15 @@ pub fn stream_openai(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
+                    let message = e.to_string();
+                    let mut raw_response = None;
+                    if let reqwest_eventsource::Error::InvalidStatusCode(_, resp) = e {
+                        raw_response = resp.text().await.ok();
+                    }
                     yield Err(ErrorDetails::InferenceServer {
-                        message: e.to_string(),
+                        message,
                         raw_request: None,
-                        raw_response: None,
+                        raw_response,
                         provider_type: PROVIDER_TYPE.to_string(),
                     }.into());
                 }
@@ -1207,7 +1206,7 @@ struct OpenAIRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u32>,
+    max_completion_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1234,9 +1233,6 @@ impl<'a> OpenAIRequest<'a> {
         model: &'a str,
         request: &'a ModelInferenceRequest,
     ) -> Result<OpenAIRequest<'a>, Error> {
-        if model.to_lowercase().starts_with("o1") {
-            return OpenAIRequest::new_o1(model, request);
-        }
         let response_format = Some(OpenAIResponseFormat::new(
             &request.json_mode,
             request.output_schema,
@@ -1248,65 +1244,34 @@ impl<'a> OpenAIRequest<'a> {
             }),
             false => None,
         };
-        let messages = prepare_openai_messages(request);
+        let mut messages = prepare_openai_messages(request);
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
+        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openai_tools(request);
+        if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
+            parallel_tool_calls = None;
+        }
+
+        if model.to_lowercase().starts_with("o1-mini") {
+            if let Some(OpenAIRequestMessage::System(_)) = messages.first() {
+                if let OpenAIRequestMessage::System(system_msg) = messages.remove(0) {
+                    let user_msg = OpenAIRequestMessage::User(OpenAIUserRequestMessage {
+                        content: system_msg.content,
+                    });
+                    messages.insert(0, user_msg);
+                }
+            }
+        }
+
         Ok(OpenAIRequest {
             messages,
             model,
             temperature: request.temperature,
-            max_tokens: request.max_tokens,
+            max_completion_tokens: request.max_tokens,
             seed: request.seed,
             top_p: request.top_p,
             presence_penalty: request.presence_penalty,
             frequency_penalty: request.frequency_penalty,
             stream: request.stream,
-            stream_options,
-            response_format,
-            tools,
-            tool_choice,
-            parallel_tool_calls,
-        })
-    }
-
-    fn new_o1(
-        model: &'a str,
-        request: &'a ModelInferenceRequest,
-    ) -> Result<OpenAIRequest<'a>, Error> {
-        let response_format = None;
-        let stream_options = None;
-        let mut messages = prepare_openai_messages(request);
-        if let Some(OpenAIRequestMessage::System(_)) = messages.first() {
-            if let OpenAIRequestMessage::System(system_msg) = messages.remove(0) {
-                let user_msg = OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                    content: system_msg.content,
-                });
-                messages.insert(0, user_msg);
-            }
-        }
-        if request.tool_config.is_some() {
-            return Err(ErrorDetails::InvalidRequest {
-                message: "The OpenAI o1 family of models does not support tools.".to_string(),
-            }
-            .into());
-        }
-        let tools = None;
-        let tool_choice = None;
-        let parallel_tool_calls = None;
-
-        // Temperature, top_p are fixed at 1
-        // Presence and frequency penalty are fixed at 0
-        // See [this guide](https://platform.openai.com/docs/guides/reasoning/quickstart) for more details
-        Ok(OpenAIRequest {
-            messages,
-            model,
-            temperature: None,
-            max_tokens: request.max_tokens,
-            seed: request.seed,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            stream: false,
             stream_options,
             response_format,
             tools,
@@ -2030,7 +1995,7 @@ mod tests {
         assert_eq!(openai_request.model, "gpt-3.5-turbo");
         assert_eq!(openai_request.messages.len(), 2);
         assert_eq!(openai_request.temperature, Some(0.7));
-        assert_eq!(openai_request.max_tokens, Some(100));
+        assert_eq!(openai_request.max_completion_tokens, Some(100));
         assert_eq!(openai_request.seed, Some(69));
         assert_eq!(openai_request.top_p, Some(0.9));
         assert_eq!(openai_request.presence_penalty, Some(0.1));
@@ -2070,7 +2035,7 @@ mod tests {
         assert_eq!(openai_request.model, "gpt-4");
         assert_eq!(openai_request.messages.len(), 2); // We'll add a system message containing Json to fit OpenAI requirements
         assert_eq!(openai_request.temperature, None);
-        assert_eq!(openai_request.max_tokens, None);
+        assert_eq!(openai_request.max_completion_tokens, None);
         assert_eq!(openai_request.seed, None);
         assert_eq!(openai_request.top_p, None);
         assert_eq!(openai_request.presence_penalty, None);
@@ -2120,7 +2085,7 @@ mod tests {
         assert_eq!(openai_request.model, "gpt-4");
         assert_eq!(openai_request.messages.len(), 1);
         assert_eq!(openai_request.temperature, None);
-        assert_eq!(openai_request.max_tokens, None);
+        assert_eq!(openai_request.max_completion_tokens, None);
         assert_eq!(openai_request.seed, None);
         assert!(!openai_request.stream);
         assert_eq!(openai_request.top_p, None);
@@ -2159,7 +2124,7 @@ mod tests {
         assert_eq!(openai_request.model, "gpt-4");
         assert_eq!(openai_request.messages.len(), 1);
         assert_eq!(openai_request.temperature, None);
-        assert_eq!(openai_request.max_tokens, None);
+        assert_eq!(openai_request.max_completion_tokens, None);
         assert_eq!(openai_request.seed, None);
         assert!(!openai_request.stream);
         assert_eq!(openai_request.top_p, None);
@@ -2201,13 +2166,16 @@ mod tests {
         assert_eq!(openai_request.model, "o1-preview");
         assert_eq!(openai_request.messages.len(), 1);
         assert!(!openai_request.stream);
-        assert_eq!(openai_request.response_format, None);
-        assert_eq!(openai_request.temperature, None);
-        assert_eq!(openai_request.max_tokens, Some(100));
+        assert_eq!(
+            openai_request.response_format,
+            Some(OpenAIResponseFormat::Text)
+        );
+        assert_eq!(openai_request.temperature, Some(0.5));
+        assert_eq!(openai_request.max_completion_tokens, Some(100));
         assert_eq!(openai_request.seed, Some(69));
-        assert_eq!(openai_request.top_p, None);
-        assert_eq!(openai_request.presence_penalty, None);
-        assert_eq!(openai_request.frequency_penalty, None);
+        assert_eq!(openai_request.top_p, Some(0.9));
+        assert_eq!(openai_request.presence_penalty, Some(0.1));
+        assert_eq!(openai_request.frequency_penalty, Some(0.2));
         assert!(openai_request.tools.is_none());
 
         // Test case: System message is converted to User message
@@ -2232,65 +2200,32 @@ mod tests {
         };
 
         let openai_request_with_system =
-            OpenAIRequest::new("o1-preview", &request_with_system).unwrap();
+            OpenAIRequest::new("o1-mini", &request_with_system).unwrap();
 
         // Check that the system message was converted to a user message
         assert_eq!(openai_request_with_system.messages.len(), 2);
-        assert!(matches!(
-            openai_request_with_system.messages[0],
-            OpenAIRequestMessage::User(ref msg) if msg.content == "This is the system message"
-        ));
+        assert!(
+            matches!(
+                openai_request_with_system.messages[0],
+                OpenAIRequestMessage::User(ref msg) if msg.content == "This is the system message"
+            ),
+            "Unexpected messages: {:?}",
+            openai_request_with_system.messages
+        );
 
-        assert_eq!(openai_request_with_system.model, "o1-preview");
+        assert_eq!(openai_request_with_system.model, "o1-mini");
         assert!(!openai_request_with_system.stream);
-        assert_eq!(openai_request_with_system.response_format, None);
-        assert_eq!(openai_request_with_system.temperature, None);
-        assert_eq!(openai_request_with_system.max_tokens, Some(100));
+        assert_eq!(
+            openai_request_with_system.response_format,
+            Some(OpenAIResponseFormat::Text)
+        );
+        assert_eq!(openai_request_with_system.temperature, Some(0.5));
+        assert_eq!(openai_request_with_system.max_completion_tokens, Some(100));
         assert_eq!(openai_request_with_system.seed, Some(69));
         assert!(openai_request_with_system.tools.is_none());
-        assert_eq!(openai_request_with_system.top_p, None);
-        assert_eq!(openai_request_with_system.presence_penalty, None);
-        assert_eq!(openai_request_with_system.frequency_penalty, None);
-
-        // Test case: Tool config errors on O1 models
-        let request_with_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            messages: vec![RequestMessage {
-                role: Role::User,
-                content: vec!["Hello".to_string().into()],
-            }],
-            system: None,
-            temperature: Some(0.5),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.2),
-            max_tokens: Some(100),
-            seed: Some(69),
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Owned(ToolCallConfig {
-                tools_available: vec![],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: false,
-            })),
-            function_type: FunctionType::Chat,
-            output_schema: None,
-        };
-
-        let openai_request_with_tools = OpenAIRequest::new("o1-preview", &request_with_tools);
-
-        // Check that it returns an error
-        assert!(openai_request_with_tools.is_err());
-        let err = openai_request_with_tools.unwrap_err();
-        let details = err.get_details();
-        if let ErrorDetails::InvalidRequest { message } = details {
-            assert_eq!(
-                message,
-                "The OpenAI o1 family of models does not support tools."
-            );
-        } else {
-            panic!("Expected InvalidRequest error");
-        }
+        assert_eq!(openai_request_with_system.top_p, Some(0.9));
+        assert_eq!(openai_request_with_system.presence_penalty, Some(0.1));
+        assert_eq!(openai_request_with_system.frequency_penalty, Some(0.2));
     }
 
     #[test]
@@ -2337,7 +2272,7 @@ mod tests {
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
             frequency_penalty: Some(0.2),
-            max_tokens: Some(100),
+            max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
             response_format: Some(OpenAIResponseFormat::Text),
@@ -2427,7 +2362,7 @@ mod tests {
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
             frequency_penalty: Some(0.2),
-            max_tokens: Some(100),
+            max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
             response_format: Some(OpenAIResponseFormat::Text),
@@ -2488,7 +2423,7 @@ mod tests {
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
             frequency_penalty: Some(0.2),
-            max_tokens: Some(100),
+            max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
             response_format: Some(OpenAIResponseFormat::Text),
@@ -2542,7 +2477,7 @@ mod tests {
             top_p: Some(0.9),
             presence_penalty: Some(0.1),
             frequency_penalty: Some(0.2),
-            max_tokens: Some(100),
+            max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
             response_format: Some(OpenAIResponseFormat::Text),
