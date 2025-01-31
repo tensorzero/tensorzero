@@ -10,7 +10,7 @@ use super::{check_column_exists, check_table_exists};
 /// The `long_cache_key` is the cache key for the model provider request
 /// The `timestamp` is the timestamp of the request
 /// The `output` is the output of the request, serialized using serde_json::to_string
-/// We also add a column `cache_hit` to indicate if a ModelInference was a cache hit
+/// We also add a column `cached` to indicate if a ModelInference was a cache hit
 pub struct Migration0011<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
@@ -32,13 +32,13 @@ impl Migration for Migration0011<'_> {
 
     /// Check if the migration needs to be applied
     /// This should be equivalent to checking if `ModelInferenceCache` is missing or
-    /// if the `cache_hit` column is missing from `ModelInference`
+    /// if the `cached` column is missing from `ModelInference`
     async fn should_apply(&self) -> Result<bool, Error> {
         let table_exists =
             check_table_exists(self.clickhouse, "ModelInferenceCache", "0011").await?;
-        let cache_hit_column_exists =
-            check_column_exists(self.clickhouse, "ModelInference", "cache_hit", "0011").await?;
-        Ok(!table_exists || !cache_hit_column_exists)
+        let cached_column_exists =
+            check_column_exists(self.clickhouse, "ModelInference", "cached", "0011").await?;
+        Ok(!table_exists || !cached_column_exists)
     }
 
     async fn apply(&self) -> Result<(), Error> {
@@ -62,9 +62,9 @@ impl Migration for Migration0011<'_> {
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Add the `cache_hit` column to ModelInference
+        // Add the `cached` column to ModelInference
         let query = r#"
-            ALTER TABLE ModelInference ADD COLUMN cache_hit Bool DEFAULT false;
+            ALTER TABLE ModelInference ADD COLUMN cached Bool DEFAULT false;
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
@@ -75,8 +75,8 @@ impl Migration for Migration0011<'_> {
         "\
             -- Drop the table\n\
             DROP TABLE IF EXISTS ModelInferenceCache;\n\
-            -- Drop the `cache_hit` column from ModelInference
-            ALTER TABLE ModelInference DROP COLUMN cache_hit;
+            -- Drop the `cached` column from ModelInference
+            ALTER TABLE ModelInference DROP COLUMN cached;
             "
         .to_string()
     }

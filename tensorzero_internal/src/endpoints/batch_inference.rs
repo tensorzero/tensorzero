@@ -828,7 +828,7 @@ pub async fn write_completed_batch_inference<'a>(
             latency: Latency::Batch,
             model_name: batch_request.model_name.clone(),
             model_provider_name: batch_request.model_provider_name.clone().into(),
-            cache_hit: false,
+            cached: false,
         };
         let tool_config: Option<ToolCallConfig> = tool_params.map(|t| t.into());
         let output_schema = match output_schema

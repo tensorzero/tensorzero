@@ -105,7 +105,7 @@ async fn test_cache_write_and_read() {
             response_time: Duration::from_secs(0)
         }
     );
-    assert!(result.cache_hit);
+    assert!(result.cached);
 
     // Read (should be None)
     tokio::time::sleep(Duration::from_secs(2)).await;

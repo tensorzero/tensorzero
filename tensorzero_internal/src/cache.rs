@@ -71,7 +71,7 @@ impl CacheKey {
     pub fn get_short_key(&self) -> Result<u64, Error> {
         let bytes = self.0[..8].try_into().map_err(|e| {
             Error::new(ErrorDetails::Cache {
-                message: format!("failed to convert hash into u64 for short cache key: {e}"),
+                message: format!("Failed to convert hash into u64 for short cache key: {e}"),
             })
         })?;
         Ok(u64::from_le_bytes(bytes))

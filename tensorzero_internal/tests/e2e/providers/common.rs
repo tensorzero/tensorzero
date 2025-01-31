@@ -620,7 +620,7 @@ pub async fn check_simple_inference_response(
         assert_eq!(id, inference_id);
     }
     assert_eq!(
-        result.get("cache_hit").unwrap().as_bool().unwrap(),
+        result.get("cached").unwrap().as_bool().unwrap(),
         should_be_cached
     );
 }
