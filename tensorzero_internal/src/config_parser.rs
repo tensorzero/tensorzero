@@ -32,7 +32,7 @@ pub struct Config<'c> {
     pub templates: TemplateConfig<'c>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,
@@ -77,7 +77,7 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ObservabilityConfig {
     #[serde(default)]
@@ -130,7 +130,13 @@ impl<'c> Config<'c> {
     }
 
     pub fn load_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
-        let config_table = UninitializedConfig::read_toml_config(config_path)?;
+        let config_table = match UninitializedConfig::read_toml_config(config_path)? {
+            Some(table) => table,
+            None => {
+                tracing::warn!("No config file found at {config_path:?}, using default config");
+                return Ok(Config::default());
+            }
+        };
         let base_path = match PathBuf::from(&config_path).parent() {
             Some(base_path) => base_path.to_path_buf(),
             None => {
@@ -367,22 +373,27 @@ impl UninitializedConfig {
     }
 
     /// Read a file from the file system and parse it as TOML
-    fn read_toml_config(path: &Path) -> Result<toml::Table, Error> {
-        std::fs::read_to_string(path)
-            .map_err(|_| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Failed to read config file: {}", path.to_string_lossy()),
-                })
-            })?
-            .parse::<toml::Table>()
-            .map_err(|_| {
-                Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "Failed to parse config file as valid TOML: {}",
-                        path.to_string_lossy()
-                    ),
-                })
-            })
+    fn read_toml_config(path: &Path) -> Result<Option<toml::Table>, Error> {
+        if !path.exists() {
+            return Ok(None);
+        }
+        Ok(Some(
+            std::fs::read_to_string(path)
+                .map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to read config file: {}", path.to_string_lossy()),
+                    })
+                })?
+                .parse::<toml::Table>()
+                .map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Failed to parse config file as valid TOML: {}",
+                            path.to_string_lossy()
+                        ),
+                    })
+                })?,
+        ))
     }
 }
 
@@ -1825,9 +1836,21 @@ mod tests {
             .parent()
             .expect("Failed to get parent directory of config file");
         let config_table = UninitializedConfig::read_toml_config(Path::new(&config_path))
+            .expect("Failed to read tensorzero.example.toml")
             .expect("Failed to read tensorzero.example.toml");
 
         Config::load_from_toml(config_table, base_path.to_path_buf())
             .expect("Failed to load config");
+    }
+
+    #[test]
+    fn test_config_load_no_config_file() {
+        let config = Config::load_from_path(Path::new("nonexistent.toml")).unwrap();
+        assert_eq!(config.gateway, GatewayConfig::default());
+        assert_eq!(config.models.len(), 0);
+        assert_eq!(config.embedding_models.len(), 0);
+        assert_eq!(config.functions.len(), 0);
+        assert_eq!(config.metrics.len(), 0);
+        assert_eq!(config.tools.len(), 0);
     }
 }
