@@ -106,7 +106,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 
 <br>
 
-<details>
+<details open>
 <summary><b>Usage: TensorZero Python Client (Recommended)</b></summary>
 
 You can access any provider using the TensorZero Python client.
