@@ -13,13 +13,6 @@ docker compose up
 2. Install the dependencies:
 
 ```bash
-uv venv
-uv pip sync requirements.txt
-```
-
-or
-
-```bash
 # We recommend using Python 3.10+ and a virtual environment
 pip install -r requirements.txt
 ```
