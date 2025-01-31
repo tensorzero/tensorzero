@@ -310,7 +310,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             } => {
                 let region = region.map(aws_types::region::Region::new);
                 if region.is_none() && !allow_auto_detect_region {
-                    return Err(D::Error::custom("AWS bedrock provider requires a region to provided, or `allow_auto_detect_region = true`."));
+                    return Err(D::Error::custom("AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`."));
                 }
 
                 // NB: We need to make an async call here to initialize the AWS Bedrock client.

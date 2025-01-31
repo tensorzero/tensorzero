@@ -1834,7 +1834,8 @@ mod tests {
             Config::load_from_toml(config, base_path.clone()).expect_err("Failed to load bedrock");
         let err_msg = err.to_string();
         assert!(
-            err_msg.contains("requires a region to provided, or `allow_auto_detect_region = true`"),
+            err_msg
+                .contains("requires a region to be provided, or `allow_auto_detect_region = true`"),
             "Unexpected error message: {err_msg}"
         );
     }
@@ -1859,6 +1860,8 @@ mod tests {
         let err =
             Config::load_from_toml(config, base_path.clone()).expect_err("Failed to load bedrock");
         let err_msg = err.to_string();
+        // Note - this requires the `AWS_REGION` environment variable to be unset when running the test,
+        // since we want the region auto-detection to fail.
         assert!(
             err_msg.contains("Failed to determine AWS region."),
             "Unexpected error message: {err_msg}"
