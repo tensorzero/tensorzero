@@ -6,7 +6,7 @@ from tensorzero import AsyncTensorZeroGateway
 async def main():
     async with AsyncTensorZeroGateway("http://localhost:3000") as gateway:
         response = await gateway.inference(
-            function_name="generate_haiku",
+            model_name="openai::gpt4o-mini",
             input={
                 "messages": [
                     {
