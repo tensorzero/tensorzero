@@ -12,6 +12,7 @@ use std::{
 };
 use uuid::Uuid;
 
+use crate::cache::CacheLookupResult;
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
@@ -127,7 +128,7 @@ pub enum ModelInferenceRequestJsonMode {
 /// and to convert it back to the appropriate response format.
 /// An example of the latter is that we might have prepared a request with Tools available
 /// but the client actually just wants a chat response.
-#[derive(Builder, Clone, Debug, Default, PartialEq)]
+#[derive(Builder, Clone, Debug, Default, PartialEq, Serialize)]
 #[builder(setter(into, strip_option), default)]
 pub struct ModelInferenceRequest<'a> {
     pub inference_id: Uuid,
@@ -199,6 +200,7 @@ pub struct ModelInferenceResponse {
     pub usage: Usage,
     pub latency: Latency,
     pub model_provider_name: Arc<str>,
+    pub cached: bool,
 }
 
 /// Finally, in the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
@@ -216,6 +218,7 @@ pub struct ModelInferenceResponseWithMetadata {
     pub latency: Latency,
     pub model_provider_name: Arc<str>,
     pub model_name: Arc<str>,
+    pub cached: bool,
 }
 
 /* As a Variant might make use of multiple model inferences, we then combine
@@ -367,6 +370,7 @@ pub struct ModelInferenceDatabaseInsert {
     pub model_name: String,
     pub model_provider_name: String,
     pub ttft_ms: Option<u32>,
+    pub cached: bool,
 }
 
 #[cfg(test)]
@@ -464,6 +468,32 @@ impl ModelInferenceResponse {
             usage: provider_inference_response.usage,
             latency: provider_inference_response.latency,
             model_provider_name,
+            cached: false,
+        }
+    }
+
+    pub fn from_cache(
+        cache_lookup: CacheLookupResult,
+        request: &ModelInferenceRequest<'_>,
+        model_provider_name: &str,
+    ) -> Self {
+        Self {
+            id: Uuid::now_v7(),
+            created: current_timestamp(),
+            output: cache_lookup.output,
+            system: request.system.clone(),
+            input_messages: request.messages.clone(), // maybe we can clean this up
+            raw_request: cache_lookup.raw_request,
+            raw_response: cache_lookup.raw_response,
+            usage: Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+            },
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            model_provider_name: Arc::from(model_provider_name),
+            cached: true,
         }
     }
 }
@@ -482,6 +512,7 @@ impl ModelInferenceResponseWithMetadata {
             latency: model_inference_response.latency,
             model_provider_name: model_inference_response.model_provider_name,
             model_name,
+            cached: model_inference_response.cached,
         }
     }
 }
@@ -517,6 +548,7 @@ impl ModelInferenceDatabaseInsert {
             ttft_ms,
             model_provider_name: result.model_provider_name.to_string(),
             model_name: result.model_name.to_string(),
+            cached: result.cached,
         }
     }
 }
@@ -546,11 +578,15 @@ impl ProviderInferenceResponse {
 }
 
 impl InferenceResult {
-    pub fn get_serialized_model_inferences(&self) -> Vec<serde_json::Value> {
-        let model_inference_responses = match self {
+    pub fn model_inference_results(&self) -> &Vec<ModelInferenceResponseWithMetadata> {
+        match self {
             InferenceResult::Chat(chat_result) => &chat_result.model_inference_results,
             InferenceResult::Json(json_result) => &json_result.model_inference_results,
-        };
+        }
+    }
+
+    pub fn get_serialized_model_inferences(&self) -> Vec<serde_json::Value> {
+        let model_inference_responses = self.model_inference_results();
         let inference_id = match self {
             InferenceResult::Chat(chat_result) => chat_result.inference_id,
             InferenceResult::Json(json_result) => json_result.inference_id,
@@ -1116,6 +1152,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -1162,6 +1199,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -1208,6 +1246,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1253,6 +1292,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1314,6 +1354,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1397,6 +1438,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1487,6 +1529,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1535,6 +1578,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1605,6 +1649,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1659,6 +1704,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(

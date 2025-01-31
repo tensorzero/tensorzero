@@ -15,6 +15,7 @@ mod client_inference_params;
 
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 
+pub use tensorzero_internal::cache::CacheParamsOptions;
 pub use tensorzero_internal::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_internal::endpoints::feedback::Params as FeedbackParams;
 pub use tensorzero_internal::endpoints::inference::{

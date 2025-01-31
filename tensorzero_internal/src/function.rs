@@ -1302,6 +1302,7 @@ mod tests {
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             latency,
+            cached: false,
         };
         let templates = TemplateConfig::default();
         let inference_config = InferenceConfig {
@@ -1362,6 +1363,7 @@ mod tests {
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             latency,
+            cached: false,
         };
         let response = function_config
             .prepare_response(
@@ -1410,6 +1412,7 @@ mod tests {
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             latency,
+            cached: false,
         };
         let response = function_config
             .prepare_response(
@@ -1459,6 +1462,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
+            cached: false,
         };
         let response = function_config
             .prepare_response(
@@ -1509,6 +1513,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
+            cached: false,
         };
         let response = function_config
             .prepare_response(
@@ -1556,6 +1561,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
+            cached: false,
         };
         let error = function_config
             .prepare_response(
@@ -1618,6 +1624,7 @@ mod tests {
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             latency,
+            cached: false,
         };
         let response = function_config
             .prepare_response(
@@ -1663,6 +1670,7 @@ mod tests {
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             latency,
+            cached: false,
         };
         let response = function_config
             .prepare_response(
@@ -1712,6 +1720,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
+            cached: false,
         };
         let response = function_config
             .prepare_response(
@@ -1762,6 +1771,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
+            cached: false,
         };
         let response = function_config
             .prepare_response(
@@ -1818,6 +1828,7 @@ mod tests {
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
             latency,
+            cached: false,
         };
         let response = function_config
             .prepare_response(
