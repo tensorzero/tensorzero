@@ -579,6 +579,8 @@ impl UninitializedToolConfig {
 #[cfg(test)]
 mod tests {
 
+    use tracing_test::traced_test;
+
     use super::*;
 
     use std::env;
@@ -1843,9 +1845,11 @@ mod tests {
             .expect("Failed to load config");
     }
 
+    #[traced_test]
     #[test]
     fn test_config_load_no_config_file() {
         let config = Config::load_from_path(Path::new("nonexistent.toml")).unwrap();
+        assert!(logs_contain("using default config"));
         assert_eq!(config.gateway, GatewayConfig::default());
         assert_eq!(config.models.len(), 0);
         assert_eq!(config.embedding_models.len(), 0);
