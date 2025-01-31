@@ -145,7 +145,7 @@ You can access any provider using the OpenAI Python client with TensorZero.
 
 1. Deploy `tensorzero/gateway` using Docker.
    **[Detailed instructions →](https://www.tensorzero.com/docs/gateway/deployment)**
-2. Optional: Set up the TensorZero configuration.
+2. Set up the TensorZero configuration.
 3. Run inference:
 
 ```python
@@ -154,7 +154,7 @@ from openai import OpenAI
 
 with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
     response = client.chat.completions.create(
-        model="openai::gpt-4o-mini",
+        model="tensorzero::your_function_name",
         messages=[
             {
                 "role": "user",
