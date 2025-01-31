@@ -19,16 +19,15 @@ uv run pytest
 """
 
 import os
+import threading
+import time
 from copy import deepcopy
+from dataclasses import dataclass
 from enum import Enum
-from time import sleep, time
 from uuid import UUID
 
 import pytest
 import pytest_asyncio
-import threading
-import time
-from dataclasses import dataclass
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
@@ -164,7 +163,7 @@ async def test_async_basic_inference(async_client):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
-    sleep(1)
+    time.sleep(1)
 
     # Test caching
     result = await async_client.inference(
@@ -232,8 +231,8 @@ async def test_async_inference_streaming(async_client):
     last_chunk_duration = None
     async for chunk in stream:
         if previous_chunk_timestamp is not None:
-            last_chunk_duration = time() - previous_chunk_timestamp
-        previous_chunk_timestamp = time()
+            last_chunk_duration = time.time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time.time()
         chunks.append(chunk)
 
     assert last_chunk_duration > 0.01
@@ -715,8 +714,8 @@ def test_sync_inference_streaming(sync_client):
     last_chunk_duration = None
     for chunk in stream:
         if previous_chunk_timestamp is not None:
-            last_chunk_duration = time() - previous_chunk_timestamp
-        previous_chunk_timestamp = time()
+            last_chunk_duration = time.time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time.time()
         chunks.append(chunk)
 
     assert last_chunk_duration > 0.01
