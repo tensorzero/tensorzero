@@ -190,6 +190,7 @@ impl InferenceProvider for DummyProvider {
             }
             .into());
         }
+
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         if self.model_name == "test_key" {
             if let Some(api_key) = api_key {

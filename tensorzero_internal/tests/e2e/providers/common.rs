@@ -3,6 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
+use rand::Rng;
 #[cfg(feature = "e2e_tests")]
 use reqwest::{Client, StatusCode};
 #[cfg(feature = "e2e_tests")]
@@ -639,14 +640,36 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
 
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
+    // Generate random u32
+    let seed = rand::thread_rng().gen_range(0..u32::MAX);
 
+    let original_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, false,
+    )
+    .await;
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let cached_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, true,
+    )
+    .await;
+    assert_eq!(original_content, cached_content);
+}
+
+#[cfg(feature = "e2e_tests")]
+pub async fn test_simple_streaming_inference_request_with_provider_cache(
+    provider: &E2ETestProvider,
+    episode_id: Uuid,
+    seed: u32,
+    tag_value: &str,
+    check_cache: bool,
+) -> String {
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input":
             {
-               "system": {"assistant_name": "Dr. Mehta"},
+               "system": {"assistant_name": format!("Dr. Mehta #{seed}")},
                "messages": [
                 {
                     "role": "user",
@@ -655,6 +678,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
             ]},
         "stream": true,
         "tags": {"key": tag_value},
+        "cache_options": {"enabled": "on", "lookback_s": 10}
     });
 
     let mut event_source = Client::new()
@@ -699,6 +723,9 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
                 inference_id = Some(chunk_inference_id);
             }
         }
+
+        let chunk_cached = chunk_json.get("cached").unwrap().as_bool().unwrap();
+        assert_eq!(chunk_cached, check_cache);
 
         let chunk_episode_id = chunk_json.get("episode_id").unwrap().as_str().unwrap();
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
@@ -757,7 +784,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": "Dr. Mehta"},
+        "system": {"assistant_name": format!("Dr. Mehta #{seed}")},
         "messages": [
             {
                 "role": "user",
@@ -855,7 +882,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        format!("You are a helpful and friendly assistant named Dr. Mehta #{seed}")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
@@ -868,18 +895,14 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
     // Check the InferenceTag Table
-    let result = select_inference_tags_clickhouse(
-        &clickhouse,
-        "basic_test",
-        "key",
-        &tag_value,
-        inference_id,
-    )
-    .await
-    .unwrap();
+    let result =
+        select_inference_tags_clickhouse(&clickhouse, "basic_test", "key", tag_value, inference_id)
+            .await
+            .unwrap();
     let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
+    full_content
 }
 
 #[cfg(feature = "e2e_tests")]
