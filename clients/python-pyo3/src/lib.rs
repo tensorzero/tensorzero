@@ -517,7 +517,7 @@ impl TensorZeroGateway {
 
         // We're in the synchronous `TensorZeroGateway` class, so we need to block on the Rust future,
         // and then return the result to the Python caller directly (not wrapped in a Python `Future`).
-        let resp = pyo3_async_runtimes::tokio::get_runtime().block_on(fut);
+        let resp = tokio_block_on_without_gil(py, fut);
         match resp {
             Ok(InferenceOutput::NonStreaming(data)) => parse_inference_response(py, data),
             Ok(InferenceOutput::Streaming(stream)) => Ok(StreamWrapper {
