@@ -919,7 +919,10 @@ async fn select_feedback_clickhouse(
         table_name, feedback_id
     );
 
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }
@@ -937,7 +940,10 @@ async fn select_feedback_tags_clickhouse(
         metric_name, tag_key, tag_value
     );
 
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }

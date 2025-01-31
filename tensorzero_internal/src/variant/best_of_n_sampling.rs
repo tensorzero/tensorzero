@@ -378,7 +378,7 @@ async fn inner_select_best_candidate<'a, 'request>(
     })?;
     let model_inference_response = (|| async {
         model_config
-            .infer(&inference_request, clients.http_client, clients.credentials)
+            .infer(&inference_request, clients, &evaluator.inner.model)
             .await
     })
     .retry(evaluator.inner.retries.get_backoff())
@@ -652,6 +652,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::{
+        cache::{CacheEnabledMode, CacheOptions},
         clickhouse::ClickHouseConnectionInfo,
         endpoints::inference::{InferenceCredentials, InferenceIds},
         inference::{
@@ -833,6 +834,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cached: false,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -870,6 +872,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
+            cached: false,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -935,6 +938,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cached: false,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -972,6 +976,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
+            cached: false,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1042,6 +1047,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cached: false,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1079,6 +1085,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider1".into(),
             model_name: "ExampleModel1".into(),
+            cached: false,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1117,6 +1124,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let input = Input {
             system: None,

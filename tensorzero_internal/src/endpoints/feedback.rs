@@ -423,7 +423,11 @@ async fn get_function_name(
         "SELECT function_name FROM {} WHERE {} = '{}'",
         table_name, identifier_key, target_id
     );
-    let function_name = connection_info.run_query(query).await?.trim().to_string();
+    let function_name = connection_info
+        .run_query(query, None)
+        .await?
+        .trim()
+        .to_string();
     if function_name.is_empty() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
             message: format!("{identifier_type} ID: {target_id} does not exist"),

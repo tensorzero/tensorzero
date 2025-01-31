@@ -46,7 +46,7 @@ impl Migration for Migration0004<'_> {
             "SELECT name FROM system.columns WHERE database = '{}' AND table = 'ModelInference'",
             database
         );
-        let response = self.clickhouse.run_query(query).await.map_err(|e| {
+        let response = self.clickhouse.run_query(query, None).await.map_err(|e| {
             Error::new(ErrorDetails::ClickHouseMigration {
                 id: "0004".to_string(),
                 message: format!("Failed to fetch columns for ModelInference: {}", e),
@@ -71,7 +71,7 @@ impl Migration for Migration0004<'_> {
             ADD COLUMN IF NOT EXISTS input_messages String,
             ADD COLUMN IF NOT EXISTS output String
         "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
+        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
         Ok(())
     }

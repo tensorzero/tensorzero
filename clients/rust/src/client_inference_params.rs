@@ -4,6 +4,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero_internal::{
+    cache::CacheParamsOptions,
     endpoints::inference::{InferenceParams, Params},
     inference::types::Input,
     tool::DynamicToolParams,
@@ -52,6 +53,7 @@ pub struct ClientInferenceParams {
     // configured one. We only lazily validate this schema.
     pub output_schema: Option<Value>,
     pub credentials: HashMap<String, ClientSecretString>,
+    pub cache_options: CacheParamsOptions,
 }
 
 impl From<ClientInferenceParams> for Params {
@@ -74,6 +76,7 @@ impl From<ClientInferenceParams> for Params {
                 .into_iter()
                 .map(|(k, v)| (k, v.0))
                 .collect(),
+            cache_options: this.cache_options,
         }
     }
 }
@@ -96,6 +99,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         dynamic_tool_params,
         output_schema,
         credentials,
+        cache_options,
     } = client_params;
     let _ = Params {
         function_name,
@@ -110,6 +114,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         dynamic_tool_params,
         output_schema,
         credentials: credentials.into_iter().map(|(k, v)| (k, v.0)).collect(),
+        cache_options,
     };
 }
 

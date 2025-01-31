@@ -9,6 +9,8 @@ use strum::VariantNames;
 use tracing::{span, warn, Instrument, Level};
 use url::Url;
 
+use crate::cache::{cache_lookup, start_cache_write, ModelProviderRequest};
+use crate::endpoints::inference::InferenceClients;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
@@ -51,28 +53,61 @@ impl ModelConfig {
     pub async fn infer<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
-        client: &'request Client,
-        api_keys: &'request InferenceCredentials,
+        clients: &'request InferenceClients<'request>,
+        model_name: &'request str,
     ) -> Result<ModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
+            // TODO: think about how to best handle errors here
+            if clients.cache_options.enabled.read() {
+                let cache_lookup = cache_lookup(
+                    clients.clickhouse_connection_info,
+                    ModelProviderRequest {
+                        request,
+                        model_name,
+                        provider_name,
+                    },
+                    clients.cache_options.max_age_s,
+                )
+                .await
+                .ok()
+                .flatten();
+                if let Some(cache_lookup) = cache_lookup {
+                    return Ok(cache_lookup);
+                }
+            }
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
                     provider_name: provider_name.to_string(),
                 })
             })?;
             let response = provider_config
-                .infer(request, client, api_keys)
+                .infer(request, clients.http_client, clients.credentials)
                 .instrument(span!(
                     Level::INFO,
                     "infer",
                     provider_name = &**provider_name
                 ))
                 .await;
+
             match response {
                 Ok(response) => {
+                    if clients.cache_options.enabled.write() {
+                        let _ = start_cache_write(
+                            clients.clickhouse_connection_info,
+                            ModelProviderRequest {
+                                request,
+                                model_name,
+                                provider_name,
+                            },
+                            &response.output,
+                            &response.raw_request,
+                            &response.raw_response,
+                        );
+                    }
                     let model_inference_response =
                         ModelInferenceResponse::new(response, provider_name.clone());
+
                     return Ok(model_inference_response);
                 }
                 Err(error) => {
@@ -1016,8 +1051,11 @@ impl ShorthandModelConfig for ModelConfig {
 mod tests {
     use std::{borrow::Cow, cell::Cell};
 
+    use crate::cache::CacheEnabledMode;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
+        cache::CacheOptions,
+        clickhouse::ClickHouseConnectionInfo,
         inference::{
             providers::dummy::{
                 DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
@@ -1054,6 +1092,17 @@ mod tests {
             parallel_tool_calls: false,
         };
         let api_keys = InferenceCredentials::default();
+        let http_client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+        };
 
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -1072,8 +1121,9 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
+        let model_name = "test model";
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap();
         let content = response.output;
@@ -1093,7 +1143,7 @@ mod tests {
             providers: HashMap::from([("error".into(), bad_provider_config)]),
         };
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap_err();
         assert_eq!(
@@ -1129,6 +1179,17 @@ mod tests {
             credentials: DummyCredentials::None,
         });
         let api_keys = InferenceCredentials::default();
+        let http_client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+        };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -1158,8 +1219,9 @@ mod tests {
             ]),
         };
 
+        let model_name = "test model";
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap();
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
@@ -1367,6 +1429,17 @@ mod tests {
             parallel_tool_calls: false,
         };
         let api_keys = InferenceCredentials::default();
+        let http_client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+        };
 
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -1384,8 +1457,9 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
+        let model_name = "test model";
         let error = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap_err();
         assert_eq!(
@@ -1406,8 +1480,17 @@ mod tests {
             "TEST_KEY".to_string(),
             SecretString::from("notgoodkey".to_string()),
         )]);
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+        };
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap_err();
         assert_eq!(
@@ -1442,6 +1525,17 @@ mod tests {
             parallel_tool_calls: false,
         };
         let api_keys = InferenceCredentials::default();
+        let http_client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+        };
 
         let request = ModelInferenceRequest {
             messages: vec![],
@@ -1460,7 +1554,7 @@ mod tests {
             output_schema: None,
         };
         let error = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap_err();
         assert_eq!(
@@ -1481,8 +1575,17 @@ mod tests {
             "TEST_KEY".to_string(),
             SecretString::from("good_key".to_string()),
         )]);
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+        };
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap();
         assert_eq!(

@@ -382,6 +382,7 @@ mod tests {
     use serde_json::{json, Value};
     use uuid::Uuid;
 
+    use crate::cache::{CacheEnabledMode, CacheOptions};
     use crate::clickhouse::ClickHouseConnectionInfo;
     use crate::embeddings::EmbeddingModelTable;
     use crate::endpoints::inference::{
@@ -707,6 +708,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let templates = get_test_template_config();
         let system_template_name = "system";
@@ -1409,6 +1414,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let templates = Box::leak(Box::new(get_test_template_config()));
         let function_config = Box::leak(Box::new(FunctionConfig::Chat(FunctionConfigChat {

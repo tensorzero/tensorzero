@@ -17,6 +17,7 @@ use tokio_stream::StreamExt;
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
 use crate::embeddings::EmbeddingModelTable;
@@ -81,6 +82,8 @@ pub struct Params {
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
     pub output_schema: Option<Value>,
+    #[serde(default)]
+    pub cache_options: CacheParamsOptions,
     #[serde(default)]
     pub credentials: InferenceCredentials,
 }
@@ -241,11 +244,11 @@ pub async fn inference(
             episode_id,
         },
     };
-
     let inference_clients = InferenceClients {
         http_client,
         clickhouse_connection_info: &clickhouse_connection_info,
         credentials: &params.credentials,
+        cache_options: &(params.cache_options, dryrun).into(),
     };
 
     let inference_models = InferenceModels {
@@ -737,6 +740,7 @@ pub struct InferenceClients<'a> {
     pub http_client: &'a reqwest::Client,
     pub clickhouse_connection_info: &'a ClickHouseConnectionInfo,
     pub credentials: &'a InferenceCredentials,
+    pub cache_options: &'a CacheOptions,
 }
 
 // Carryall struct for models used in inference

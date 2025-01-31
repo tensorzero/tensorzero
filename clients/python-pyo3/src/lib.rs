@@ -23,9 +23,9 @@ use python_helpers::{
     parse_inference_response, parse_tool, python_uuid_to_uuid, serialize_to_dict,
 };
 use tensorzero_rust::{
-    err_to_http, Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
-    ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
-    InferenceStream, Input, TensorZeroError, Tool,
+    err_to_http, CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode,
+    ClientInferenceParams, ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput,
+    InferenceParams, InferenceStream, Input, TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -159,7 +159,7 @@ impl BaseTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
     #[allow(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -177,6 +177,7 @@ impl BaseTensorZeroGateway {
         parallel_tool_calls: Option<bool>,
         tags: Option<HashMap<String, String>>,
         credentials: Option<HashMap<String, ClientSecretString>>,
+        cache_options: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
             this.py(),
@@ -194,6 +195,7 @@ impl BaseTensorZeroGateway {
             parallel_tool_calls,
             tags,
             credentials,
+            cache_options,
         )?;
         serialize_to_dict(this.py(), params)
     }
@@ -259,6 +261,7 @@ impl BaseTensorZeroGateway {
         parallel_tool_calls: Option<bool>,
         tags: Option<HashMap<String, String>>,
         credentials: Option<HashMap<String, ClientSecretString>>,
+        cache_options: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<ClientInferenceParams> {
         let episode_id = python_uuid_to_uuid("episode_id", episode_id)?;
 
@@ -295,6 +298,12 @@ impl BaseTensorZeroGateway {
             None
         };
 
+        let cache_options: Option<CacheParamsOptions> = if let Some(cache_options) = cache_options {
+            Some(deserialize_from_json(py, cache_options)?)
+        } else {
+            None
+        };
+
         let input: Input = deserialize_from_json(py, &input)?;
 
         Ok(ClientInferenceParams {
@@ -314,6 +323,7 @@ impl BaseTensorZeroGateway {
             },
             input,
             credentials: credentials.unwrap_or_default(),
+            cache_options: cache_options.unwrap_or_default(),
             ..Default::default()
         })
     }
@@ -434,7 +444,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
     #[allow(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -460,6 +470,8 @@ impl TensorZeroGateway {
     ///                     It should be one of: "auto", "required", "off", or {"specific": str}. The last option pins the request to a specific tool name.
     /// :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
     /// :param tags: If set, adds tags to the inference request.
+    /// :param cache_options: If set, overrides the cache options for the inference request.
+    ///                      Structure: {"max_age_s": Optional[int], "enabled": "on" | "off" | "read_only" | "write_only"}
     /// :return: If stream is false, returns an InferenceResponse.
     ///          If stream is true, returns a geerator that yields InferenceChunks as they come in.
     fn inference(
@@ -479,6 +491,7 @@ impl TensorZeroGateway {
         parallel_tool_calls: Option<bool>,
         tags: Option<HashMap<String, String>>,
         credentials: Option<HashMap<String, ClientSecretString>>,
+        cache_options: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let fut =
             this.as_super()
@@ -499,6 +512,7 @@ impl TensorZeroGateway {
                     parallel_tool_calls,
                     tags,
                     credentials,
+                    cache_options,
                 )?);
 
         // We're in the synchronous `TensorZeroGateway` class, so we need to block on the Rust future,
@@ -612,7 +626,7 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
     #[allow(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -638,6 +652,8 @@ impl AsyncTensorZeroGateway {
     ///                     It should be one of: "auto", "required", "off", or {"specific": str}. The last option pins the request to a specific tool name.
     /// :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
     /// :param tags: If set, adds tags to the inference request.
+    /// :param cache_options: If set, overrides the cache options for the inference request.
+    ///                      Structure: {"max_age_s": Optional[int], "enabled": "on" | "off" | "read_only" | "write_only"}
     /// :return: If stream is false, returns an InferenceResponse.
     ///          If stream is true, returns an async generator that yields InferenceChunks as they come in.
     fn inference<'a>(
@@ -657,6 +673,7 @@ impl AsyncTensorZeroGateway {
         parallel_tool_calls: Option<bool>,
         tags: Option<HashMap<String, String>>,
         credentials: Option<HashMap<String, ClientSecretString>>,
+        cache_options: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
             py,
@@ -674,6 +691,7 @@ impl AsyncTensorZeroGateway {
             parallel_tool_calls,
             tags,
             credentials,
+            cache_options,
         )?;
         let client = this.as_super().client.clone();
         // See `AsyncStreamWrapper::__anext__` for more details about `future_into_py`
