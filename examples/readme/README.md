@@ -1,6 +1,6 @@
 # TensorZero `README` Examples
 
-This directory contains the example used for the absolutely minimal example in the README at the repository root.
+This directory contains the code used for the absolutely minimal examples in the README at the repository root.
 
 ## Running the Example
 
