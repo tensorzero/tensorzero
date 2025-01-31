@@ -38,10 +38,10 @@ async fn get_providers() -> E2ETestProviders {
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         inference_params_inference: inference_params_providers,
-        tool_use_inference: vec![],
+        tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: vec![],
         dynamic_tool_use_inference: standard_providers.clone(),
-        parallel_tool_use_inference: vec![],
+        parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: standard_providers.clone(),
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),

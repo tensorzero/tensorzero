@@ -419,8 +419,9 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
             }))?
             .message;
         let mut content: Vec<ContentBlock> = Vec::new();
-        if let Some(text) = message.content {
-            content.push(text.into());
+        match message.content {
+            Some(text) if !text.is_empty() => content.push(text.into()),
+            _ => (),
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {

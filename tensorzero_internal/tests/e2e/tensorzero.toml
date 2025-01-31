@@ -1424,6 +1424,12 @@ model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.weather_helper_parallel.variants.deepseek]
+type = "chat_completion"
+model = "deepseek-chat"
+system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.weather_helper_parallel.variants.anthropic]
 type = "chat_completion"
 weight = 1
