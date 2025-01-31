@@ -1,4 +1,4 @@
-# TensorZero README example
+# TensorZero `README` Examples
 
 This directory contains the code used for the absolutely minimal example in the README at the repository root.
 
@@ -29,5 +29,4 @@ pip install -r requirements.txt
 ```bash
 python sync_client_example.py
 python async_client_example.py
-python openai_client_example.py
 ```
