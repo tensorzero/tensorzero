@@ -3,6 +3,10 @@ use backon::Retryable;
 use futures::StreamExt;
 use itertools::izip;
 use serde::Deserialize;
+use serde::de::{self, Deserializer};
+use toml::Value;
+use crate::variant::chat_completion::ChatCompletionConfig as ChatCompletionVariantConfig;
+use crate::variant::best_of_n_sampling::BestOfNSamplingConfig as BestOfNSamplingVariantConfig;
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -38,6 +42,49 @@ pub enum VariantConfig {
     BestOfNSampling(best_of_n_sampling::BestOfNSamplingConfig),
     Dicl(dicl::DiclConfig),
     MixtureOfN(mixture_of_n::MixtureOfNConfig),
+}
+
+impl<'de> Deserialize<'de> for VariantConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        
+        let table = value.as_table().ok_or_else(|| {
+            de::Error::custom("variant configuration must be a table")
+        })?;
+        
+        // First check for the required type field
+        let variant_type = table.get("type").ok_or_else(|| {
+            // This error will include the full path to the variant
+            de::Error::missing_field("type")
+        })?;
+
+        let variant_type_str = variant_type.as_str().ok_or_else(|| {
+            de::Error::invalid_type(
+                de::Unexpected::Other("non-string value"), 
+                &"a string"
+            )
+        })?;
+
+        match variant_type_str {
+            "chat_completion" => {
+                ChatCompletionVariantConfig::deserialize(value)
+                    .map(VariantConfig::ChatCompletion)
+                    .map_err(de::Error::custom)
+            }
+            "best_of_n" => {
+                BestOfNSamplingVariantConfig::deserialize(value)
+                    .map(VariantConfig::BestOfNSampling)
+                    .map_err(de::Error::custom)
+            }
+            _ => Err(de::Error::custom(format!(
+                "unknown variant type: {}", 
+                variant_type_str
+            ))),
+        }
+    }
 }
 
 /// This type is used to determine how to enforce JSON mode for a given variant.
