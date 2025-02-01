@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::deserialize_json_string;
-use crate::inference::types::{ContentBlock, ModelInferenceRequest, ModelInferenceResponse};
+use crate::inference::types::{ContentBlockOutput, ModelInferenceRequest, ModelInferenceResponse};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -124,7 +124,7 @@ impl ModelProviderRequest<'_> {
 struct ModelInferenceCacheRow {
     short_cache_key: u64,
     long_cache_key: String,
-    output: Vec<ContentBlock>,
+    output: Vec<ContentBlockOutput>,
     raw_request: String,
     raw_response: String,
 }
@@ -133,7 +133,7 @@ struct ModelInferenceCacheRow {
 pub fn start_cache_write(
     clickhouse_client: &ClickHouseConnectionInfo,
     request: ModelProviderRequest<'_>,
-    output: &[ContentBlock],
+    output: &[ContentBlockOutput],
     raw_request: &str,
     raw_response: &str,
 ) -> Result<(), Error> {
@@ -164,7 +164,7 @@ pub fn start_cache_write(
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CacheLookupResult {
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub output: Vec<ContentBlock>,
+    pub output: Vec<ContentBlockOutput>,
     pub raw_request: String,
     pub raw_response: String,
 }

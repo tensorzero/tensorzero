@@ -15,7 +15,7 @@ use crate::{
     error::{Error, ErrorDetails},
     inference::types::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
-        ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest,
+        ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
         ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStream, TextChunk, Usage,
     },
@@ -604,7 +604,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 raw_response: Some(raw_response.clone())
             }))?
             .message;
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             if !text.is_empty() {
                 content.push(text.into());
@@ -612,7 +612,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
@@ -926,7 +926,7 @@ mod tests {
         let inference_response = result.unwrap();
         assert_eq!(
             inference_response.output,
-            vec![ContentBlock::ToolCall(ToolCall {
+            vec![ContentBlockOutput::ToolCall(ToolCall {
                 id: "call1".to_string(),
                 name: "test_function".to_string(),
                 arguments: "{}".to_string(),

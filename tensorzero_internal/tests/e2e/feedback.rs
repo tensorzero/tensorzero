@@ -2,7 +2,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
-    inference::types::{ContentBlockOutput, JsonInferenceOutput, Text},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text},
 };
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
@@ -228,7 +228,7 @@ async fn e2e_test_demonstration_feedback() {
     let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
     assert_eq!(retrieved_inference_id_uuid, inference_id);
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
-    let expected_value = serde_json::to_string(&json!(vec![ContentBlockOutput::Text(Text {
+    let expected_value = serde_json::to_string(&json!(vec![ContentBlockChatOutput::Text(Text {
         text: "do this!".to_string()
     })]))
     .unwrap();

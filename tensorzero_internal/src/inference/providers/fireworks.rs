@@ -14,7 +14,7 @@ use crate::{
     error::{Error, ErrorDetails},
     inference::types::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
-        ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+        ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation},
@@ -437,13 +437,13 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             }
             ))?
             .message;
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {

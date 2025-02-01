@@ -30,7 +30,7 @@ use crate::endpoints::inference::{
 use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    current_timestamp, ContentBlockChunk, ContentBlockOutput, Input, InputMessage,
+    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, Input, InputMessage,
     InputMessageContent, Role, Usage,
 };
 use crate::tool::{
@@ -540,18 +540,22 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
 // Takes a vector of ContentBlockOutput and returns a tuple of (Option<String>, Vec<OpenAICompatibleToolCall>).
 // This is useful since the OpenAI format separates text and tool calls in the response fields.
 fn process_chat_content(
-    content: Vec<ContentBlockOutput>,
+    content: Vec<ContentBlockChatOutput>,
 ) -> (Option<String>, Vec<OpenAICompatibleToolCall>) {
     let mut content_str: Option<String> = None;
     let mut tool_calls = Vec::new();
     for block in content {
         match block {
-            ContentBlockOutput::Text(text) => match content_str {
+            ContentBlockChatOutput::Text(text) => match content_str {
                 Some(ref mut content) => content.push_str(&text.text),
                 None => content_str = Some(text.text),
             },
-            ContentBlockOutput::ToolCall(tool_call) => {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
                 tool_calls.push(tool_call.into());
+            }
+            ContentBlockChatOutput::Thought(_thought) => {
+                // OpenAI compatible endpoint does not support thought blocks
+                // Users of this endpoint will need to check observability to see them
             }
         }
     }
@@ -966,17 +970,17 @@ mod tests {
     #[test]
     fn test_process_chat_content() {
         let content = vec![
-            ContentBlockOutput::Text(Text {
+            ContentBlockChatOutput::Text(Text {
                 text: "Hello".to_string(),
             }),
-            ContentBlockOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(ToolCallOutput {
                 arguments: None,
                 name: Some("test_tool".to_string()),
                 id: "1".to_string(),
                 raw_name: "test_tool".to_string(),
                 raw_arguments: "{}".to_string(),
             }),
-            ContentBlockOutput::Text(Text {
+            ContentBlockChatOutput::Text(Text {
                 text: ", world!".to_string(),
             }),
         ];
@@ -986,29 +990,29 @@ mod tests {
         assert_eq!(tool_calls[0].id, "1");
         assert_eq!(tool_calls[0].function.name, "test_tool");
         assert_eq!(tool_calls[0].function.arguments, "{}");
-        let content: Vec<ContentBlockOutput> = vec![];
+        let content: Vec<ContentBlockChatOutput> = vec![];
         let (content_str, tool_calls) = process_chat_content(content);
         assert_eq!(content_str, None);
         assert!(tool_calls.is_empty());
 
         let content = vec![
-            ContentBlockOutput::Text(Text {
+            ContentBlockChatOutput::Text(Text {
                 text: "First part".to_string(),
             }),
-            ContentBlockOutput::Text(Text {
+            ContentBlockChatOutput::Text(Text {
                 text: " second part".to_string(),
             }),
-            ContentBlockOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(ToolCallOutput {
                 arguments: None,
                 name: Some("middle_tool".to_string()),
                 id: "123".to_string(),
                 raw_name: "middle_tool".to_string(),
                 raw_arguments: "{\"key\": \"value\"}".to_string(),
             }),
-            ContentBlockOutput::Text(Text {
+            ContentBlockChatOutput::Text(Text {
                 text: " third part".to_string(),
             }),
-            ContentBlockOutput::Text(Text {
+            ContentBlockChatOutput::Text(Text {
                 text: " fourth part".to_string(),
             }),
         ];

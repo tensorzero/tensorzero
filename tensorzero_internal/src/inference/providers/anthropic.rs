@@ -20,8 +20,9 @@ use crate::inference::types::{
     Latency, ModelInferenceRequestJsonMode, Role, Text,
 };
 use crate::inference::types::{
-    ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
+    ContentBlockOutput, ModelInferenceRequest, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStream, RequestMessage, TextChunk,
+    Usage,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
@@ -447,12 +448,12 @@ enum AnthropicMessageContent<'a> {
     },
 }
 
-impl<'a> TryFrom<&'a ContentBlock> for AnthropicMessageContent<'a> {
+impl<'a> TryFrom<&'a ContentBlock> for Option<AnthropicMessageContent<'a>> {
     type Error = Error;
 
     fn try_from(block: &'a ContentBlock) -> Result<Self, Self::Error> {
         match block {
-            ContentBlock::Text(Text { text }) => Ok(AnthropicMessageContent::Text { text }),
+            ContentBlock::Text(Text { text }) => Ok(Some(AnthropicMessageContent::Text { text })),
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value (Anthropic expects an object)
                 let input: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
@@ -475,18 +476,21 @@ impl<'a> TryFrom<&'a ContentBlock> for AnthropicMessageContent<'a> {
                     }));
                 }
 
-                Ok(AnthropicMessageContent::ToolUse {
+                Ok(Some(AnthropicMessageContent::ToolUse {
                     id: &tool_call.id,
                     name: &tool_call.name,
                     input,
-                })
+                }))
             }
-            ContentBlock::ToolResult(tool_result) => Ok(AnthropicMessageContent::ToolResult {
-                tool_use_id: &tool_result.id,
-                content: vec![AnthropicMessageContent::Text {
-                    text: &tool_result.result,
-                }],
-            }),
+            ContentBlock::ToolResult(tool_result) => {
+                Ok(Some(AnthropicMessageContent::ToolResult {
+                    tool_use_id: &tool_result.id,
+                    content: vec![AnthropicMessageContent::Text {
+                        text: &tool_result.result,
+                    }],
+                }))
+            }
+            ContentBlock::Thought(_thought) => Ok(None),
         }
     }
 }
@@ -499,7 +503,6 @@ struct AnthropicMessage<'a> {
 
 impl<'a> TryFrom<&'a RequestMessage> for AnthropicMessage<'a> {
     type Error = Error;
-
     fn try_from(
         inference_message: &'a RequestMessage,
     ) -> Result<AnthropicMessage<'a>, Self::Error> {
@@ -507,7 +510,10 @@ impl<'a> TryFrom<&'a RequestMessage> for AnthropicMessage<'a> {
             .content
             .iter()
             .map(|block| block.try_into())
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<Option<AnthropicMessageContent>>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
 
         Ok(AnthropicMessage {
             role: inference_message.role.into(),
@@ -654,13 +660,13 @@ fn prefill_json_message(messages: Vec<AnthropicMessage>) -> Vec<AnthropicMessage
 }
 
 pub(crate) fn prefill_json_response(
-    content: Vec<ContentBlock>,
-) -> Result<Vec<ContentBlock>, Error> {
+    content: Vec<ContentBlockOutput>,
+) -> Result<Vec<ContentBlockOutput>, Error> {
     // Check if the content is a single text block
     if content.len() == 1 {
-        if let ContentBlock::Text(text) = &content[0] {
+        if let ContentBlockOutput::Text(text) = &content[0] {
             // If it's a single text block, add a "{" to the beginning
-            return Ok(vec![ContentBlock::Text(Text {
+            return Ok(vec![ContentBlockOutput::Text(Text {
                 text: format!("{{{}", text.text.trim()),
             })]);
         }
@@ -727,13 +733,13 @@ pub enum AnthropicContentBlock {
     },
 }
 
-impl TryFrom<AnthropicContentBlock> for ContentBlock {
+impl TryFrom<AnthropicContentBlock> for ContentBlockOutput {
     type Error = Error;
     fn try_from(block: AnthropicContentBlock) -> Result<Self, Self::Error> {
         match block {
             AnthropicContentBlock::Text { text } => Ok(text.into()),
             AnthropicContentBlock::ToolUse { id, name, input } => {
-                Ok(ContentBlock::ToolCall(ToolCall {
+                Ok(ContentBlockOutput::ToolCall(ToolCall {
                     id,
                     name,
                     arguments: serde_json::to_string(&input).map_err(|e| {
@@ -813,7 +819,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             })
         })?;
 
-        let output: Vec<ContentBlock> = response
+        let output: Vec<ContentBlockOutput> = response
             .content
             .into_iter()
             .map(|block| block.try_into())
@@ -1169,9 +1175,11 @@ mod tests {
 
     #[test]
     fn test_try_from_content_block() {
-        let text_content_block = "test".to_string().into();
+        let text_content_block: ContentBlock = "test".to_string().into();
         let anthropic_content_block =
-            AnthropicMessageContent::try_from(&text_content_block).unwrap();
+            Option::<AnthropicMessageContent>::try_from(&text_content_block)
+                .unwrap()
+                .unwrap();
         assert_eq!(
             anthropic_content_block,
             AnthropicMessageContent::Text { text: "test" }
@@ -1183,7 +1191,9 @@ mod tests {
             arguments: serde_json::to_string(&json!({"type": "string"})).unwrap(),
         });
         let anthropic_content_block =
-            AnthropicMessageContent::try_from(&tool_call_content_block).unwrap();
+            Option::<AnthropicMessageContent>::try_from(&tool_call_content_block)
+                .unwrap()
+                .unwrap();
         assert_eq!(
             anthropic_content_block,
             AnthropicMessageContent::ToolUse {
@@ -1834,7 +1844,7 @@ mod tests {
         assert!(inference_response.output.len() == 1);
         assert_eq!(
             inference_response.output[0],
-            ContentBlock::ToolCall(ToolCall {
+            ContentBlockOutput::ToolCall(ToolCall {
                 id: "tool_call_1".to_string(),
                 name: "get_temperature".to_string(),
                 arguments: r#"{"location":"New York"}"#.to_string(),
@@ -1904,7 +1914,7 @@ mod tests {
         assert!(inference_response.output.len() == 2);
         assert_eq!(
             inference_response.output[1],
-            ContentBlock::ToolCall(ToolCall {
+            ContentBlockOutput::ToolCall(ToolCall {
                 id: "tool_call_2".to_string(),
                 name: "get_temperature".to_string(),
                 arguments: r#"{"location":"London"}"#.to_string(),
@@ -2277,24 +2287,24 @@ mod tests {
     #[test]
     fn test_prefill_json_response() {
         // Test case 1: Single text block
-        let input = vec![ContentBlock::Text(Text {
+        let input = vec![ContentBlockOutput::Text(Text {
             text: "  \"key\": \"value\"}".to_string(),
         })];
         let result = prefill_json_response(input).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(
             result[0],
-            ContentBlock::Text(Text {
+            ContentBlockOutput::Text(Text {
                 text: "{\"key\": \"value\"}".to_string(),
             })
         );
 
         // Test case 2: Multiple blocks
         let input = vec![
-            ContentBlock::Text(Text {
+            ContentBlockOutput::Text(Text {
                 text: "Block 1".to_string(),
             }),
-            ContentBlock::Text(Text {
+            ContentBlockOutput::Text(Text {
                 text: "Block 2".to_string(),
             }),
         ];
@@ -2307,7 +2317,7 @@ mod tests {
         assert_eq!(result, input);
 
         // Test case 4: Non-text block
-        let input = vec![ContentBlock::ToolCall(ToolCall {
+        let input = vec![ContentBlockOutput::ToolCall(ToolCall {
             id: "1".to_string(),
             name: "test_tool".to_string(),
             arguments: "{}".to_string(),

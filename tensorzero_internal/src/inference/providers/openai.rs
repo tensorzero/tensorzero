@@ -27,9 +27,9 @@ use crate::inference::types::batch::{
 };
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
-    RequestMessage, Role, Text, TextChunk, Usage,
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStream, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -1024,6 +1024,10 @@ pub(super) fn tensorzero_to_openai_messages(
                 });
                 messages.push(message);
             }
+            ContentBlock::Thought(_thought) => {
+                // TODO (Viraj): open an issue for this
+                // For now, we don't input thoughts to OpenAI models
+            }
         }
     }
 
@@ -1466,13 +1470,13 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
@@ -1807,13 +1811,13 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
             .message;
 
         // Convert message content to ContentBlocks
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
 
@@ -2449,7 +2453,7 @@ mod tests {
         let inference_response = result.unwrap();
         assert_eq!(
             inference_response.output,
-            vec![ContentBlock::ToolCall(ToolCall {
+            vec![ContentBlockOutput::ToolCall(ToolCall {
                 id: "call1".to_string(),
                 name: "test_function".to_string(),
                 arguments: "{}".to_string(),

@@ -26,8 +26,8 @@ use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    collect_chunks, ChatInferenceDatabaseInsert, CollectChunksArgs, ContentBlockChunk,
-    ContentBlockOutput, InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
+    collect_chunks, ChatInferenceDatabaseInsert, CollectChunksArgs, ContentBlockChatOutput,
+    ContentBlockChunk, InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
     JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
     RequestMessage, Usage,
 };
@@ -637,7 +637,7 @@ pub struct ChatInferenceResponse {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
     pub variant_name: String,
-    pub content: Vec<ContentBlockOutput>,
+    pub content: Vec<ContentBlockChatOutput>,
     pub usage: Usage,
 }
 

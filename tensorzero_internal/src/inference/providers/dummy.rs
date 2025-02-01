@@ -16,9 +16,9 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, current_timestamp, ContentBlock, ContentBlockChunk,
-    Latency, ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStream, Usage,
+    batch::StartBatchProviderInferenceResponse, current_timestamp, ContentBlockChunk,
+    ContentBlockOutput, Latency, ModelInferenceRequest, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStream, Usage,
 };
 use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk};
@@ -205,13 +205,13 @@ impl InferenceProvider for DummyProvider {
         let id = Uuid::now_v7();
         let created = current_timestamp();
         let content = match self.model_name.as_str() {
-            "tool" => vec![ContentBlock::ToolCall(ToolCall {
+            "tool" => vec![ContentBlockOutput::ToolCall(ToolCall {
                 name: "get_temperature".to_string(),
                 #[allow(clippy::unwrap_used)]
                 arguments: serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
                 id: "0".to_string(),
             })],
-            "bad_tool" => vec![ContentBlock::ToolCall(ToolCall {
+            "bad_tool" => vec![ContentBlockOutput::ToolCall(ToolCall {
                 name: "get_temperature".to_string(),
                 #[allow(clippy::unwrap_used)]
                 arguments: serde_json::to_string(&*DUMMY_BAD_TOOL_RESPONSE).unwrap(),

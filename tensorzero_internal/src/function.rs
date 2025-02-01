@@ -9,7 +9,7 @@ use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
-    ChatInferenceResult, ContentBlock, InferenceResult, Input, InputMessageContent,
+    ChatInferenceResult, ContentBlockOutput, InferenceResult, Input, InputMessageContent,
     JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, Usage,
 };
 use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
@@ -149,7 +149,7 @@ impl FunctionConfig {
     pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
-        content_blocks: Vec<ContentBlock>,
+        content_blocks: Vec<ContentBlockOutput>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         inference_config: &'request InferenceConfig<'a, 'request>,
@@ -175,8 +175,8 @@ impl FunctionConfig {
                     .into_iter()
                     .rev()
                     .find_map(|content_block| match content_block {
-                        ContentBlock::Text(text) => Some(text.text),
-                        ContentBlock::ToolCall(tool_call) => Some(tool_call.arguments),
+                        ContentBlockOutput::Text(text) => Some(text.text),
+                        ContentBlockOutput::ToolCall(tool_call) => Some(tool_call.arguments),
                         _ => None,
                     })
                     .ok_or_else(|| {
@@ -1443,7 +1443,7 @@ mod tests {
             name: "tool_call_name".to_string(),
             arguments: "tool_call_arguments".to_string(),
         };
-        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 10,
@@ -1494,7 +1494,7 @@ mod tests {
             name: "tool_call_name".to_string(),
             arguments: r#"{"name": "Jerry", "age": 30}"#.to_string(),
         };
-        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 10,
@@ -1701,7 +1701,7 @@ mod tests {
             name: "tool_call_name".to_string(),
             arguments: "tool_call_arguments".to_string(),
         };
-        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 10,
@@ -1752,7 +1752,7 @@ mod tests {
             name: "tool_call_name".to_string(),
             arguments: r#"{"answer": "42"}"#.to_string(),
         };
-        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 10,
