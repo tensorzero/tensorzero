@@ -38,7 +38,7 @@ export default function BasicInfo({ inference }: BasicInfoProps) {
                 <Code>{inference.variant_name}</Code>
               </Link>
             </dd>
-            <Badge variant="outline" className="ml-2 bg-blue-200">
+            <Badge variant="outline" className="bg-blue-200">
               {variantType}
             </Badge>
           </div>
