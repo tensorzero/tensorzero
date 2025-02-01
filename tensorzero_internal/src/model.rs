@@ -1,4 +1,3 @@
-use lazy_static::lazy_static;
 use reqwest::Client;
 use secrecy::SecretString;
 use serde::de::Error as SerdeError;
@@ -10,6 +9,8 @@ use strum::VariantNames;
 use tracing::{span, warn, Instrument, Level};
 use url::Url;
 
+use crate::cache::{cache_lookup, start_cache_write, ModelProviderRequest};
+use crate::endpoints::inference::InferenceClients;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
@@ -21,6 +22,7 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
+use crate::model_table::{BaseModelTable, ShorthandModelConfig};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -52,28 +54,61 @@ impl ModelConfig {
     pub async fn infer<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
-        client: &'request Client,
-        api_keys: &'request InferenceCredentials,
+        clients: &'request InferenceClients<'request>,
+        model_name: &'request str,
     ) -> Result<ModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
+            // TODO: think about how to best handle errors here
+            if clients.cache_options.enabled.read() {
+                let cache_lookup = cache_lookup(
+                    clients.clickhouse_connection_info,
+                    ModelProviderRequest {
+                        request,
+                        model_name,
+                        provider_name,
+                    },
+                    clients.cache_options.max_age_s,
+                )
+                .await
+                .ok()
+                .flatten();
+                if let Some(cache_lookup) = cache_lookup {
+                    return Ok(cache_lookup);
+                }
+            }
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
                     provider_name: provider_name.to_string(),
                 })
             })?;
             let response = provider_config
-                .infer(request, client, api_keys)
+                .infer(request, clients.http_client, clients.credentials)
                 .instrument(span!(
                     Level::INFO,
                     "infer",
                     provider_name = &**provider_name
                 ))
                 .await;
+
             match response {
                 Ok(response) => {
+                    if clients.cache_options.enabled.write() {
+                        let _ = start_cache_write(
+                            clients.clickhouse_connection_info,
+                            ModelProviderRequest {
+                                request,
+                                model_name,
+                                provider_name,
+                            },
+                            &response.output,
+                            &response.raw_request,
+                            &response.raw_response,
+                        );
+                    }
                     let model_inference_response =
                         ModelInferenceResponse::new(response, provider_name.clone());
+
                     return Ok(model_inference_response);
                 }
                 Err(error) => {
@@ -129,12 +164,12 @@ impl ModelConfig {
         }))
     }
 
-    pub async fn start_batch_inference<'a, 'request>(
-        &'a self,
+    pub async fn start_batch_inference<'request>(
+        &self,
         requests: &'request [ModelInferenceRequest<'request>],
         client: &'request Client,
         api_keys: &'request InferenceCredentials,
-    ) -> Result<StartBatchModelInferenceResponse<'a>, Error> {
+    ) -> Result<StartBatchModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
@@ -154,7 +189,7 @@ impl ModelConfig {
                 Ok(response) => {
                     return Ok(StartBatchModelInferenceResponse::new(
                         response,
-                        provider_name,
+                        provider_name.clone(),
                     ));
                 }
                 Err(error) => {
@@ -165,55 +200,6 @@ impl ModelConfig {
         Err(Error::new(ErrorDetails::ModelProvidersExhausted {
             provider_errors,
         }))
-    }
-
-    pub fn validate(&self, model_name: &str) -> Result<(), Error> {
-        // Ensure that the model has at least one provider
-        if self.routing.is_empty() {
-            return Err(ErrorDetails::Config {
-                message: format!("`models.{model_name}`: `routing` must not be empty"),
-            }
-            .into());
-        }
-
-        // Ensure that routing entries are unique and exist as keys in providers
-        let mut seen_providers = std::collections::HashSet::new();
-        for provider in &self.routing {
-            if provider.starts_with("tensorzero::") {
-                return Err(ErrorDetails::Config {
-                    message: format!("`models.{model_name}.routing`: Provider name cannot start with 'tensorzero::': {provider}"),
-                }
-                .into());
-            }
-            if !seen_providers.insert(provider) {
-                return Err(ErrorDetails::Config {
-                    message: format!("`models.{model_name}.routing`: duplicate entry `{provider}`"),
-                }
-                .into());
-            }
-
-            if !self.providers.contains_key(provider) {
-                return Err(ErrorDetails::Config {
-            message: format!(
-                "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
-            ),
-        }
-        .into());
-            }
-        }
-
-        // Validate each provider
-        for provider_name in self.providers.keys() {
-            if !seen_providers.contains(provider_name) {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                "`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"
-            ),
-                }
-                .into());
-            }
-        }
-        Ok(())
     }
 }
 
@@ -248,7 +234,7 @@ pub enum ProviderConfig {
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
-enum ProviderConfigHelper {
+pub(super) enum ProviderConfigHelper {
     Anthropic {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
@@ -994,17 +980,6 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
     }
 }
 
-lazy_static! {
-    static ref RESERVED_MODEL_PREFIXES: Vec<String> = {
-        let mut prefixes: Vec<String> = ProviderConfigHelper::VARIANTS
-            .iter()
-            .map(|&v| format!("{}::", v))
-            .collect();
-        prefixes.push("tensorzero::".to_string());
-        prefixes
-    };
-}
-
 const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "anthropic::",
     "fireworks::",
@@ -1018,125 +993,112 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "dummy::",
 ];
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(try_from = "HashMap<Arc<str>, ModelConfig>")]
-pub struct ModelTable(HashMap<Arc<str>, ModelConfig>);
+pub type ModelTable = BaseModelTable<ModelConfig>;
 
-impl TryFrom<HashMap<Arc<str>, ModelConfig>> for ModelTable {
-    type Error = String;
-
-    fn try_from(map: HashMap<Arc<str>, ModelConfig>) -> Result<Self, Self::Error> {
-        for key in map.keys() {
-            if RESERVED_MODEL_PREFIXES
-                .iter()
-                .any(|name| key.starts_with(name))
-            {
-                return Err(format!("Model name '{}' contains a reserved prefix", key));
-            }
-        }
-        Ok(ModelTable(map))
-    }
-}
-
-impl std::ops::Deref for ModelTable {
-    type Target = HashMap<Arc<str>, ModelConfig>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl ModelTable {
-    /// Check that a model name is valid
-    /// This is either true because it's in the table, or because it's a valid shorthand name
-    /// In the latter case, we actually create a new model config in the table corresponding to the shorthand
-    pub fn validate_or_create(&mut self, key: &str) -> Result<(), Error> {
-        // Try direct lookup (if it's blacklisted, it's not in the table)
-        // If it's shorthand and already in the table, it's valid
-        if let Some(model_config) = self.0.get(key) {
-            model_config.validate(key)?;
-            return Ok(());
-        }
-
-        // Try matching shorthand prefixes
-        if let Some(prefix) = SHORTHAND_MODEL_PREFIXES
-            .iter()
-            .find(|&&prefix| key.starts_with(prefix))
-        {
-            let model_name = match key.strip_prefix(prefix) {
-                Some(name) => name,
-                None => {
-                    return Err(ErrorDetails::Config {
-                        message: format!(
-                            "Failed to strip prefix '{}' from model name '{}' This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/issues/new",
-                            prefix, key
-                        ),
-                    }
-                    .into());
+impl ShorthandModelConfig for ModelConfig {
+    const SHORTHAND_MODEL_PREFIXES: &[&str] = SHORTHAND_MODEL_PREFIXES;
+    const MODEL_TYPE: &str = "Model";
+    fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
+        let model_name = model_name.to_string();
+        let provider_config = match provider_type {
+            "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
+            "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(model_name, None)?),
+            "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(model_name, None)?),
+            "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
+                GoogleAIStudioGeminiProvider::new(model_name, None)?,
+            ),
+            "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
+            "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
+            "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
+            "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
+            "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
+            _ => {
+                return Err(ErrorDetails::Config {
+                    message: format!("Invalid provider type: {}", provider_type),
                 }
-            };
-            // Remove the last two characters of the prefix to get the provider type
-            let provider_type = &prefix[..prefix.len() - 2];
-            let model_config = model_config_from_shorthand(provider_type, model_name)?;
-            model_config.validate(key)?;
-            self.0.insert(key.into(), model_config);
-            return Ok(());
-        }
-
-        Err(ErrorDetails::Config {
-            message: format!("Model name '{}' not found in model table", key),
-        }
-        .into())
+                .into());
+            }
+        };
+        Ok(ModelConfig {
+            routing: vec![provider_type.to_string().into()],
+            providers: HashMap::from([(provider_type.to_string().into(), provider_config)]),
+        })
     }
-}
 
-fn model_config_from_shorthand(
-    provider_type: &str,
-    model_name: &str,
-) -> Result<ModelConfig, Error> {
-    let model_name = model_name.to_string();
-    let provider_config = match provider_type {
-        "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
-        "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(model_name, None)?),
-        "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
-            GoogleAIStudioGeminiProvider::new(model_name, None)?,
-        ),
-        "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
-        "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
-        "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
-        "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
-        "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
-        "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(model_name, None)?),
-        #[cfg(any(test, feature = "e2e_tests"))]
-        "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
-        _ => {
+    fn validate(&self, model_name: &str) -> Result<(), Error> {
+        // Ensure that the model has at least one provider
+        if self.routing.is_empty() {
             return Err(ErrorDetails::Config {
-                message: format!("Invalid provider type: {}", provider_type),
+                message: format!("`models.{model_name}`: `routing` must not be empty"),
             }
             .into());
         }
-    };
-    Ok(ModelConfig {
-        routing: vec![provider_type.to_string().into()],
-        providers: HashMap::from([(provider_type.to_string().into(), provider_config)]),
-    })
+
+        // Ensure that routing entries are unique and exist as keys in providers
+        let mut seen_providers = std::collections::HashSet::new();
+        for provider in &self.routing {
+            if provider.starts_with("tensorzero::") {
+                return Err(ErrorDetails::Config {
+                    message: format!("`models.{model_name}.routing`: Provider name cannot start with 'tensorzero::': {provider}"),
+                }
+                .into());
+            }
+            if !seen_providers.insert(provider) {
+                return Err(ErrorDetails::Config {
+                    message: format!("`models.{model_name}.routing`: duplicate entry `{provider}`"),
+                }
+                .into());
+            }
+
+            if !self.providers.contains_key(provider) {
+                return Err(ErrorDetails::Config {
+            message: format!(
+                "`models.{model_name}`: `routing` contains entry `{provider}` that does not exist in `providers`"
+            ),
+        }
+        .into());
+            }
+        }
+
+        // Validate each provider
+        for provider_name in self.providers.keys() {
+            if !seen_providers.contains(provider_name) {
+                return Err(ErrorDetails::Config {
+                    message: format!(
+                "`models.{model_name}`: Provider `{provider_name}` is not listed in `routing`"
+            ),
+                }
+                .into());
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::{borrow::Cow, cell::Cell};
 
-    use crate::inference::{
-        providers::dummy::{
-            DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
-            DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
-        },
-        types::{ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk},
-    };
+    use crate::cache::CacheEnabledMode;
     use crate::tool::{ToolCallConfig, ToolChoice};
+    use crate::{
+        cache::CacheOptions,
+        clickhouse::ClickHouseConnectionInfo,
+        inference::{
+            providers::dummy::{
+                DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
+                DUMMY_INFER_USAGE, DUMMY_STREAMING_RESPONSE,
+            },
+            types::{ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk},
+        },
+        model_table::RESERVED_MODEL_PREFIXES,
+    };
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
     use tracing_test::traced_test;
+    use uuid::Uuid;
 
     use super::*;
 
@@ -1160,9 +1122,21 @@ mod tests {
             parallel_tool_calls: false,
         };
         let api_keys = InferenceCredentials::default();
+        let http_client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+        };
 
         // Try inferring the good model only
         let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: Some(Cow::Borrowed(&tool_config)),
@@ -1177,8 +1151,9 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
+        let model_name = "test model";
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap();
         let content = response.output;
@@ -1198,7 +1173,7 @@ mod tests {
             providers: HashMap::from([("error".into(), bad_provider_config)]),
         };
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap_err();
         assert_eq!(
@@ -1234,8 +1209,20 @@ mod tests {
             credentials: DummyCredentials::None,
         });
         let api_keys = InferenceCredentials::default();
+        let http_client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+        };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: None,
@@ -1262,8 +1249,9 @@ mod tests {
             ]),
         };
 
+        let model_name = "test model";
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap();
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
@@ -1292,6 +1280,7 @@ mod tests {
         });
         let api_keys = InferenceCredentials::default();
         let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: None,
@@ -1394,6 +1383,7 @@ mod tests {
         });
         let api_keys = InferenceCredentials::default();
         let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: None,
@@ -1413,8 +1403,8 @@ mod tests {
         let model_config = ModelConfig {
             routing: vec!["error_provider".into(), "good_provider".into()],
             providers: HashMap::from([
-                ("error_provider".into(), bad_provider_config),
-                ("good_provider".into(), good_provider_config),
+                ("error_provider".to_string().into(), bad_provider_config),
+                ("good_provider".to_string().into(), good_provider_config),
             ]),
         };
         let (initial_chunk, stream, raw_request, model_provider_name) = model_config
@@ -1469,8 +1459,20 @@ mod tests {
             parallel_tool_calls: false,
         };
         let api_keys = InferenceCredentials::default();
+        let http_client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+        };
 
         let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: Some(Cow::Borrowed(&tool_config)),
@@ -1485,8 +1487,9 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
+        let model_name = "test model";
         let error = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap_err();
         assert_eq!(
@@ -1507,8 +1510,17 @@ mod tests {
             "TEST_KEY".to_string(),
             SecretString::from("notgoodkey".to_string()),
         )]);
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+        };
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap_err();
         assert_eq!(
@@ -1543,9 +1555,21 @@ mod tests {
             parallel_tool_calls: false,
         };
         let api_keys = InferenceCredentials::default();
+        let http_client = Client::new();
+        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+        };
 
         let request = ModelInferenceRequest {
             messages: vec![],
+            inference_id: Uuid::now_v7(),
             system: None,
             tool_config: Some(Cow::Borrowed(&tool_config)),
             temperature: None,
@@ -1560,7 +1584,7 @@ mod tests {
             output_schema: None,
         };
         let error = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap_err();
         assert_eq!(
@@ -1581,8 +1605,17 @@ mod tests {
             "TEST_KEY".to_string(),
             SecretString::from("good_key".to_string()),
         )]);
+        let clients = InferenceClients {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
+        };
         let response = model_config
-            .infer(&request, &Client::new(), &api_keys)
+            .infer(&request, &clients, model_name)
             .await
             .unwrap();
         assert_eq!(
@@ -1593,22 +1626,15 @@ mod tests {
 
     #[test]
     fn test_validate_or_create_model_config() {
-        let mut model_table = ModelTable::default();
+        let model_table = ModelTable::default();
         // Test that we can get or create a model config
-        model_table.validate_or_create("dummy::gpt-4o").unwrap();
-        assert_eq!(model_table.len(), 1);
-        let model_config = model_table.get("dummy::gpt-4o").unwrap();
-        assert_eq!(model_config.routing, vec!["dummy".into()]);
-        let provider_config = model_config.providers.get("dummy").unwrap();
-        match provider_config {
-            ProviderConfig::Dummy(provider) => assert_eq!(&*provider.model_name, "gpt-4o"),
-            _ => panic!("Expected Dummy provider"),
-        }
-
-        // Test that it is idempotent
-        model_table.validate_or_create("dummy::gpt-4o").unwrap();
-        assert_eq!(model_table.len(), 1);
-        let model_config = model_table.get("dummy::gpt-4o").unwrap();
+        model_table.validate("dummy::gpt-4o").unwrap();
+        // Shorthand models are not added to the model table
+        assert_eq!(model_table.static_model_len(), 0);
+        let model_config = model_table
+            .get("dummy::gpt-4o")
+            .unwrap()
+            .expect("Missing dummy model");
         assert_eq!(model_config.routing, vec!["dummy".into()]);
         let provider_config = model_config.providers.get("dummy").unwrap();
         match provider_config {
@@ -1617,7 +1643,7 @@ mod tests {
         }
 
         // Test that it fails if the model is not well-formed
-        let model_config = model_table.validate_or_create("foo::bar");
+        let model_config = model_table.validate("foo::bar");
         assert!(model_config.is_err());
         assert_eq!(
             model_config.unwrap_err(),
@@ -1633,12 +1659,11 @@ mod tests {
             routing: vec!["anthropic".into()],
             providers: HashMap::from([("anthropic".into(), anthropic_provider_config)]),
         };
-        let mut model_table: ModelTable =
-            HashMap::from([("claude".into(), anthropic_model_config)])
-                .try_into()
-                .unwrap();
+        let model_table: ModelTable = HashMap::from([("claude".into(), anthropic_model_config)])
+            .try_into()
+            .unwrap();
 
-        model_table.validate_or_create("dummy::claude").unwrap();
+        model_table.validate("dummy::claude").unwrap();
     }
 
     #[test]

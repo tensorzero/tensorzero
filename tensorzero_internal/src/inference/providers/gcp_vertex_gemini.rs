@@ -409,7 +409,6 @@ fn stream_gcp_vertex_gemini(
     start_time: Instant,
 ) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     async_stream::stream! {
-        let inference_id = Uuid::now_v7();
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -445,7 +444,7 @@ fn stream_gcp_vertex_gemini(
                         let response = GCPVertexGeminiStreamResponseWithMetadata {
                             response: data,
                             latency: start_time.elapsed(),
-                            inference_id,
+
                         }.try_into();
                         yield response
                     }
@@ -1032,17 +1031,12 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
 struct GCPVertexGeminiStreamResponseWithMetadata {
     response: GCPVertexGeminiResponse,
     latency: Duration,
-    inference_id: Uuid,
 }
 
 impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceResponseChunk {
     type Error = Error;
     fn try_from(response: GCPVertexGeminiStreamResponseWithMetadata) -> Result<Self, Self::Error> {
-        let GCPVertexGeminiStreamResponseWithMetadata {
-            response,
-            latency,
-            inference_id,
-        } = response;
+        let GCPVertexGeminiStreamResponseWithMetadata { response, latency } = response;
 
         let raw = serde_json::to_string(&response).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -1073,7 +1067,6 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceRes
             _ => true,
         });
         Ok(ProviderInferenceResponseChunk::new(
-            inference_id,
             content,
             response
                 .usage_metadata
@@ -1338,6 +1331,7 @@ mod tests {
             parallel_tool_calls: false,
         };
         let inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: Some(Cow::Borrowed(&tool_config)),
@@ -1373,6 +1367,7 @@ mod tests {
             },
         ];
         let inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: messages.clone(),
             system: Some("test_system".to_string()),
             tool_config: Some(Cow::Borrowed(&tool_config)),
@@ -1421,6 +1416,7 @@ mod tests {
         ];
         let output_schema = serde_json::json!({});
         let inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: messages.clone(),
             system: Some("test_system".to_string()),
             tool_config: Some(Cow::Borrowed(&tool_config)),
@@ -1486,6 +1482,7 @@ mod tests {
         );
 
         let inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: messages.clone(),
             system: Some("test_system".to_string()),
             tool_config: Some(Cow::Borrowed(&tool_config)),
@@ -1582,6 +1579,7 @@ mod tests {
             response_time: Duration::from_secs(1),
         };
         let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: Some("test_system".to_string()),
             tool_config: None,
@@ -1654,6 +1652,7 @@ mod tests {
             response_time: Duration::from_secs(2),
         };
         let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["test_user".to_string().into()],
@@ -1816,6 +1815,7 @@ mod tests {
     #[test]
     fn test_prepare_tools() {
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -1857,6 +1857,7 @@ mod tests {
             }
         }
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],

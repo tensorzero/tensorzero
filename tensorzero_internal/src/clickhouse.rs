@@ -159,7 +159,7 @@ impl ClickHouseConnectionInfo {
                 {
                     Ok(_) => Ok(()),
                     Err(e) => Err(ErrorDetails::ClickHouseConnection {
-                        message: format!("ClickHouse is not healthy: {}", e),
+                        message: format!("ClickHouse is not healthy: {e:?}"),
                     }
                     .into()),
                 }
@@ -167,7 +167,11 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn run_query(&self, query: String) -> Result<String, Error> {
+    pub async fn run_query(
+        &self,
+        query: String,
+        parameters: Option<&HashMap<&str, &str>>,
+    ) -> Result<String, Error> {
         match self {
             Self::Disabled => Ok("".to_string()),
             Self::Mock { .. } => Ok("".to_string()),
@@ -176,7 +180,16 @@ impl ClickHouseConnectionInfo {
                 client,
                 ..
             } => {
-                let database_url = database_url.expose_secret();
+                let mut database_url = Url::parse(database_url.expose_secret()).map_err(|e| Error::new(ErrorDetails::ClickHouseQuery { message: format!("Error parsing ClickHouse URL: {e}. This should never happen. Please submit a bug report at https://github.com/tensorzero/tensorzero/issues/new") }))?;
+                // Add query parameters if provided
+                if let Some(params) = parameters {
+                    for (key, value) in params {
+                        let param_key = format!("param_{}", key);
+                        database_url
+                            .query_pairs_mut()
+                            .append_pair(&param_key, value);
+                    }
+                }
                 let response = client
                     .post(database_url)
                     .body(query)
@@ -187,7 +200,6 @@ impl ClickHouseConnectionInfo {
                             message: e.to_string(),
                         })
                     })?;
-
                 let status = response.status();
 
                 let response_body = response.text().await.map_err(|e| {
@@ -319,7 +331,7 @@ async fn write_production(
         .await
         .map_err(|e| {
             Error::new(ErrorDetails::ClickHouseQuery {
-                message: e.to_string(),
+                message: format!("{e:?}"),
             })
         })?;
 
@@ -335,9 +347,8 @@ async fn write_production(
 }
 
 fn set_clickhouse_format_settings(database_url: &mut Url) {
-    const OVERRIDDEN_SETTINGS: [&str; 3] = [
+    const OVERRIDDEN_SETTINGS: [&str; 2] = [
         "input_format_skip_unknown_fields",
-        "input_format_defaults_for_omitted_fields",
         "input_format_null_as_default",
     ];
 
@@ -376,14 +387,14 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
                     url.scheme()
                 ),
             }
-            .into())
+            .into());
         }
         _ => {
             return Err(ErrorDetails::Config {
                 message: format!(
                 "Invalid scheme in ClickHouse URL: '{}'. Only 'http' and 'https' are supported.",
-                    url.scheme()
-                ),
+                url.scheme()
+            ),
             }
             .into())
         }
@@ -448,11 +459,11 @@ mod tests {
     fn test_set_clickhouse_format_settings() {
         let mut database_url = Url::parse("http://localhost:8123/").unwrap();
         set_clickhouse_format_settings(&mut database_url);
-        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_defaults_for_omitted_fields=0&input_format_null_as_default=0");
+        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_null_as_default=0");
 
         let mut database_url = Url::parse("http://localhost:8123/?input_format_skip_unknown_fields=1&input_format_defaults_for_omitted_fields=1&input_format_null_as_default=1").unwrap();
         set_clickhouse_format_settings(&mut database_url);
-        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_defaults_for_omitted_fields=0&input_format_null_as_default=0");
+        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_defaults_for_omitted_fields=1&input_format_skip_unknown_fields=0&input_format_null_as_default=0");
     }
 
     #[test]

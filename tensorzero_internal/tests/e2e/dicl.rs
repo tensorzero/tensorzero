@@ -23,12 +23,23 @@ use crate::common::{
 };
 
 #[tokio::test]
-pub async fn test_dicl_inference_request_no_examples() {
+pub async fn test_dicl_inference_request_no_examples_empty_dicl() {
+    test_dicl_inference_request_no_examples("empty_dicl").await;
+}
+
+// This model is identical to `empty_dicl`, but it specified the embedding model
+// using shorthand
+#[tokio::test]
+pub async fn test_dicl_inference_request_no_examples_empty_dicl_shorthand() {
+    test_dicl_inference_request_no_examples("empty_dicl_shorthand").await;
+}
+
+pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
         "function_name": "basic_test",
-        "variant_name": "empty_dicl",
+        "variant_name": dicl_variant_name,
         "episode_id": episode_id,
         "input":
             {
@@ -63,7 +74,7 @@ pub async fn test_dicl_inference_request_no_examples() {
     assert_eq!(episode_id_response, episode_id);
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "empty_dicl");
+    assert_eq!(variant_name, dicl_variant_name);
 
     let content = response_json.get("content").unwrap().as_array().unwrap();
     assert_eq!(content.len(), 1);
@@ -98,7 +109,7 @@ pub async fn test_dicl_inference_request_no_examples() {
     assert_eq!(function_name, payload["function_name"]);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "empty_dicl");
+    assert_eq!(variant_name, dicl_variant_name);
 
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
@@ -173,7 +184,7 @@ pub async fn test_dicl_inference_request_no_examples() {
                     .unwrap();
                 assert!(raw_response.to_lowercase().contains("tokyo"));
             }
-            "text-embedding-3-small" => {
+            "openai::text-embedding-3-small" | "text-embedding-3-small" => {
                 // The embedding call should not generate any output tokens
                 assert_eq!(
                     model_inference
@@ -279,7 +290,7 @@ async fn embed_insert_example(
         serde_json::to_string(&row).unwrap()
     );
 
-    clickhouse.run_query(query).await.unwrap();
+    clickhouse.run_query(query, None).await.unwrap();
 }
 
 /// Testing a DICL variant
@@ -295,7 +306,7 @@ pub async fn test_dicl_inference_request() {
         "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{}' AND variant_name = '{}'",
             function_name, variant_name
         );
-    clickhouse.run_query(delete_query).await.unwrap();
+    clickhouse.run_query(delete_query, None).await.unwrap();
 
     // Insert examples into the database
     let mut tasks = Vec::new();
@@ -877,7 +888,7 @@ async fn test_dicl_json_request() {
         "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{}' AND variant_name = '{}'",
             function_name, variant_name
         );
-    clickhouse.run_query(delete_query).await.unwrap();
+    clickhouse.run_query(delete_query, None).await.unwrap();
 
     // Insert examples into the database
     let mut tasks = Vec::new();

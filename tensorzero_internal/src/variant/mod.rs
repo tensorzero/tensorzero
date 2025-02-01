@@ -4,14 +4,14 @@ use futures::StreamExt;
 use itertools::izip;
 use serde::Deserialize;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
+use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::Error;
 use crate::error::ErrorDetails;
@@ -54,7 +54,7 @@ pub enum JsonMode {
     ImplicitTool,
 }
 
-/// Maps to the subset of Config that applies to the current inference request.
+/// Configuration that applies to the current inference request.
 #[derive(Debug)]
 pub struct InferenceConfig<'a, 'request> {
     pub tool_config: Option<&'request ToolCallConfig>,
@@ -62,6 +62,7 @@ pub struct InferenceConfig<'a, 'request> {
     pub dynamic_output_schema: Option<&'request DynamicJSONSchema>,
     pub function_name: &'request str,
     pub variant_name: Option<&'request str>,
+    pub ids: InferenceIds,
 }
 
 /// Maps to the subset of Config that applies to the current inference request.
@@ -74,18 +75,30 @@ pub struct BatchInferenceConfig<'a> {
     pub variant_name: Option<&'a str>,
 }
 impl<'a> BatchInferenceConfig<'a> {
-    pub fn inference_configs(&'a self) -> Vec<InferenceConfig<'a, 'a>> {
+    pub fn inference_configs(
+        &'a self,
+        episode_ids: &[Uuid],
+        inference_ids: &[Uuid],
+    ) -> Vec<InferenceConfig<'a, 'a>> {
         izip!(
             self.tool_configs.iter().map(|x| x.as_ref()),
-            self.dynamic_output_schemas.iter().map(|x| x.as_ref())
+            self.dynamic_output_schemas.iter().map(|x| x.as_ref()),
+            episode_ids.iter(),
+            inference_ids.iter()
         )
-        .map(|(tool_config, dynamic_output_schema)| InferenceConfig {
-            templates: self.templates,
-            tool_config,
-            dynamic_output_schema,
-            function_name: self.function_name,
-            variant_name: self.variant_name,
-        })
+        .map(
+            |(tool_config, dynamic_output_schema, episode_id, inference_id)| InferenceConfig {
+                templates: self.templates,
+                tool_config,
+                dynamic_output_schema,
+                function_name: self.function_name,
+                variant_name: self.variant_name,
+                ids: InferenceIds {
+                    inference_id: *inference_id,
+                    episode_id: *episode_id,
+                },
+            },
+        )
         .collect()
     }
 }
@@ -126,7 +139,7 @@ pub trait Variant {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
+        embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -322,7 +335,7 @@ impl Variant for VariantConfig {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
+        embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -389,6 +402,7 @@ where
         FunctionConfig::Chat(_) => ModelInferenceRequest {
             messages,
             system,
+            inference_id: inference_config.ids.inference_id,
             tool_config: inference_config.tool_config.map(Cow::Borrowed),
             temperature: inference_params.chat_completion.temperature,
             top_p: inference_params.chat_completion.top_p,
@@ -419,6 +433,7 @@ where
                 messages,
                 system,
                 tool_config,
+                inference_id: inference_config.ids.inference_id,
                 temperature: inference_params.chat_completion.temperature,
                 top_p: inference_params.chat_completion.top_p,
                 max_tokens: inference_params.chat_completion.max_tokens,
@@ -453,11 +468,7 @@ async fn infer_model_request<'a, 'request>(
 ) -> Result<InferenceResult, Error> {
     let model_inference_response = (|| async {
         args.model_config
-            .infer(
-                &args.request,
-                args.clients.http_client,
-                args.clients.credentials,
-            )
+            .infer(&args.request, args.clients, &args.model_name)
             .await
     })
     .retry(args.retry_config.get_backoff())
@@ -465,14 +476,13 @@ async fn infer_model_request<'a, 'request>(
 
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, args.model_name);
-    let inference_id = Uuid::now_v7();
     let raw_content = model_inference_result.output.clone();
     let usage = model_inference_result.usage.clone();
     let model_inference_results = vec![model_inference_result];
 
     args.function
         .prepare_response(
-            inference_id,
+            args.inference_config.ids.inference_id,
             raw_content,
             usage,
             model_inference_results,
@@ -562,6 +572,7 @@ impl<'a> BatchInferenceConfig<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cache::{CacheEnabledMode, CacheOptions};
     use crate::clickhouse::ClickHouseConnectionInfo;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
@@ -602,6 +613,10 @@ mod tests {
             function_name: "test_function",
             variant_name: Some("test_variant"),
             dynamic_output_schema: None,
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
         };
 
         // Define common inference parameters
@@ -720,6 +735,10 @@ mod tests {
         });
         let dynamic_output_schema = DynamicJSONSchema::new(dynamic_output_schema_value.clone());
         let inference_config_dynamic = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             templates: &templates,
             tool_config: Some(&tool_config),
             function_name: "test_function",
@@ -794,6 +813,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let templates = get_test_template_config();
         let inference_params = InferenceParams::default();
@@ -803,6 +826,10 @@ mod tests {
             function_name: "test_function",
             variant_name: Some("test_variant"),
             dynamic_output_schema: None,
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
         };
 
         // Test case 1: Successful inference with ChatCompletionConfig and FunctionConfigChat
@@ -823,6 +850,7 @@ mod tests {
         }];
 
         let model_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: request_messages.clone(),
             system: None,
             temperature: Some(0.7),
@@ -918,6 +946,7 @@ mod tests {
         });
 
         let model_request_json = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: request_messages.clone(),
             system: None,
             temperature: Some(0.7),
@@ -1025,6 +1054,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let templates = get_test_template_config();
         let inference_params = InferenceParams::default();
@@ -1034,6 +1067,10 @@ mod tests {
             function_name: "test_function",
             variant_name: Some("test_variant"),
             dynamic_output_schema: None,
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
         };
 
         let model_name = "dummy_chat_model";
@@ -1054,6 +1091,7 @@ mod tests {
         }];
 
         let model_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: request_messages.clone(),
             system: None,
             temperature: Some(0.7),
@@ -1142,6 +1180,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1175,6 +1217,7 @@ mod tests {
 
         // Prepare the model inference request
         let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages,
             system,
             temperature: Some(0.7),
@@ -1268,6 +1311,10 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let inference_params = InferenceParams::default();
 
@@ -1289,6 +1336,7 @@ mod tests {
         }];
 
         let model_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: request_messages.clone(),
             system: None,
             temperature: Some(0.7),

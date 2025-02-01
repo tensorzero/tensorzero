@@ -29,7 +29,7 @@ pub struct Tool {
     pub strict: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ToolConfig {
     Static(Arc<StaticToolConfig>),
     Dynamic(DynamicToolConfig),
@@ -38,7 +38,7 @@ pub enum ToolConfig {
 }
 
 /// Contains the configuration information for a specific tool
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct StaticToolConfig {
     pub description: String,
     pub parameters: JSONSchemaFromPath,
@@ -47,7 +47,7 @@ pub struct StaticToolConfig {
 }
 
 /// Contains the configuration information for a tool defined at runtime
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct DynamicToolConfig {
     pub description: String,
     pub parameters: DynamicJSONSchema,
@@ -57,14 +57,14 @@ pub struct DynamicToolConfig {
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImplicitToolConfig {
     pub parameters: JSONSchemaFromPath,
 }
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement for a JSON schema that is dynamically passed at inference time
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DynamicImplicitToolConfig {
     pub parameters: DynamicJSONSchema,
 }
@@ -72,7 +72,7 @@ pub struct DynamicImplicitToolConfig {
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
     pub tool_choice: ToolChoice,
@@ -188,8 +188,7 @@ impl ToolCallConfig {
 /// if `allowed_tools` is not provided, all tools are allowed.
 /// `additional_tools` are the tools that are provided at runtime, which we compile on the fly.
 /// `tool_choice` and `parallel_tool_calls` are optional and will override the function-level values.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[cfg_attr(test, derive(Default))]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct DynamicToolParams {
     pub allowed_tools: Option<Vec<String>>,
@@ -198,7 +197,7 @@ pub struct DynamicToolParams {
     pub parallel_tool_calls: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, derive(Default))]
 pub struct BatchDynamicToolParams {
     pub allowed_tools: Option<Vec<Option<Vec<String>>>>,
@@ -302,7 +301,7 @@ pub enum ToolChoice {
     Specific(String),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ToolCallChunk {
     pub id: String,
     pub raw_name: String,

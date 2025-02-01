@@ -1,6 +1,5 @@
 services:
   clickhouse:
-    container_name: tensorzero-clickhouse-ui-tests
     image: clickhouse/clickhouse-server:latest
     tmpfs:
       # So the fixtures aren't persisted between restarts of the containers and double-added
@@ -27,7 +26,6 @@ services:
       timeout: 1s
 
   gateway:
-    container_name: tensorzero-gateway-ui-tests
     build:
       context: ../..
       dockerfile: Dockerfile
@@ -35,7 +33,7 @@ services:
     volumes:
       - ./config:/app/config:ro
     environment:
-      - TENSORZERO_CLICKHOUSE_URL=http://tensorzero-clickhouse-ui-tests:8123/tensorzero
+      - TENSORZERO_CLICKHOUSE_URL=http://clickhouse:8123/tensorzero_ui_fixtures
     env_file:
       - ${ENV_FILE:-../.env}
     ports:
@@ -59,12 +57,11 @@ services:
 
   fixtures:
     # NOTE: This is expected to quickly terminate with status code 0
-    container_name: tensorzero-fixtures-ui-tests
     image: clickhouse/clickhouse-server:latest
     volumes:
       - .:/fixtures:ro
     environment:
-      - CLICKHOUSE_HOST=tensorzero-clickhouse-ui-tests
+      - CLICKHOUSE_HOST=clickhouse
     depends_on:
       gateway:
         condition: service_healthy

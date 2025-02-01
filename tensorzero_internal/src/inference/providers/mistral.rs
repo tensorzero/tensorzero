@@ -9,7 +9,6 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 use url::Url;
-use uuid::Uuid;
 
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -302,7 +301,6 @@ pub fn stream_mistral(
     start_time: Instant,
 ) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     async_stream::stream! {
-        let inference_id = Uuid::now_v7();
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -331,7 +329,7 @@ pub fn stream_mistral(
                             }.into());
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            mistral_to_tensorzero_chunk(d, inference_id, latency)
+                            mistral_to_tensorzero_chunk(d, latency)
                         });
                         yield stream_message;
                     }
@@ -676,7 +674,6 @@ struct MistralChatChunk {
 /// Maps a Mistral chunk to a TensorZero chunk for streaming inferences
 fn mistral_to_tensorzero_chunk(
     mut chunk: MistralChatChunk,
-    inference_id: Uuid,
     latency: Duration,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
@@ -716,7 +713,6 @@ fn mistral_to_tensorzero_chunk(
     }
 
     Ok(ProviderInferenceResponseChunk::new(
-        inference_id,
         content,
         usage,
         raw_message,
@@ -729,6 +725,8 @@ mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
 
+    use uuid::Uuid;
+
     use super::*;
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
@@ -737,6 +735,7 @@ mod tests {
     #[test]
     fn test_mistral_request_new() {
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -794,6 +793,7 @@ mod tests {
         };
 
         let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["test_user".to_string().into()],
@@ -881,6 +881,7 @@ mod tests {
             },
         };
         let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
