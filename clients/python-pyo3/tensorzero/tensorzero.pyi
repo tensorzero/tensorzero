@@ -22,8 +22,9 @@ class BaseTensorZeroGateway:
     def inference(
         self,
         *,
-        function_name: str,
         input: InferenceInput,
+        function_name: Optional[str] = None,
+        model_name: Optional[str] = None,
         episode_id: Optional[UUID] = None,
         stream: Optional[bool] = None,
         params: Optional[Dict[str, Any]] = None,
@@ -37,6 +38,7 @@ class BaseTensorZeroGateway:
         parallel_tool_calls: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
         credentials: Optional[Dict[str, str]] = None,
+        cache_options: Optional[Dict[str, Any]] = None,
     ) -> Union[InferenceResponse, Generator[InferenceChunk, None, None]]: ...
     def feedback(
         self,
@@ -60,8 +62,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     def inference(
         self,
         *,
-        function_name: str,
         input: InferenceInput,
+        function_name: Optional[str] = None,
+        model_name: Optional[str] = None,
         episode_id: Optional[UUID] = None,
         stream: Optional[bool] = None,
         params: Optional[Dict[str, Any]] = None,
@@ -75,6 +78,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         parallel_tool_calls: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
         credentials: Optional[Dict[str, str]] = None,
+        cache_options: Optional[Dict[str, Any]] = None,
     ) -> Union[InferenceResponse, Generator[InferenceChunk, None, None]]:
         """
         Make a POST request to the /inference endpoint.
@@ -167,8 +171,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     async def inference(  # type: ignore[override]
         self,
         *,
-        function_name: str,
         input: InferenceInput,
+        function_name: Optional[str] = None,
+        model_name: Optional[str] = None,
         episode_id: Optional[UUID] = None,
         stream: Optional[bool] = None,
         params: Optional[Dict[str, Any]] = None,
@@ -182,6 +187,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         parallel_tool_calls: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
         credentials: Optional[Dict[str, str]] = None,
+        cache_options: Optional[Dict[str, Any]] = None,
     ) -> Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]:
         """
         Make a POST request to the /inference endpoint.

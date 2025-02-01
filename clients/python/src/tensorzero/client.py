@@ -68,8 +68,9 @@ class BaseTensorZeroGateway(ABC):
 
     def _prepare_inference_request(
         self,
-        function_name: str,
         input: InferenceInput,
+        function_name: Optional[str] = None,
+        model_name: Optional[str] = None,
         episode_id: Optional[UUID] = None,
         stream: Optional[bool] = None,
         params: Optional[Dict[str, Any]] = None,
@@ -93,9 +94,12 @@ class BaseTensorZeroGateway(ABC):
                     if hasattr(item, "to_dict"):
                         message["content"][i] = item.to_dict()
         data: Dict[str, Any] = {
-            "function_name": function_name,
             "input": input,
         }
+        if function_name is not None:
+            data["function_name"] = function_name
+        if model_name is not None:
+            data["model_name"] = model_name
         if episode_id is not None:
             data["episode_id"] = str(episode_id)
         if stream is not None:
@@ -198,8 +202,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     def inference(
         self,
         *,
-        function_name: str,
         input: InferenceInput,
+        function_name: Optional[str] = None,
+        model_name: Optional[str] = None,
         episode_id: Optional[UUID] = None,
         stream: Optional[bool] = None,
         params: Optional[Dict[str, Any]] = None,
@@ -244,8 +249,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         """
         url = urljoin(self.base_url, "inference")
         data = self._prepare_inference_request(
-            function_name,
             input,
+            function_name,
+            model_name,
             episode_id,
             stream,
             params,
@@ -366,8 +372,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     async def inference(  # type: ignore[override]
         self,
         *,
-        function_name: str,
         input: InferenceInput,
+        function_name: Optional[str] = None,
+        model_name: Optional[str] = None,
         episode_id: Optional[UUID] = None,
         stream: Optional[bool] = None,
         params: Optional[Dict[str, Any]] = None,
@@ -412,8 +419,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         """
         url = urljoin(self.base_url, "inference")
         data = self._prepare_inference_request(
-            function_name,
             input,
+            function_name,
+            model_name,
             episode_id,
             stream,
             params,

@@ -453,7 +453,7 @@ async fn get_latest_batch_inference(
         "#,
         function_name, variant_name, status, tag_filter
     );
-    let response = clickhouse.run_query(query).await.unwrap();
+    let response = clickhouse.run_query(query, None).await.unwrap();
     if response.is_empty() {
         return None;
     }
@@ -469,7 +469,7 @@ async fn get_all_batch_inferences(
         "SELECT * FROM BatchModelInference WHERE batch_id = '{}' FORMAT JSONEachRow",
         batch_id,
     );
-    let response = clickhouse.run_query(query).await.unwrap();
+    let response = clickhouse.run_query(query, None).await.unwrap();
     let rows = response
         .lines()
         .filter(|line| !line.is_empty())
@@ -750,7 +750,7 @@ pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
 
     // Check the response from polling by inference_id
     let inference_id = inferences_json[0]
@@ -775,7 +775,7 @@ pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
 
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -830,7 +830,7 @@ pub async fn test_poll_completed_simple_batch_inference_request_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
 
     // Poll by batch_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -855,7 +855,7 @@ pub async fn test_poll_completed_simple_batch_inference_request_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
 }
 
 pub async fn test_start_inference_params_batch_inference_request_with_provider(
@@ -1194,7 +1194,7 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
 
     // Poll by batch_id
     let url = get_poll_batch_inference_url(PollPathParams {

@@ -390,7 +390,43 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
 
     println!("API response: {response_json:#?}");
 
-    check_simple_inference_response(response_json, Some(episode_id), &provider, false).await;
+    check_simple_inference_response(response_json, Some(episode_id), &provider, false, false).await;
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+        "cache_options": {"enabled": "on", "lookback_s": 10}
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    check_simple_inference_response(response_json, Some(episode_id), &provider, false, true).await;
 }
 
 pub async fn check_simple_inference_response(
@@ -398,6 +434,7 @@ pub async fn check_simple_inference_response(
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
     is_batch: bool,
+    should_be_cached: bool,
 ) {
     let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
@@ -422,9 +459,14 @@ pub async fn check_simple_inference_response(
 
     let usage = response_json.get("usage").unwrap();
     let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 0);
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 0);
+    if should_be_cached {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -533,10 +575,15 @@ pub async fn check_simple_inference_response(
     assert!(serde_json::from_str::<Value>(raw_response).is_ok());
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 0);
-    if !is_batch {
+    if should_be_cached {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
+    if !is_batch && !should_be_cached {
         let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
         assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
@@ -572,6 +619,10 @@ pub async fn check_simple_inference_response(
         let id = Uuid::parse_str(id).unwrap();
         assert_eq!(id, inference_id);
     }
+    assert_eq!(
+        result.get("cached").unwrap().as_bool().unwrap(),
+        should_be_cached
+    );
 }
 
 #[cfg(feature = "e2e_tests")]

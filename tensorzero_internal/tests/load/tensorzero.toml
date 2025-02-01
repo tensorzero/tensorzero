@@ -13,6 +13,7 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-3.5-turbo"
 api_base = "http://localhost:3030/openai/"
+api_key_location = "none"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │

@@ -290,7 +290,7 @@ async fn embed_insert_example(
         serde_json::to_string(&row).unwrap()
     );
 
-    clickhouse.run_query(query).await.unwrap();
+    clickhouse.run_query(query, None).await.unwrap();
 }
 
 /// Testing a DICL variant
@@ -306,7 +306,7 @@ pub async fn test_dicl_inference_request() {
         "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{}' AND variant_name = '{}'",
             function_name, variant_name
         );
-    clickhouse.run_query(delete_query).await.unwrap();
+    clickhouse.run_query(delete_query, None).await.unwrap();
 
     // Insert examples into the database
     let mut tasks = Vec::new();
@@ -888,7 +888,7 @@ async fn test_dicl_json_request() {
         "ALTER TABLE DynamicInContextLearningExample DELETE WHERE function_name = '{}' AND variant_name = '{}'",
             function_name, variant_name
         );
-    clickhouse.run_query(delete_query).await.unwrap();
+    clickhouse.run_query(delete_query, None).await.unwrap();
 
     // Insert examples into the database
     let mut tasks = Vec::new();
