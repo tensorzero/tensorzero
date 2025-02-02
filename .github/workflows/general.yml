@@ -43,7 +43,7 @@ jobs:
           tool: cargo-nextest,cargo-deny
 
       - name: Build (Rust)
-        run: cargo build --verbose
+        run: cargo build --workspace --verbose
 
       - name: Lint (Rust)
         run: |
