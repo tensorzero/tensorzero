@@ -105,7 +105,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -114,17 +114,18 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
+                    message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: Some(response.clone()),
+                    raw_response: Some(raw_response.clone()),
                 })
             })?;
 
             let response_with_latency = GCPVertexAnthropicResponseWithMetadata {
                 response,
+                raw_response,
                 latency,
                 request: request_body,
                 function_type: &request.function_type,
@@ -692,6 +693,7 @@ struct GCPVertexAnthropicResponse {
 #[derive(Debug, PartialEq)]
 struct GCPVertexAnthropicResponseWithMetadata<'a> {
     response: GCPVertexAnthropicResponse,
+    raw_response: String,
     latency: Latency,
     request: GCPVertexAnthropicRequestBody<'a>,
     function_type: &'a FunctionType,
@@ -704,18 +706,13 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
     fn try_from(value: GCPVertexAnthropicResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
         let GCPVertexAnthropicResponseWithMetadata {
             response,
+            raw_response,
             latency,
             request,
             function_type,
             json_mode,
             generic_request,
         } = value;
-
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error parsing response from GCP Vertex Anthropic: {e}"),
-            })
-        })?;
 
         let content: Vec<ContentBlock> = response
             .content
@@ -1701,8 +1698,10 @@ mod tests {
             tools: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
+        let raw_response = "test response".to_string();
         let body_with_latency = GCPVertexAnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
+            raw_response: raw_response.clone(),
             latency: latency.clone(),
             request: request_body,
             function_type: &FunctionType::Chat,
@@ -1716,8 +1715,7 @@ mod tests {
             vec!["Response text".to_string().into()]
         );
 
-        let raw_json = json!(anthropic_response_body).to_string();
-        assert_eq!(raw_json, inference_response.raw_response);
+        assert_eq!(raw_response, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
@@ -1781,6 +1779,7 @@ mod tests {
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = GCPVertexAnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
+            raw_response: raw_response.clone(),
             latency: latency.clone(),
             request: request_body,
             function_type: &FunctionType::Chat,
@@ -1799,8 +1798,7 @@ mod tests {
             })
         );
 
-        let raw_json = json!(anthropic_response_body).to_string();
-        assert_eq!(raw_json, inference_response.raw_response);
+        assert_eq!(raw_response, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
@@ -1869,6 +1867,7 @@ mod tests {
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = GCPVertexAnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
+            raw_response: raw_response.clone(),
             latency: latency.clone(),
             request: request_body,
             function_type: &FunctionType::Chat,
@@ -1890,8 +1889,7 @@ mod tests {
             })
         );
 
-        let raw_json = json!(anthropic_response_body).to_string();
-        assert_eq!(raw_json, inference_response.raw_response);
+        assert_eq!(raw_response, inference_response.raw_response);
 
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
