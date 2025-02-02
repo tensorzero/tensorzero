@@ -1360,10 +1360,10 @@ impl<'a> OpenAIBatchRequest<'a> {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct OpenAIUsage {
-    prompt_tokens: u32,
+    pub prompt_tokens: u32,
     #[serde(default)]
-    completion_tokens: u32,
-    total_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
 }
 
 impl From<OpenAIUsage> for Usage {
