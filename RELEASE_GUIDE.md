@@ -40,11 +40,11 @@ DOCKER_BUILDKIT=1 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   -t tensorzero/gateway:latest \
   -t tensorzero/gateway:XXXX.XX.X \
-  -f Dockerfile \
+  -f gateway/Dockerfile \
   --attest type=provenance,mode=max \
   --attest type=sbom \
   --push \
-  .
+  gateway/
 ```
 
 > [!IMPORTANT]

@@ -147,7 +147,7 @@ impl InferenceProvider for AnthropicProvider {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -156,12 +156,12 @@ impl InferenceProvider for AnthropicProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
+                    message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: Some(response.to_string()),
+                    raw_response: Some(raw_response.clone()),
                 })
             })?;
 
@@ -172,6 +172,7 @@ impl InferenceProvider for AnthropicProvider {
                 input_messages: request.messages.clone(),
                 function_type: &request.function_type,
                 json_mode: &request.json_mode,
+                raw_response,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -782,6 +783,7 @@ struct AnthropicResponse {
 #[derive(Debug, PartialEq)]
 struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
+    raw_response: String,
     latency: Latency,
     request: AnthropicRequestBody<'a>,
     input_messages: Vec<RequestMessage>,
@@ -794,6 +796,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
     fn try_from(value: AnthropicResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
         let AnthropicResponseWithMetadata {
             response,
+            raw_response,
             latency,
             request: request_body,
             input_messages,
@@ -804,12 +807,6 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
-            })
-        })?;
-
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error parsing response from Anthropic: {e}"),
             })
         })?;
 
@@ -1759,6 +1756,7 @@ mod tests {
             tool_choice: None,
             tools: None,
         };
+        let raw_response = "{\"foo\": \"bar\"}".to_string();
         let input_messages = vec![RequestMessage {
             role: Role::User,
             content: vec!["Hello".to_string().into()],
@@ -1766,6 +1764,7 @@ mod tests {
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
+            raw_response: raw_response.clone(),
             latency: latency.clone(),
             request: request_body,
             input_messages: input_messages.clone(),
@@ -1779,8 +1778,7 @@ mod tests {
             vec!["Response text".to_string().into()]
         );
 
-        let raw_json = json!(anthropic_response_body).to_string();
-        assert_eq!(raw_json, inference_response.raw_response);
+        assert_eq!(raw_response, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
@@ -1823,6 +1821,7 @@ mod tests {
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
+            raw_response: raw_response.clone(),
             latency: latency.clone(),
             request: request_body,
             input_messages: input_messages.clone(),
@@ -1841,8 +1840,7 @@ mod tests {
             })
         );
 
-        let raw_json = json!(anthropic_response_body).to_string();
-        assert_eq!(raw_json, inference_response.raw_response);
+        assert_eq!(raw_response, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
@@ -1890,6 +1888,7 @@ mod tests {
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = AnthropicResponseWithMetadata {
             response: anthropic_response_body.clone(),
+            raw_response: raw_response.clone(),
             latency: latency.clone(),
             request: request_body,
             input_messages: input_messages.clone(),
@@ -1911,8 +1910,7 @@ mod tests {
             })
         );
 
-        let raw_json = json!(anthropic_response_body).to_string();
-        assert_eq!(raw_json, inference_response.raw_response);
+        assert_eq!(raw_response, inference_response.raw_response);
 
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
