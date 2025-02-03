@@ -57,8 +57,8 @@ impl Migration for Migration0012<'_> {
                 tags Map(String, String),
                 auxiliary String, -- a JSON (unstructured, for now)
                 is_deleted Bool DEFAULT false,
-                inserted DateTime DEFAULT now()
-            ) ENGINE = ReplacingMergeTree(inserted, is_deleted)
+                created DateTime DEFAULT now()
+            ) ENGINE = ReplacingMergeTree(created, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
@@ -77,8 +77,8 @@ impl Migration for Migration0012<'_> {
                 tags Map(String, String),
                 auxiliary String, -- a JSON (unstructured, for now)
                 is_deleted Bool DEFAULT false,
-                inserted DateTime DEFAULT now()
-            ) ENGINE = ReplacingMergeTree(inserted, is_deleted)
+                created DateTime DEFAULT now()
+            ) ENGINE = ReplacingMergeTree(created, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
