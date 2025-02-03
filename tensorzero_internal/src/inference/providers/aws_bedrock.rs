@@ -15,7 +15,6 @@ use futures::{Stream, StreamExt};
 use reqwest::StatusCode;
 use std::time::Duration;
 use tokio::time::Instant;
-use uuid::Uuid;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use crate::endpoints::inference::InferenceCredentials;
@@ -335,7 +334,6 @@ fn stream_bedrock(
     start_time: Instant,
 ) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     async_stream::stream! {
-        let inference_id = Uuid::now_v7();
         let mut current_tool_id : Option<String> = None;
         let mut current_tool_name: Option<String> = None;
 
@@ -358,7 +356,7 @@ fn stream_bedrock(
                         // NOTE: AWS Bedrock returns usage (ConverseStreamMetadataEvent) AFTER MessageStop.
 
                         // Convert the event to a tensorzero stream message
-                        let stream_message = bedrock_to_tensorzero_stream_message(output, inference_id, start_time.elapsed(), &mut current_tool_id, &mut current_tool_name);
+                        let stream_message = bedrock_to_tensorzero_stream_message(output, start_time.elapsed(), &mut current_tool_id, &mut current_tool_name);
 
                         match stream_message {
                             Ok(None) => {},
@@ -374,7 +372,6 @@ fn stream_bedrock(
 
 fn bedrock_to_tensorzero_stream_message(
     output: ConverseStreamOutputType,
-    inference_id: Uuid,
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
@@ -386,7 +383,6 @@ fn bedrock_to_tensorzero_stream_message(
             match message.delta {
                 Some(delta) => match delta {
                     ContentBlockDelta::Text(text) => Ok(Some(ProviderInferenceResponseChunk::new(
-                        inference_id,
                         vec![ContentBlockChunk::Text(TextChunk {
                             text,
                             id: message.content_block_index.to_string(),
@@ -397,7 +393,6 @@ fn bedrock_to_tensorzero_stream_message(
                     ))),
                     ContentBlockDelta::ToolUse(tool_use) => {
                         Ok(Some(ProviderInferenceResponseChunk::new(
-                            inference_id,
                             // Take the current tool name and ID and use them to create a ToolCallChunk
                             // This is necessary because the ToolCallChunk must always contain the tool name and ID
                             // even though AWS Bedrock only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
@@ -442,7 +437,6 @@ fn bedrock_to_tensorzero_stream_message(
                     *current_tool_id = Some(tool_use.tool_use_id.clone());
                     *current_tool_name = Some(tool_use.name.clone());
                     Ok(Some(ProviderInferenceResponseChunk::new(
-                        inference_id,
                         vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                             id: tool_use.tool_use_id,
                             raw_name: tool_use.name,
@@ -479,7 +473,6 @@ fn bedrock_to_tensorzero_stream_message(
                     });
 
                     Ok(Some(ProviderInferenceResponseChunk::new(
-                        inference_id,
                         vec![],
                         usage,
                         raw_message,

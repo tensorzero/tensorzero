@@ -14,6 +14,7 @@ pub mod migration_0007;
 pub mod migration_0008;
 pub mod migration_0009;
 pub mod migration_0010;
+pub mod migration_0011;
 
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails
@@ -27,7 +28,7 @@ async fn check_table_exists(
         clickhouse.database(),
         table
     );
-    match clickhouse.run_query(query).await {
+    match clickhouse.run_query(query, None).await {
         Err(e) => {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: migration_id.to_string(),
@@ -64,7 +65,7 @@ async fn check_column_exists(
         table,
         column,
     );
-    match clickhouse.run_query(query).await {
+    match clickhouse.run_query(query, None).await {
         Err(e) => {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: migration_id.to_string(),
@@ -93,7 +94,7 @@ async fn get_column_type(
         table,
         column
     );
-    match clickhouse.run_query(query).await {
+    match clickhouse.run_query(query, None).await {
         Err(e) => Err(ErrorDetails::ClickHouseMigration {
             id: migration_id.to_string(),
             message: e.to_string(),
