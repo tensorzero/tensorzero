@@ -700,7 +700,9 @@ pub struct JsonInferenceResponseChunk {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
     pub variant_name: String,
-    pub raw: String,
+    pub raw: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thought: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
 }
@@ -728,6 +730,7 @@ impl InferenceResponseChunk {
                     episode_id,
                     variant_name,
                     raw: result.raw,
+                    thought: result.thought,
                     usage: result.usage,
                 })
             }
@@ -875,7 +878,8 @@ mod tests {
 
         // Test case 2: Valid JSON ProviderInferenceResponseChunk
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
-            raw: "Test content".to_string(),
+            raw: Some("Test content".to_string()),
+            thought: Some("Thought 1".to_string()),
             created: 0,
             usage: None,
             raw_response: "".to_string(),
@@ -910,7 +914,7 @@ mod tests {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);
                 assert_eq!(c.episode_id, inference_metadata.episode_id);
                 assert_eq!(c.variant_name, inference_metadata.variant_name);
-                assert_eq!(c.raw, "Test content");
+                assert_eq!(c.raw, Some("Test content".to_string()));
                 assert!(c.usage.is_none());
             }
             InferenceResponseChunk::Chat(_) => {

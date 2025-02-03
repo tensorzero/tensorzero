@@ -641,7 +641,7 @@ impl From<InferenceResponseChunk> for OpenAICompatibleResponseChunk {
                     index: 0,
                     finish_reason: "".to_string(),
                     delta: OpenAICompatibleDelta {
-                        content: Some(c.raw),
+                        content: c.raw,
                         tool_calls: None,
                     },
                 }],

@@ -97,7 +97,8 @@ async fn main() {
                             }
                         }
                         InferenceResponseChunk::Json(c) => {
-                            write!(stdout, "{}", c.raw).expect("Failed to write to stdout");
+                            write!(stdout, "{}", c.raw.unwrap_or_default())
+                                .expect("Failed to write to stdout");
                             stdout.flush().expect("Failed to flush stdout");
                         }
                     },

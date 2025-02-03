@@ -327,7 +327,8 @@ pub struct ChatInferenceResultChunk {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct JsonInferenceResultChunk {
-    pub raw: String,
+    pub raw: Option<String>,
+    pub thought: Option<String>,
     pub created: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
@@ -895,16 +896,23 @@ impl From<ContentBlockChatOutput> for ContentBlock {
 /// We take the string from either of these (from the last block if there are multiple)
 /// and use that as the raw response.
 impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
-    fn from(mut chunk: ProviderInferenceResponseChunk) -> Self {
-        let raw = match chunk.content.pop() {
-            Some(ContentBlockChunk::ToolCall(tool_call)) => tool_call.raw_arguments.to_owned(),
-            Some(ContentBlockChunk::Text(text)) => text.text.to_owned(),
-            Some(ContentBlockChunk::Thought(thought)) => thought.text.to_owned(),
-            None => String::new(),
-        };
-
+    fn from(chunk: ProviderInferenceResponseChunk) -> Self {
+        let mut raw = None;
+        let mut thought = None;
+        for content in chunk.content.into_iter() {
+            match content {
+                ContentBlockChunk::ToolCall(tool_call) => {
+                    raw = Some(tool_call.raw_arguments.to_owned())
+                }
+                ContentBlockChunk::Text(text_chunk) => raw = Some(text_chunk.text.to_owned()),
+                ContentBlockChunk::Thought(thought_chunk) => {
+                    thought = Some(thought_chunk.text.to_owned())
+                }
+            }
+        }
         Self {
             raw,
+            thought,
             created: chunk.created,
             usage: chunk.usage,
             latency: chunk.latency,
@@ -1055,7 +1063,9 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                     Some(ContentBlockOutput::Text(Text {
                         text: existing_text,
                     })) => {
-                        existing_text.push_str(&chunk.raw);
+                        if let Some(raw) = chunk.raw {
+                            existing_text.push_str(&raw);
+                        }
                     }
                     // If there is no text block, create one
                     _ => {
@@ -1064,7 +1074,24 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                         if ttft.is_none() {
                             ttft = Some(chunk.latency);
                         }
-                        text_blocks.insert("".to_string(), chunk.raw.into());
+                        if let Some(raw) = chunk.raw {
+                            text_blocks.insert(String::new(), raw.into());
+                        }
+                    }
+                }
+                if let Some(thought) = chunk.thought {
+                    match thought_blocks.get_mut("") {
+                        // If there is already a thought block, append to it
+                        Some(ContentBlockOutput::Thought(existing_thought)) => {
+                            existing_thought.text.push_str(&thought);
+                        }
+                        // If there is no thought block, create one
+                        _ => {
+                            thought_blocks.insert(
+                                String::new(),
+                                ContentBlockOutput::Thought(Thought { text: thought }),
+                            );
+                        }
                     }
                 }
             }
@@ -1933,14 +1960,16 @@ mod tests {
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: "{\"name\":".to_string(),
+                raw: Some("{\"name\":".to_string()),
+                thought: Some("Thought 1".to_string()),
                 created,
                 usage: Some(usage1.clone()),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: "\"John\",\"age\":30}".to_string(),
+                raw: Some("\"John\",\"age\":30}".to_string()),
+                thought: Some("Thought 2".to_string()),
                 created,
                 usage: Some(usage2.clone()),
                 raw_response: "\"John\",\"age\":30}".to_string(),
@@ -1977,6 +2006,10 @@ mod tests {
                     "{\"name\":\"John\",\"age\":30}".to_string()
                 );
                 assert_eq!(
+                    json_result.output.thought,
+                    Some("Thought 1Thought 2".to_string())
+                );
+                assert_eq!(
                     json_result.usage,
                     Usage {
                         input_tokens: 15,
@@ -2004,14 +2037,16 @@ mod tests {
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: "{\"name\":".to_string(),
+                raw: Some("{\"name\":".to_string()),
+                thought: Some("Thought 1".to_string()),
                 created,
                 usage: Some(usage.clone()),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(100),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: "\"John\"}".to_string(),
+                raw: Some("\"John\"}".to_string()),
+                thought: None,
                 created,
                 usage: None,
                 raw_response: "\"John\"}".to_string(),
@@ -2044,6 +2079,7 @@ mod tests {
                 assert_eq!(json_result.usage, usage);
                 assert_eq!(json_result.output.parsed, None);
                 assert_eq!(json_result.output.raw, "{\"name\":\"John\"}".to_string());
+                assert_eq!(json_result.output.thought, Some("Thought 1".to_string()));
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 let model_inference_result = json_result.model_inference_results.first().unwrap();
                 assert_eq!(&*model_inference_result.model_name, model_name);
@@ -2066,21 +2102,24 @@ mod tests {
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: "{\"name\":\"John\",".to_string(),
+                raw: Some("{\"name\":\"John\",".to_string()),
+                thought: None,
                 created,
                 usage: Some(usage.clone()),
                 raw_response: "{\"name\":\"John\",".to_string(),
                 latency: Duration::from_millis(100),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: "".to_string(),
+                raw: Some("".to_string()),
+                thought: Some("Thought 2".to_string()),
                 created,
                 usage: None,
                 raw_response: "".to_string(),
                 latency: Duration::from_millis(200),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: "\"age\":30}".to_string(),
+                raw: Some("\"age\":30}".to_string()),
+                thought: None,
                 created,
                 usage: None,
                 raw_response: "\"age\":30}".to_string(),
@@ -2110,7 +2149,14 @@ mod tests {
             assert_eq!(chat_response.created, created);
             assert_eq!(
                 chat_response.content,
-                vec!["{\"name\":\"John\",\"age\":30}".to_string().into()]
+                vec![
+                    ContentBlockChatOutput::Thought(Thought {
+                        text: "Thought 2".to_string()
+                    }),
+                    ContentBlockChatOutput::Text(Text {
+                        text: "{\"name\":\"John\",\"age\":30}".to_string()
+                    }),
+                ]
             );
             assert_eq!(chat_response.usage, usage);
             assert_eq!(chat_response.model_inference_results.len(), 1);
@@ -2156,14 +2202,16 @@ mod tests {
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: "{\"name\":".to_string(),
+                raw: Some("{\"name\":".to_string()),
+                thought: Some("Thought 1".to_string()),
                 created,
                 usage: Some(usage1.clone()),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: "\"John\",\"age\":30}".to_string(),
+                raw: Some("\"John\",\"age\":30}".to_string()),
+                thought: Some("Thought 2".to_string()),
                 created,
                 usage: Some(usage2.clone()),
                 raw_response: "\"John\",\"age\":30}".to_string(),
@@ -2198,6 +2246,10 @@ mod tests {
                 assert_eq!(
                     json_result.output.raw,
                     "{\"name\":\"John\",\"age\":30}".to_string()
+                );
+                assert_eq!(
+                    json_result.output.thought,
+                    Some("Thought 1Thought 2".to_string())
                 );
                 assert_eq!(
                     json_result.usage,
@@ -2255,14 +2307,16 @@ mod tests {
         let templates = TemplateConfig::default();
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: "{\"name\":".to_string(),
+                raw: Some("{\"name\":".to_string()),
+                thought: Some("Thought 1".to_string()),
                 created,
                 usage: Some(usage1.clone()),
                 raw_response: "{\"name\":".to_string(),
                 latency: Duration::from_millis(150),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                raw: "\"John\",\"age\":30}".to_string(),
+                raw: Some("\"John\",\"age\":30}".to_string()),
+                thought: Some("Thought 2".to_string()),
                 created,
                 usage: Some(usage2.clone()),
                 raw_response: "\"John\",\"age\":30}".to_string(),
@@ -2434,5 +2488,112 @@ mod tests {
             "content": [{"type": "invalid_type", "value": "test"}]
         });
         assert!(serde_json::from_value::<InputMessage>(input).is_err());
+    }
+
+    #[test]
+    fn test_json_inference_result_chunk_from_provider_chunk() {
+        use std::time::Duration;
+
+        // Test case for ToolCall content
+        let tool_chunk = ProviderInferenceResponseChunk {
+            content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                id: "123".to_string(),
+                raw_arguments: "{\"key\": \"value\"}".to_string(),
+                raw_name: "test_tool".to_string(),
+            })],
+            created: 1234567890,
+            usage: Some(Usage {
+                input_tokens: 10,
+                output_tokens: 20,
+            }),
+            raw_response: "raw response".to_string(),
+            latency: Duration::from_secs(1),
+        };
+
+        let result = JsonInferenceResultChunk::from(tool_chunk);
+        assert_eq!(result.raw, Some("{\"key\": \"value\"}".to_string()));
+        assert_eq!(result.thought, None);
+        assert_eq!(result.created, 1234567890);
+        assert_eq!(result.raw_response, "raw response");
+        assert_eq!(result.latency, Duration::from_secs(1));
+        assert_eq!(
+            result.usage,
+            Some(Usage {
+                input_tokens: 10,
+                output_tokens: 20
+            })
+        );
+
+        // Test case for Text content
+        let text_chunk = ProviderInferenceResponseChunk {
+            content: vec![ContentBlockChunk::Text(TextChunk {
+                id: "123".to_string(),
+                text: "some text".to_string(),
+            })],
+            created: 1234567890,
+            usage: None,
+            raw_response: "raw response".to_string(),
+            latency: Duration::from_secs(1),
+        };
+
+        let result = JsonInferenceResultChunk::from(text_chunk);
+        assert_eq!(result.raw, Some("some text".to_string()));
+        assert_eq!(result.thought, None);
+
+        // Test case for Thought content
+        let thought_chunk = ProviderInferenceResponseChunk {
+            content: vec![ContentBlockChunk::Thought(ThoughtChunk {
+                id: "123".to_string(),
+                text: "thinking...".to_string(),
+            })],
+            created: 1234567890,
+            usage: None,
+            raw_response: "raw response".to_string(),
+            latency: Duration::from_secs(1),
+        };
+
+        let result = JsonInferenceResultChunk::from(thought_chunk);
+        assert_eq!(result.raw, None);
+        assert_eq!(result.thought, Some("thinking...".to_string()));
+
+        // Test case for multiple content blocks - should use last raw content
+        let mixed_chunk = ProviderInferenceResponseChunk {
+            content: vec![
+                ContentBlockChunk::Text(TextChunk {
+                    id: "123".to_string(),
+                    text: "first text".to_string(),
+                }),
+                ContentBlockChunk::ToolCall(ToolCallChunk {
+                    id: "456".to_string(),
+                    raw_arguments: "final content".to_string(),
+                    raw_name: "test_tool".to_string(),
+                }),
+                ContentBlockChunk::Thought(ThoughtChunk {
+                    id: "789".to_string(),
+                    text: "final thought".to_string(),
+                }),
+            ],
+            created: 1234567890,
+            usage: None,
+            raw_response: "raw response".to_string(),
+            latency: Duration::from_secs(1),
+        };
+
+        let result = JsonInferenceResultChunk::from(mixed_chunk);
+        assert_eq!(result.raw, Some("final content".to_string()));
+        assert_eq!(result.thought, Some("final thought".to_string()));
+
+        // Test case for empty content
+        let empty_chunk = ProviderInferenceResponseChunk {
+            content: vec![],
+            created: 1234567890,
+            usage: None,
+            raw_response: "raw response".to_string(),
+            latency: Duration::from_secs(1),
+        };
+
+        let result = JsonInferenceResultChunk::from(empty_chunk);
+        assert_eq!(result.raw, None);
+        assert_eq!(result.thought, None);
     }
 }
