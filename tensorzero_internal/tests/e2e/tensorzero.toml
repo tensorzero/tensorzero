@@ -297,6 +297,13 @@ type = "hyperbolic"
 model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
 api_key_location = "dynamic::hyperbolic_api_key"
 
+[models."openai/gpt-4o-mini"]
+routing = ["openrouter"]
+
+[models."openai/gpt-4o-mini".providers.openrouter]
+type = "openrouter"
+model_name = "openai/gpt-4o-mini"
+
 [models.slow]
 routing = ["slow"]
 
@@ -691,6 +698,12 @@ max_tokens = 100
 [functions.basic_test.variants.hyperbolic-shorthand]
 type = "chat_completion"
 model = "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.openrouter]
+type = "chat_completion"
+model = "openai/gpt-4o-mini"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
