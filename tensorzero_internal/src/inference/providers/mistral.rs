@@ -150,7 +150,7 @@ impl InferenceProvider for MistralProvider {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -159,18 +159,19 @@ impl InferenceProvider for MistralProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
+                    message: format!("Error parsing JSON response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: Some(response.clone()),
+                    raw_response: Some(raw_response.clone()),
                 })
             })?;
 
             MistralResponseWithMetadata {
                 response,
                 latency,
+                raw_response,
                 request: request_body,
                 generic_request: request,
             }
@@ -563,6 +564,7 @@ struct MistralResponse {
 
 struct MistralResponseWithMetadata<'a> {
     response: MistralResponse,
+    raw_response: String,
     latency: Latency,
     request: MistralRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
@@ -573,15 +575,11 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
     fn try_from(value: MistralResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
         let MistralResponseWithMetadata {
             mut response,
+            raw_response,
             latency,
             request: request_body,
             generic_request,
         } = value;
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error parsing response: {e}"),
-            })
-        })?;
         if response.choices.len() != 1 {
             return Err(Error::new(ErrorDetails::InferenceServer {
                 message: format!(
@@ -827,6 +825,7 @@ mod tests {
             tool_choice: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
+        let raw_response = "test_response".to_string();
         let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
             response: valid_response,
             latency: Latency::NonStreaming {
@@ -834,6 +833,7 @@ mod tests {
             },
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -850,6 +850,7 @@ mod tests {
             }
         );
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.raw_response, raw_response);
         assert_eq!(inference_response.system, None);
         assert_eq!(
             inference_response.input_messages,
@@ -921,6 +922,7 @@ mod tests {
             },
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -941,6 +943,7 @@ mod tests {
             }
         );
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.raw_response, raw_response);
         assert_eq!(inference_response.system, Some("test_system".to_string()));
         assert_eq!(
             inference_response.input_messages,
@@ -979,6 +982,7 @@ mod tests {
             },
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         });
         let details = result.unwrap_err().get_owned_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
@@ -1027,6 +1031,7 @@ mod tests {
             },
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         });
         let details = result.unwrap_err().get_owned_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));

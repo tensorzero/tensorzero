@@ -13,20 +13,42 @@ async fn get_providers() -> E2ETestProviders {
         Err(_) => HashMap::new(),
     };
 
-    let standard_providers = vec![E2ETestProvider {
-        variant_name: "deepseek".to_string(),
+    let standard_providers = vec![
+        E2ETestProvider {
+            variant_name: "deepseek-chat".to_string(),
+            model_name: "deepseek-chat".to_string(),
+            model_provider_name: "deepseek".to_string(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            variant_name: "deepseek-reasoner".to_string(),
+            model_name: "deepseek-reasoner".to_string(),
+            model_provider_name: "deepseek".to_string(),
+            credentials: HashMap::new(),
+        },
+    ];
+
+    let inference_params_providers = vec![
+        E2ETestProvider {
+            variant_name: "deepseek-dynamic".to_string(),
+            model_name: "deepseek-chat-dynamic".to_string(),
+            model_provider_name: "deepseek".to_string(),
+            credentials: credentials.clone(),
+        },
+        E2ETestProvider {
+            variant_name: "deepseek-reasoner".to_string(),
+            model_name: "deepseek-reasoner".to_string(),
+            model_provider_name: "deepseek".to_string(),
+            credentials: credentials.clone(),
+        },
+    ];
+
+    let json_providers = vec![E2ETestProvider {
+        variant_name: "deepseek-chat".to_string(),
         model_name: "deepseek-chat".to_string(),
         model_provider_name: "deepseek".to_string(),
-        credentials: HashMap::new(),
+        credentials: credentials.clone(),
     }];
-
-    let inference_params_providers = vec![E2ETestProvider {
-        variant_name: "deepseek".to_string(),
-        model_name: "deepseek-chat".to_string(),
-        model_provider_name: "deepseek".to_string(),
-        credentials,
-    }];
-
     #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "deepseek-shorthand".to_string(),
@@ -40,9 +62,9 @@ async fn get_providers() -> E2ETestProviders {
         inference_params_inference: inference_params_providers,
         tool_use_inference: vec![],
         tool_multi_turn_inference: vec![],
-        dynamic_tool_use_inference: standard_providers.clone(),
+        dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
-        json_mode_inference: standard_providers.clone(),
+        json_mode_inference: json_providers.clone(),
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
         #[cfg(feature = "batch_tests")]

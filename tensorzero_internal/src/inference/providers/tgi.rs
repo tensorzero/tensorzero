@@ -151,7 +151,7 @@ impl InferenceProvider for TGIProvider {
             })?;
 
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -160,12 +160,12 @@ impl InferenceProvider for TGIProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
+                    message: format!("Error parsing JSON response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: serde_json::to_string(&request_body).ok(),
-                    raw_response: Some(response.clone()),
+                    raw_response: Some(raw_response.clone()),
                 })
             })?;
 
@@ -175,6 +175,7 @@ impl InferenceProvider for TGIProvider {
             Ok(TGIResponseWithMetadata {
                 response,
                 latency,
+                raw_response,
                 request: request_body,
                 generic_request: request,
             }
@@ -423,6 +424,7 @@ struct OpenAIRequestFunctionCall<'a> {
 struct TGIResponseWithMetadata<'a> {
     response: TGIResponse,
     latency: Latency,
+    raw_response: String,
     request: TGIRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
@@ -433,14 +435,10 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let TGIResponseWithMetadata {
             mut response,
             latency,
+            raw_response,
             request: request_body,
             generic_request,
         } = value;
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing response: {e}"),
-            })
-        })?;
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
                 message: format!(
@@ -860,6 +858,68 @@ mod tests {
                 text: "Hello".to_string(),
                 id: "0".to_string(),
             })],
+        );
+    }
+    #[test]
+    fn test_tgi_response_with_metadata_try_into() {
+        let valid_response = TGIResponse {
+            choices: vec![TGIResponseChoice {
+                index: 0,
+                message: TGIResponseMessage {
+                    content: Some("Hello, world!".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: TGIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            },
+        };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: Some(100),
+            stream: false,
+            seed: Some(69),
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let tgi_response_with_metadata = TGIResponseWithMetadata {
+            response: valid_response,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            request: TGIRequest::new("test-model", &generic_request).unwrap(),
+            generic_request: &generic_request,
+        };
+        let inference_response: ProviderInferenceResponse =
+            tgi_response_with_metadata.try_into().unwrap();
+
+        assert_eq!(inference_response.output.len(), 1);
+        assert_eq!(
+            inference_response.output[0],
+            "Hello, world!".to_string().into()
+        );
+        assert_eq!(inference_response.raw_response, "test_response");
+        assert_eq!(inference_response.usage.input_tokens, 10);
+        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(
+            inference_response.latency,
+            Latency::NonStreaming {
+                response_time: Duration::from_secs(0)
+            }
         );
     }
 }
