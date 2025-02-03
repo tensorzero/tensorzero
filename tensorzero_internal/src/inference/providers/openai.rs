@@ -153,7 +153,7 @@ impl InferenceProvider for OpenAIProvider {
                 })
             })?;
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
@@ -162,11 +162,11 @@ impl InferenceProvider for OpenAIProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
+                    message: format!("Error parsing JSON response: {e}"),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: Some(response.clone()),
+                    raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -176,6 +176,7 @@ impl InferenceProvider for OpenAIProvider {
             };
             Ok(OpenAIResponseWithMetadata {
                 response,
+                raw_response,
                 latency,
                 request: request_body,
                 generic_request: request,
@@ -542,7 +543,7 @@ impl EmbeddingProvider for OpenAIProvider {
                 })
             })?;
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
@@ -552,11 +553,11 @@ impl EmbeddingProvider for OpenAIProvider {
             })?;
 
             let response: OpenAIEmbeddingResponse =
-                serde_json::from_str(&response).map_err(|e| {
+                serde_json::from_str(&raw_response).map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing JSON response: {e}: {response}"),
+                        message: format!("Error parsing JSON response: {e}"),
                         raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                        raw_response: Some(response.clone()),
+                        raw_response: Some(raw_response.clone()),
                         provider_type: PROVIDER_TYPE.to_string(),
                     })
                 })?;
@@ -568,6 +569,7 @@ impl EmbeddingProvider for OpenAIProvider {
                 response,
                 latency,
                 request: request_body,
+                raw_response,
             }
             .try_into()?)
         } else {
@@ -1425,6 +1427,7 @@ struct OpenAIResponseWithMetadata<'a> {
     latency: Latency,
     request: OpenAIRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
+    raw_response: String,
 }
 
 impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -1434,16 +1437,9 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             mut response,
             latency,
             request: request_body,
+            raw_response,
             generic_request,
         } = value;
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing response: {e}"),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
                 message: format!(
@@ -1647,6 +1643,7 @@ struct OpenAIEmbeddingResponseWithMetadata<'a> {
     response: OpenAIEmbeddingResponse,
     latency: Latency,
     request: OpenAIEmbeddingRequest<'a>,
+    raw_response: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1661,6 +1658,7 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
             response,
             latency,
             request,
+            raw_response,
         } = response;
         let raw_request = serde_json::to_string(&request).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
@@ -1670,14 +1668,7 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing response from OpenAI: {e}"),
-                raw_request: Some(serde_json::to_string(&request).unwrap_or_default()),
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
+
         if response.data.len() != 1 {
             return Err(Error::new(ErrorDetails::InferenceServer {
                 message: "Expected exactly one embedding in response".to_string(),
@@ -2347,6 +2338,7 @@ mod tests {
             parallel_tool_calls: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
+        let raw_response = "test_response".to_string();
         let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
             response: valid_response,
             latency: Latency::NonStreaming {
@@ -2354,6 +2346,7 @@ mod tests {
             },
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -2370,6 +2363,7 @@ mod tests {
             }
         );
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.raw_response, raw_response);
         assert_eq!(inference_response.system, None);
         assert_eq!(
             inference_response.input_messages,
@@ -2444,6 +2438,7 @@ mod tests {
             },
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -2464,6 +2459,7 @@ mod tests {
             }
         );
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.raw_response, raw_response);
         assert_eq!(inference_response.system, Some("test_system".to_string()));
         assert_eq!(
             inference_response.input_messages,
@@ -2504,6 +2500,7 @@ mod tests {
             },
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         });
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -2558,6 +2555,7 @@ mod tests {
             },
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         });
         assert!(result.is_err());
         let err = result.unwrap_err();
