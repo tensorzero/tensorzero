@@ -4,12 +4,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::instrument;
 
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable};
+use crate::model_table::{CowNoClone, ShorthandModelConfig};
 use crate::tool::{
     ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
     IMPLICIT_TOOL_NAME,
@@ -23,22 +24,64 @@ use crate::variant::{Variant, VariantConfig};
 #[derive(Debug, Default)]
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
-    pub models: ModelTable, // model name => model config
-    pub embedding_models: HashMap<Arc<str>, EmbeddingModelConfig>, // embedding model name => embedding model config
+    pub models: ModelTable,                    // model name => model config
+    pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
-    pub metrics: HashMap<String, MetricConfig>,          // metric name => metric config
-    pub tools: HashMap<String, Arc<StaticToolConfig>>,   // tool name => tool config
+    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub templates: TemplateConfig<'c>,
 }
 
+#[derive(Debug, Default, PartialEq)]
+pub struct GatewayConfig {
+    pub bind_address: Option<std::net::SocketAddr>,
+    pub observability: ObservabilityConfig,
+    pub debug: bool,
+}
+
+/// Note: This struct and the impl below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag
+/// TODO (#797): Remove this once we have removed the `disable_observability` flag
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct GatewayConfig {
+pub struct UninitializedGatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     #[serde(default)]
     pub disable_observability: bool,
     #[serde(default)]
+    pub observability: ObservabilityConfig,
+    #[serde(default)]
     pub debug: bool,
+}
+
+impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
+    type Error = Error;
+    fn try_from(config: UninitializedGatewayConfig) -> Result<Self, Self::Error> {
+        let enabled = match (config.disable_observability, config.observability.enabled) {
+            (true, Some(_)) => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: "Configuration flag `gateway.disable_observability` and `gateway.observability.enabled` are mutually exclusive. We are deprecating `gateway.disable_observability` in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.".to_string(),
+                }));
+            }
+            (true, None) => {
+                tracing::warn!("Deprecation Warning: The configuration flag `gateway.disable_observability.enabled` is deprecated in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.");
+                Some(false)
+            }
+            (false, Some(enabled)) => Some(enabled),
+            (false, None) => None,
+        };
+        Ok(Self {
+            bind_address: config.bind_address,
+            observability: ObservabilityConfig { enabled },
+            debug: config.debug,
+        })
+    }
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ObservabilityConfig {
+    #[serde(default)]
+    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,16 +125,27 @@ impl<'c> Config<'c> {
     #[instrument]
     pub fn load() -> Result<Config<'c>, Error> {
         let config_path = UninitializedConfig::get_config_path();
-        let config_table = UninitializedConfig::read_toml_config(&config_path)?;
+        let config_path = Path::new(&config_path);
+        Self::load_from_path(config_path)
+    }
+
+    pub fn load_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
+        let config_table = match UninitializedConfig::read_toml_config(config_path)? {
+            Some(table) => table,
+            None => {
+                tracing::warn!("No config file found at {config_path:?}, using default config");
+                return Ok(Config::default());
+            }
+        };
         let base_path = match PathBuf::from(&config_path).parent() {
             Some(base_path) => base_path.to_path_buf(),
             None => {
                 return Err(ErrorDetails::Config {
                     message: format!(
-                        "Failed to get parent directory of config file: {config_path}"
+                        "Failed to get parent directory of config file: {config_path:?}"
                     ),
                 }
-                .into())
+                .into());
             }
         };
         let config = Self::load_from_toml(config_table, base_path)?;
@@ -101,7 +155,7 @@ impl<'c> Config<'c> {
     fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config<'c>, Error> {
         let config = UninitializedConfig::try_from(table)?;
 
-        let gateway = config.gateway.unwrap_or_default();
+        let gateway = config.gateway.unwrap_or_default().try_into()?;
 
         let templates = TemplateConfig::new();
 
@@ -183,7 +237,7 @@ impl<'c> Config<'c> {
         }
 
         // Validate each model
-        for (model_name, model) in self.models.iter() {
+        for (model_name, model) in self.models.iter_static_models() {
             if model_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
                     message: format!("Model name cannot start with 'tensorzero::': {model_name}"),
@@ -252,8 +306,11 @@ impl<'c> Config<'c> {
     }
 
     /// Get a model by name
-    pub fn get_model<'a>(&'a self, model_name: &Arc<str>) -> Result<&'a ModelConfig, Error> {
-        self.models.get(model_name).ok_or_else(|| {
+    pub fn get_model<'a>(
+        &'a self,
+        model_name: &Arc<str>,
+    ) -> Result<CowNoClone<'a, ModelConfig>, Error> {
+        self.models.get(model_name)?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
                 name: model_name.to_string(),
             })
@@ -292,11 +349,11 @@ impl<'c> Config<'c> {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedConfig {
-    pub gateway: Option<GatewayConfig>,
+    pub gateway: Option<UninitializedGatewayConfig>,
     #[serde(default)]
     pub models: ModelTable, // model name => model config
     #[serde(default)]
-    pub embedding_models: HashMap<Arc<str>, EmbeddingModelConfig>, // embedding model name => embedding model config
+    pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
@@ -316,19 +373,27 @@ impl UninitializedConfig {
     }
 
     /// Read a file from the file system and parse it as TOML
-    fn read_toml_config(path: &str) -> Result<toml::Table, Error> {
-        std::fs::read_to_string(path)
-            .map_err(|_| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Failed to read config file: {path}"),
-                })
-            })?
-            .parse::<toml::Table>()
-            .map_err(|_| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Failed to parse config file as valid TOML: {path}"),
-                })
-            })
+    fn read_toml_config(path: &Path) -> Result<Option<toml::Table>, Error> {
+        if !path.exists() {
+            return Ok(None);
+        }
+        Ok(Some(
+            std::fs::read_to_string(path)
+                .map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to read config file: {}", path.to_string_lossy()),
+                    })
+                })?
+                .parse::<toml::Table>()
+                .map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Failed to parse config file as valid TOML: {}",
+                            path.to_string_lossy()
+                        ),
+                    })
+                })?,
+        ))
     }
 }
 
@@ -514,6 +579,8 @@ impl UninitializedToolConfig {
 #[cfg(test)]
 mod tests {
 
+    use tracing_test::traced_test;
+
     use super::*;
 
     use std::env;
@@ -621,6 +688,7 @@ mod tests {
         let embedding_model = config
             .embedding_models
             .get("text-embedding-3-small")
+            .expect("Error getting embedding model")
             .unwrap();
         assert_eq!(embedding_model.routing, vec!["openai".into()]);
         assert_eq!(embedding_model.providers.len(), 1);
@@ -1365,7 +1433,7 @@ mod tests {
                 result.unwrap_err(),
                 Error::new(ErrorDetails::Config {
                     message:
-                        "Embedding model name cannot start with 'tensorzero::': tensorzero::bad_embedding_model"
+                        "Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix\nin `embedding_models`\n"
                             .to_string()
                 })
             );
@@ -1472,25 +1540,31 @@ mod tests {
 
         // Check if all expected templates are present
         assert_eq!(
-            templates.get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
+            templates
+                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
             Some(&PathBuf::from(
                 "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
             ))
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
+            templates
+                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
             Some(&PathBuf::from(
                 "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
             ))
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"),
+            templates.get(
+                "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
+            ),
             Some(&PathBuf::from(
                 "/base/path/fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
             ))
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"),
+            templates.get(
+                "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
+            ),
             Some(&PathBuf::from(
                 "/base/path/fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
             ))
@@ -1763,10 +1837,24 @@ mod tests {
         let base_path = config_pathbuf
             .parent()
             .expect("Failed to get parent directory of config file");
-        let config_table = UninitializedConfig::read_toml_config(&config_path)
+        let config_table = UninitializedConfig::read_toml_config(Path::new(&config_path))
+            .expect("Failed to read tensorzero.example.toml")
             .expect("Failed to read tensorzero.example.toml");
 
         Config::load_from_toml(config_table, base_path.to_path_buf())
             .expect("Failed to load config");
+    }
+
+    #[traced_test]
+    #[test]
+    fn test_config_load_no_config_file() {
+        let config = Config::load_from_path(Path::new("nonexistent.toml")).unwrap();
+        assert!(logs_contain("using default config"));
+        assert_eq!(config.gateway, GatewayConfig::default());
+        assert_eq!(config.models.len(), 0);
+        assert_eq!(config.embedding_models.len(), 0);
+        assert_eq!(config.functions.len(), 0);
+        assert_eq!(config.metrics.len(), 0);
+        assert_eq!(config.tools.len(), 0);
     }
 }

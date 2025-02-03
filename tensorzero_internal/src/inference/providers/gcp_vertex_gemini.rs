@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use futures::{Stream, StreamExt};
@@ -23,7 +24,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default_with_fn, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 const PROVIDER_NAME: &str = "GCP Vertex Gemini";
@@ -40,6 +41,8 @@ pub struct GCPVertexGeminiProvider {
     model_id: String,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
+
 impl GCPVertexGeminiProvider {
     pub fn new(
         model_id: String,
@@ -47,10 +50,13 @@ impl GCPVertexGeminiProvider {
         project_id: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials =
-            GCPVertexCredentials::try_from((generic_credentials, PROVIDER_TYPE))?;
+        let credentials = build_creds_caching_default_with_fn(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+            |creds| GCPVertexCredentials::try_from((creds, PROVIDER_TYPE)),
+        )?;
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse");
         let audience = format!("https://{location}-aiplatform.googleapis.com/");
@@ -59,7 +65,7 @@ impl GCPVertexGeminiProvider {
             request_url,
             streaming_request_url,
             audience,
-            credentials: provider_credentials,
+            credentials,
             model_id,
         })
     }
@@ -69,7 +75,7 @@ pub fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::PathFromEnv("GCP_VERTEX_CREDENTIALS_PATH".to_string())
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum GCPVertexCredentials {
     Static(GCPServiceAccountCredentials),
     Dynamic(String),
@@ -279,7 +285,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -288,12 +294,12 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
+                    message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: Some(response),
+                    raw_response: Some(raw_response.clone()),
                 })
             })?;
             let response_with_latency = GCPVertexGeminiResponseWithMetadata {
@@ -301,6 +307,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 latency,
                 request: request_body,
                 generic_request: request,
+                raw_response,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -403,7 +410,6 @@ fn stream_gcp_vertex_gemini(
     start_time: Instant,
 ) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     async_stream::stream! {
-        let inference_id = Uuid::now_v7();
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -439,7 +445,7 @@ fn stream_gcp_vertex_gemini(
                         let response = GCPVertexGeminiStreamResponseWithMetadata {
                             response: data,
                             latency: start_time.elapsed(),
-                            inference_id,
+
                         }.try_into();
                         yield response
                     }
@@ -950,6 +956,7 @@ struct GCPVertexGeminiResponse {
 
 struct GCPVertexGeminiResponseWithMetadata<'a> {
     response: GCPVertexGeminiResponse,
+    raw_response: String,
     latency: Latency,
     request: GCPVertexGeminiRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
@@ -960,15 +967,11 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
     fn try_from(response: GCPVertexGeminiResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
         let GCPVertexGeminiResponseWithMetadata {
             response,
+            raw_response,
             latency,
             request: request_body,
             generic_request,
         } = response;
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing response from GCP Vertex Gemini: {e}"),
-            })
-        })?;
 
         // GCP Vertex Gemini response can contain multiple candidates and each of these can contain
         // multiple content parts. We will only use the first candidate but handle all parts of the response therein.
@@ -1026,17 +1029,12 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
 struct GCPVertexGeminiStreamResponseWithMetadata {
     response: GCPVertexGeminiResponse,
     latency: Duration,
-    inference_id: Uuid,
 }
 
 impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceResponseChunk {
     type Error = Error;
     fn try_from(response: GCPVertexGeminiStreamResponseWithMetadata) -> Result<Self, Self::Error> {
-        let GCPVertexGeminiStreamResponseWithMetadata {
-            response,
-            latency,
-            inference_id,
-        } = response;
+        let GCPVertexGeminiStreamResponseWithMetadata { response, latency } = response;
 
         let raw = serde_json::to_string(&response).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -1067,7 +1065,6 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceRes
             _ => true,
         });
         Ok(ProviderInferenceResponseChunk::new(
-            inference_id,
             content,
             response
                 .usage_metadata
@@ -1332,6 +1329,7 @@ mod tests {
             parallel_tool_calls: false,
         };
         let inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: None,
             tool_config: Some(Cow::Borrowed(&tool_config)),
@@ -1367,6 +1365,7 @@ mod tests {
             },
         ];
         let inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: messages.clone(),
             system: Some("test_system".to_string()),
             tool_config: Some(Cow::Borrowed(&tool_config)),
@@ -1415,6 +1414,7 @@ mod tests {
         ];
         let output_schema = serde_json::json!({});
         let inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: messages.clone(),
             system: Some("test_system".to_string()),
             tool_config: Some(Cow::Borrowed(&tool_config)),
@@ -1480,6 +1480,7 @@ mod tests {
         );
 
         let inference_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: messages.clone(),
             system: Some("test_system".to_string()),
             tool_config: Some(Cow::Borrowed(&tool_config)),
@@ -1576,6 +1577,7 @@ mod tests {
             response_time: Duration::from_secs(1),
         };
         let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![],
             system: Some("test_system".to_string()),
             tool_config: None,
@@ -1598,11 +1600,13 @@ mod tests {
             system_instruction: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
+        let raw_response = "test response".to_string();
         let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -1619,6 +1623,7 @@ mod tests {
         );
         assert_eq!(model_inference_response.latency, latency);
         assert_eq!(model_inference_response.raw_request, raw_request);
+        assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(
             model_inference_response.system,
             Some("test_system".to_string())
@@ -1648,6 +1653,7 @@ mod tests {
             response_time: Duration::from_secs(2),
         };
         let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["test_user".to_string().into()],
@@ -1678,6 +1684,7 @@ mod tests {
             latency: latency.clone(),
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -1704,6 +1711,7 @@ mod tests {
         );
         assert_eq!(model_inference_response.latency, latency);
         assert_eq!(model_inference_response.raw_request, raw_request);
+        assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(model_inference_response.system, None);
         assert_eq!(
             model_inference_response.input_messages,
@@ -1762,6 +1770,7 @@ mod tests {
             latency: latency.clone(),
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -1797,6 +1806,8 @@ mod tests {
             }
         );
         assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.raw_request, raw_request);
+        assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(model_inference_response.system, None);
         assert_eq!(
             model_inference_response.input_messages,
@@ -1810,6 +1821,7 @@ mod tests {
     #[test]
     fn test_prepare_tools() {
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -1851,6 +1863,7 @@ mod tests {
             }
         }
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],

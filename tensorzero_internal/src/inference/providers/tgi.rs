@@ -16,10 +16,10 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
-use uuid::Uuid;
 
 use super::openai::{
     get_chat_url, prepare_openai_messages, prepare_openai_tools, OpenAIRequestMessage, OpenAITool,
@@ -36,7 +36,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
     TextChunk, Usage,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::ToolCall;
 
 const PROVIDER_NAME: &str = "TGI";
@@ -52,19 +52,24 @@ pub struct TGIProvider {
     credentials: TGICredentials,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<TGICredentials> = OnceLock::new();
+
 impl TGIProvider {
     pub fn new(api_base: Url, api_key_location: Option<CredentialLocation>) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = TGICredentials::try_from(generic_credentials)?;
+        let credentials = build_creds_caching_default(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+        )?;
         Ok(TGIProvider {
             api_base,
-            credentials: provider_credentials,
+            credentials,
         })
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum TGICredentials {
     Static(SecretString),
     Dynamic(String),
@@ -146,7 +151,7 @@ impl InferenceProvider for TGIProvider {
             })?;
 
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -155,12 +160,12 @@ impl InferenceProvider for TGIProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
+                    message: format!("Error parsing JSON response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: serde_json::to_string(&request_body).ok(),
-                    raw_response: Some(response.clone()),
+                    raw_response: Some(raw_response.clone()),
                 })
             })?;
 
@@ -170,6 +175,7 @@ impl InferenceProvider for TGIProvider {
             Ok(TGIResponseWithMetadata {
                 response,
                 latency,
+                raw_response,
                 request: request_body,
                 generic_request: request,
             }
@@ -287,7 +293,6 @@ fn stream_tgi(
     start_time: Instant,
 ) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     async_stream::stream! {
-        let inference_id = Uuid::now_v7();
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -317,7 +322,7 @@ fn stream_tgi(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            tgi_to_tensorzero_chunk(d, inference_id, latency)
+                            tgi_to_tensorzero_chunk(d, latency)
                         });
                         yield stream_message;
                     }
@@ -419,6 +424,7 @@ struct OpenAIRequestFunctionCall<'a> {
 struct TGIResponseWithMetadata<'a> {
     response: TGIResponse,
     latency: Latency,
+    raw_response: String,
     request: TGIRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
@@ -429,14 +435,10 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let TGIResponseWithMetadata {
             mut response,
             latency,
+            raw_response,
             request: request_body,
             generic_request,
         } = value;
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing response: {e}"),
-            })
-        })?;
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
                 message: format!(
@@ -616,7 +618,6 @@ struct TGIChatChunk {
 /// Maps an TGI chunk to a TensorZero chunk for streaming inferences
 fn tgi_to_tensorzero_chunk(
     mut chunk: TGIChatChunk,
-    inference_id: Uuid,
     latency: Duration,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
@@ -658,7 +659,6 @@ fn tgi_to_tensorzero_chunk(
     }
 
     Ok(ProviderInferenceResponseChunk::new(
-        inference_id,
         content,
         usage,
         raw_message,
@@ -671,6 +671,7 @@ mod tests {
     use std::borrow::Cow;
 
     use serde_json::json;
+    use uuid::Uuid;
 
     use crate::inference::{
         providers::{
@@ -686,6 +687,7 @@ mod tests {
     fn test_tgi_request_new() {
         let model_name = PROVIDER_TYPE.to_string();
         let basic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![
                 RequestMessage {
                     role: Role::User,
@@ -726,6 +728,7 @@ mod tests {
 
         // Test request with tools and JSON mode
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -771,6 +774,7 @@ mod tests {
 
         // Test request with strict JSON mode with no output schema
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -804,6 +808,7 @@ mod tests {
         // Test request with strict JSON mode with an output schema
         let output_schema = json!({});
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -846,16 +851,75 @@ mod tests {
             }],
             usage: None,
         };
-        let inference_id = Uuid::now_v7();
-        let message =
-            tgi_to_tensorzero_chunk(chunk.clone(), inference_id, Duration::from_millis(50))
-                .unwrap();
+        let message = tgi_to_tensorzero_chunk(chunk.clone(), Duration::from_millis(50)).unwrap();
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::Text(TextChunk {
                 text: "Hello".to_string(),
                 id: "0".to_string(),
             })],
+        );
+    }
+    #[test]
+    fn test_tgi_response_with_metadata_try_into() {
+        let valid_response = TGIResponse {
+            choices: vec![TGIResponseChoice {
+                index: 0,
+                message: TGIResponseMessage {
+                    content: Some("Hello, world!".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: TGIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            },
+        };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: Some(100),
+            stream: false,
+            seed: Some(69),
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let tgi_response_with_metadata = TGIResponseWithMetadata {
+            response: valid_response,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            request: TGIRequest::new("test-model", &generic_request).unwrap(),
+            generic_request: &generic_request,
+        };
+        let inference_response: ProviderInferenceResponse =
+            tgi_response_with_metadata.try_into().unwrap();
+
+        assert_eq!(inference_response.output.len(), 1);
+        assert_eq!(
+            inference_response.output[0],
+            "Hello, world!".to_string().into()
+        );
+        assert_eq!(inference_response.raw_response, "test_response");
+        assert_eq!(inference_response.usage.input_tokens, 10);
+        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(
+            inference_response.latency,
+            Latency::NonStreaming {
+                response_time: Duration::from_secs(0)
+            }
         );
     }
 }

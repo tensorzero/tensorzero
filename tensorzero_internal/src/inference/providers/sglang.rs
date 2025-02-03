@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use futures::StreamExt;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
@@ -15,7 +17,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
@@ -37,24 +39,29 @@ pub struct SGLangProvider {
     credentials: SGLangCredentials,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<SGLangCredentials> = OnceLock::new();
+
 impl SGLangProvider {
     pub fn new(
         model_name: String,
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = SGLangCredentials::try_from(generic_credentials)?;
+        let credentials = build_creds_caching_default(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+        )?;
         Ok(SGLangProvider {
             model_name,
             api_base,
-            credentials: provider_credentials,
+            credentials,
         })
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum SGLangCredentials {
     Static(SecretString),
     Dynamic(String),
@@ -130,7 +137,7 @@ impl InferenceProvider for SGLangProvider {
                 })
             })?;
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
@@ -139,11 +146,11 @@ impl InferenceProvider for SGLangProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
+                    message: format!("Error parsing JSON response: {e}"),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: Some(response.clone()),
+                    raw_response: Some(raw_response.clone()),
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
@@ -154,6 +161,7 @@ impl InferenceProvider for SGLangProvider {
             Ok(SGLangResponseWithMetadata {
                 response,
                 latency,
+                raw_response,
                 request: request_body,
                 generic_request: request,
             }
@@ -367,6 +375,7 @@ impl<'a> SGLangRequest<'a> {
 struct SGLangResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
+    raw_response: String,
     request: SGLangRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
@@ -377,14 +386,10 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let SGLangResponseWithMetadata {
             mut response,
             latency,
+            raw_response,
             request: request_body,
             generic_request,
         } = value;
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error parsing response: {e}"),
-            })
-        })?;
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
                 message: format!(
@@ -440,12 +445,16 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
+    use std::{borrow::Cow, time::Duration};
 
     use serde_json::json;
+    use uuid::Uuid;
 
     use crate::inference::{
-        providers::common::WEATHER_TOOL_CONFIG,
+        providers::{
+            common::WEATHER_TOOL_CONFIG,
+            openai::{OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage},
+        },
         types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
     };
 
@@ -455,6 +464,7 @@ mod tests {
     fn test_sglang_request_new() {
         let model_name = PROVIDER_TYPE.to_string();
         let basic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![
                 RequestMessage {
                     role: Role::User,
@@ -495,6 +505,7 @@ mod tests {
 
         // Test that non-strict JSON mode requires an output schema
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -516,6 +527,7 @@ mod tests {
 
         // Test request with in strict JSON mode requires an no output schema
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -538,6 +550,7 @@ mod tests {
         // Test request with strict JSON mode with an output schema
         let output_schema = json!({});
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -567,5 +580,68 @@ mod tests {
         assert_eq!(sglang_request.top_p, None);
         assert_eq!(sglang_request.presence_penalty, None);
         assert_eq!(sglang_request.frequency_penalty, None);
+    }
+
+    #[test]
+    fn test_sglang_response_with_metadata_try_into() {
+        let valid_response = OpenAIResponse {
+            choices: vec![OpenAIResponseChoice {
+                index: 0,
+                message: OpenAIResponseMessage {
+                    content: Some("Hello, world!".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: OpenAIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            },
+        };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: Some(100),
+            stream: false,
+            seed: Some(69),
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let sglang_response_with_metadata = SGLangResponseWithMetadata {
+            response: valid_response,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            request: SGLangRequest::new("test-model", &generic_request).unwrap(),
+            generic_request: &generic_request,
+        };
+        let inference_response: ProviderInferenceResponse =
+            sglang_response_with_metadata.try_into().unwrap();
+
+        assert_eq!(inference_response.output.len(), 1);
+        assert_eq!(
+            inference_response.output[0],
+            "Hello, world!".to_string().into()
+        );
+        assert_eq!(inference_response.raw_response, "test_response");
+        assert_eq!(inference_response.usage.input_tokens, 10);
+        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(
+            inference_response.latency,
+            Latency::NonStreaming {
+                response_time: Duration::from_secs(0)
+            }
+        );
     }
 }

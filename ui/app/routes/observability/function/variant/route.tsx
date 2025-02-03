@@ -74,16 +74,18 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     variant_name,
   });
 
-  const variantPerformancesPromise = metric_name
-    ? getVariantPerformances({
-        function_name,
-        function_config,
-        metric_name,
-        metric_config: config.metrics[metric_name],
-        time_window_unit: time_granularity as TimeWindowUnit,
-        variant_name,
-      })
-    : undefined;
+  const variantPerformancesPromise =
+    // Only get variant performances if metric_name is provided and valid
+    metric_name && config.metrics[metric_name]
+      ? getVariantPerformances({
+          function_name,
+          function_config,
+          metric_name,
+          metric_config: config.metrics[metric_name],
+          time_window_unit: time_granularity as TimeWindowUnit,
+          variant_name,
+        })
+      : undefined;
 
   const [
     inferences,

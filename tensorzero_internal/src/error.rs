@@ -69,6 +69,9 @@ pub enum ErrorDetails {
     AllVariantsFailed {
         errors: HashMap<String, Error>,
     },
+    InvalidInferenceTarget {
+        message: String,
+    },
     ApiKeyMissing {
         provider_name: String,
     },
@@ -84,6 +87,9 @@ pub enum ErrorDetails {
     },
     BatchNotFound {
         id: Uuid,
+    },
+    Cache {
+        message: String,
     },
     ChannelWrite {
         message: String,
@@ -230,6 +236,9 @@ pub enum ErrorDetails {
     Serialization {
         message: String,
     },
+    StreamError {
+        source: Box<Error>,
+    },
     ToolNotFound {
         name: String,
     },
@@ -279,9 +288,11 @@ impl ErrorDetails {
             ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
             ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::AppState { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidInferenceTarget { .. } => tracing::Level::WARN,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::Cache { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
@@ -326,6 +337,7 @@ impl ErrorDetails {
             ErrorDetails::OutputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::ProviderNotFound { .. } => tracing::Level::ERROR,
             ErrorDetails::Serialization { .. } => tracing::Level::ERROR,
+            ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ToolNotLoaded { .. } => tracing::Level::ERROR,
             ErrorDetails::TypeConversion { .. } => tracing::Level::ERROR,
@@ -345,12 +357,13 @@ impl ErrorDetails {
     /// Defines the HTTP status code for responses involving this error
     fn status_code(&self) -> StatusCode {
         match self {
-            ErrorDetails::AllVariantsFailed { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BatchInputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::BatchNotFound { .. } => StatusCode::NOT_FOUND,
+            ErrorDetails::Cache { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ChannelWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseConnection { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -359,6 +372,7 @@ impl ErrorDetails {
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceClient { status_code, .. } => {
                 status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
@@ -397,6 +411,7 @@ impl ErrorDetails {
             ErrorDetails::OutputValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ProviderNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Serialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -441,6 +456,9 @@ impl std::fmt::Display for ErrorDetails {
                         .join("\n")
                 )
             }
+            ErrorDetails::InvalidInferenceTarget { message } => {
+                write!(f, "Invalid inference target: {message}")
+            }
             ErrorDetails::ApiKeyMissing { provider_name } => {
                 write!(f, "API key missing for provider: {}", provider_name)
             }
@@ -459,6 +477,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::BatchNotFound { id } => {
                 write!(f, "Batch request not found for id: {}", id)
+            }
+            ErrorDetails::Cache { message } => {
+                write!(f, "Error in cache: {}", message)
             }
             ErrorDetails::ChannelWrite { message } => {
                 write!(f, "Error writing to channel: {}", message)
@@ -684,6 +705,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::ProviderNotFound { provider_name } => {
                 write!(f, "Provider not found: {}", provider_name)
+            }
+            ErrorDetails::StreamError { source } => {
+                write!(f, "Error in streaming response: {source}")
             }
             ErrorDetails::Serialization { message } => write!(f, "{}", message),
             ErrorDetails::TypeConversion { message } => write!(f, "{}", message),

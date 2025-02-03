@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
@@ -5,7 +7,7 @@ use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
@@ -41,22 +43,27 @@ pub struct HyperbolicProvider {
     credentials: HyperbolicCredentials,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<HyperbolicCredentials> = OnceLock::new();
+
 impl HyperbolicProvider {
     pub fn new(
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = HyperbolicCredentials::try_from(generic_credentials)?;
+        let credentials = build_creds_caching_default(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+        )?;
         Ok(HyperbolicProvider {
             model_name,
-            credentials: provider_credentials,
+            credentials,
         })
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum HyperbolicCredentials {
     Static(SecretString),
     Dynamic(String),
@@ -134,7 +141,7 @@ impl InferenceProvider for HyperbolicProvider {
             })?;
 
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
@@ -143,12 +150,12 @@ impl InferenceProvider for HyperbolicProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
+                    message: format!("Error parsing JSON response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: Some(response.clone()),
+                    raw_response: Some(raw_response.clone()),
                 })
             })?;
 
@@ -158,6 +165,7 @@ impl InferenceProvider for HyperbolicProvider {
             Ok(HyperbolicResponseWithMetadata {
                 response,
                 latency,
+                raw_response,
                 request: request_body,
                 generic_request: request,
             }
@@ -316,6 +324,7 @@ impl<'a> HyperbolicRequest<'a> {
 
 struct HyperbolicResponseWithMetadata<'a> {
     response: OpenAIResponse,
+    raw_response: String,
     latency: Latency,
     request: HyperbolicRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
@@ -327,15 +336,10 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
         let HyperbolicResponseWithMetadata {
             mut response,
             latency,
+            raw_response,
             request: request_body,
             generic_request,
         } = value;
-
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing response: {e}"),
-            })
-        })?;
 
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
@@ -392,10 +396,16 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::time::Duration;
+
+    use uuid::Uuid;
 
     use super::*;
 
     use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
+    use crate::inference::providers::openai::{
+        OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
+    };
     use crate::inference::types::{
         FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
@@ -403,6 +413,7 @@ mod tests {
     #[test]
     fn test_hyperbolic_request_new() {
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -468,5 +479,67 @@ mod tests {
             result.unwrap_err().get_owned_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
+    }
+    #[test]
+    fn test_hyperbolic_response_with_metadata_try_into() {
+        let valid_response = OpenAIResponse {
+            choices: vec![OpenAIResponseChoice {
+                index: 0,
+                message: OpenAIResponseMessage {
+                    content: Some("Hello, world!".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: OpenAIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            },
+        };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: Some(100),
+            stream: false,
+            seed: Some(69),
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let hyperbolic_response_with_metadata = HyperbolicResponseWithMetadata {
+            response: valid_response,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            request: HyperbolicRequest::new("test-model", &generic_request).unwrap(),
+            generic_request: &generic_request,
+        };
+        let inference_response: ProviderInferenceResponse =
+            hyperbolic_response_with_metadata.try_into().unwrap();
+
+        assert_eq!(inference_response.output.len(), 1);
+        assert_eq!(
+            inference_response.output[0],
+            "Hello, world!".to_string().into()
+        );
+        assert_eq!(inference_response.raw_response, "test_response");
+        assert_eq!(inference_response.usage.input_tokens, 10);
+        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(
+            inference_response.latency,
+            Latency::NonStreaming {
+                response_time: Duration::from_secs(0)
+            }
+        );
     }
 }

@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use futures::future::join_all;
 use rand::Rng;
@@ -7,7 +6,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
@@ -19,7 +18,6 @@ use crate::{
     function::FunctionConfig,
     inference::types::{InferenceResult, InferenceResultChunk, InferenceResultStream, Input},
     minijinja_util::TemplateConfig,
-    model::ModelConfig,
     variant::chat_completion::ChatCompletionConfig,
 };
 
@@ -93,7 +91,7 @@ impl Variant for MixtureOfNConfig {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
+        embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -232,7 +230,7 @@ impl MixtureOfNConfig {
         &'a self,
         input: &Input,
         function: &'a FunctionConfig,
-        models: &'a HashMap<Arc<str>, ModelConfig>,
+        models: &'a ModelTable,
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         mut candidates: Vec<InferenceResult>,
@@ -299,7 +297,7 @@ impl MixtureOfNConfig {
 async fn inner_fuse_candidates<'a, 'request>(
     fuser: &'a FuserConfig,
     input: &'request Input,
-    models: &'a HashMap<Arc<str>, ModelConfig>,
+    models: &'a ModelTable,
     function: &'a FunctionConfig,
     inference_config: &'request InferenceConfig<'a, 'request>,
     clients: &'request InferenceClients<'request>,
@@ -318,7 +316,7 @@ async fn inner_fuse_candidates<'a, 'request>(
         }
         .into());
     }
-    let model_config = models.get(&fuser.inner.model).ok_or_else(|| {
+    let model_config = models.get(&fuser.inner.model)?.ok_or_else(|| {
         Error::new(ErrorDetails::UnknownModel {
             name: fuser.inner.model.to_string(),
         })
@@ -326,7 +324,7 @@ async fn inner_fuse_candidates<'a, 'request>(
     let infer_model_request_args = InferModelRequestArgs {
         request: inference_request,
         model_name: fuser.inner.model.clone(),
-        model_config,
+        model_config: &model_config,
         function,
         inference_config,
         retry_config: &fuser.inner.retries,
@@ -495,12 +493,15 @@ impl FuserConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use reqwest::Client;
     use uuid::Uuid;
 
     use crate::{
+        cache::{CacheEnabledMode, CacheOptions},
         clickhouse::ClickHouseConnectionInfo,
-        endpoints::inference::InferenceCredentials,
+        endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::{
             providers::dummy::DummyProvider,
@@ -511,7 +512,7 @@ mod tests {
         },
         jsonschema_util::JSONSchemaFromPath,
         minijinja_util::tests::get_test_template_config,
-        model::ProviderConfig,
+        model::{ModelConfig, ProviderConfig},
         tool::{ToolCallConfig, ToolChoice},
     };
 
@@ -672,6 +673,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cached: false,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -706,6 +708,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
+            cached: false,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -768,6 +771,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cached: false,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -802,6 +806,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
+            cached: false,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -877,6 +882,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cached: false,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -911,6 +917,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider1".into(),
             model_name: "ExampleModel1".into(),
+            cached: false,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -928,7 +935,7 @@ mod tests {
             .await,
         );
         let candidates = vec![candidate0, candidate1];
-        let models = HashMap::from([(
+        let models = ModelTable::try_from(HashMap::from([(
             "json".into(),
             ModelConfig {
                 routing: vec!["json".into()],
@@ -940,7 +947,8 @@ mod tests {
                     }),
                 )]),
             },
-        )]);
+        )]))
+        .expect("Failed to create model table");
         let client = Client::new();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
@@ -948,12 +956,20 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let input = Input {
             system: None,
             messages: vec![],
         };
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
@@ -1020,7 +1036,7 @@ mod tests {
                     )]),
                 },
             );
-            map
+            ModelTable::try_from(map).expect("Failed to create model table")
         };
         let input = Input {
             system: None,
@@ -1080,7 +1096,7 @@ mod tests {
                     )]),
                 },
             );
-            map
+            ModelTable::try_from(map).expect("Failed to create model table")
         };
         let input = Input {
             system: None,

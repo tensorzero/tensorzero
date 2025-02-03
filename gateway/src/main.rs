@@ -7,7 +7,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 
-use tensorzero_internal::clickhouse_migration_manager;
 use tensorzero_internal::config_parser::Config;
 use tensorzero_internal::endpoints;
 use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
@@ -21,7 +20,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[tokio::main]
 async fn main() {
     // Set up logs and metrics
-    observability::setup_logs();
+    observability::setup_logs(true);
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Load config
@@ -31,13 +30,6 @@ async fn main() {
     let app_state = gateway_util::AppStateData::new(config.clone())
         .await
         .expect_pretty("Failed to initialize AppState");
-
-    // Run ClickHouse migrations (if any)
-    if !config.gateway.disable_observability {
-        clickhouse_migration_manager::run(&app_state.clickhouse_connection_info)
-            .await
-            .expect_pretty("Failed to run ClickHouse migrations");
-    }
 
     // Set debug mode
     error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");

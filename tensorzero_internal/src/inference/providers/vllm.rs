@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::sync::OnceLock;
 
 use futures::StreamExt;
 use reqwest_eventsource::RequestBuilderExt;
@@ -21,7 +22,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 
 const PROVIDER_NAME: &str = "vLLM";
 const PROVIDER_TYPE: &str = "vllm";
@@ -33,19 +34,24 @@ pub struct VLLMProvider {
     credentials: VLLMCredentials,
 }
 
+static DEFAULT_CREDENTIALS: OnceLock<VLLMCredentials> = OnceLock::new();
+
 impl VLLMProvider {
     pub fn new(
         model_name: String,
         api_base: Url,
         api_key_location: Option<CredentialLocation>,
     ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or(default_api_key_location());
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = VLLMCredentials::try_from(generic_credentials)?;
+        let credentials = build_creds_caching_default(
+            api_key_location,
+            default_api_key_location(),
+            PROVIDER_TYPE,
+            &DEFAULT_CREDENTIALS,
+        )?;
         Ok(VLLMProvider {
             model_name,
             api_base,
-            credentials: provider_credentials,
+            credentials,
         })
     }
 }
@@ -54,7 +60,7 @@ fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("VLLM_API_KEY".to_string())
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum VLLMCredentials {
     Static(SecretString),
     Dynamic(String),
@@ -154,6 +160,7 @@ impl InferenceProvider for VLLMProvider {
             Ok(VLLMResponseWithMetadata {
                 response: response_body,
                 latency,
+                raw_response,
                 request: request_body,
                 generic_request: request,
             }
@@ -332,6 +339,7 @@ impl<'a> VLLMRequest<'a> {
 struct VLLMResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
+    raw_response: String,
     request: VLLMRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
@@ -342,17 +350,11 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let VLLMResponseWithMetadata {
             mut response,
             latency,
+            raw_response,
             request: request_body,
             generic_request,
         } = value;
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error parsing response: {e}"),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
+
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
                 message: format!(
@@ -431,14 +433,18 @@ fn tensorzero_to_vllm_system_message(system: Option<&str>) -> Option<OpenAIReque
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
+    use std::{borrow::Cow, time::Duration};
 
     use serde_json::json;
+    use uuid::Uuid;
 
     use super::*;
 
     use crate::inference::{
-        providers::common::WEATHER_TOOL_CONFIG,
+        providers::{
+            common::WEATHER_TOOL_CONFIG,
+            openai::{OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage},
+        },
         types::{FunctionType, RequestMessage, Role},
     };
 
@@ -452,6 +458,7 @@ mod tests {
             }
         });
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -487,6 +494,7 @@ mod tests {
             }
         });
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -539,5 +547,68 @@ mod tests {
             result.unwrap_err().get_owned_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
+    }
+
+    #[test]
+    fn test_vllm_response_with_metadata_try_into() {
+        let valid_response = OpenAIResponse {
+            choices: vec![OpenAIResponseChoice {
+                index: 0,
+                message: OpenAIResponseMessage {
+                    content: Some("Hello, world!".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: OpenAIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            },
+        };
+        let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["test_user".to_string().into()],
+            }],
+            system: None,
+            temperature: Some(0.5),
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: Some(100),
+            stream: false,
+            seed: Some(69),
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+        let vllm_response_with_metadata = VLLMResponseWithMetadata {
+            response: valid_response,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            request: VLLMRequest::new("test-model", &generic_request).unwrap(),
+            generic_request: &generic_request,
+        };
+        let inference_response: ProviderInferenceResponse =
+            vllm_response_with_metadata.try_into().unwrap();
+
+        assert_eq!(inference_response.output.len(), 1);
+        assert_eq!(
+            inference_response.output[0],
+            "Hello, world!".to_string().into()
+        );
+        assert_eq!(inference_response.raw_response, "test_response");
+        assert_eq!(inference_response.usage.input_tokens, 10);
+        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(
+            inference_response.latency,
+            Latency::NonStreaming {
+                response_time: Duration::from_secs(0)
+            }
+        );
     }
 }

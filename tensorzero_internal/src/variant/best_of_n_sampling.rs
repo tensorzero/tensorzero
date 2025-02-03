@@ -1,6 +1,5 @@
 use std::borrow::Cow;
-use std::sync::Arc;
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use backon::Retryable;
 use futures::future::join_all;
@@ -10,7 +9,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::{
@@ -26,7 +25,6 @@ use crate::{
     function::FunctionConfig,
     inference::types::{InferenceResult, InferenceResultChunk, InferenceResultStream, Input},
     minijinja_util::TemplateConfig,
-    model::ModelConfig,
     variant::chat_completion::ChatCompletionConfig,
 };
 
@@ -119,7 +117,7 @@ impl Variant for BestOfNSamplingConfig {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
+        embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -258,7 +256,7 @@ impl BestOfNSamplingConfig {
     async fn select_best_candidate<'a, 'request>(
         &'a self,
         input: &Input,
-        models: &'a HashMap<Arc<str>, ModelConfig>,
+        models: &ModelTable,
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
         candidates: Vec<InferenceResult>,
@@ -344,7 +342,7 @@ impl BestOfNSamplingConfig {
 async fn inner_select_best_candidate<'a, 'request>(
     evaluator: &'a EvaluatorConfig,
     input: &'request Input,
-    models: &'a HashMap<Arc<str>, ModelConfig>,
+    models: &'a ModelTable,
     inference_config: &'request InferenceConfig<'a, 'request>,
     clients: &'request InferenceClients<'request>,
     candidates: &[InferenceResult],
@@ -373,14 +371,14 @@ async fn inner_select_best_candidate<'a, 'request>(
         // Return the selected index and None for the model inference result
         return Ok((Some(selected_index), None));
     }
-    let model_config = models.get(&evaluator.inner.model).ok_or_else(|| {
+    let model_config = models.get(&evaluator.inner.model)?.ok_or_else(|| {
         Error::new(ErrorDetails::UnknownModel {
             name: evaluator.inner.model.to_string(),
         })
     })?;
     let model_inference_response = (|| async {
         model_config
-            .infer(&inference_request, clients.http_client, clients.credentials)
+            .infer(&inference_request, clients, &evaluator.inner.model)
             .await
     })
     .retry(evaluator.inner.retries.get_backoff())
@@ -608,6 +606,7 @@ impl EvaluatorConfig {
         };
         Ok((
             ModelInferenceRequest {
+                inference_id: inference_config.ids.inference_id,
                 messages,
                 system,
                 tool_config,
@@ -647,18 +646,21 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use reqwest::Client;
     use uuid::Uuid;
 
     use crate::{
+        cache::{CacheEnabledMode, CacheOptions},
         clickhouse::ClickHouseConnectionInfo,
-        endpoints::inference::InferenceCredentials,
+        endpoints::inference::{InferenceCredentials, InferenceIds},
         inference::{
             providers::dummy::DummyProvider,
             types::{ChatInferenceResult, JsonInferenceResult, Latency},
         },
         minijinja_util::tests::get_test_template_config,
-        model::ProviderConfig,
+        model::{ModelConfig, ProviderConfig},
     };
 
     use super::*;
@@ -832,6 +834,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cached: false,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -869,6 +872,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
+            cached: false,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -934,6 +938,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cached: false,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -971,6 +976,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
+            cached: false,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -1041,6 +1047,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cached: false,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -1078,6 +1085,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider1".into(),
             model_name: "ExampleModel1".into(),
+            cached: false,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -1095,7 +1103,7 @@ mod tests {
             .await,
         );
         let candidates = vec![candidate0, candidate1];
-        let models = HashMap::from([(
+        let models = ModelTable::try_from(HashMap::from([(
             "best_of_n_1".into(),
             ModelConfig {
                 routing: vec!["best_of_n_1".into()],
@@ -1107,7 +1115,8 @@ mod tests {
                     }),
                 )]),
             },
-        )]);
+        )]))
+        .expect("Failed to create model table");
         let client = Client::new();
         let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
@@ -1115,12 +1124,20 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let input = Input {
             system: None,
             messages: vec![],
         };
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,
@@ -1187,7 +1204,7 @@ mod tests {
                     )]),
                 },
             );
-            map
+            ModelTable::try_from(map).expect("Failed to create model table")
         };
         let input = Input {
             system: None,
@@ -1246,7 +1263,7 @@ mod tests {
                     )]),
                 },
             );
-            map
+            ModelTable::try_from(map).expect("Failed to create model table")
         };
         let input = Input {
             system: None,
@@ -1322,6 +1339,7 @@ mod tests {
                 )]),
             },
         );
+        let big_models = ModelTable::try_from(big_models).expect("Failed to create model table");
 
         let result_big = best_of_n_big_variant
             .select_best_candidate(

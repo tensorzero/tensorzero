@@ -4,7 +4,7 @@ use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use uuid::Uuid;
 
 lazy_static::lazy_static! {
-    pub static ref CLICKHOUSE_URL: String = std::env::var("CLICKHOUSE_URL").expect("Environment variable CLICKHOUSE_URL must be set");
+    pub static ref CLICKHOUSE_URL: String = std::env::var("TENSORZERO_CLICKHOUSE_URL").expect("Environment variable TENSORZERO_CLICKHOUSE_URL must be set");
     static ref GATEWAY_URL: String = std::env::var("GATEWAY_URL").unwrap_or("http://localhost:3000".to_string());
 }
 
@@ -26,7 +26,7 @@ pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
 #[cfg(feature = "e2e_tests")]
 pub async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo) {
     clickhouse
-        .run_query("SYSTEM FLUSH ASYNC INSERT QUEUE".to_string())
+        .run_query("SYSTEM FLUSH ASYNC INSERT QUEUE".to_string(), None)
         .await
         .unwrap();
 }
@@ -43,7 +43,10 @@ pub(crate) async fn select_chat_inference_clickhouse(
         inference_id
     );
 
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }
@@ -61,7 +64,10 @@ pub(crate) async fn select_json_inference_clickhouse(
         inference_id
     );
 
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }
@@ -79,7 +85,10 @@ pub(crate) async fn select_model_inference_clickhouse(
         inference_id
     );
 
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }
@@ -97,7 +106,10 @@ pub(crate) async fn select_model_inferences_clickhouse(
         inference_id
     );
 
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
     let json_rows: Vec<Value> = text
         .lines()
         .filter_map(|line| serde_json::from_str(line).ok())
@@ -125,7 +137,10 @@ pub(crate) async fn select_inference_tags_clickhouse(
         function_name, tag_key, tag_value, inference_id
     );
 
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }
@@ -145,7 +160,10 @@ pub(crate) async fn select_batch_model_inference_clickhouse(
         inference_id
     );
 
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
     Some(serde_json::from_str(&text).unwrap())
 }
 
@@ -163,7 +181,10 @@ pub(crate) async fn select_batch_model_inferences_clickhouse(
         batch_id
     );
 
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
     let json_rows: Vec<Value> = text
         .lines()
         .filter_map(|line| serde_json::from_str(line).ok())
@@ -182,7 +203,10 @@ pub(crate) async fn select_latest_batch_request_clickhouse(
         batch_id
     );
 
-    let text = clickhouse_connection_info.run_query(query).await.unwrap();
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }
