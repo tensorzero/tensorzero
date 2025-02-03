@@ -2,7 +2,7 @@ use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 use url::Url;
 
@@ -20,8 +20,8 @@ use crate::model::{Credential, CredentialLocation};
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-    stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,
-    StreamOptions,
+    stream_openai, OpenAIRequestMessage, OpenAIResponseToolCall, OpenAITool, OpenAIToolChoice,
+    OpenAIUsage, StreamOptions,
 };
 
 lazy_static! {
@@ -373,8 +373,30 @@ impl<'a> DeepSeekRequest<'a> {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct DeepSeekResponseMessage {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<OpenAIResponseToolCall>>,
+}
+
+// Leaving out logprobs and finish_reason for now
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+struct DeepSeekResponseChoice {
+    index: u8,
+    message: DeepSeekResponseMessage,
+}
+
+// Leaving out id, created, model, service_tier, system_fingerprint, object for now
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+struct DeepSeekResponse {
+    choices: Vec<DeepSeekResponseChoice>,
+    usage: OpenAIUsage,
+}
+
 struct DeepSeekResponseWithMetadata<'a> {
-    response: OpenAIResponse,
+    response: DeepSeekResponse,
     raw_response: String,
     latency: Latency,
     request: DeepSeekRequest<'a>,
@@ -454,8 +476,7 @@ mod tests {
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::providers::openai::{
-        OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType, OpenAIUsage,
-        SpecificToolChoice, SpecificToolFunction,
+        OpenAIToolType, OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
     };
     use crate::inference::types::{
         FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
@@ -603,10 +624,10 @@ mod tests {
     }
     #[test]
     fn test_deepseek_response_with_metadata_try_into() {
-        let valid_response = OpenAIResponse {
-            choices: vec![OpenAIResponseChoice {
+        let valid_response = DeepSeekResponse {
+            choices: vec![DeepSeekResponseChoice {
                 index: 0,
-                message: OpenAIResponseMessage {
+                message: DeepSeekResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
