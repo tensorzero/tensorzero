@@ -20,6 +20,7 @@ use crate::inference::types::{
     ContentBlockOutput, Latency, ModelInferenceRequest, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStream, Usage,
 };
+use crate::inference::types::{Text, Thought};
 use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk};
 
@@ -214,6 +215,22 @@ impl InferenceProvider for DummyProvider {
                 arguments: serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
                 id: "0".to_string(),
             })],
+            "reasoner" => vec![
+                ContentBlockOutput::Thought(Thought {
+                    text: "hmmm".to_string(),
+                }),
+                ContentBlockOutput::Text(Text {
+                    text: DUMMY_INFER_RESPONSE_CONTENT.to_string(),
+                }),
+            ],
+            "json_reasoner" => vec![
+                ContentBlockOutput::Thought(Thought {
+                    text: "hmmm".to_string(),
+                }),
+                ContentBlockOutput::Text(Text {
+                    text: DUMMY_JSON_RESPONSE_RAW.to_string(),
+                }),
+            ],
             "bad_tool" => vec![ContentBlockOutput::ToolCall(ToolCall {
                 name: "get_temperature".to_string(),
                 #[allow(clippy::unwrap_used)]
@@ -326,10 +343,11 @@ impl InferenceProvider for DummyProvider {
         }
         let created = current_timestamp();
 
-        let (content_chunks, is_tool_call) = if self.model_name == "tool" {
-            (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true)
-        } else {
-            (DUMMY_STREAMING_RESPONSE.to_vec(), false)
+        let (content_chunks, is_tool_call) = match self.model_name.as_str() {
+            "tool" => (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true),
+            "reasoner" => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
+            "json_reasoner" => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
+            _ => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
         };
 
         let total_tokens = content_chunks.len() as u32;
