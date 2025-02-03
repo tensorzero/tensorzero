@@ -27,8 +27,8 @@ services:
 
   gateway:
     build:
-      context: ../../gateway
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: gateway/Dockerfile
       target: gateway
     volumes:
       - ./config:/app/config:ro
