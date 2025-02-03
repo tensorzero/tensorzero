@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
@@ -17,15 +17,17 @@ use crate::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+        Thought,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation},
+    tool::ToolCall,
 };
 
 use super::{
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
-        tensorzero_to_openai_messages, OpenAIRequestMessage, OpenAIResponse,
-        OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
+        tensorzero_to_openai_messages, OpenAIRequestMessage, OpenAISystemRequestMessage,
+        OpenAITool, OpenAIToolChoice, OpenAIToolType, OpenAIUsage,
     },
     provider_trait::InferenceProvider,
 };
@@ -363,8 +365,101 @@ fn tensorzero_to_together_system_message(system: Option<&str>) -> Option<OpenAIR
     })
 }
 
+#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
+struct TogetherResponseFunctionCall {
+    name: String,
+    arguments: String,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
+struct TogetherResponseToolCall {
+    id: String,
+    r#type: OpenAIToolType,
+    function: TogetherResponseFunctionCall,
+}
+
+impl From<TogetherResponseToolCall> for ToolCall {
+    fn from(together_tool_call: TogetherResponseToolCall) -> Self {
+        ToolCall {
+            id: together_tool_call.id,
+            name: together_tool_call.function.name,
+            arguments: together_tool_call.function.arguments,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+struct TogetherResponseMessage {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<TogetherResponseToolCall>>,
+}
+
+impl<'de> Deserialize<'de> for TogetherResponseMessage {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        #[derive(Deserialize)]
+        struct Helper {
+            content: Option<String>,
+            tool_calls: Option<Vec<TogetherResponseToolCall>>,
+        }
+
+        let helper = Helper::deserialize(deserializer)?;
+
+        let (content, reasoning_content) = if let Some(text) = helper.content {
+            // Count thinking blocks
+            let think_count = text.matches("<think>").count();
+            if think_count > 1 {
+                return Err(D::Error::custom("Multiple thinking blocks found"));
+            }
+
+            if let (Some(start), Some(end)) = (text.find("<think>"), text.find("</think>")) {
+                let reasoning = text[start + 7..end].trim().to_string();
+                let mut cleaned = String::with_capacity(text.len());
+                cleaned.push_str(&text[..start]);
+                cleaned.push_str(&text[end + 8..]);
+                (Some(cleaned.trim().to_string()), Some(reasoning))
+            } else if think_count != text.matches("</think>").count() {
+                // Check for mismatched tags
+                return Err(D::Error::custom("Mismatched thinking tags"));
+            } else {
+                (Some(text), None)
+            }
+        } else {
+            (None, None)
+        };
+
+        Ok(TogetherResponseMessage {
+            content,
+            reasoning_content,
+            tool_calls: helper.tool_calls,
+        })
+    }
+}
+
+// Leaving out logprobs and finish_reason for now
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+struct TogetherResponseChoice {
+    index: u8,
+    message: TogetherResponseMessage,
+}
+
+// Leaving out id, created, model, service_tier, system_fingerprint, object for now
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+struct TogetherResponse {
+    choices: Vec<TogetherResponseChoice>,
+    usage: OpenAIUsage,
+}
+
 struct TogetherResponseWithMetadata<'a> {
-    response: OpenAIResponse,
+    response: TogetherResponse,
     latency: Latency,
     raw_response: String,
     request: TogetherRequest<'a>,
@@ -405,6 +500,9 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             }))?
             .message;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(Thought { text: reasoning }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
@@ -446,8 +544,7 @@ mod tests {
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::providers::openai::{
-        OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType, OpenAIUsage,
-        SpecificToolChoice, SpecificToolFunction,
+        OpenAIToolType, OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
     };
     use crate::inference::types::{FunctionType, RequestMessage, Role};
 
@@ -537,11 +634,12 @@ mod tests {
 
     #[test]
     fn test_together_response_with_metadata_try_into() {
-        let valid_response = OpenAIResponse {
-            choices: vec![OpenAIResponseChoice {
+        let valid_response = TogetherResponse {
+            choices: vec![TogetherResponseChoice {
                 index: 0,
-                message: OpenAIResponseMessage {
+                message: TogetherResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: Some("Thinking...".to_string()),
                     tool_calls: None,
                 },
             }],
@@ -582,9 +680,15 @@ mod tests {
         let inference_response: ProviderInferenceResponse =
             together_response_with_metadata.try_into().unwrap();
 
-        assert_eq!(inference_response.output.len(), 1);
+        assert_eq!(inference_response.output.len(), 2);
         assert_eq!(
             inference_response.output[0],
+            ContentBlockOutput::Thought(Thought {
+                text: "Thinking...".to_string()
+            })
+        );
+        assert_eq!(
+            inference_response.output[1],
             "Hello, world!".to_string().into()
         );
         assert_eq!(inference_response.raw_response, "test_response");
@@ -596,5 +700,38 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+    }
+
+    #[test]
+    fn test_single_thinking() {
+        let json = r#"{
+            "content": "Hello <think>this is thinking</think> world",
+            "tool_calls": null
+        }"#;
+
+        let msg: TogetherResponseMessage = serde_json::from_str(json).unwrap();
+        // 2 spaces between Hello and world because of the thinking block and whitespace
+        assert_eq!(msg.content, Some("Hello  world".to_string()));
+        assert_eq!(msg.reasoning_content, Some("this is thinking".to_string()));
+    }
+
+    #[test]
+    fn test_multiple_thinking_blocks() {
+        let json = r#"{
+            "content": "Hello <think>thinking 1</think> middle <think>thinking 2</think>",
+            "tool_calls": null
+        }"#;
+
+        assert!(serde_json::from_str::<TogetherResponseMessage>(json).is_err());
+    }
+
+    #[test]
+    fn test_mismatched_tags() {
+        let json = r#"{
+            "content": "Hello <think>thinking without end tag",
+            "tool_calls": null
+        }"#;
+
+        assert!(serde_json::from_str::<TogetherResponseMessage>(json).is_err());
     }
 }

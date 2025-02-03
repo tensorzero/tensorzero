@@ -174,7 +174,7 @@ pub async fn test_reasoning_inference_request_with_provider(provider: E2ETestPro
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        800
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();

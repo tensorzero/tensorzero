@@ -40,6 +40,13 @@ async fn get_providers() -> E2ETestProviders {
         // },
     ];
 
+    let reasoning_providers = vec![E2ETestProvider {
+        variant_name: "together-deepseek-r1".to_string(),
+        model_name: "together-deepseek-r1".to_string(),
+        model_provider_name: "together".to_string(),
+        credentials: HashMap::new(),
+    }];
+
     #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "together-shorthand".to_string(),
@@ -53,7 +60,7 @@ async fn get_providers() -> E2ETestProviders {
     // - Together's function calling for Llama 3.1 is different from Llama 3.0 (breaking) - we should test both
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
-        reasoning_inference: vec![],
+        reasoning_inference: reasoning_providers.clone(),
         inference_params_inference: inference_params_providers,
         tool_use_inference: vec![],
         tool_multi_turn_inference: vec![],
