@@ -285,7 +285,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -294,12 +294,12 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
+                    message: format!("Error parsing JSON response: {e}: {raw_response}"),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: Some(response),
+                    raw_response: Some(raw_response.clone()),
                 })
             })?;
             let response_with_latency = GCPVertexGeminiResponseWithMetadata {
@@ -307,6 +307,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                 latency,
                 request: request_body,
                 generic_request: request,
+                raw_response,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -955,6 +956,7 @@ struct GCPVertexGeminiResponse {
 
 struct GCPVertexGeminiResponseWithMetadata<'a> {
     response: GCPVertexGeminiResponse,
+    raw_response: String,
     latency: Latency,
     request: GCPVertexGeminiRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
@@ -965,15 +967,11 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
     fn try_from(response: GCPVertexGeminiResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
         let GCPVertexGeminiResponseWithMetadata {
             response,
+            raw_response,
             latency,
             request: request_body,
             generic_request,
         } = response;
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing response from GCP Vertex Gemini: {e}"),
-            })
-        })?;
 
         // GCP Vertex Gemini response can contain multiple candidates and each of these can contain
         // multiple content parts. We will only use the first candidate but handle all parts of the response therein.
@@ -1602,11 +1600,13 @@ mod tests {
             system_instruction: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
+        let raw_response = "test response".to_string();
         let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -1623,6 +1623,7 @@ mod tests {
         );
         assert_eq!(model_inference_response.latency, latency);
         assert_eq!(model_inference_response.raw_request, raw_request);
+        assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(
             model_inference_response.system,
             Some("test_system".to_string())
@@ -1683,6 +1684,7 @@ mod tests {
             latency: latency.clone(),
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -1709,6 +1711,7 @@ mod tests {
         );
         assert_eq!(model_inference_response.latency, latency);
         assert_eq!(model_inference_response.raw_request, raw_request);
+        assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(model_inference_response.system, None);
         assert_eq!(
             model_inference_response.input_messages,
@@ -1767,6 +1770,7 @@ mod tests {
             latency: latency.clone(),
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -1802,6 +1806,8 @@ mod tests {
             }
         );
         assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(model_inference_response.raw_request, raw_request);
+        assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(model_inference_response.system, None);
         assert_eq!(
             model_inference_response.input_messages,
