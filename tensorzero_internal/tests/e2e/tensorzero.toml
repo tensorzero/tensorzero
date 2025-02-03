@@ -732,7 +732,7 @@ max_tokens = 100
 type = "chat_completion"
 model = "deepseek-reasoner"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 800
 
 [functions.basic_test.variants.together-deepseek-r1]
 type = "chat_completion"

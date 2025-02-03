@@ -17,7 +17,7 @@ use crate::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
         ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-        ProviderInferenceResponseStream, TextChunk, Thought,
+        ProviderInferenceResponseStream, TextChunk, Thought, ThoughtChunk,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation},
     tool::{ToolCall, ToolCallChunk},
@@ -533,12 +533,68 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
     }
 }
 
+enum ThinkingState {
+    Normal,
+    Thinking,
+    Finished,
+}
+
+impl ThinkingState {
+    fn get_id(&self) -> String {
+        match self {
+            ThinkingState::Normal => "0".to_string(),
+            ThinkingState::Thinking => "1".to_string(),
+            ThinkingState::Finished => "2".to_string(),
+        }
+    }
+
+    // Returns true if an update was made to the thinking state
+    // Returns false if the text is not a thinking block
+    // Returns an error if the thinking state is invalid
+    fn update(&mut self, text: &str) -> Result<bool, Error> {
+        match (&mut *self, text) {
+            (ThinkingState::Normal, "<think>") => {
+                *self = ThinkingState::Thinking;
+                Ok(true)
+            }
+            (ThinkingState::Normal, "</think>") => Err(Error::new(ErrorDetails::InferenceServer {
+                message: "Found </think> while not thinking".to_string(),
+                raw_request: None,
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })),
+            (ThinkingState::Thinking, "</think>") => {
+                *self = ThinkingState::Finished;
+                Ok(true)
+            }
+            (ThinkingState::Thinking, "<think>") => {
+                Err(Error::new(ErrorDetails::InferenceServer {
+                    message: "Found <think> while already thinking".to_string(),
+                    raw_request: None,
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                }))
+            }
+            (ThinkingState::Finished, "<think>") | (ThinkingState::Finished, "</think>") => {
+                Err(Error::new(ErrorDetails::InferenceServer {
+                    message: "Found thinking tags after thinking finished".to_string(),
+                    raw_request: None,
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                }))
+            }
+            _ => Ok(false),
+        }
+    }
+}
+
 fn stream_together(
     mut event_source: EventSource,
     start_time: Instant,
 ) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     let mut tool_call_ids = Vec::new();
     let mut tool_call_names = Vec::new();
+    let mut thinking_state = ThinkingState::Normal;
     async_stream::stream! {
         while let Some(ev) = event_source.next().await {
             match ev {
@@ -574,7 +630,7 @@ fn stream_together(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            together_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names)
+                            together_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names, &mut thinking_state)
                         });
                         yield stream_message;
                     }
@@ -592,6 +648,7 @@ fn together_to_tensorzero_chunk(
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
     tool_names: &mut Vec<String>,
+    thinking_state: &mut ThinkingState,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
@@ -614,10 +671,23 @@ fn together_to_tensorzero_chunk(
     let mut content = vec![];
     if let Some(choice) = chunk.choices.pop() {
         if let Some(text) = choice.delta.content {
-            content.push(ContentBlockChunk::Text(TextChunk {
-                text,
-                id: "0".to_string(),
-            }));
+            // If an update is made to the thinking state, we don't want to add a text chunk
+            if !thinking_state.update(&text)? {
+                match thinking_state {
+                    ThinkingState::Normal | ThinkingState::Finished => {
+                        content.push(ContentBlockChunk::Text(TextChunk {
+                            text,
+                            id: thinking_state.get_id(),
+                        }));
+                    }
+                    ThinkingState::Thinking => {
+                        content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                            text,
+                            id: thinking_state.get_id(),
+                        }));
+                    }
+                }
+            };
         }
         if let Some(tool_calls) = choice.delta.tool_calls {
             for tool_call in tool_calls {
@@ -726,7 +796,7 @@ mod tests {
     use crate::inference::providers::openai::{
         OpenAIToolType, OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
     };
-    use crate::inference::types::{FunctionType, RequestMessage, Role};
+    use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
 
     #[test]
     fn test_together_request_new() {
@@ -913,5 +983,306 @@ mod tests {
         }"#;
 
         assert!(serde_json::from_str::<TogetherResponseMessage>(json).is_err());
+    }
+
+    #[test]
+    fn test_thinking_state() {
+        // Test initial state and ID
+        let mut state = ThinkingState::Normal;
+        assert_eq!(state.get_id(), "0");
+
+        // Test normal state transitions and IDs
+        assert!(state.update("<think>").is_ok());
+        assert!(matches!(state, ThinkingState::Thinking));
+        assert_eq!(state.get_id(), "1");
+
+        assert!(state.update("</think>").is_ok());
+        assert!(matches!(state, ThinkingState::Finished));
+        assert_eq!(state.get_id(), "2");
+
+        // Test invalid transitions from Normal state
+        let mut state = ThinkingState::Normal;
+        let err = state.update("</think>").unwrap_err();
+        assert!(matches!(
+            err.get_details(),
+            ErrorDetails::InferenceServer { .. }
+        ));
+        if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
+            assert_eq!(message, "Found </think> while not thinking");
+        }
+
+        // Test invalid transitions from Thinking state
+        let mut state = ThinkingState::Thinking;
+        let err = state.update("<think>").unwrap_err();
+        assert!(matches!(
+            err.get_details(),
+            ErrorDetails::InferenceServer { .. }
+        ));
+        if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
+            assert_eq!(message, "Found <think> while already thinking");
+        }
+
+        // Test invalid transitions from Finished state
+        let mut state = ThinkingState::Finished;
+        let err = state.update("<think>").unwrap_err();
+        assert!(matches!(
+            err.get_details(),
+            ErrorDetails::InferenceServer { .. }
+        ));
+        if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
+            assert_eq!(message, "Found thinking tags after thinking finished");
+        }
+
+        let err = state.update("</think>").unwrap_err();
+        assert!(matches!(
+            err.get_details(),
+            ErrorDetails::InferenceServer { .. }
+        ));
+        if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
+            assert_eq!(message, "Found thinking tags after thinking finished");
+        }
+
+        // Test that random text is allowed in any state
+        let mut state = ThinkingState::Normal;
+        assert!(state.update("random text").is_ok());
+
+        state = ThinkingState::Thinking;
+        assert!(state.update("random text").is_ok());
+
+        state = ThinkingState::Finished;
+        assert!(state.update("random text").is_ok());
+    }
+
+    #[test]
+    fn test_together_to_tensorzero_chunk() {
+        let chunk = TogetherChatChunk {
+            choices: vec![TogetherChatChunkChoice {
+                delta: TogetherDelta {
+                    content: Some("Hello".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: None,
+        };
+        let mut tool_call_ids = vec!["id1".to_string()];
+        let mut tool_call_names = vec!["name1".to_string()];
+        let mut thinking_state = ThinkingState::Normal;
+        let message = together_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+            &mut thinking_state,
+        )
+        .unwrap();
+        assert_eq!(
+            message.content,
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: "Hello".to_string(),
+                id: "0".to_string(),
+            })],
+        );
+        // Test what an intermediate tool chunk should look like
+        let chunk = TogetherChatChunk {
+            choices: vec![TogetherChatChunkChoice {
+                delta: TogetherDelta {
+                    content: None,
+                    tool_calls: Some(vec![TogetherToolCallChunk {
+                        index: 0,
+                        id: None,
+                        function: TogetherFunctionCallChunk {
+                            name: None,
+                            arguments: Some("{\"hello\":\"world\"}".to_string()),
+                        },
+                    }]),
+                },
+            }],
+            usage: None,
+        };
+        let message = together_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+            &mut thinking_state,
+        )
+        .unwrap();
+        assert_eq!(
+            message.content,
+            vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                id: "id1".to_string(),
+                raw_name: "name1".to_string(),
+                raw_arguments: "{\"hello\":\"world\"}".to_string(),
+            })]
+        );
+        // Test what a bad tool chunk would do (new ID but no names)
+        let chunk = TogetherChatChunk {
+            choices: vec![TogetherChatChunkChoice {
+                delta: TogetherDelta {
+                    content: None,
+                    tool_calls: Some(vec![TogetherToolCallChunk {
+                        index: 1,
+                        id: None,
+                        function: TogetherFunctionCallChunk {
+                            name: None,
+                            arguments: Some("{\"hello\":\"world\"}".to_string()),
+                        },
+                    }]),
+                },
+            }],
+            usage: None,
+        };
+        let error = together_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+            &mut thinking_state,
+        )
+        .unwrap_err();
+        let details = error.get_details();
+        assert_eq!(
+            *details,
+            ErrorDetails::InferenceServer {
+                message: "Tool call index out of bounds (meaning we haven't seen this many ids in the stream)".to_string(),
+                raw_request: None,
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            }
+        );
+        // Test a correct new tool chunk
+        let chunk = TogetherChatChunk {
+            choices: vec![TogetherChatChunkChoice {
+                delta: TogetherDelta {
+                    content: None,
+                    tool_calls: Some(vec![TogetherToolCallChunk {
+                        index: 1,
+                        id: Some("id2".to_string()),
+                        function: TogetherFunctionCallChunk {
+                            name: Some("name2".to_string()),
+                            arguments: Some("{\"hello\":\"world\"}".to_string()),
+                        },
+                    }]),
+                },
+            }],
+            usage: None,
+        };
+        let message = together_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+            &mut thinking_state,
+        )
+        .unwrap();
+        assert_eq!(
+            message.content,
+            vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                id: "id2".to_string(),
+                raw_name: "name2".to_string(),
+                raw_arguments: "{\"hello\":\"world\"}".to_string(),
+            })]
+        );
+        // Check that the lists were updated
+        assert_eq!(tool_call_ids, vec!["id1".to_string(), "id2".to_string()]);
+        assert_eq!(
+            tool_call_names,
+            vec!["name1".to_string(), "name2".to_string()]
+        );
+
+        // Check a chunk with no choices and only usage
+        let chunk = TogetherChatChunk {
+            choices: vec![],
+            usage: Some(OpenAIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            }),
+        };
+        let message = together_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+            &mut thinking_state,
+        )
+        .unwrap();
+        assert_eq!(message.content, vec![]);
+        assert_eq!(
+            message.usage,
+            Some(Usage {
+                input_tokens: 10,
+                output_tokens: 20,
+            })
+        );
+
+        // Test a thinking chunk
+        let chunk = TogetherChatChunk {
+            choices: vec![TogetherChatChunkChoice {
+                delta: TogetherDelta {
+                    content: Some("<think>".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: None,
+        };
+        let message = together_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+            &mut thinking_state,
+        )
+        .unwrap();
+        assert!(message.content.is_empty());
+        assert!(matches!(thinking_state, ThinkingState::Thinking));
+
+        // Test a thinking middle chunk
+        let chunk = TogetherChatChunk {
+            choices: vec![TogetherChatChunkChoice {
+                delta: TogetherDelta {
+                    content: Some("some thinking content".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: None,
+        };
+        let message = together_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+            &mut thinking_state,
+        )
+        .unwrap();
+        assert_eq!(
+            message.content,
+            vec![ContentBlockChunk::Thought(ThoughtChunk {
+                text: "some thinking content".to_string(),
+                id: "1".to_string(),
+            })]
+        );
+        assert!(matches!(thinking_state, ThinkingState::Thinking));
+
+        // Test a thinking chunk end
+        let chunk = TogetherChatChunk {
+            choices: vec![TogetherChatChunkChoice {
+                delta: TogetherDelta {
+                    content: Some("</think>".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: None,
+        };
+        let message = together_to_tensorzero_chunk(
+            chunk.clone(),
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+            &mut thinking_state,
+        )
+        .unwrap();
+        assert!(message.content.is_empty());
+        assert!(matches!(thinking_state, ThinkingState::Finished));
     }
 }

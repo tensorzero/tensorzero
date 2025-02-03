@@ -1000,7 +1000,9 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                     if ttft.is_none() {
                                         ttft = Some(chunk.latency);
                                     }
-                                    text_blocks.insert(text.id, text.text.into());
+                                    if !text.text.is_empty() {
+                                        text_blocks.insert(text.id, text.text.into());
+                                    }
                                 }
                             }
                         }

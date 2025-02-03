@@ -393,6 +393,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider(provider: 
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
+    println!("output: {output:#?}");
     assert_eq!(output.len(), 2);
     let mut found_text = false;
     let mut found_thought = false;
@@ -430,7 +431,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider(provider: 
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        800
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
