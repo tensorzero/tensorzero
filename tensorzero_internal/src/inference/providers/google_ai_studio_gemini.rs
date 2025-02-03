@@ -159,7 +159,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -168,17 +168,18 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
+                    message: format!("Error parsing JSON response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: Some(response.clone()),
+                    raw_response: Some(raw_response.clone()),
                 })
             })?;
             let response_with_latency = GeminiResponseWithMetadata {
                 response,
                 latency,
+                raw_response,
                 request: request_body,
                 generic_request: request,
             };
@@ -786,6 +787,7 @@ struct GeminiResponse {
 
 struct GeminiResponseWithMetadata<'a> {
     response: GeminiResponse,
+    raw_response: String,
     latency: Latency,
     request: GeminiRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
@@ -796,15 +798,11 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
     fn try_from(response: GeminiResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
         let GeminiResponseWithMetadata {
             response,
+            raw_response,
             latency,
             request: request_body,
             generic_request,
         } = response;
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing response from Google AI Studio Gemini: {e}"),
-            })
-        })?;
 
         // Google AI Studio Gemini response can contain multiple candidates and each of these can contain
         // multiple content parts. We will only use the first candidate but handle all parts of the response therein.
@@ -1320,11 +1318,13 @@ mod tests {
             system_instruction: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
+        let raw_response = "test response".to_string();
         let response_with_latency = GeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -1341,6 +1341,7 @@ mod tests {
         );
         assert_eq!(model_inference_response.latency, latency);
         assert_eq!(model_inference_response.raw_request, raw_request);
+        assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(model_inference_response.system, None);
         assert_eq!(
             model_inference_response.input_messages,
@@ -1404,6 +1405,7 @@ mod tests {
             latency: latency.clone(),
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
@@ -1490,11 +1492,12 @@ mod tests {
             latency: latency.clone(),
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         };
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
         assert_eq!(model_inference_response.raw_request, raw_request);
-
+        assert_eq!(model_inference_response.raw_response, raw_response);
         if let [ContentBlock::Text(Text { text: text1 }), ContentBlock::ToolCall(tool_call1), ContentBlock::Text(Text { text: text2 }), ContentBlock::ToolCall(tool_call2)] =
             &model_inference_response.output[..]
         {
