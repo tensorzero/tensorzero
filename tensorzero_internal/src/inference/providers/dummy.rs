@@ -152,6 +152,9 @@ impl InferenceProvider for DummyProvider {
         _http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
+        if self.model_name == "slow" {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        }
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
             #[allow(clippy::expect_used)]
@@ -283,6 +286,9 @@ impl InferenceProvider for DummyProvider {
         ),
         Error,
     > {
+        if self.model_name == "slow" {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        }
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
             #[allow(clippy::expect_used)]
