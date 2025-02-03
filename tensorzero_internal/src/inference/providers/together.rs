@@ -1,9 +1,9 @@
-use std::{borrow::Cow, sync::OnceLock};
+use std::{borrow::Cow, sync::OnceLock, time::Duration};
 
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
-use reqwest_eventsource::RequestBuilderExt;
+use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,19 +15,19 @@ use crate::{
     error::{Error, ErrorDetails},
     inference::types::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
-        ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-        ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
-        Thought,
+        ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+        ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+        ProviderInferenceResponseStream, TextChunk, Thought,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation},
-    tool::ToolCall,
+    tool::{ToolCall, ToolCallChunk},
 };
 
 use super::{
     openai::{
-        get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
-        tensorzero_to_openai_messages, OpenAIRequestMessage, OpenAISystemRequestMessage,
-        OpenAITool, OpenAIToolChoice, OpenAIToolType, OpenAIUsage,
+        get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
+        OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
+        OpenAIToolType, OpenAIUsage,
     },
     provider_trait::InferenceProvider,
 };
@@ -227,7 +227,7 @@ impl InferenceProvider for TogetherProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-        let mut stream = Box::pin(stream_openai(event_source, start_time));
+        let mut stream = Box::pin(stream_together(event_source, start_time));
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
         let chunk = match stream.next().await {
@@ -531,6 +531,186 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             latency,
         ))
     }
+}
+
+fn stream_together(
+    mut event_source: EventSource,
+    start_time: Instant,
+) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
+    let mut tool_call_ids = Vec::new();
+    let mut tool_call_names = Vec::new();
+    async_stream::stream! {
+        while let Some(ev) = event_source.next().await {
+            match ev {
+                Err(e) => {
+                    let message = e.to_string();
+                    let mut raw_response = None;
+                    if let reqwest_eventsource::Error::InvalidStatusCode(_, resp) = e {
+                        raw_response = resp.text().await.ok();
+                    }
+                    yield Err(ErrorDetails::InferenceServer {
+                        message,
+                        raw_request: None,
+                        raw_response,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    }.into());
+                }
+                Ok(event) => match event {
+                    Event::Open => continue,
+                    Event::Message(message) => {
+                        if message.data == "[DONE]" {
+                            break;
+                        }
+                        let data: Result<TogetherChatChunk, Error> =
+                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
+                                message: format!(
+                                    "Error parsing chunk. Error: {}",
+                                    e,
+                                ),
+                                raw_request: None,
+                                raw_response: Some(message.data.clone()),
+                                provider_type: PROVIDER_TYPE.to_string(),
+                            }));
+
+                        let latency = start_time.elapsed();
+                        let stream_message = data.and_then(|d| {
+                            together_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names)
+                        });
+                        yield stream_message;
+                    }
+                },
+            }
+        }
+
+        event_source.close();
+    }
+}
+
+/// Maps a Together chunk to a TensorZero chunk for streaming inferences
+fn together_to_tensorzero_chunk(
+    mut chunk: TogetherChatChunk,
+    latency: Duration,
+    tool_call_ids: &mut Vec<String>,
+    tool_names: &mut Vec<String>,
+) -> Result<ProviderInferenceResponseChunk, Error> {
+    let raw_message = serde_json::to_string(&chunk).map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!("Error parsing response from Together: {e}"),
+            raw_request: None,
+            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })?;
+    if chunk.choices.len() > 1 {
+        return Err(ErrorDetails::InferenceServer {
+            message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
+            raw_request: None,
+            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        }
+        .into());
+    }
+    let usage = chunk.usage.map(|u| u.into());
+    let mut content = vec![];
+    if let Some(choice) = chunk.choices.pop() {
+        if let Some(text) = choice.delta.content {
+            content.push(ContentBlockChunk::Text(TextChunk {
+                text,
+                id: "0".to_string(),
+            }));
+        }
+        if let Some(tool_calls) = choice.delta.tool_calls {
+            for tool_call in tool_calls {
+                let index = tool_call.index;
+                let id = match tool_call.id {
+                    Some(id) => {
+                        tool_call_ids.push(id.clone());
+                        id
+                    }
+                    None => {
+                        tool_call_ids
+                            .get(index as usize)
+                            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
+                                message: "Tool call index out of bounds (meaning we haven't seen this many ids in the stream)".to_string(),
+                                raw_request: None,
+                                raw_response: None,
+                                provider_type: PROVIDER_TYPE.to_string(),
+                            }))?
+                            .clone()
+                    }
+                };
+                let name = match tool_call.function.name {
+                    Some(name) => {
+                        tool_names.push(name.clone());
+                        name
+                    }
+                    None => {
+                        tool_names
+                            .get(index as usize)
+                            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
+                                message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),
+                                raw_request: None,
+                                raw_response: None,
+                                provider_type: PROVIDER_TYPE.to_string(),
+                            }))?
+                            .clone()
+                    }
+                };
+                content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
+                    id,
+                    raw_name: name,
+                    raw_arguments: tool_call.function.arguments.unwrap_or_default(),
+                }));
+            }
+        }
+    }
+
+    Ok(ProviderInferenceResponseChunk::new(
+        content,
+        usage,
+        raw_message,
+        latency,
+    ))
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct TogetherFunctionCallChunk {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    arguments: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct TogetherToolCallChunk {
+    index: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
+    // If we were to do this better, we would need to check the type field
+    function: TogetherFunctionCallChunk,
+}
+
+// This doesn't include role
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct TogetherDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<TogetherToolCallChunk>>,
+}
+
+// This doesn't include logprobs, finish_reason, and index
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct TogetherChatChunkChoice {
+    delta: TogetherDelta,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct TogetherChatChunk {
+    choices: Vec<TogetherChatChunkChoice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    usage: Option<OpenAIUsage>,
 }
 
 #[cfg(test)]
