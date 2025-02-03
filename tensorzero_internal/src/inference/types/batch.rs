@@ -29,7 +29,6 @@ pub enum BatchStatus {
 /// through the call stack.
 pub struct StartBatchProviderInferenceResponse {
     pub batch_id: Uuid,
-    pub inference_ids: Vec<Uuid>,
     pub raw_requests: Vec<String>, // The raw text of each individual batch request
     pub batch_params: Value,
     pub raw_request: String,  // The raw text of the batch request body
@@ -42,7 +41,6 @@ pub struct StartBatchProviderInferenceResponse {
 /// Adds the model provider name to the response
 pub struct StartBatchModelInferenceResponse {
     pub batch_id: Uuid,
-    pub inference_ids: Vec<Uuid>,
     pub raw_requests: Vec<String>,
     pub batch_params: Value,
     pub raw_request: String,  // The raw text of the batch request body
@@ -59,7 +57,6 @@ impl StartBatchModelInferenceResponse {
     ) -> Self {
         Self {
             batch_id: provider_batch_response.batch_id,
-            inference_ids: provider_batch_response.inference_ids,
             raw_requests: provider_batch_response.raw_requests,
             batch_params: provider_batch_response.batch_params,
             raw_request: provider_batch_response.raw_request,
@@ -76,7 +73,6 @@ impl StartBatchModelInferenceResponse {
 /// systems, tool configs, inference params, model_name, and output schemas.
 pub struct StartBatchModelInferenceWithMetadata<'a> {
     pub batch_id: Uuid,
-    pub inference_ids: Vec<Uuid>,
     pub errors: Vec<Value>,
     pub input_messages: Vec<Vec<RequestMessage>>,
     pub systems: Vec<Option<String>>,
@@ -111,7 +107,6 @@ impl<'a> StartBatchModelInferenceWithMetadata<'a> {
         }
         Self {
             batch_id: model_batch_response.batch_id,
-            inference_ids: model_batch_response.inference_ids,
             input_messages,
             systems,
             tool_configs,
@@ -161,7 +156,7 @@ pub struct BatchRequestRow<'a> {
     pub errors: Vec<Value>,
 }
 
-fn deserialize_json_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+pub fn deserialize_json_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: serde::de::DeserializeOwned,

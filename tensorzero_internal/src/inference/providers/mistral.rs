@@ -9,7 +9,6 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 use url::Url;
-use uuid::Uuid;
 
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -151,7 +150,7 @@ impl InferenceProvider for MistralProvider {
             response_time: start_time.elapsed(),
         };
         if res.status().is_success() {
-            let response = res.text().await.map_err(|e| {
+            let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
                     message: format!("Error parsing text response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
@@ -160,18 +159,19 @@ impl InferenceProvider for MistralProvider {
                 })
             })?;
 
-            let response = serde_json::from_str(&response).map_err(|e| {
+            let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {response}"),
+                    message: format!("Error parsing JSON response: {e}"),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: Some(response.clone()),
+                    raw_response: Some(raw_response.clone()),
                 })
             })?;
 
             MistralResponseWithMetadata {
                 response,
                 latency,
+                raw_response,
                 request: request_body,
                 generic_request: request,
             }
@@ -302,7 +302,6 @@ pub fn stream_mistral(
     start_time: Instant,
 ) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     async_stream::stream! {
-        let inference_id = Uuid::now_v7();
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -331,7 +330,7 @@ pub fn stream_mistral(
                             }.into());
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            mistral_to_tensorzero_chunk(d, inference_id, latency)
+                            mistral_to_tensorzero_chunk(d, latency)
                         });
                         yield stream_message;
                     }
@@ -565,6 +564,7 @@ struct MistralResponse {
 
 struct MistralResponseWithMetadata<'a> {
     response: MistralResponse,
+    raw_response: String,
     latency: Latency,
     request: MistralRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
@@ -575,15 +575,11 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
     fn try_from(value: MistralResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
         let MistralResponseWithMetadata {
             mut response,
+            raw_response,
             latency,
             request: request_body,
             generic_request,
         } = value;
-        let raw_response = serde_json::to_string(&response).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error parsing response: {e}"),
-            })
-        })?;
         if response.choices.len() != 1 {
             return Err(Error::new(ErrorDetails::InferenceServer {
                 message: format!(
@@ -676,7 +672,6 @@ struct MistralChatChunk {
 /// Maps a Mistral chunk to a TensorZero chunk for streaming inferences
 fn mistral_to_tensorzero_chunk(
     mut chunk: MistralChatChunk,
-    inference_id: Uuid,
     latency: Duration,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
@@ -716,7 +711,6 @@ fn mistral_to_tensorzero_chunk(
     }
 
     Ok(ProviderInferenceResponseChunk::new(
-        inference_id,
         content,
         usage,
         raw_message,
@@ -729,6 +723,8 @@ mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
 
+    use uuid::Uuid;
+
     use super::*;
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
@@ -737,6 +733,7 @@ mod tests {
     #[test]
     fn test_mistral_request_new() {
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],
@@ -794,6 +791,7 @@ mod tests {
         };
 
         let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["test_user".to_string().into()],
@@ -827,6 +825,7 @@ mod tests {
             tool_choice: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
+        let raw_response = "test_response".to_string();
         let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
             response: valid_response,
             latency: Latency::NonStreaming {
@@ -834,6 +833,7 @@ mod tests {
             },
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -850,6 +850,7 @@ mod tests {
             }
         );
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.raw_response, raw_response);
         assert_eq!(inference_response.system, None);
         assert_eq!(
             inference_response.input_messages,
@@ -881,6 +882,7 @@ mod tests {
             },
         };
         let generic_request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::Assistant,
                 content: vec!["test_assistant".to_string().into()],
@@ -920,6 +922,7 @@ mod tests {
             },
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         });
         assert!(result.is_ok());
         let inference_response = result.unwrap();
@@ -940,6 +943,7 @@ mod tests {
             }
         );
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(inference_response.raw_response, raw_response);
         assert_eq!(inference_response.system, Some("test_system".to_string()));
         assert_eq!(
             inference_response.input_messages,
@@ -978,6 +982,7 @@ mod tests {
             },
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         });
         let details = result.unwrap_err().get_owned_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
@@ -1026,6 +1031,7 @@ mod tests {
             },
             request: request_body,
             generic_request: &generic_request,
+            raw_response: raw_response.clone(),
         });
         let details = result.unwrap_err().get_owned_details();
         assert!(matches!(details, ErrorDetails::InferenceServer { .. }));
