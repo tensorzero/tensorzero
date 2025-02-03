@@ -657,6 +657,7 @@ impl InferenceResult {
 }
 
 impl JsonInferenceResult {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         inference_id: Uuid,
         raw: String,

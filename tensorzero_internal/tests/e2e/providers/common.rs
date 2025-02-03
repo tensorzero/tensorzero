@@ -122,6 +122,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_use_tool_choice_required_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_specific_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
+        use $crate::providers::reasoning::test_reasoning_inference_request_with_provider;
 
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
@@ -129,6 +130,15 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.simple_inference;
             for provider in providers {
                 test_simple_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
+        async fn test_reasoning_inference_request() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                test_reasoning_inference_request_with_provider(provider).await;
             }
         }
 
