@@ -201,7 +201,7 @@ jobs:
         run: wasm-pack test --node --features console_error_panic_hook
 
       - name: Build Docker container for production deployment tests
-        run: docker build -t tensorzero/gateway .
+        run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for production deployment tests
         run: |
