@@ -12,36 +12,26 @@ async fn get_providers() -> E2ETestProviders {
         Ok(key) => HashMap::from([("deepseek_api_key".to_string(), key)]),
         Err(_) => HashMap::new(),
     };
+    let standard_providers = vec![E2ETestProvider {
+        variant_name: "deepseek-chat".to_string(),
+        model_name: "deepseek-chat".to_string(),
+        model_provider_name: "deepseek".to_string(),
+        credentials: HashMap::new(),
+    }];
 
-    let standard_providers = vec![
-        E2ETestProvider {
-            variant_name: "deepseek-chat".to_string(),
-            model_name: "deepseek-chat".to_string(),
-            model_provider_name: "deepseek".to_string(),
-            credentials: HashMap::new(),
-        },
-        E2ETestProvider {
-            variant_name: "deepseek-reasoner".to_string(),
-            model_name: "deepseek-reasoner".to_string(),
-            model_provider_name: "deepseek".to_string(),
-            credentials: HashMap::new(),
-        },
-    ];
+    let reasoning_providers = vec![E2ETestProvider {
+        variant_name: "deepseek-reasoner".to_string(),
+        model_name: "deepseek-reasoner".to_string(),
+        model_provider_name: "deepseek".to_string(),
+        credentials: HashMap::new(),
+    }];
 
-    let inference_params_providers = vec![
-        E2ETestProvider {
-            variant_name: "deepseek-dynamic".to_string(),
-            model_name: "deepseek-chat-dynamic".to_string(),
-            model_provider_name: "deepseek".to_string(),
-            credentials: credentials.clone(),
-        },
-        E2ETestProvider {
-            variant_name: "deepseek-reasoner".to_string(),
-            model_name: "deepseek-reasoner".to_string(),
-            model_provider_name: "deepseek".to_string(),
-            credentials: credentials.clone(),
-        },
-    ];
+    let inference_params_providers = vec![E2ETestProvider {
+        variant_name: "deepseek-dynamic".to_string(),
+        model_name: "deepseek-chat-dynamic".to_string(),
+        model_provider_name: "deepseek".to_string(),
+        credentials: credentials.clone(),
+    }];
 
     let json_providers = vec![E2ETestProvider {
         variant_name: "deepseek-chat".to_string(),
@@ -59,6 +49,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        reasoning_inference: reasoning_providers.clone(),
         inference_params_inference: inference_params_providers,
         tool_use_inference: vec![],
         tool_multi_turn_inference: vec![],

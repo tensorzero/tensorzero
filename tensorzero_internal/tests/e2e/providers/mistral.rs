@@ -37,6 +37,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: providers.clone(),
+        reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
         tool_use_inference: providers.clone(),
         tool_multi_turn_inference: providers.clone(),

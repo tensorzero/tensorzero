@@ -352,6 +352,7 @@ async fn e2e_test_demonstration_feedback_json() {
     let expected_value = serde_json::to_string(&JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo"})),
         raw: "{\"answer\":\"Tokyo\"}".to_string(),
+        thought: None,
     })
     .unwrap();
     assert_eq!(retrieved_value, expected_value);

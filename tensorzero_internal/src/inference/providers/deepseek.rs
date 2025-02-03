@@ -10,12 +10,12 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream,
 };
+use crate::inference::types::{ContentBlockOutput, Thought};
 use crate::model::{Credential, CredentialLocation};
 
 use super::openai::{
@@ -378,6 +378,8 @@ struct DeepSeekResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
 
@@ -439,6 +441,9 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
             }))?
             .message;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(Thought { text: reasoning }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
@@ -629,6 +634,7 @@ mod tests {
                 index: 0,
                 message: DeepSeekResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: Some("I'm thinking about the weather".to_string()),
                     tool_calls: None,
                 },
             }],
@@ -669,9 +675,16 @@ mod tests {
         let inference_response: ProviderInferenceResponse =
             deepseek_response_with_metadata.try_into().unwrap();
 
-        assert_eq!(inference_response.output.len(), 1);
+        assert_eq!(inference_response.output.len(), 2);
         assert_eq!(
             inference_response.output[0],
+            ContentBlockOutput::Thought(Thought {
+                text: "I'm thinking about the weather".to_string()
+            })
+        );
+
+        assert_eq!(
+            inference_response.output[1],
             "Hello, world!".to_string().into()
         );
         assert_eq!(inference_response.raw_response, "test_response");

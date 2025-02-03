@@ -17,6 +17,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        reasoning_inference: vec![],
         inference_params_inference: standard_providers.clone(),
         // TODO: Support tool use once SGLang makes a releawe with https://github.com/sgl-project/sglang/pull/2544
         tool_use_inference: vec![],

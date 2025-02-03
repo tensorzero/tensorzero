@@ -278,6 +278,8 @@ pub struct JsonInferenceResult {
 pub struct JsonInferenceOutput {
     pub raw: String,
     pub parsed: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thought: Option<String>,
 }
 
 /// In the streaming case we convert ProviderInferenceResponseChunks into a InferenceResultChunk, which is then
@@ -659,12 +661,17 @@ impl JsonInferenceResult {
         inference_id: Uuid,
         raw: String,
         parsed: Option<Value>,
+        thought: Option<String>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         output_schema: Value,
         inference_params: InferenceParams,
     ) -> Self {
-        let output = JsonInferenceOutput { raw, parsed };
+        let output = JsonInferenceOutput {
+            raw,
+            parsed,
+            thought,
+        };
         Self {
             inference_id,
             created: current_timestamp(),
