@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
+use std::io::ErrorKind;
 
 use tensorzero_internal::config_parser::Config;
 use tensorzero_internal::endpoints;
@@ -68,11 +69,20 @@ async fn main() {
         .bind_address
         .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 3000)));
 
-    let listener = tokio::net::TcpListener::bind(bind_address)
-        .await
-        .expect_pretty(&format!(
-            "Failed to bind to socket address `{bind_address}`"
-        ));
+    let listener = match tokio::net::TcpListener::bind(bind_address).await {
+    Ok(listener) => listener,
+    Err(e) if e.kind() == ErrorKind::AddrInUse => {
+        tracing::error!(
+            "Port {} is already in use. Ensure no other process is using it or try a different port.",
+            bind_address.port()
+        );
+        std::process::exit(1);
+    }
+    Err(e) => {
+        tracing::error!("Failed to bind to {}: {}", bind_address, e);
+        std::process::exit(1);
+    }
+};
 
     tracing::info!(
         "TensorZero Gateway version {} is listening on {}",
