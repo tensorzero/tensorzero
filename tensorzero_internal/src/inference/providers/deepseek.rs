@@ -16,7 +16,9 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream,
 };
-use crate::inference::types::{ContentBlockChunk, ContentBlockOutput, TextChunk, Thought};
+use crate::inference::types::{
+    ContentBlockChunk, ContentBlockOutput, TextChunk, Thought, ThoughtChunk,
+};
 use crate::model::{Credential, CredentialLocation};
 use crate::tool::ToolCallChunk;
 
@@ -495,6 +497,12 @@ fn deepseek_to_tensorzero_chunk(
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {
                 text,
+                id: "0".to_string(),
+            }));
+        }
+        if let Some(reasoning) = choice.delta.reasoning_content {
+            content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                text: reasoning,
                 id: "0".to_string(),
             }));
         }
