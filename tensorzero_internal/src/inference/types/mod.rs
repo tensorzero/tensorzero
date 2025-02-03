@@ -1044,6 +1044,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                 }
             }
             InferenceResultChunk::Json(chunk) => {
+                // TODO (Viraj): handle thinking here
                 match text_blocks.get_mut("") {
                     // If there is already a text block, append to it
                     Some(ContentBlockOutput::Text(Text {
@@ -1076,7 +1077,6 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
     };
     let mut content_blocks: Vec<ContentBlockOutput> = tool_call_blocks.into_values().collect();
     content_blocks.extend(text_blocks.into_values());
-    content_blocks.extend(thought_blocks.into_values());
     let model_response = ProviderInferenceResponse::new(
         content_blocks.clone(),
         system,

@@ -24,10 +24,9 @@ use crate::model::{Credential, CredentialLocation};
 use crate::tool::ToolCallChunk;
 
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
-    tensorzero_to_openai_messages, tensorzero_to_openai_system_message, OpenAIRequestMessage,
-    OpenAIResponseToolCall, OpenAITool, OpenAIToolChoice, OpenAIUsage, OpenAIUserRequestMessage,
-    StreamOptions,
+    get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
+    tensorzero_to_openai_system_message, OpenAIRequestMessage, OpenAIResponseToolCall, OpenAITool,
+    OpenAIToolChoice, OpenAIUsage, OpenAIUserRequestMessage, StreamOptions,
 };
 
 lazy_static! {
@@ -231,7 +230,7 @@ impl InferenceProvider for DeepSeekProvider {
                 })
             })?;
 
-        let mut stream = Box::pin(stream_openai(event_source, start_time));
+        let mut stream = Box::pin(stream_deepseek(event_source, start_time));
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
         let chunk = match stream.next().await {
@@ -379,7 +378,7 @@ impl<'a> DeepSeekRequest<'a> {
     }
 }
 
-pub fn stream_deepseek(
+fn stream_deepseek(
     mut event_source: EventSource,
     start_time: Instant,
 ) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
