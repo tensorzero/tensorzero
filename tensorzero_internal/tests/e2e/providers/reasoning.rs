@@ -393,12 +393,27 @@ pub async fn test_streaming_reasoning_inference_request_with_provider(provider: 
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    // TODO (Viraj): this fails rn
     assert_eq!(output.len(), 2);
-    let content_block = output.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    let mut found_text = false;
+    let mut found_thought = false;
+    let mut clickhouse_content = String::new();
+
+    for block in output {
+        let block_type = block.get("type").unwrap().as_str().unwrap();
+        match block_type {
+            "text" => {
+                found_text = true;
+                clickhouse_content = block.get("text").unwrap().as_str().unwrap().to_string();
+            }
+            "thought" => {
+                found_thought = true;
+            }
+            _ => panic!("Unexpected content block type: {}", block_type),
+        }
+    }
+
+    assert!(found_text, "Expected to find a text block");
+    assert!(found_thought, "Expected to find a thought block");
     assert_eq!(clickhouse_content, full_content);
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
@@ -491,7 +506,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider(provider: 
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    assert_eq!(output.len(), 2);
     // Check the InferenceTag Table
     let result = select_inference_tags_clickhouse(
         &clickhouse,

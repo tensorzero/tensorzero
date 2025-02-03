@@ -1015,7 +1015,10 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                     if ttft.is_none() {
                                         ttft = Some(chunk.latency);
                                     }
-                                    thought_blocks.insert(thought.id, thought.text.into());
+                                    thought_blocks.insert(
+                                        thought.id,
+                                        ContentBlockOutput::Thought(Thought { text: thought.text }),
+                                    );
                                 }
                             }
                         }
@@ -1065,7 +1068,6 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
             }
         }
     }
-
     let ttft = ttft.ok_or_else(|| {
         Error::new(ErrorDetails::TypeConversion {
             message: "Never got TTFT because there was never content in the response.".to_string(),
@@ -1076,6 +1078,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         response_time,
     };
     let mut content_blocks: Vec<ContentBlockOutput> = tool_call_blocks.into_values().collect();
+    content_blocks.extend(thought_blocks.into_values());
     content_blocks.extend(text_blocks.into_values());
     let model_response = ProviderInferenceResponse::new(
         content_blocks.clone(),
