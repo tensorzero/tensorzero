@@ -675,6 +675,12 @@ model = "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.openrouter]
+type = "chat_completion"
+model = "openai/gpt-3.5-turbo"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.flaky]
 type = "chat_completion"
 model = "flaky_basic_test"

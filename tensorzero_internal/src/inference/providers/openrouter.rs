@@ -114,6 +114,9 @@ impl InferenceProvider for OpenRouterProvider {
         let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
+        println!("request_body: {:?}", request_body);
+        println!("request_url: {:?}", request_url);
+        println!("api_key: {:?}", api_key.expose_secret());
         let request_builder = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
