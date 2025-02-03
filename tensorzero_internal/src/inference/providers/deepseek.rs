@@ -3,6 +3,7 @@ use lazy_static::lazy_static;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -23,9 +24,10 @@ use crate::model::{Credential, CredentialLocation};
 use crate::tool::ToolCallChunk;
 
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-    stream_openai, OpenAIRequestMessage, OpenAIResponseToolCall, OpenAITool, OpenAIToolChoice,
-    OpenAIUsage, StreamOptions,
+    get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
+    tensorzero_to_openai_messages, tensorzero_to_openai_system_message, OpenAIRequestMessage,
+    OpenAIResponseToolCall, OpenAITool, OpenAIToolChoice, OpenAIUsage, OpenAIUserRequestMessage,
+    StreamOptions,
 };
 
 lazy_static! {
@@ -355,7 +357,7 @@ impl<'a> DeepSeekRequest<'a> {
         // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
         // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check
         // if a model is an R1 model and if so, remove the system prompt from the request and instead put it in the first user message.
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_deepseek_messages(request, model);
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
 
@@ -582,6 +584,35 @@ struct DeepSeekResponseChoice {
 struct DeepSeekResponse {
     choices: Vec<DeepSeekResponseChoice>,
     usage: OpenAIUsage,
+}
+
+pub(super) fn prepare_deepseek_messages<'a>(
+    request: &'a ModelInferenceRequest,
+    model_name: &'a str,
+) -> Vec<OpenAIRequestMessage<'a>> {
+    let mut messages: Vec<OpenAIRequestMessage> = request
+        .messages
+        .iter()
+        .flat_map(tensorzero_to_openai_messages)
+        .collect();
+    // If this is an R1 model, prepend the system message as the first user message instead of using it as a system message
+    if model_name.contains("r1") {
+        if let Some(system) = request.system.as_deref() {
+            messages.insert(
+                0,
+                OpenAIRequestMessage::User(OpenAIUserRequestMessage {
+                    content: Cow::Borrowed(system),
+                }),
+            );
+        }
+    } else if let Some(system_msg) = tensorzero_to_openai_system_message(
+        request.system.as_deref(),
+        &request.json_mode,
+        &messages,
+    ) {
+        messages.insert(0, system_msg);
+    }
+    messages
 }
 
 struct DeepSeekResponseWithMetadata<'a> {

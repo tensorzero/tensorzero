@@ -819,7 +819,7 @@ pub(super) struct OpenAISystemRequestMessage<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIUserRequestMessage<'a> {
-    content: Cow<'a, str>, // NOTE: this could be an array including images and stuff according to API spec (not supported yet)
+    pub(super) content: Cow<'a, str>, // NOTE: this could be an array including images and stuff according to API spec (not supported yet)
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -936,7 +936,7 @@ pub(super) fn prepare_openai_tools<'a>(
 /// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
 /// the request will return an error.
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
-fn tensorzero_to_openai_system_message<'a>(
+pub(super) fn tensorzero_to_openai_system_message<'a>(
     system: Option<&'a str>,
     json_mode: &ModelInferenceRequestJsonMode,
     messages: &[OpenAIRequestMessage<'a>],
