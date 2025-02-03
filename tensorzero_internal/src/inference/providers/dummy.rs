@@ -318,6 +318,9 @@ impl InferenceProvider for DummyProvider {
             }
             .into());
         }
+
+        let err_in_stream = self.model_name == "err_in_stream";
+
         let created = current_timestamp();
 
         let (content_chunks, is_tool_call) = if self.model_name == "tool" {
@@ -331,6 +334,15 @@ impl InferenceProvider for DummyProvider {
         let stream: ProviderInferenceResponseStreamInner = Box::pin(
             tokio_stream::iter(content_chunks.into_iter().enumerate())
                 .map(move |(i, chunk)| {
+                    if err_in_stream && i == 3 {
+                        return Err(Error::new(ErrorDetails::InferenceClient {
+                            message: "Dummy error in stream".to_string(),
+                            raw_request: Some("raw request".to_string()),
+                            raw_response: None,
+                            status_code: None,
+                            provider_type: PROVIDER_TYPE.to_string(),
+                        }));
+                    }
                     Ok(ProviderInferenceResponseChunk {
                         created,
                         content: vec![if is_tool_call {
