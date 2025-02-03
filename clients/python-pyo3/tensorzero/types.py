@@ -192,7 +192,8 @@ class JsonChunk:
     inference_id: UUID
     episode_id: UUID
     variant_name: str
-    raw: str
+    raw: Optional[str]
+    thought: Optional[str]
     usage: Optional[Usage]
 
 
