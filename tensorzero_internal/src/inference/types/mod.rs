@@ -300,10 +300,17 @@ pub struct ProviderInferenceResponseChunk {
 pub enum ContentBlockChunk {
     Text(TextChunk),
     ToolCall(ToolCallChunk),
+    Thought(ThoughtChunk),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TextChunk {
+    pub id: String,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ThoughtChunk {
     pub id: String,
     pub text: String,
 }
@@ -892,6 +899,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
         let raw = match chunk.content.pop() {
             Some(ContentBlockChunk::ToolCall(tool_call)) => tool_call.raw_arguments.to_owned(),
             Some(ContentBlockChunk::Text(text)) => text.text.to_owned(),
+            Some(ContentBlockChunk::Thought(thought)) => thought.text.to_owned(),
             None => String::new(),
         };
 
@@ -948,6 +956,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
     let mut tool_call_blocks: HashMap<String, ContentBlockOutput> = HashMap::new();
     let mut text_blocks: HashMap<String, ContentBlockOutput> = HashMap::new();
+    let mut thought_blocks: HashMap<String, ContentBlockOutput> = HashMap::new();
     let raw_response: String = value
         .iter()
         .map(|chunk| chunk.raw_response())
@@ -992,6 +1001,21 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                         ttft = Some(chunk.latency);
                                     }
                                     text_blocks.insert(text.id, text.text.into());
+                                }
+                            }
+                        }
+                        ContentBlockChunk::Thought(thought) => {
+                            match thought_blocks.get_mut(&thought.id) {
+                                // If there is already a thought block, append to it
+                                Some(ContentBlockOutput::Thought(existing_thought)) => {
+                                    existing_thought.text.push_str(&thought.text);
+                                }
+                                // If there is no thought block, create one
+                                _ => {
+                                    if ttft.is_none() {
+                                        ttft = Some(chunk.latency);
+                                    }
+                                    thought_blocks.insert(thought.id, thought.text.into());
                                 }
                             }
                         }
@@ -1052,6 +1076,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
     };
     let mut content_blocks: Vec<ContentBlockOutput> = tool_call_blocks.into_values().collect();
     content_blocks.extend(text_blocks.into_values());
+    content_blocks.extend(thought_blocks.into_values());
     let model_response = ProviderInferenceResponse::new(
         content_blocks.clone(),
         system,

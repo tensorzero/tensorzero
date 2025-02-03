@@ -669,6 +669,10 @@ fn process_chat_content_chunk(
             ContentBlockChunk::ToolCall(tool_call) => {
                 tool_calls.push(tool_call.into());
             }
+            ContentBlockChunk::Thought(_thought) => {
+                // OpenAI compatible endpoint does not support thought blocks
+                // Users of this endpoint will need to check observability to see them
+            }
         }
     }
     (content_str, tool_calls)
