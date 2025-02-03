@@ -21,6 +21,7 @@ use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 
+use super::helpers::peek_first_chunk;
 use super::openai::{
     get_chat_url, prepare_openai_messages, prepare_openai_tools, OpenAIRequestMessage, OpenAITool,
     OpenAIToolChoice, OpenAIToolType, StreamOptions,
@@ -200,14 +201,7 @@ impl InferenceProvider for TGIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<
-        (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            String,
-        ),
-        Error,
-    > {
+    ) -> Result<(ProviderInferenceResponseStream, String), Error> {
         let model_name = PROVIDER_NAME.to_lowercase().clone();
         let request_body = TGIRequest::new(&model_name, request)?;
         // TGI integration does not support tools in streaming mode
@@ -239,28 +233,16 @@ impl InferenceProvider for TGIProvider {
                     message: format!("Error sending request to OpenAI: {e}"),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: serde_json::to_string(&request_body).ok(),
+                    raw_request: Some(raw_request.clone()),
                     raw_response: None,
                 })
             })?;
 
-        let mut stream = Box::pin(stream_tgi(event_source, start_time));
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
-        let chunk = match stream.next().await {
-            Some(Ok(chunk)) => chunk,
-            Some(Err(e)) => return Err(e),
-            None => {
-                return Err(ErrorDetails::InferenceServer {
-                    message: "Stream ended before first chunk".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: serde_json::to_string(&request_body).ok(),
-                    raw_response: None,
-                }
-                .into())
-            }
-        };
-        Ok((chunk, stream, raw_request))
+        let mut stream = Box::pin(stream_tgi(event_source, start_time).peekable());
+        peek_first_chunk(&mut stream.as_mut(), &raw_request, PROVIDER_TYPE).await?;
+        Ok((stream, raw_request))
     }
 
     async fn start_batch_inference<'a>(

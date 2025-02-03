@@ -16,12 +16,13 @@ use crate::{
     inference::types::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-        ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+        ProviderInferenceResponse, ProviderInferenceResponseStream,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation},
 };
 
 use super::{
+    helpers::peek_first_chunk,
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
         tensorzero_to_openai_messages, OpenAIRequestMessage, OpenAIResponse,
@@ -193,14 +194,7 @@ impl InferenceProvider for TogetherProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<
-        (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            String,
-        ),
-        Error,
-    > {
+    ) -> Result<(ProviderInferenceResponseStream, String), Error> {
         let request_body = TogetherRequest::new(&self.model_name, request);
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -225,22 +219,11 @@ impl InferenceProvider for TogetherProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-        let mut stream = Box::pin(stream_openai(event_source, start_time));
+        let mut stream = Box::pin(stream_openai(event_source, start_time).peekable());
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
-        let chunk = match stream.next().await {
-            Some(Ok(chunk)) => chunk,
-            Some(Err(e)) => return Err(e),
-            None => {
-                return Err(Error::new(ErrorDetails::InferenceServer {
-                    message: "Stream ended before first chunk".to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                }));
-            }
-        };
-        Ok((chunk, stream, raw_request))
+        peek_first_chunk(&mut stream.as_mut(), &raw_request, PROVIDER_TYPE).await?;
+        Ok((stream, raw_request))
     }
 
     async fn start_batch_inference<'a>(

@@ -135,6 +135,9 @@ pub enum ErrorDetails {
         raw_request: Option<String>,
         raw_response: Option<String>,
     },
+    InternalError {
+        message: String,
+    },
     InferenceTimeout {
         variant_name: String,
     },
@@ -307,6 +310,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceServer { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::InputValidation { .. } => tracing::Level::WARN,
+            ErrorDetails::InternalError { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidBaseUrl { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
@@ -383,6 +387,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidEpisodeId { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidBatchParams { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -573,6 +578,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::InputValidation { source } => {
                 write!(f, "Input validation failed with messages: {}", source)
+            }
+            ErrorDetails::InternalError { message } => {
+                write!(f, "Internal error: {}", message)
             }
             ErrorDetails::InvalidBaseUrl { message } => write!(
                 f,
