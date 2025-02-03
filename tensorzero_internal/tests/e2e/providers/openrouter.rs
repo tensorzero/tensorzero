@@ -15,14 +15,14 @@ async fn get_providers() -> E2ETestProviders {
 
     let standard_providers = vec![E2ETestProvider {
         variant_name: "openrouter".to_string(),
-        model_name: "openai/gpt-3.5-turbo".into(),
+        model_name: "openai/gpt-4o-mini".into(),
         model_provider_name: "openrouter".into(),
         credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "openrouter".to_string(),
-        model_name: "openai/gpt-3.5-turbo".into(),
+        model_name: "openai/gpt-4o-mini".into(),
         model_provider_name: "openrouter".into(),
         credentials,
     }];

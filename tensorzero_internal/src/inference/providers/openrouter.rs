@@ -114,9 +114,7 @@ impl InferenceProvider for OpenRouterProvider {
         let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        println!("request_body: {:?}", request_body);
-        println!("request_url: {:?}", request_url);
-        println!("api_key: {:?}", api_key.expose_secret());
+
         let request_builder = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
@@ -393,6 +391,7 @@ impl<'a> TryFrom<OpenRouterResponseWithMetadata<'a>> for ProviderInferenceRespon
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use uuid::Uuid;
 
     use super::*;
 
@@ -404,6 +403,7 @@ mod tests {
     #[test]
     fn test_openrouter_request_new() {
         let request_with_tools = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["What's the weather?".to_string().into()],

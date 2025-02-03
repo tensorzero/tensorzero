@@ -290,12 +290,12 @@ type = "hyperbolic"
 model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
 api_key_location = "dynamic::hyperbolic_api_key"
 
-[models."openai/gpt-3.5-turbo"]
+[models."openai/gpt-4o-mini"]
 routing = ["openrouter"]
 
-[models."openai/gpt-3.5-turbo".providers.openrouter]
+[models."openai/gpt-4o-mini".providers.openrouter]
 type = "openrouter"
-model_name = "openai/gpt-3.5-turbo"
+model_name = "openai/gpt-4o-mini"
 
 [models.test]
 routing = ["good"]
@@ -677,7 +677,7 @@ max_tokens = 100
 
 [functions.basic_test.variants.openrouter]
 type = "chat_completion"
-model = "openai/gpt-3.5-turbo"
+model = "openai/gpt-4o-mini"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 

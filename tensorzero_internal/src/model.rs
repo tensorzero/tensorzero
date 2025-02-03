@@ -215,12 +215,12 @@ pub enum ProviderConfig {
     Hyperbolic(HyperbolicProvider),
     Mistral(MistralProvider),
     OpenAI(OpenAIProvider),
+    OpenRouter(OpenRouterProvider),
+    SGLang(SGLangProvider),
+    TGI(TGIProvider),
     Together(TogetherProvider),
     VLLM(VLLMProvider),
     XAI(XAIProvider),
-    TGI(TGIProvider),
-    SGLang(SGLangProvider),
-    OpenRouter(OpenRouterProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -286,9 +286,25 @@ pub(super) enum ProviderConfigHelper {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     },
+    #[allow(clippy::upper_case_acronyms)]
     OpenAI {
         model_name: String,
         api_base: Option<Url>,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[allow(clippy::upper_case_acronyms)]
+    OpenRouter {
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    },
+    SGLang {
+        model_name: String,
+        api_base: Url,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[allow(clippy::upper_case_acronyms)]
+    TGI {
+        api_base: Url,
         api_key_location: Option<CredentialLocation>,
     },
     Together {
@@ -303,22 +319,6 @@ pub(super) enum ProviderConfigHelper {
     },
     #[allow(clippy::upper_case_acronyms)]
     XAI {
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    },
-    #[allow(clippy::upper_case_acronyms)]
-    TGI {
-        api_base: Url,
-        api_key_location: Option<CredentialLocation>,
-    },
-    #[allow(clippy::upper_case_acronyms)]
-    SGLang {
-        model_name: String,
-        api_base: Url,
-        api_key_location: Option<CredentialLocation>,
-    },
-    #[allow(clippy::upper_case_acronyms)]
-    OpenRouter {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
     },
@@ -422,6 +422,28 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 OpenAIProvider::new(model_name, api_base, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
+            ProviderConfigHelper::OpenRouter {
+                model_name,
+                api_key_location,
+            } => ProviderConfig::OpenRouter(
+                OpenRouterProvider::new(model_name, api_key_location)
+                    .map_err(|e| D::Error::custom(e.to_string()))?,
+            ),
+            ProviderConfigHelper::SGLang {
+                model_name,
+                api_base,
+                api_key_location,
+            } => ProviderConfig::SGLang(
+                SGLangProvider::new(model_name, api_base, api_key_location)
+                    .map_err(|e| D::Error::custom(e.to_string()))?,
+            ),
+            ProviderConfigHelper::TGI {
+                api_base,
+                api_key_location,
+            } => ProviderConfig::TGI(
+                TGIProvider::new(api_base, api_key_location)
+                    .map_err(|e| D::Error::custom(e.to_string()))?,
+            ),
             ProviderConfigHelper::Together {
                 model_name,
                 api_key_location,
@@ -442,28 +464,6 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 api_key_location,
             } => ProviderConfig::XAI(
                 XAIProvider::new(model_name, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::SGLang {
-                model_name,
-                api_base,
-                api_key_location,
-            } => ProviderConfig::SGLang(
-                SGLangProvider::new(model_name, api_base, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::TGI {
-                api_base,
-                api_key_location,
-            } => ProviderConfig::TGI(
-                TGIProvider::new(api_base, api_key_location)
-                    .map_err(|e| D::Error::custom(e.to_string()))?,
-            ),
-            ProviderConfigHelper::OpenRouter {
-                model_name,
-                api_key_location,
-            } => ProviderConfig::OpenRouter(
-                OpenRouterProvider::new(model_name, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
             #[cfg(any(test, feature = "e2e_tests"))]
@@ -502,12 +502,12 @@ impl ProviderConfig {
             ProviderConfig::Hyperbolic(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::Mistral(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::OpenAI(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::Together(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::OpenRouter(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::SGLang(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::TGI(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::Together(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::TGI(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::OpenRouter(provider) => provider.infer(request, client, api_keys).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => provider.infer(request, client, api_keys).await,
         }
@@ -557,20 +557,20 @@ impl ProviderConfig {
             ProviderConfig::OpenAI(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
-            ProviderConfig::Together(provider) => {
+            ProviderConfig::OpenRouter(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::SGLang(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
-            ProviderConfig::XAI(provider) => provider.infer_stream(request, client, api_keys).await,
+            ProviderConfig::TGI(provider) => provider.infer_stream(request, client, api_keys).await,
+            ProviderConfig::Together(provider) => {
+                provider.infer_stream(request, client, api_keys).await
+            }
             ProviderConfig::VLLM(provider) => {
                 provider.infer_stream(request, client, api_keys).await
             }
-            ProviderConfig::TGI(provider) => provider.infer_stream(request, client, api_keys).await,
-            ProviderConfig::OpenRouter(provider) => {
-                provider.infer_stream(request, client, api_keys).await
-            }
+            ProviderConfig::XAI(provider) => provider.infer_stream(request, client, api_keys).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider.infer_stream(request, client, api_keys).await
@@ -635,12 +635,22 @@ impl ProviderConfig {
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
-            ProviderConfig::Together(provider) => {
+            ProviderConfig::OpenRouter(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
             ProviderConfig::SGLang(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::TGI(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::Together(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -651,16 +661,6 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::XAI(provider) => {
-                provider
-                    .start_batch_inference(requests, client, api_keys)
-                    .await
-            }
-            ProviderConfig::TGI(provider) => {
-                provider
-                    .start_batch_inference(requests, client, api_keys)
-                    .await
-            }
-            ProviderConfig::OpenRouter(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -731,6 +731,11 @@ impl ProviderConfig {
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
             }
+            ProviderConfig::OpenRouter(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
             ProviderConfig::TGI(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
@@ -752,11 +757,6 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::XAI(provider) => {
-                provider
-                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
-                    .await
-            }
-            ProviderConfig::OpenRouter(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -987,10 +987,10 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "hyperbolic::",
     "mistral::",
     "openai::",
+    "openrouter::",
     "together::",
     "xai::",
     "dummy::",
-    "openrouter::",
 ];
 
 pub type ModelTable = BaseModelTable<ModelConfig>;
@@ -1009,9 +1009,9 @@ impl ShorthandModelConfig for ModelConfig {
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
             "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
             "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
+            "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, None)?),
             "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
             "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
-            "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, None)?),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
