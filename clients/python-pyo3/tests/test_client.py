@@ -484,6 +484,7 @@ async def test_async_json_success(async_client):
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": {"country": "Japan"}}],
         },
+        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         stream=False,
     )
     assert result.variant_name == "test"
@@ -956,6 +957,7 @@ def test_sync_json_success(sync_client):
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": {"country": "Japan"}}],
         },
+        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         stream=False,
     )
     assert result.variant_name == "test"
