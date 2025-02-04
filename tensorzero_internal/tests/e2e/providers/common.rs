@@ -7073,7 +7073,7 @@ pub async fn check_json_mode_inference_response(
     assert_eq!(variant_name, provider.variant_name);
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
-    assert!(output.keys().len() == 2);
+    assert!(output.keys().len() == 3);
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
     assert!(parsed_output
         .get("answer")
@@ -7324,7 +7324,7 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert_eq!(variant_name, provider.variant_name);
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
-    assert!(output.keys().len() == 2);
+    assert!(output.keys().len() == 3);
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
     assert!(parsed_output
         .get("response")
@@ -7567,10 +7567,10 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         let chunk_episode_id = chunk_json.get("episode_id").unwrap().as_str().unwrap();
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
-
-        let raw = chunk_json.get("raw").unwrap().as_str().unwrap();
-        if !raw.is_empty() {
-            full_content.push_str(raw);
+        if let Some(raw) = chunk_json.get("raw").and_then(|raw| raw.as_str()) {
+            if !raw.is_empty() {
+                full_content.push_str(raw);
+            }
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -7632,7 +7632,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Value = serde_json::from_str(output).unwrap();
     let output = output.as_object().unwrap();
-    assert_eq!(output.keys().len(), 2);
+    assert_eq!(output.keys().len(), 3);
     let clickhouse_parsed = output.get("parsed").unwrap().as_object().unwrap();
     let clickhouse_raw = output.get("parsed").unwrap().as_object().unwrap();
     assert_eq!(clickhouse_parsed, clickhouse_raw);
