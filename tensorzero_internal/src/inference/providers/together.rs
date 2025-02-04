@@ -17,7 +17,7 @@ use crate::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
         ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-        ProviderInferenceResponseStream, TextChunk, Thought, ThoughtChunk,
+        ProviderInferenceResponseStream, Text, TextChunk, Thought, ThoughtChunk,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation},
     tool::{ToolCall, ToolCallChunk},
@@ -46,6 +46,11 @@ const PROVIDER_TYPE: &str = "together";
 pub struct TogetherProvider {
     model_name: String,
     credentials: TogetherCredentials,
+    parse_think_blocks: bool,
+}
+
+pub fn default_parse_think_blocks() -> bool {
+    true
 }
 
 static DEFAULT_CREDENTIALS: OnceLock<TogetherCredentials> = OnceLock::new();
@@ -54,6 +59,7 @@ impl TogetherProvider {
     pub fn new(
         model_name: String,
         api_key_location: Option<CredentialLocation>,
+        parse_think_blocks: bool,
     ) -> Result<Self, Error> {
         let credentials = build_creds_caching_default(
             api_key_location,
@@ -64,6 +70,7 @@ impl TogetherProvider {
         Ok(TogetherProvider {
             model_name,
             credentials,
+            parse_think_blocks,
         })
     }
 }
@@ -174,6 +181,7 @@ impl InferenceProvider for TogetherProvider {
                 },
                 request: request_body,
                 generic_request: request,
+                parse_think_blocks: self.parse_think_blocks,
             }
             .try_into()?)
         } else {
@@ -227,7 +235,11 @@ impl InferenceProvider for TogetherProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-        let mut stream = Box::pin(stream_together(event_source, start_time));
+        let mut stream = Box::pin(stream_together(
+            event_source,
+            start_time,
+            self.parse_think_blocks,
+        ));
         // Get a single chunk from the stream and make sure it is OK then send to client.
         // We want to do this here so that we can tell that the request is working.
         let chunk = match stream.next().await {
@@ -388,59 +400,57 @@ impl From<TogetherResponseToolCall> for ToolCall {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct TogetherResponseMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<TogetherResponseToolCall>>,
 }
 
-impl<'de> Deserialize<'de> for TogetherResponseMessage {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::Error;
+const THINK_TAG: &str = "<think>";
+const THINK_TAG_LEN: usize = THINK_TAG.len();
+const END_THINK_TAG: &str = "</think>";
+const END_THINK_TAG_LEN: usize = END_THINK_TAG.len();
 
-        #[derive(Deserialize)]
-        struct Helper {
-            content: Option<String>,
-            tool_calls: Option<Vec<TogetherResponseToolCall>>,
-        }
-
-        let helper = Helper::deserialize(deserializer)?;
-
-        let (content, reasoning_content) = if let Some(text) = helper.content {
-            // Count thinking blocks
-            let think_count = text.matches("<think>").count();
-            if think_count > 1 {
-                return Err(D::Error::custom("Multiple thinking blocks found"));
-            }
-
-            if let (Some(start), Some(end)) = (text.find("<think>"), text.find("</think>")) {
-                let reasoning = text[start + 7..end].trim().to_string();
-                let mut cleaned = String::with_capacity(text.len());
-                cleaned.push_str(&text[..start]);
-                cleaned.push_str(&text[end + 8..]);
-                (Some(cleaned.trim().to_string()), Some(reasoning))
-            } else if think_count != text.matches("</think>").count() {
-                // Check for mismatched tags
-                return Err(D::Error::custom("Mismatched thinking tags"));
-            } else {
-                (Some(text), None)
-            }
-        } else {
-            (None, None)
-        };
-
-        Ok(TogetherResponseMessage {
-            content,
-            reasoning_content,
-            tool_calls: helper.tool_calls,
-        })
+/// Processes the thinking blocks from a span of text.
+/// If parsing is disabled, the text is returned as is.
+/// If parsing is enabled, the text is checked for a single thinking block.
+/// If there is one, the text is cleaned of the thinking block and the reasoning is returned.
+/// If there is no thinking block, the text is returned as is and the reasoning is None.
+/// If there is more than one thinking block, an error is returned.
+///
+/// The function also validates that tags are properly matched - an error is returned
+/// if there are mismatched opening/closing tags.
+///
+/// Returns a tuple of (cleaned_text, optional_reasoning).
+/// The reasoning, if present, will have leading/trailing whitespace trimmed.
+fn process_think_blocks(text: &str, parse: bool) -> Result<(String, Option<String>), Error> {
+    if !parse {
+        return Ok((text.to_string(), None));
+    }
+    let think_count = text.matches(THINK_TAG).count();
+    if think_count > 1 {
+        return Err(Error::new(ErrorDetails::InferenceServer {
+            message: "Multiple thinking blocks found".to_string(),
+            raw_request: None,
+            raw_response: None,
+            provider_type: PROVIDER_TYPE.to_string(),
+        }));
+    }
+    if let (Some(start), Some(end)) = (text.find(THINK_TAG), text.find(END_THINK_TAG)) {
+        let reasoning = text[start + THINK_TAG_LEN..end].to_string();
+        let cleaned = format!("{}{}", &text[..start], &text[end + END_THINK_TAG_LEN..]);
+        Ok((cleaned, Some(reasoning)))
+    } else if think_count != text.matches(END_THINK_TAG).count() {
+        return Err(Error::new(ErrorDetails::InferenceServer {
+            message: "Mismatched thinking tags".to_string(),
+            raw_request: None,
+            raw_response: None,
+            provider_type: PROVIDER_TYPE.to_string(),
+        }));
+    } else {
+        Ok((text.to_string(), None))
     }
 }
 
@@ -464,6 +474,7 @@ struct TogetherResponseWithMetadata<'a> {
     raw_response: String,
     request: TogetherRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
+    parse_think_blocks: bool,
 }
 
 impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -475,6 +486,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             raw_response,
             request: request_body,
             generic_request,
+            parse_think_blocks,
         } = value;
         if response.choices.len() != 1 {
             return Err(ErrorDetails::InferenceServer {
@@ -500,11 +512,15 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             }))?
             .message;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
-        if let Some(reasoning) = message.reasoning_content {
-            content.push(ContentBlockOutput::Thought(Thought { text: reasoning }));
-        }
-        if let Some(text) = message.content {
-            content.push(text.into());
+        if let Some(raw_text) = message.content {
+            let (clean_text, extracted_reasoning) =
+                process_think_blocks(&raw_text, parse_think_blocks)?;
+            if let Some(reasoning) = extracted_reasoning {
+                content.push(ContentBlockOutput::Thought(Thought { text: reasoning }));
+            }
+            if !clean_text.is_empty() {
+                content.push(ContentBlockOutput::Text(Text { text: clean_text }));
+            }
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
@@ -519,12 +535,10 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        let system = generic_request.system.clone();
-        let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             content,
-            system,
-            messages,
+            generic_request.system.clone(),
+            generic_request.messages.clone(),
             raw_request,
             raw_response,
             usage,
@@ -591,6 +605,7 @@ impl ThinkingState {
 fn stream_together(
     mut event_source: EventSource,
     start_time: Instant,
+    parse_think_blocks: bool,
 ) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
     let mut tool_call_ids = Vec::new();
     let mut tool_call_names = Vec::new();
@@ -619,10 +634,7 @@ fn stream_together(
                         }
                         let data: Result<TogetherChatChunk, Error> =
                             serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
-                                message: format!(
-                                    "Error parsing chunk. Error: {}",
-                                    e,
-                                ),
+                                message: format!("Error parsing chunk. Error: {}", e),
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),
@@ -630,7 +642,7 @@ fn stream_together(
 
                         let latency = start_time.elapsed();
                         let stream_message = data.and_then(|d| {
-                            together_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names, &mut thinking_state)
+                            together_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names, &mut thinking_state, parse_think_blocks)
                         });
                         yield stream_message;
                     }
@@ -643,12 +655,17 @@ fn stream_together(
 }
 
 /// Maps a Together chunk to a TensorZero chunk for streaming inferences
+///
+/// This function handles the conversion of Together chat chunks into TensorZero chunks.
+/// It processes the content and tool calls from the Together response, updating the tool call IDs and names.
+/// If parsing think blocks is enabled, it also processes the thinking state and extracts reasoning.
 fn together_to_tensorzero_chunk(
     mut chunk: TogetherChatChunk,
     latency: Duration,
     tool_call_ids: &mut Vec<String>,
-    tool_names: &mut Vec<String>,
+    tool_call_names: &mut Vec<String>,
     thinking_state: &mut ThinkingState,
+    parse_think_blocks: bool,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
@@ -671,23 +688,30 @@ fn together_to_tensorzero_chunk(
     let mut content = vec![];
     if let Some(choice) = chunk.choices.pop() {
         if let Some(text) = choice.delta.content {
-            // If an update is made to the thinking state, we don't want to add a text chunk
-            if !thinking_state.update(&text)? {
-                match thinking_state {
-                    ThinkingState::Normal | ThinkingState::Finished => {
-                        content.push(ContentBlockChunk::Text(TextChunk {
-                            text,
-                            id: thinking_state.get_id(),
-                        }));
-                    }
-                    ThinkingState::Thinking => {
-                        content.push(ContentBlockChunk::Thought(ThoughtChunk {
-                            text,
-                            id: thinking_state.get_id(),
-                        }));
+            if parse_think_blocks {
+                if !thinking_state.update(&text)? {
+                    match thinking_state {
+                        ThinkingState::Normal | ThinkingState::Finished => {
+                            content.push(ContentBlockChunk::Text(TextChunk {
+                                text,
+                                id: thinking_state.get_id(),
+                            }));
+                        }
+                        ThinkingState::Thinking => {
+                            content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                                text,
+                                id: thinking_state.get_id(),
+                            }));
+                        }
                     }
                 }
-            };
+            } else {
+                // Just add the text verbatim if we're not parsing think blocks.
+                content.push(ContentBlockChunk::Text(TextChunk {
+                    text,
+                    id: "0".to_string(),
+                }));
+            }
         }
         if let Some(tool_calls) = choice.delta.tool_calls {
             for tool_call in tool_calls {
@@ -711,11 +735,11 @@ fn together_to_tensorzero_chunk(
                 };
                 let name = match tool_call.function.name {
                     Some(name) => {
-                        tool_names.push(name.clone());
+                        tool_call_names.push(name.clone());
                         name
                     }
                     None => {
-                        tool_names
+                        tool_call_names
                             .get(index as usize)
                             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                                 message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),
@@ -889,7 +913,6 @@ mod tests {
                 index: 0,
                 message: TogetherResponseMessage {
                     content: Some("Hello, world!".to_string()),
-                    reasoning_content: Some("Thinking...".to_string()),
                     tool_calls: None,
                 },
             }],
@@ -926,19 +949,14 @@ mod tests {
             },
             request: TogetherRequest::new("test-model", &generic_request),
             generic_request: &generic_request,
+            parse_think_blocks: true,
         };
         let inference_response: ProviderInferenceResponse =
             together_response_with_metadata.try_into().unwrap();
 
-        assert_eq!(inference_response.output.len(), 2);
+        assert_eq!(inference_response.output.len(), 1);
         assert_eq!(
             inference_response.output[0],
-            ContentBlockOutput::Thought(Thought {
-                text: "Thinking...".to_string()
-            })
-        );
-        assert_eq!(
-            inference_response.output[1],
             "Hello, world!".to_string().into()
         );
         assert_eq!(inference_response.raw_response, "test_response");
@@ -950,39 +968,130 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+
+        // Test case with thinking in the response
+        let valid_response = TogetherResponse {
+            choices: vec![TogetherResponseChoice {
+                index: 0,
+                message: TogetherResponseMessage {
+                    content: Some("<think>hmmm</think>Hello, world!".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: OpenAIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            },
+        };
+        let together_response_with_metadata = TogetherResponseWithMetadata {
+            response: valid_response,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            request: TogetherRequest::new("test-model", &generic_request),
+            generic_request: &generic_request,
+            parse_think_blocks: true,
+        };
+        let inference_response: ProviderInferenceResponse =
+            together_response_with_metadata.try_into().unwrap();
+        assert_eq!(inference_response.output.len(), 2);
+        assert_eq!(
+            inference_response.output[0],
+            ContentBlockOutput::Thought(Thought {
+                text: "hmmm".to_string()
+            })
+        );
+        assert_eq!(
+            inference_response.output[1],
+            "Hello, world!".to_string().into()
+        );
+        assert_eq!(inference_response.raw_response, "test_response");
+
+        // Test case with thinking in the middle of response
+        let valid_response = TogetherResponse {
+            choices: vec![TogetherResponseChoice {
+                index: 0,
+                message: TogetherResponseMessage {
+                    content: Some("Hello <think>hmmm</think> world!".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: OpenAIUsage {
+                prompt_tokens: 10,
+                completion_tokens: 20,
+                total_tokens: 30,
+            },
+        };
+        let together_response_with_metadata = TogetherResponseWithMetadata {
+            response: valid_response,
+            raw_response: "test_response".to_string(),
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            request: TogetherRequest::new("test-model", &generic_request),
+            generic_request: &generic_request,
+            parse_think_blocks: true,
+        };
+        let inference_response: ProviderInferenceResponse =
+            together_response_with_metadata.try_into().unwrap();
+        assert_eq!(inference_response.output.len(), 2);
+        assert_eq!(
+            inference_response.output[0],
+            ContentBlockOutput::Thought(Thought {
+                text: "hmmm".to_string()
+            })
+        );
+        assert_eq!(
+            inference_response.output[1],
+            "Hello  world!".to_string().into()
+        );
+        assert_eq!(inference_response.raw_response, "test_response");
     }
 
     #[test]
     fn test_single_thinking() {
-        let json = r#"{
-            "content": "Hello <think>this is thinking</think> world",
-            "tool_calls": null
-        }"#;
+        let text = "Hello <think>this is thinking</think> world";
+        let (cleaned_text, reasoning) = process_think_blocks(text, true).unwrap();
+        assert_eq!(cleaned_text, "Hello  world");
+        assert_eq!(reasoning, Some("this is thinking".to_string()));
 
-        let msg: TogetherResponseMessage = serde_json::from_str(json).unwrap();
-        // 2 spaces between Hello and world because of the thinking block and whitespace
-        assert_eq!(msg.content, Some("Hello  world".to_string()));
-        assert_eq!(msg.reasoning_content, Some("this is thinking".to_string()));
+        let (cleaned_text, reasoning) = process_think_blocks(text, false).unwrap();
+        assert_eq!(cleaned_text, text);
+        assert_eq!(reasoning, None);
     }
 
     #[test]
     fn test_multiple_thinking_blocks() {
-        let json = r#"{
-            "content": "Hello <think>thinking 1</think> middle <think>thinking 2</think>",
-            "tool_calls": null
-        }"#;
+        let text = "Hello <think>thinking 1</think> middle <think>thinking 2</think>";
+        let result = process_think_blocks(text, true);
+        assert!(result.is_err());
+        if let Err(err) = result {
+            if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
+                assert_eq!(message, "Multiple thinking blocks found");
+            }
+        }
 
-        assert!(serde_json::from_str::<TogetherResponseMessage>(json).is_err());
+        let (cleaned_text, reasoning) = process_think_blocks(text, false).unwrap();
+        assert_eq!(cleaned_text, text);
+        assert_eq!(reasoning, None);
     }
 
     #[test]
     fn test_mismatched_tags() {
-        let json = r#"{
-            "content": "Hello <think>thinking without end tag",
-            "tool_calls": null
-        }"#;
+        let text = "Hello <think>thinking without end tag";
+        let result = process_think_blocks(text, true);
+        assert!(result.is_err());
+        if let Err(err) = result {
+            if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
+                assert_eq!(message, "Mismatched thinking tags");
+            }
+        }
 
-        assert!(serde_json::from_str::<TogetherResponseMessage>(json).is_err());
+        let (cleaned_text, reasoning) = process_think_blocks(text, false).unwrap();
+        assert_eq!(cleaned_text, text);
+        assert_eq!(reasoning, None);
     }
 
     #[test]
@@ -1073,6 +1182,7 @@ mod tests {
             &mut tool_call_ids,
             &mut tool_call_names,
             &mut thinking_state,
+            true,
         )
         .unwrap();
         assert_eq!(
@@ -1105,6 +1215,7 @@ mod tests {
             &mut tool_call_ids,
             &mut tool_call_names,
             &mut thinking_state,
+            true,
         )
         .unwrap();
         assert_eq!(
@@ -1138,6 +1249,7 @@ mod tests {
             &mut tool_call_ids,
             &mut tool_call_names,
             &mut thinking_state,
+            true,
         )
         .unwrap_err();
         let details = error.get_details();
@@ -1173,6 +1285,7 @@ mod tests {
             &mut tool_call_ids,
             &mut tool_call_names,
             &mut thinking_state,
+            true,
         )
         .unwrap();
         assert_eq!(
@@ -1205,6 +1318,7 @@ mod tests {
             &mut tool_call_ids,
             &mut tool_call_names,
             &mut thinking_state,
+            true,
         )
         .unwrap();
         assert_eq!(message.content, vec![]);
@@ -1232,6 +1346,7 @@ mod tests {
             &mut tool_call_ids,
             &mut tool_call_names,
             &mut thinking_state,
+            true,
         )
         .unwrap();
         assert!(message.content.is_empty());
@@ -1253,6 +1368,7 @@ mod tests {
             &mut tool_call_ids,
             &mut tool_call_names,
             &mut thinking_state,
+            true,
         )
         .unwrap();
         assert_eq!(
@@ -1280,9 +1396,42 @@ mod tests {
             &mut tool_call_ids,
             &mut tool_call_names,
             &mut thinking_state,
+            true,
         )
         .unwrap();
         assert!(message.content.is_empty());
         assert!(matches!(thinking_state, ThinkingState::Finished));
+    }
+
+    #[test]
+    fn test_together_to_tensorzero_chunk_without_think_parsing() {
+        let chunk = TogetherChatChunk {
+            choices: vec![TogetherChatChunkChoice {
+                delta: TogetherDelta {
+                    content: Some("Hello <think>should not parse</think>".to_string()),
+                    tool_calls: None,
+                },
+            }],
+            usage: None,
+        };
+        let mut tool_call_ids = vec![];
+        let mut tool_call_names = vec![];
+        let mut thinking_state = ThinkingState::Normal;
+        let message = together_to_tensorzero_chunk(
+            chunk,
+            Duration::from_millis(50),
+            &mut tool_call_ids,
+            &mut tool_call_names,
+            &mut thinking_state,
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            message.content,
+            vec![ContentBlockChunk::Text(TextChunk {
+                text: "Hello <think>should not parse</think>".to_string(),
+                id: "0".to_string(),
+            })]
+        );
     }
 }
