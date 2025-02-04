@@ -1855,6 +1855,10 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_bedrock_err_auto_detect_region() {
+        // We want auto-detection to fail, so we clear this environment variable.
+        // We use 'nextest' as our runner, so each test runs in its own process
+        std::env::remove_var("AWS_REGION");
+
         let config_str = r#"
         [gateway]
         bind_address = "0.0.0.0:3000"
@@ -1873,8 +1877,6 @@ mod tests {
         let err =
             Config::load_from_toml(config, base_path.clone()).expect_err("Failed to load bedrock");
         let err_msg = err.to_string();
-        // Note - this requires the `AWS_REGION` environment variable to be unset when running the test,
-        // since we want the region auto-detection to fail.
         assert!(
             err_msg.contains("Failed to determine AWS region."),
             "Unexpected error message: {err_msg}"
