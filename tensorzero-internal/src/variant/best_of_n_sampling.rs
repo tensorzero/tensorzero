@@ -600,8 +600,14 @@ impl EvaluatorConfig {
                 self.inner.presence_penalty,
                 self.inner.frequency_penalty,
             );
-        let tool_config = match self.inner.json_mode {
-            Some(JsonMode::ImplicitTool) => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
+        let json_mode = inference_params
+            .chat_completion
+            .json_mode
+            .map(|m| m.into())
+            .or(self.inner.json_mode)
+            .unwrap_or(JsonMode::Strict);
+        let tool_config = match json_mode {
+            JsonMode::ImplicitTool => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
             _ => None,
         };
         Ok((
@@ -617,7 +623,7 @@ impl EvaluatorConfig {
                 presence_penalty: inference_params.chat_completion.presence_penalty,
                 frequency_penalty: inference_params.chat_completion.frequency_penalty,
                 stream: false,
-                json_mode: self.inner.json_mode.unwrap_or(JsonMode::Strict).into(),
+                json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
             },

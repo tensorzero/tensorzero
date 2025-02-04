@@ -9,7 +9,7 @@ use serde_json::Value;
 use tensorzero_internal::{
     embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
     endpoints::inference::InferenceCredentials,
-    inference::types::Latency,
+    inference::types::{Latency, ModelInferenceRequestJsonMode},
 };
 #[cfg(feature = "e2e_tests")]
 use uuid::Uuid;
@@ -415,6 +415,180 @@ async fn test_o1_streaming_unsupported() {
         text.contains("'stream' does not support true with this model"),
         "Unexpected error: {text}"
     );
+}
+
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+async fn test_text_function_json_override_with_mode_on() {
+    test_text_function_json_override_with_mode(ModelInferenceRequestJsonMode::On).await;
+}
+
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+async fn test_text_function_json_override_with_mode_off() {
+    test_text_function_json_override_with_mode(ModelInferenceRequestJsonMode::Off).await;
+}
+
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+async fn test_text_function_json_override_with_mode_strict() {
+    test_text_function_json_override_with_mode(ModelInferenceRequestJsonMode::Strict).await;
+}
+
+async fn test_text_function_json_override_with_mode(json_mode: ModelInferenceRequestJsonMode) {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+    let mode = serde_json::to_value(&json_mode).unwrap();
+
+    // Note that we need to include 'json' somewhere in the messages, to stop OpenAI from complaining
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "openai",
+        "episode_id": episode_id,
+        "input":
+            {"system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital of Japan (possibly as JSON)?"
+                }
+            ]},
+        "params": {
+            "chat_completion": {
+                "json_mode": mode,
+            }
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    let response_status = response.status();
+    let response_json = response.json::<Value>().await.unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(
+        response_status,
+        StatusCode::OK,
+        "Unexpected response status, body: {response_json:?})"
+    );
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(content_blocks.len() == 1);
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    // We should have forwarded the JSON mode to the provider, so OpenAI should give us back json
+    // Since we're using a text function, tensorzero should not handle the JSON parsing for us.
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    // Assert that Tokyo is in the content
+    assert!(content.contains("Tokyo"), "Content should mention Tokyo");
+    if let ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict = json_mode {
+        let _context_as_json: Value =
+            serde_json::from_str(content).expect("Content should be valid JSON");
+    }
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+
+    // First, check Inference table
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "AskJeeves"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": "What is the capital of Japan (possibly as JSON)?"}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+    let content_blocks = result.get("output").unwrap().as_str().unwrap();
+    // Check that content_blocks is a list of blocks length 1
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.first().unwrap();
+    // Check the type and content in the block
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(clickhouse_content, content);
+    // Check that episode_id is here and correct
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "openai");
+    // Check the processing time
+    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(processing_time_ms > 0);
+
+    // Check that we saved the correct json mode to ClickHouse
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let expected_json_mode = serde_json::to_value(&json_mode).unwrap();
+    let clickhouse_json_mode = inference_params
+        .get("chat_completion")
+        .unwrap()
+        .get("json_mode")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!(expected_json_mode, clickhouse_json_mode);
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, "gpt-4o-mini-2024-07-18");
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, "openai");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    // Check that raw_request is valid JSON
+    let raw_request_val: Value =
+        serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
+    let expected_request = match json_mode {
+        ModelInferenceRequestJsonMode::Off => {
+            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"text"}})
+        }
+        ModelInferenceRequestJsonMode::On => {
+            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_object"}})
+        }
+        ModelInferenceRequestJsonMode::Strict => {
+            json!({"messages":[{"role":"system","content":"You are a helpful and friendly assistant named AskJeeves"},{"role":"user","content":"What is the capital of Japan (possibly as JSON)?"}],"model":"gpt-4o-mini-2024-07-18","max_completion_tokens":100,"stream":false,"response_format":{"type":"json_object"}})
+        }
+    };
+    assert_eq!(raw_request_val, expected_request);
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 5);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 5);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
 }
 
 #[cfg(feature = "e2e_tests")]

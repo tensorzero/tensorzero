@@ -31,7 +31,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     current_timestamp, ContentBlockChunk, ContentBlockOutput, Input, InputMessage,
-    InputMessageContent, Role, Usage,
+    InputMessageContent, ModelInferenceRequestJsonMode, Role, Usage,
 };
 use crate::tool::{
     DynamicToolParams, Tool, ToolCall, ToolCallChunk, ToolCallOutput, ToolChoice, ToolResult,
@@ -289,6 +289,16 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             (None, Some(max_completion_tokens)) => Some(max_completion_tokens),
             (None, None) => None,
         };
+        let json_mode = match openai_compatible_params.response_format {
+            Some(OpenAICompatibleResponseFormat::JsonSchema { json_schema: _ }) => {
+                Some(ModelInferenceRequestJsonMode::Strict)
+            }
+            Some(OpenAICompatibleResponseFormat::JsonObject) => {
+                Some(ModelInferenceRequestJsonMode::On)
+            }
+            Some(OpenAICompatibleResponseFormat::Text) => Some(ModelInferenceRequestJsonMode::Off),
+            None => None,
+        };
         let input = openai_compatible_params.messages.try_into()?;
         let chat_completion_inference_params = ChatCompletionInferenceParams {
             temperature: openai_compatible_params.temperature,
@@ -297,6 +307,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             top_p: openai_compatible_params.top_p,
             presence_penalty: openai_compatible_params.presence_penalty,
             frequency_penalty: openai_compatible_params.frequency_penalty,
+            json_mode,
         };
         let inference_params = InferenceParams {
             chat_completion: chat_completion_inference_params,

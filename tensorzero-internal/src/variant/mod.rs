@@ -394,11 +394,17 @@ fn prepare_model_inference_request<'a, 'request>(
     inference_config: &'request InferenceConfig<'a, 'request>,
     stream: bool,
     inference_params: &InferenceParams,
-    json_mode: Option<JsonMode>,
+    base_json_mode: Option<JsonMode>,
 ) -> Result<ModelInferenceRequest<'request>, Error>
 where
     'a: 'request,
 {
+    let json_mode = inference_params
+        .chat_completion
+        .json_mode
+        .map(JsonMode::from)
+        .or(base_json_mode);
+
     Ok(match function {
         FunctionConfig::Chat(_) => ModelInferenceRequest {
             messages,
@@ -412,9 +418,11 @@ where
             frequency_penalty: inference_params.chat_completion.frequency_penalty,
             seed: inference_params.chat_completion.seed,
             stream,
+            // In chat mode, we fall back to 'JsonMode::Off' - json mode will only be enabled if
+            // explicitly requested in `chat_completion` params.
             json_mode: json_mode.unwrap_or(JsonMode::Off).into(),
             function_type: FunctionType::Chat,
-            output_schema: None,
+            output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
         },
         FunctionConfig::Json(json_config) => {
             let tool_config = match json_mode {
@@ -442,6 +450,8 @@ where
                 frequency_penalty: inference_params.chat_completion.frequency_penalty,
                 seed: inference_params.chat_completion.seed,
                 stream,
+                // In json mode, we fall back to 'JsonMode::Strict' if it was unset in both
+                // the `chat_completions` params and the variant config.
                 json_mode: json_mode.unwrap_or(JsonMode::Strict).into(),
                 function_type: FunctionType::Json,
                 output_schema,
@@ -634,6 +644,7 @@ mod tests {
                 presence_penalty: Some(0.0),
                 frequency_penalty: Some(0.0),
                 seed: Some(42),
+                json_mode: None,
             },
         };
 

@@ -28,8 +28,8 @@ use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     collect_chunks, ChatInferenceDatabaseInsert, CollectChunksArgs, ContentBlockChunk,
     ContentBlockOutput, InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
-    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
-    RequestMessage, Usage,
+    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceRequestJsonMode,
+    ModelInferenceResponseWithMetadata, RequestMessage, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
@@ -776,6 +776,8 @@ pub struct ChatCompletionInferenceParams {
     pub presence_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub json_mode: Option<ModelInferenceRequestJsonMode>,
 }
 
 impl ChatCompletionInferenceParams {

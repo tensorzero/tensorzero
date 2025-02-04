@@ -117,7 +117,8 @@ pub enum FunctionType {
     Json,
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Default, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ModelInferenceRequestJsonMode {
     #[default]
     Off,
@@ -1121,6 +1122,15 @@ impl From<JsonMode> for ModelInferenceRequestJsonMode {
     }
 }
 
+impl From<ModelInferenceRequestJsonMode> for JsonMode {
+    fn from(json_mode: ModelInferenceRequestJsonMode) -> Self {
+        match json_mode {
+            ModelInferenceRequestJsonMode::On => JsonMode::On,
+            ModelInferenceRequestJsonMode::Strict => JsonMode::Strict,
+            ModelInferenceRequestJsonMode::Off => JsonMode::Off,
+        }
+    }
+}
 impl<'a> std::iter::Sum<&'a Usage> for Usage {
     fn sum<I: Iterator<Item = &'a Usage>>(iter: I) -> Self {
         iter.fold(Usage::default(), |mut acc, u| {
