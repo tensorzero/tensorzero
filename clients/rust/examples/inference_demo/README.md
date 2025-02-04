@@ -4,7 +4,7 @@ This demo shows performing inference with both an HTTP gateway server and an emb
 
 ## Usage
 
-1. Run `docker compose up` in `<tensorzero_repository>/examples/haiku-hidden-preferences` 
+1. Run `docker compose up` in `<tensorzero_repository>/examples/haiku-hidden-preferences`
 
 The following steps should be run from the root of the repository
 

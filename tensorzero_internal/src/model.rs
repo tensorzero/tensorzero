@@ -29,7 +29,8 @@ use crate::{
     inference::{
         providers::{
             anthropic::AnthropicProvider, aws_bedrock::AWSBedrockProvider, azure::AzureProvider,
-            fireworks::FireworksProvider, gcp_vertex_anthropic::GCPVertexAnthropicProvider,
+            deepseek::DeepSeekProvider, fireworks::FireworksProvider,
+            gcp_vertex_anthropic::GCPVertexAnthropicProvider,
             gcp_vertex_gemini::GCPVertexGeminiProvider, mistral::MistralProvider,
             openai::OpenAIProvider, provider_trait::InferenceProvider, together::TogetherProvider,
             vllm::VLLMProvider, xai::XAIProvider,
@@ -219,6 +220,7 @@ pub enum ProviderConfig {
     XAI(XAIProvider),
     TGI(TGIProvider),
     SGLang(SGLangProvider),
+    DeepSeek(DeepSeekProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -315,6 +317,11 @@ pub(super) enum ProviderConfigHelper {
     SGLang {
         model_name: String,
         api_base: Url,
+        api_key_location: Option<CredentialLocation>,
+    },
+    #[allow(clippy::upper_case_acronyms)]
+    DeepSeek {
+        model_name: String,
         api_key_location: Option<CredentialLocation>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
@@ -461,6 +468,13 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 TGIProvider::new(api_base, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
+            ProviderConfigHelper::DeepSeek {
+                model_name,
+                api_key_location,
+            } => ProviderConfig::DeepSeek(
+                DeepSeekProvider::new(model_name, api_key_location)
+                    .map_err(|e| D::Error::custom(e.to_string()))?,
+            ),
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfigHelper::Dummy {
                 model_name,
@@ -502,6 +516,7 @@ impl ProviderConfig {
             ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys).await,
             ProviderConfig::TGI(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::DeepSeek(provider) => provider.infer(request, client, api_keys).await,
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => provider.infer(request, client, api_keys).await,
         }
@@ -562,6 +577,9 @@ impl ProviderConfig {
                 provider.infer_stream(request, client, api_keys).await
             }
             ProviderConfig::TGI(provider) => provider.infer_stream(request, client, api_keys).await,
+            ProviderConfig::DeepSeek(provider) => {
+                provider.infer_stream(request, client, api_keys).await
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider.infer_stream(request, client, api_keys).await
@@ -642,6 +660,11 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::XAI(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::DeepSeek(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -738,6 +761,11 @@ impl ProviderConfig {
                     .await
             }
             ProviderConfig::XAI(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::DeepSeek(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -970,6 +998,7 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "openai::",
     "together::",
     "xai::",
+    "deepseek::",
     "dummy::",
 ];
 
@@ -982,6 +1011,7 @@ impl ShorthandModelConfig for ModelConfig {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
             "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
+            "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(model_name, None)?),
             "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(model_name, None)?),
             "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
                 GoogleAIStudioGeminiProvider::new(model_name, None)?,
