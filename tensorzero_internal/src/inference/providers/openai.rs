@@ -1026,7 +1026,6 @@ pub(super) fn tensorzero_to_openai_messages(
                 messages.push(message);
             }
             ContentBlock::Thought(_thought) => {
-                // TODO (Viraj): open an issue for this
                 // For now, we don't input thoughts to OpenAI models
             }
         }

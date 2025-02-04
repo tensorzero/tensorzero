@@ -428,7 +428,6 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GCPVertexAnthropicMessageContent<'
             }
             ContentBlock::Thought(_thought) => {
                 // For now, we don't input thoughts to Anthropic models
-                // TODO (Viraj): open an issue for this
                 Ok(None)
             }
         }

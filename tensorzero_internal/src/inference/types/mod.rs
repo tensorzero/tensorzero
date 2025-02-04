@@ -473,7 +473,6 @@ impl fmt::Display for Role {
     }
 }
 
-// TODO (Viraj): remove if appropriate
 impl From<String> for ContentBlock {
     fn from(text: String) -> Self {
         ContentBlock::Text(Text { text })
@@ -1056,7 +1055,6 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                 }
             }
             InferenceResultChunk::Json(chunk) => {
-                // TODO (Viraj): handle thinking here
                 match text_blocks.get_mut("") {
                     // If there is already a text block, append to it
                     Some(ContentBlockOutput::Text(Text {
