@@ -66,7 +66,7 @@
     "typescript": "^5.7.3",
     "vite": "^5.4.14",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.9"
   },
   "overrides": {
     "react-is": "^19.0.0-rc-69d4b800-20241021"
