@@ -24,6 +24,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
+use crate::model::StreamResponse;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
@@ -112,6 +113,7 @@ pub struct ModelUsedInfo {
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
+    pub cached: bool,
 }
 
 pub trait Variant {
@@ -133,7 +135,7 @@ pub trait Variant {
         inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
-    ) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error>;
+    ) -> Result<(InferenceResultStream, ModelUsedInfo), Error>;
 
     fn validate(
         &self,
@@ -248,7 +250,7 @@ impl Variant for VariantConfig {
         inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
-    ) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error> {
+    ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         match self {
             VariantConfig::ChatCompletion(params) => {
                 params
@@ -501,10 +503,15 @@ async fn infer_model_request_stream<'request>(
     clients: &'request InferenceClients<'request>,
     inference_params: InferenceParams,
     retry_config: RetryConfig,
-) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error> {
-    let (first_chunk, stream, raw_request, model_provider_name) = (|| async {
+) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
+    let StreamResponse {
+        stream,
+        raw_request,
+        model_provider_name,
+        cached,
+    } = (|| async {
         model_config
-            .infer_stream(&request, clients.http_client, clients.credentials)
+            .infer_stream(&request, clients, &model_name)
             .await
     })
     .retry(retry_config.get_backoff())
@@ -519,12 +526,12 @@ async fn infer_model_request_stream<'request>(
         previous_model_inference_results: vec![],
         system,
         input_messages,
+        cached,
     };
     let config_type = function.config_type();
-    let first_chunk = InferenceResultChunk::new(first_chunk, config_type);
     let stream =
         stream.map(move |chunk| chunk.map(|chunk| InferenceResultChunk::new(chunk, config_type)));
-    Ok((first_chunk, Box::pin(stream), model_used_info))
+    Ok((Box::pin(stream), model_used_info))
 }
 
 #[derive(Debug, Deserialize, Copy, Clone)]
@@ -1252,10 +1259,10 @@ mod tests {
         assert!(result.is_ok());
 
         // Unwrap the result
-        let (first_chunk, mut stream, model_used_info) = result.unwrap();
+        let (mut stream, model_used_info) = result.unwrap();
 
         // Check the first chunk
-        if let InferenceResultChunk::Chat(chat_chunk) = first_chunk {
+        if let InferenceResultChunk::Chat(chat_chunk) = stream.next().await.unwrap().unwrap() {
             assert_eq!(chat_chunk.content.len(), 1);
             if let ContentBlockChunk::Text(text_chunk) = &chat_chunk.content[0] {
                 assert_eq!(text_chunk.text, DUMMY_STREAMING_RESPONSE[0]);
@@ -1390,10 +1397,10 @@ mod tests {
         assert!(result.is_ok());
 
         // Unwrap the result
-        let (first_chunk, mut stream, model_used_info) = result.unwrap();
+        let (mut stream, model_used_info) = result.unwrap();
 
         // Check the first chunk
-        if let InferenceResultChunk::Chat(chat_chunk) = first_chunk {
+        if let InferenceResultChunk::Chat(chat_chunk) = stream.next().await.unwrap().unwrap() {
             assert_eq!(chat_chunk.content.len(), 1);
             if let ContentBlockChunk::Text(text_chunk) = &chat_chunk.content[0] {
                 assert_eq!(text_chunk.text, DUMMY_STREAMING_RESPONSE[0]);

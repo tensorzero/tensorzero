@@ -107,6 +107,7 @@ struct InferenceMetadata {
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
+    pub cached: bool,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -279,9 +280,10 @@ pub async fn inference(
                 )
                 .await;
 
-            // Make sure the response worked (incl. first chunk) prior to launching the thread and starting to return chunks
-            let (chunk, stream, model_used_info) = match result {
-                Ok((chunk, stream, model_used_info)) => (chunk, stream, model_used_info),
+            // Make sure the response worked prior to launching the thread and starting to return chunks.
+            // The provider has already checked that the first chunk is OK.
+            let (stream, model_used_info) = match result {
+                Ok((stream, model_used_info)) => (stream, model_used_info),
                 Err(e) => {
                     tracing::warn!(
                         "functions.{function_name:?}.variants.{variant_name:?} failed during inference: {e}",
@@ -312,13 +314,13 @@ pub async fn inference(
                 tags: params.tags,
                 tool_config,
                 dynamic_output_schema: output_schema,
+                cached: model_used_info.cached,
             };
 
             let stream = create_stream(
                 function,
                 config.clone(),
                 inference_metadata,
-                chunk,
                 stream,
                 clickhouse_connection_info,
             );
@@ -448,16 +450,11 @@ fn create_stream(
     function: Arc<FunctionConfig>,
     config: Arc<Config<'static>>,
     metadata: InferenceMetadata,
-    first_chunk: InferenceResultChunk,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
-        let mut buffer = vec![first_chunk.clone()];
-
-        // Send the first chunk
-        yield Ok(prepare_response_chunk(&metadata, first_chunk));
-
+        let mut buffer = vec![];
         while let Some(chunk) = stream.next().await {
             match chunk {
                 Ok(chunk) => {
@@ -493,6 +490,7 @@ fn create_stream(
                 tags,
                 tool_config,
                 dynamic_output_schema,
+                cached: _,
             } = metadata;
 
             let config = config.clone();
@@ -553,6 +551,7 @@ fn prepare_response_chunk(
         metadata.inference_id,
         metadata.episode_id,
         metadata.variant_name.clone(),
+        metadata.cached,
     )
 }
 
@@ -563,16 +562,19 @@ fn prepare_serialized_events(
 ) -> impl Stream<Item = Result<Event, Error>> {
     async_stream::stream! {
         while let Some(chunk) = stream.next().await {
-            // NOTE - in the future, we may want to end the stream early if we get an error
-            // For now, we just ignore the error and try to get more chunks
-            let Ok(chunk) = chunk else {
-                continue;
+            let chunk_json = match chunk {
+                Ok(chunk) => {
+                    serde_json::to_value(chunk).map_err(|e| {
+                        Error::new(ErrorDetails::Inference {
+                            message: format!("Failed to convert chunk to JSON: {}", e),
+                        })
+                    })?
+                },
+                Err(e) => {
+                    // NOTE - in the future, we may want to end the stream early if we get an error
+                    serde_json::json!({"error": e.to_string()})
+                }
             };
-            let chunk_json = serde_json::to_value(chunk).map_err(|e| {
-                Error::new(ErrorDetails::Inference {
-                    message: format!("Failed to convert chunk to JSON: {}", e),
-                })
-            })?;
             yield Event::default().json_data(chunk_json).map_err(|e| {
                 Error::new(ErrorDetails::Inference {
                     message: format!("Failed to convert Value to Event: {}", e),
@@ -693,6 +695,7 @@ pub struct ChatInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
+    pub cached: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -703,6 +706,7 @@ pub struct JsonInferenceResponseChunk {
     pub raw: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
+    pub cached: bool,
 }
 
 impl InferenceResponseChunk {
@@ -711,6 +715,7 @@ impl InferenceResponseChunk {
         inference_id: Uuid,
         episode_id: Uuid,
         variant_name: String,
+        cached: bool,
     ) -> Self {
         match inference_result {
             InferenceResultChunk::Chat(result) => {
@@ -720,6 +725,7 @@ impl InferenceResponseChunk {
                     variant_name,
                     content: result.content,
                     usage: result.usage,
+                    cached,
                 })
             }
             InferenceResultChunk::Json(result) => {
@@ -729,6 +735,7 @@ impl InferenceResponseChunk {
                     variant_name,
                     raw: result.raw,
                     usage: result.usage,
+                    cached,
                 })
             }
         }
@@ -853,6 +860,7 @@ mod tests {
             tags: HashMap::new(),
             tool_config: None,
             dynamic_output_schema: None,
+            cached: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -902,6 +910,7 @@ mod tests {
             tags: HashMap::new(),
             tool_config: None,
             dynamic_output_schema: None,
+            cached: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);

@@ -12,3 +12,4 @@ mod mixture_of_n;
 mod prometheus;
 mod providers;
 mod retries;
+mod streaming_errors;

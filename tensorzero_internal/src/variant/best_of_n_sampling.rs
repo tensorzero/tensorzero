@@ -23,7 +23,7 @@ use crate::{
     endpoints::inference::InferenceParams,
     error::Error,
     function::FunctionConfig,
-    inference::types::{InferenceResult, InferenceResultChunk, InferenceResultStream, Input},
+    inference::types::{InferenceResult, InferenceResultStream, Input},
     minijinja_util::TemplateConfig,
     variant::chat_completion::ChatCompletionConfig,
 };
@@ -106,7 +106,7 @@ impl Variant for BestOfNSamplingConfig {
         _inference_config: &'request InferenceConfig<'static, 'request>,
         _clients: &'request InferenceClients<'request>,
         _inference_params: InferenceParams,
-    ) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error> {
+    ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         Err(ErrorDetails::InvalidRequest {
             message: "Best of n variants do not support streaming inference.".to_string(),
         }
