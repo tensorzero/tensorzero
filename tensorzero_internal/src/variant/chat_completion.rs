@@ -8,8 +8,8 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels, InferencePa
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultChunk,
-    InferenceResultStream, Input, InputMessageContent, ModelInferenceRequest, RequestMessage, Role,
+    batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream, Input,
+    InputMessageContent, ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::inference::types::{InferenceResult, InputMessage};
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -190,7 +190,7 @@ impl Variant for ChatCompletionConfig {
         inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
-    ) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error> {
+    ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         let mut inference_params = inference_params;
         let request = self.prepare_request(
             input,
@@ -391,7 +391,9 @@ mod tests {
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::inference::providers::common::get_temperature_tool_config;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
-    use crate::inference::types::{ContentBlockOutput, ModelInferenceRequestJsonMode, Usage};
+    use crate::inference::types::{
+        ContentBlockOutput, InferenceResultChunk, ModelInferenceRequestJsonMode, Usage,
+    };
     use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::model::{ModelConfig, ProviderConfig};
@@ -1541,7 +1543,7 @@ mod tests {
             variant_name: Some(""),
             dynamic_output_schema: None,
         };
-        let (first_chunk, mut stream, models_used) = chat_completion_config
+        let (mut stream, models_used) = chat_completion_config
             .infer_stream(
                 &input,
                 &inference_models,
@@ -1552,7 +1554,7 @@ mod tests {
             )
             .await
             .unwrap();
-        let first_chunk = match first_chunk {
+        let first_chunk = match stream.next().await.unwrap().unwrap() {
             InferenceResultChunk::Chat(chunk) => chunk,
             _ => panic!("Expected Chat inference response"),
         };

@@ -279,9 +279,10 @@ pub async fn inference(
                 )
                 .await;
 
-            // Make sure the response worked (incl. first chunk) prior to launching the thread and starting to return chunks
-            let (chunk, stream, model_used_info) = match result {
-                Ok((chunk, stream, model_used_info)) => (chunk, stream, model_used_info),
+            // Make sure the response worked prior to launching the thread and starting to return chunks.
+            // The provider has already checked that the first chunk is OK.
+            let (stream, model_used_info) = match result {
+                Ok((stream, model_used_info)) => (stream, model_used_info),
                 Err(e) => {
                     tracing::warn!(
                         "functions.{function_name:?}.variants.{variant_name:?} failed during inference: {e}",
@@ -318,7 +319,6 @@ pub async fn inference(
                 function,
                 config.clone(),
                 inference_metadata,
-                chunk,
                 stream,
                 clickhouse_connection_info,
             );
@@ -448,16 +448,11 @@ fn create_stream(
     function: Arc<FunctionConfig>,
     config: Arc<Config<'static>>,
     metadata: InferenceMetadata,
-    first_chunk: InferenceResultChunk,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
-        let mut buffer = vec![first_chunk.clone()];
-
-        // Send the first chunk
-        yield Ok(prepare_response_chunk(&metadata, first_chunk));
-
+        let mut buffer = vec![];
         while let Some(chunk) = stream.next().await {
             match chunk {
                 Ok(chunk) => {
@@ -563,16 +558,19 @@ fn prepare_serialized_events(
 ) -> impl Stream<Item = Result<Event, Error>> {
     async_stream::stream! {
         while let Some(chunk) = stream.next().await {
-            // NOTE - in the future, we may want to end the stream early if we get an error
-            // For now, we just ignore the error and try to get more chunks
-            let Ok(chunk) = chunk else {
-                continue;
+            let chunk_json = match chunk {
+                Ok(chunk) => {
+                    serde_json::to_value(chunk).map_err(|e| {
+                        Error::new(ErrorDetails::Inference {
+                            message: format!("Failed to convert chunk to JSON: {}", e),
+                        })
+                    })?
+                },
+                Err(e) => {
+                    // NOTE - in the future, we may want to end the stream early if we get an error
+                    serde_json::json!({"error": e.to_string()})
+                }
             };
-            let chunk_json = serde_json::to_value(chunk).map_err(|e| {
-                Error::new(ErrorDetails::Inference {
-                    message: format!("Failed to convert chunk to JSON: {}", e),
-                })
-            })?;
             yield Event::default().json_data(chunk_json).map_err(|e| {
                 Error::new(ErrorDetails::Inference {
                     message: format!("Failed to convert Value to Event: {}", e),

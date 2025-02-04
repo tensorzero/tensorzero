@@ -278,14 +278,7 @@ impl InferenceProvider for DummyProvider {
         _request: &'a ModelInferenceRequest<'_>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<
-        (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            String,
-        ),
-        Error,
-    > {
+    ) -> Result<(ProviderInferenceResponseStream, String), Error> {
         if self.model_name == "slow" {
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
@@ -324,6 +317,9 @@ impl InferenceProvider for DummyProvider {
             }
             .into());
         }
+
+        let err_in_stream = self.model_name == "err_in_stream";
+
         let created = current_timestamp();
 
         let (content_chunks, is_tool_call) = if self.model_name == "tool" {
@@ -333,28 +329,18 @@ impl InferenceProvider for DummyProvider {
         };
 
         let total_tokens = content_chunks.len() as u32;
-
-        let initial_chunk = ProviderInferenceResponseChunk {
-            created,
-            content: vec![if is_tool_call {
-                ContentBlockChunk::ToolCall(ToolCallChunk {
-                    id: "0".to_string(),
-                    raw_name: "get_temperature".to_string(),
-                    raw_arguments: content_chunks[0].to_string(),
-                })
-            } else {
-                ContentBlockChunk::Text(crate::inference::types::TextChunk {
-                    text: content_chunks[0].to_string(),
-                    id: "0".to_string(),
-                })
-            }],
-            usage: None,
-            raw_response: "".to_string(),
-            latency: Duration::from_millis(100),
-        };
         let content_chunk_len = content_chunks.len();
-        let stream = tokio_stream::iter(content_chunks.into_iter().skip(1).enumerate())
+        let stream = tokio_stream::iter(content_chunks.into_iter().enumerate())
             .map(move |(i, chunk)| {
+                if err_in_stream && i == 3 {
+                    return Err(Error::new(ErrorDetails::InferenceClient {
+                        message: "Dummy error in stream".to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: None,
+                        status_code: None,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    }));
+                }
                 Ok(ProviderInferenceResponseChunk {
                     created,
                     content: vec![if is_tool_call {
@@ -370,7 +356,7 @@ impl InferenceProvider for DummyProvider {
                         })
                     }],
                     usage: None,
-                    raw_response: "".to_string(),
+                    raw_response: json!({"dummy_raw": chunk }).to_string(),
                     latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                 })
             })
@@ -381,16 +367,12 @@ impl InferenceProvider for DummyProvider {
                     input_tokens: 10,
                     output_tokens: total_tokens,
                 }),
-                raw_response: "".to_string(),
+                raw_response: "{}".to_string(),
                 latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
             })))
             .throttle(std::time::Duration::from_millis(10));
 
-        Ok((
-            initial_chunk,
-            Box::pin(stream),
-            DUMMY_RAW_REQUEST.to_string(),
-        ))
+        Ok((Box::pin(stream), DUMMY_RAW_REQUEST.to_string()))
     }
 
     async fn start_batch_inference<'a>(
