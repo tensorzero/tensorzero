@@ -1,3 +1,5 @@
+# This workflow builds the PyO3-based native library across several platforms (using different runners),
+# and then publishes the wheels to PyPi as a single release.
 name: Publish PyO3 client to PyPI
 
 on:
@@ -147,6 +149,8 @@ jobs:
       contents: write
       # Used to generate artifact attestation
       attestations: write
+    # Download all of the wheel artifacts published by the other jobs,
+    # and publish them to PyPi as a new release, using the `upload-pyo3.sh` script.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
