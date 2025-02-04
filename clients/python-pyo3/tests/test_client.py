@@ -304,6 +304,77 @@ async def test_async_inference_streaming(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_reasoning_inference_streaming(async_client):
+    stream = await async_client.inference(
+        function_name="basic_test",
+        variant_name="reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        tags={"key": "value"},
+        stream=True,
+    )
+
+    chunks = []
+    previous_chunk_timestamp = None
+    last_chunk_duration = None
+    async for chunk in stream:
+        if previous_chunk_timestamp is not None:
+            last_chunk_duration = time.time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time.time()
+        chunks.append(chunk)
+
+    assert last_chunk_duration > 0.01
+    expected_thinking = [
+        "hmmm",
+        "hmmm",
+    ]
+    expected_text = [
+        "Wally,",
+        " the",
+        " golden",
+        " retriever,",
+        " wagged",
+        " his",
+        " tail",
+        " excitedly",
+        " as",
+        " he",
+        " devoured",
+        " a",
+        " slice",
+        " of",
+        " cheese",
+        " pizza.",
+    ]
+    previous_inference_id = None
+    previous_episode_id = None
+    print(chunks)
+    for i, chunk in enumerate(chunks):
+        if previous_inference_id is not None:
+            assert chunk.inference_id == previous_inference_id
+        if previous_episode_id is not None:
+            assert chunk.episode_id == previous_episode_id
+        previous_inference_id = chunk.inference_id
+        previous_episode_id = chunk.episode_id
+        variant_name = chunk.variant_name
+        assert variant_name == "reasoner"
+        if i < len(expected_thinking):
+            assert len(chunk.content) == 1
+            assert chunk.content[0].type == "thought"
+            assert chunk.content[0].text == expected_thinking[i]
+        elif i < len(expected_thinking) + len(expected_text):
+            assert len(chunk.content) == 1
+            assert chunk.content[0].type == "text"
+            assert chunk.content[0].text == expected_text[i - len(expected_thinking)]
+        else:
+            assert len(chunk.content) == 0
+            assert chunk.usage.input_tokens == 10
+            assert chunk.usage.output_tokens == 16
+
+
+@pytest.mark.asyncio
 async def test_async_inference_streaming_nonexistent_function(async_client):
     with pytest.raises(TensorZeroError) as exc_info:
         stream = await async_client.inference(

@@ -180,6 +180,12 @@ class ToolCallChunk(ContentBlockChunk):
 
 
 @dataclass
+class ThoughtChunk(ContentBlockChunk):
+    text: str
+    id: str
+
+
+@dataclass
 class ChatChunk:
     inference_id: UUID
     episode_id: UUID
@@ -234,6 +240,8 @@ def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
             raw_name=block["raw_name"],
             type=block_type,
         )
+    elif block_type == "thought":
+        return ThoughtChunk(id=block["id"], text=block["text"], type=block_type)
     else:
         raise ValueError(f"Unknown content block type: {block}")
 
