@@ -19,7 +19,7 @@ use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, Input, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, ModelInferenceResponseWithMetadata, RequestMessage,
+    ModelInferenceResponseWithMetadata, RequestMessage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -44,12 +44,11 @@ pub enum VariantConfig {
 /// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
 /// we support coercing tool calls into JSON mode.
 /// This is represented as a tool config in the
-#[derive(Debug, Default, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum JsonMode {
     Off,
     On,
-    #[default]
     Strict,
     ImplicitTool,
 }
@@ -393,7 +392,7 @@ fn prepare_model_inference_request<'a, 'request>(
     inference_config: &'request InferenceConfig<'a, 'request>,
     stream: bool,
     inference_params: &InferenceParams,
-    json_mode: &'a JsonMode,
+    json_mode: Option<JsonMode>,
 ) -> Result<ModelInferenceRequest<'request>, Error>
 where
     'a: 'request,
@@ -411,13 +410,13 @@ where
             frequency_penalty: inference_params.chat_completion.frequency_penalty,
             seed: inference_params.chat_completion.seed,
             stream,
-            json_mode: ModelInferenceRequestJsonMode::Off,
+            json_mode: json_mode.unwrap_or(JsonMode::Off).into(),
             function_type: FunctionType::Chat,
             output_schema: None,
         },
         FunctionConfig::Json(json_config) => {
             let tool_config = match json_mode {
-                JsonMode::ImplicitTool => match inference_config.dynamic_output_schema {
+                Some(JsonMode::ImplicitTool) => match inference_config.dynamic_output_schema {
                     Some(schema) => Some(Cow::Owned(create_dynamic_implicit_tool_config(
                         schema.value.clone(),
                     ))),
@@ -441,7 +440,7 @@ where
                 frequency_penalty: inference_params.chat_completion.frequency_penalty,
                 seed: inference_params.chat_completion.seed,
                 stream,
-                json_mode: json_mode.into(),
+                json_mode: json_mode.unwrap_or(JsonMode::Strict).into(),
                 function_type: FunctionType::Json,
                 output_schema,
             }
@@ -663,7 +662,7 @@ mod tests {
             &inference_config,
             stream,
             &inference_params,
-            &json_mode,
+            Some(json_mode),
         )
         .unwrap();
 
@@ -710,7 +709,7 @@ mod tests {
             &inference_config,
             stream,
             &inference_params,
-            &json_mode,
+            Some(json_mode),
         )
         .unwrap();
 
@@ -754,7 +753,7 @@ mod tests {
             &inference_config_dynamic,
             stream,
             &inference_params,
-            &json_mode,
+            Some(json_mode),
         )
         .unwrap();
 
@@ -776,7 +775,7 @@ mod tests {
             &inference_config,
             stream,
             &inference_params,
-            &json_mode,
+            Some(json_mode),
         )
         .unwrap();
 
@@ -794,7 +793,7 @@ mod tests {
             &inference_config,
             stream,
             &inference_params,
-            &json_mode,
+            Some(json_mode),
         )
         .unwrap();
 
