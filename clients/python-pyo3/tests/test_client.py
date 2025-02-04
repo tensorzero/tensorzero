@@ -1138,6 +1138,7 @@ def test_prepare_inference_request(sync_client):
         stream=True,
         dryrun=False,
         episode_id=episode_id,
+        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         variant_name="baz",
         params={"chat_completion": {"temperature": 0.1}},
         tool_choice="auto",
@@ -1173,6 +1174,10 @@ def test_prepare_inference_request(sync_client):
     assert request["stream"]
     assert not request["dryrun"]
     assert request["episode_id"] == str(episode_id)
+    assert request["output_schema"] == {
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+    }
     assert request["params"]["chat_completion"]["temperature"] == 0.1
     assert request["tool_choice"] == "auto"
     assert request["additional_tools"][0] == {
