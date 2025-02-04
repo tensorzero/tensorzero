@@ -26,6 +26,8 @@ use crate::inference::types::{
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
+use super::helpers::peek_first_chunk;
+
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
 const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
@@ -204,14 +206,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<
-        (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            String,
-        ),
-        Error,
-    > {
+    ) -> Result<(ProviderInferenceResponseStream, String), Error> {
         let request_body: GeminiRequest = GeminiRequest::new(request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -236,21 +231,12 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                     raw_response: None,
                 })
             })?;
-        let mut stream = Box::pin(stream_google_ai_studio_gemini(event_source, start_time));
-        let chunk = match stream.next().await {
-            Some(Ok(chunk)) => chunk,
-            Some(Err(e)) => return Err(e),
-            None => {
-                return Err(ErrorDetails::InferenceServer {
-                    message: "Stream ended before first chunk".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                }
-                .into())
-            }
-        };
-        Ok((chunk, stream, raw_request))
+        let mut stream =
+            Box::pin(stream_google_ai_studio_gemini(event_source, start_time).peekable());
+        // Get a single chunk from the stream and make sure it is OK then send to client.
+        // We want to do this here so that we can tell that the request is working.
+        peek_first_chunk(&mut stream.as_mut(), &raw_request, PROVIDER_TYPE).await?;
+        Ok((stream, raw_request))
     }
 
     async fn start_batch_inference<'a>(
