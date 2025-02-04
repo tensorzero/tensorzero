@@ -145,6 +145,9 @@ pub static DUMMY_STREAMING_TOOL_RESPONSE: [&str; 5] = [
     r#""}"#,
 ];
 
+pub static DUMMY_STREAMING_JSON_RESPONSE: [&str; 5] =
+    [r#"{"name""#, r#":"John""#, r#","age""#, r#":30"#, r#"}"#];
+
 pub static DUMMY_RAW_REQUEST: &str = "raw request";
 
 impl InferenceProvider for DummyProvider {
@@ -338,6 +341,13 @@ impl InferenceProvider for DummyProvider {
             )
             .await;
         }
+        if self.model_name == "json_reasoner" {
+            return create_streaming_reasoning_response(
+                DUMMY_STREAMING_THINKING.to_vec(),
+                DUMMY_STREAMING_JSON_RESPONSE.to_vec(),
+            )
+            .await;
+        }
 
         if self.model_name == "error" {
             return Err(ErrorDetails::InferenceClient {
@@ -509,7 +519,7 @@ async fn create_streaming_reasoning_response(
         text: thinking_chunks[0].to_string(),
         id: "0".to_string(),
     });
-    let thinking_chunks = thinking_chunks.into_iter().skip(1).map(|chunk| {
+    let thinking_chunks = thinking_chunks.into_iter().map(|chunk| {
         ContentBlockChunk::Thought(ThoughtChunk {
             text: chunk.to_string(),
             id: "0".to_string(),
