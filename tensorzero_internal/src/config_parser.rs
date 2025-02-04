@@ -1858,6 +1858,7 @@ mod tests {
         // We want auto-detection to fail, so we clear this environment variable.
         // We use 'nextest' as our runner, so each test runs in its own process
         std::env::remove_var("AWS_REGION");
+        std::env::remove_var("AWS_DEFAULT_REGION");
 
         let config_str = r#"
         [gateway]
