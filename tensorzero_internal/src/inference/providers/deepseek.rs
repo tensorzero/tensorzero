@@ -595,7 +595,7 @@ pub(super) fn prepare_deepseek_messages<'a>(
         .flat_map(tensorzero_to_openai_messages)
         .collect();
     // If this is an R1 model, prepend the system message as the first user message instead of using it as a system message
-    if model_name.contains("r1") {
+    if model_name.to_lowercase().contains("reasoner") {
         if let Some(system) = request.system.as_deref() {
             messages.insert(
                 0,
@@ -913,5 +913,103 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+    }
+
+    #[test]
+    fn test_prepare_deepseek_messages() {
+        // Test case 1: Regular model with system message
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["Hello".to_string().into()],
+            }],
+            system: Some("System prompt".to_string()),
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            stream: false,
+            seed: None,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+
+        let messages = prepare_deepseek_messages(&request, "deepseek-chat");
+        assert_eq!(messages.len(), 2);
+        assert!(matches!(messages[0], OpenAIRequestMessage::System(_)));
+        assert!(matches!(messages[1], OpenAIRequestMessage::User(_)));
+
+        // Test case 2: Reasoner model with system message
+        let messages = prepare_deepseek_messages(&request, "deepseek-reasoner");
+        assert_eq!(messages.len(), 2);
+        assert!(matches!(messages[0], OpenAIRequestMessage::User(_)));
+        assert!(matches!(messages[1], OpenAIRequestMessage::User(_)));
+
+        // Test case 3: Regular model without system message
+        let request_no_system = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["Hello".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            stream: false,
+            seed: None,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+
+        let messages = prepare_deepseek_messages(&request_no_system, "deepseek-chat");
+        assert_eq!(messages.len(), 1);
+        assert!(matches!(messages[0], OpenAIRequestMessage::User(_)));
+
+        // Test case 4: Multiple messages with different roles
+        let request_multiple = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![
+                RequestMessage {
+                    role: Role::User,
+                    content: vec!["Hello".to_string().into()],
+                },
+                RequestMessage {
+                    role: Role::Assistant,
+                    content: vec!["Hi there!".to_string().into()],
+                },
+                RequestMessage {
+                    role: Role::User,
+                    content: vec!["How are you?".to_string().into()],
+                },
+            ],
+            system: Some("Be helpful".to_string()),
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            stream: false,
+            seed: None,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+
+        let messages = prepare_deepseek_messages(&request_multiple, "deepseek-chat");
+        assert_eq!(messages.len(), 4);
+        assert!(matches!(messages[0], OpenAIRequestMessage::System(_)));
+        assert!(matches!(messages[1], OpenAIRequestMessage::User(_)));
+        assert!(matches!(messages[2], OpenAIRequestMessage::Assistant(_)));
+        assert!(matches!(messages[3], OpenAIRequestMessage::User(_)));
     }
 }
