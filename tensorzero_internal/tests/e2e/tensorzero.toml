@@ -117,7 +117,6 @@ model_id = "claude-3-haiku@20240307"
 location = "us-central1"
 project_id = "tensorzero-public"
 
-
 [models."gemini-1.5-flash-001"]
 routing = ["gcp_vertex_gemini"]
 
@@ -296,6 +295,27 @@ routing = ["hyperbolic"]
 type = "hyperbolic"
 model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
 api_key_location = "dynamic::hyperbolic_api_key"
+
+[models."deepseek-chat"]
+routing = ["deepseek"]
+
+[models."deepseek-chat".providers.deepseek]
+type = "deepseek"
+model_name = "deepseek-chat"
+
+[models."deepseek-reasoner"]
+routing = ["deepseek"]
+
+[models."deepseek-reasoner".providers.deepseek]
+type = "deepseek"
+model_name = "deepseek-reasoner"
+
+[models."deepseek-chat-dynamic"]
+routing = ["deepseek"]
+
+[models."deepseek-chat-dynamic".providers.deepseek]
+type = "deepseek"
+model_name = "deepseek-chat"
 
 [models.slow]
 routing = ["slow"]
@@ -694,6 +714,29 @@ model = "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.basic_test.variants.deepseek-chat]
+type = "chat_completion"
+model = "deepseek-chat"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.deepseek-reasoner]
+type = "chat_completion"
+model = "deepseek-reasoner"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.deepseek-dynamic]
+type = "chat_completion"
+model = "deepseek-chat-dynamic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.deepseek-shorthand]
+type = "chat_completion"
+model = "deepseek::deepseek-chat"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
 [functions.basic_test.variants.flaky]
 type = "chat_completion"
 model = "flaky_basic_test"
@@ -1001,6 +1044,14 @@ embedding_model = "text-embedding-3-small"
 k = 3
 max_tokens = 100
 
+[functions.json_success.variants.deepseek-chat]
+type = "chat_completion"
+model = "deepseek-chat"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
 [functions.dynamic_json]
 type = "json"
 system_schema = "../../fixtures/config/functions/dynamic_json/system_schema.json"
@@ -1245,6 +1296,14 @@ model = "microsoft/Phi-3.5-mini-instruct"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
+max_tokens = 100
+
+[functions.dynamic_json.variants.deepseek-chat]
+type = "chat_completion"
+model = "deepseek-chat"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "on"
 max_tokens = 100
 
 [functions.variant_failover]
