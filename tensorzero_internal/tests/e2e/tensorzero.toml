@@ -435,6 +435,20 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "json_beatles_2"
 
+[models.json_reasoner]
+routing = ["dummy"]
+
+[models.json_reasoner.providers.dummy]
+type = "dummy"
+model_name = "json_reasoner"
+
+[models.reasoner]
+routing = ["dummy"]
+
+[models.reasoner.providers.dummy]
+type = "dummy"
+model_name = "reasoner"
+
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
 
@@ -740,6 +754,12 @@ model = "together-deepseek-r1"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 800
 
+[functions.basic_test.variants.reasoner]
+type = "chat_completion"
+model = "reasoner"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
 [functions.basic_test.variants.deepseek-dynamic]
 type = "chat_completion"
 model = "deepseek-chat-dynamic"
@@ -976,6 +996,12 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "implicit_tool"
 max_tokens = 100
 
+[functions.json_success.variants.json_reasoner]
+type = "chat_completion"
+model = "json_reasoner"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+max_tokens = 100
 
 [functions.json_success.variants.mistral]
 type = "chat_completion"

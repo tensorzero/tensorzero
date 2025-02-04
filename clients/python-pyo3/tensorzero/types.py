@@ -79,6 +79,7 @@ class ToolResult:
 class JsonInferenceOutput:
     raw: str
     parsed: Optional[Dict[str, Any]]
+    thought: Optional[str]
 
 
 @dataclass

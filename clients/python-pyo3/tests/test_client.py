@@ -186,6 +186,33 @@ async def test_async_basic_inference(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_reasoning_inference(async_client):
+    result = await async_client.inference(
+        function_name="basic_test",
+        variant_name="reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        tags={"key": "value"},
+    )
+    assert result.variant_name == "reasoner"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 2
+    assert content[0].type == "thought"
+    assert content[0].text == "hmmm"
+    assert content[1].type == "text"
+    assert (
+        content[1].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
+@pytest.mark.asyncio
 async def test_async_default_function_inference(async_client):
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
@@ -490,6 +517,26 @@ async def test_async_json_success(async_client):
     assert isinstance(result, JsonInferenceResponse)
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
+    assert result.usage.input_tokens == 10
+    assert result.usage.output_tokens == 10
+
+
+@pytest.mark.asyncio
+async def test_async_json_reasoning(async_client):
+    result = await async_client.inference(
+        function_name="json_success",
+        variant_name="json_reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+        },
+        stream=False,
+    )
+    assert result.variant_name == "json_reasoner"
+    assert isinstance(result, JsonInferenceResponse)
+    assert result.output.raw == '{"answer":"Hello"}'
+    assert result.output.parsed == {"answer": "Hello"}
+    assert result.output.thought == "hmmm"
     assert result.usage.input_tokens == 10
     assert result.usage.output_tokens == 10
 
@@ -827,6 +874,32 @@ def test_sync_tool_call_inference(sync_client):
     assert usage.output_tokens == 10
 
 
+def test_sync_reasoning_inference(sync_client):
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        tags={"key": "value"},
+    )
+    assert result.variant_name == "reasoner"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 2
+    assert content[0].type == "thought"
+    assert content[0].text == "hmmm"
+    assert content[1].type == "text"
+    assert (
+        content[1].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
 def test_sync_malformed_tool_call_inference(sync_client):
     result = sync_client.inference(
         function_name="weather_helper",
@@ -962,6 +1035,25 @@ def test_sync_json_success(sync_client):
     assert isinstance(result, JsonInferenceResponse)
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
+    assert result.usage.input_tokens == 10
+    assert result.usage.output_tokens == 10
+
+
+def test_sync_json_reasoning(sync_client):
+    result = sync_client.inference(
+        function_name="json_success",
+        variant_name="json_reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+        },
+        stream=False,
+    )
+    assert result.variant_name == "json_reasoner"
+    assert isinstance(result, JsonInferenceResponse)
+    assert result.output.raw == '{"answer":"Hello"}'
+    assert result.output.parsed == {"answer": "Hello"}
+    assert result.output.thought == "hmmm"
     assert result.usage.input_tokens == 10
     assert result.usage.output_tokens == 10
 
