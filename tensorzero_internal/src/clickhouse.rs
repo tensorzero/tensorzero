@@ -150,14 +150,31 @@ impl ClickHouseConnectionInfo {
                 client,
                 ..
             } => {
+                // We need to ping the /ping endpoint to check if ClickHouse is healthy
+                let mut ping_url = Url::parse(database_url.expose_secret()).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: "Invalid ClickHouse database URL".to_string(),
+                    })
+                })?;
+                ping_url.set_path("/ping");
+                ping_url.set_query(None);
+
                 match client
-                    .get(database_url.expose_secret())
+                    .get(ping_url)
                     // If ClickHouse is healthy, it should respond within 500ms
                     .timeout(std::time::Duration::from_millis(500))
                     .send()
                     .await
                 {
-                    Ok(_) => Ok(()),
+                    Ok(response) if response.status().is_success() => Ok(()),
+                    Ok(response) => Err(ErrorDetails::ClickHouseConnection {
+                        message: format!(
+                            "ClickHouse is not healthy (status code {}): {}",
+                            response.status(),
+                            response.text().await.unwrap_or_default()
+                        ),
+                    }
+                    .into()),
                     Err(e) => Err(ErrorDetails::ClickHouseConnection {
                         message: format!("ClickHouse is not healthy: {e:?}"),
                     }
