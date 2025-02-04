@@ -27,9 +27,9 @@ use crate::inference::types::batch::{
 };
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
-    RequestMessage, Role, Text, TextChunk, Usage,
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStream, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -818,7 +818,7 @@ pub(super) struct OpenAISystemRequestMessage<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIUserRequestMessage<'a> {
-    content: Cow<'a, str>, // NOTE: this could be an array including images and stuff according to API spec (not supported yet)
+    pub(super) content: Cow<'a, str>, // NOTE: this could be an array including images and stuff according to API spec (not supported yet)
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -935,7 +935,7 @@ pub(super) fn prepare_openai_tools<'a>(
 /// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
 /// the request will return an error.
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
-fn tensorzero_to_openai_system_message<'a>(
+pub(super) fn tensorzero_to_openai_system_message<'a>(
     system: Option<&'a str>,
     json_mode: &ModelInferenceRequestJsonMode,
     messages: &[OpenAIRequestMessage<'a>],
@@ -1024,6 +1024,9 @@ pub(super) fn tensorzero_to_openai_messages(
                     tool_call_id: &tool_result.id,
                 });
                 messages.push(message);
+            }
+            ContentBlock::Thought(_thought) => {
+                // For now, we don't input thoughts to OpenAI models
             }
         }
     }
@@ -1427,13 +1430,13 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
@@ -1763,13 +1766,13 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
             .message;
 
         // Convert message content to ContentBlocks
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
 
@@ -2379,7 +2382,7 @@ mod tests {
         let inference_response = result.unwrap();
         assert_eq!(
             inference_response.output,
-            vec![ContentBlock::ToolCall(ToolCall {
+            vec![ContentBlockOutput::ToolCall(ToolCall {
                 id: "call1".to_string(),
                 name: "test_function".to_string(),
                 arguments: "{}".to_string(),

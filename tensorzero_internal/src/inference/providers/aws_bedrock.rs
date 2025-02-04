@@ -22,6 +22,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
     Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
@@ -513,12 +514,12 @@ fn prefill_json_message(mut messages: Vec<Message>) -> Result<Vec<Message>, Erro
     Ok(messages)
 }
 
-impl TryFrom<&ContentBlock> for BedrockContentBlock {
+impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
     type Error = Error;
 
     fn try_from(block: &ContentBlock) -> Result<Self, Self::Error> {
         match block {
-            ContentBlock::Text(Text { text }) => Ok(BedrockContentBlock::Text(text.clone())),
+            ContentBlock::Text(Text { text }) => Ok(Some(BedrockContentBlock::Text(text.clone()))),
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value...
                 let input = serde_json::from_str(&tool_call.arguments).map_err(|e| {
@@ -558,7 +559,7 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
                         })
                     })?;
 
-                Ok(BedrockContentBlock::ToolUse(tool_use_block))
+                Ok(Some(BedrockContentBlock::ToolUse(tool_use_block)))
             }
             ContentBlock::ToolResult(tool_result) => {
                 let tool_result_block = ToolResultBlock::builder()
@@ -576,13 +577,14 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
                         })
                     })?;
 
-                Ok(BedrockContentBlock::ToolResult(tool_result_block))
+                Ok(Some(BedrockContentBlock::ToolResult(tool_result_block)))
             }
+            ContentBlock::Thought(_thought) => Ok(None),
         }
     }
 }
 
-impl TryFrom<BedrockContentBlock> for ContentBlock {
+impl TryFrom<BedrockContentBlock> for ContentBlockOutput {
     type Error = Error;
 
     fn try_from(block: BedrockContentBlock) -> Result<Self, Self::Error> {
@@ -598,7 +600,7 @@ impl TryFrom<BedrockContentBlock> for ContentBlock {
                     })
                 })?;
 
-                Ok(ContentBlock::ToolCall(ToolCall {
+                Ok(ContentBlockOutput::ToolCall(ToolCall {
                     name: tool_use.name,
                     arguments,
                     id: tool_use.tool_use_id,
@@ -619,13 +621,16 @@ impl TryFrom<&RequestMessage> for Message {
 
     fn try_from(inference_message: &RequestMessage) -> Result<Message, Error> {
         let role: ConversationRole = inference_message.role.into();
-        let blocks: Vec<BedrockContentBlock> = inference_message
+        let content: Vec<BedrockContentBlock> = inference_message
             .content
             .iter()
             .map(|block| block.try_into())
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<Option<BedrockContentBlock>>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
         let mut message_builder = Message::builder().role(role);
-        for block in blocks {
+        for block in content {
             message_builder = message_builder.content(block);
         }
         let message = message_builder.build().map_err(|e| {
@@ -680,7 +685,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             }
         };
 
-        let mut content: Vec<ContentBlock> = message
+        let mut content: Vec<ContentBlockOutput> = message
             .ok_or_else(|| {
                 Error::new(ErrorDetails::InferenceServer {
                     raw_request: None,
@@ -692,7 +697,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             .content
             .into_iter()
             .map(|block| block.try_into())
-            .collect::<Result<Vec<ContentBlock>, _>>()?;
+            .collect::<Result<Vec<ContentBlockOutput>, _>>()?;
 
         if model_id.contains("claude")
             && *function_type == FunctionType::Json

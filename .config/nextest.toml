@@ -35,3 +35,7 @@ test-group = 'e2e_together'
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::xai::)'
 test-group = 'e2e_xai'
+
+[[profile.default.overrides]]
+filter = 'binary(e2e) and test(reasoning)'
+slow-timeout = { period = "60s", terminate-after = 3 }

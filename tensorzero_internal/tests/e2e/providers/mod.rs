@@ -12,6 +12,7 @@ mod google_ai_studio_gemini;
 mod hyperbolic;
 mod mistral;
 mod openai;
+mod reasoning;
 mod sglang;
 mod tgi;
 mod together;

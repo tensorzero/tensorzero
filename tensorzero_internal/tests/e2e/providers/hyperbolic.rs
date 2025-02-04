@@ -37,6 +37,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers,
+        reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
         tool_use_inference: vec![],
         tool_multi_turn_inference: vec![],

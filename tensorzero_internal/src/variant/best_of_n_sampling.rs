@@ -12,8 +12,9 @@ use tokio::time::{timeout, Duration};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
+use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, ContentBlock, FunctionType, ModelInferenceRequest,
+    batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -391,8 +392,8 @@ async fn inner_select_best_candidate<'a, 'request>(
         .output
         .iter()
         .find_map(|block| match block {
-            ContentBlock::Text(text) => Some(&text.text),
-            ContentBlock::ToolCall(tool_call) => Some(&tool_call.arguments),
+            ContentBlockOutput::Text(text) => Some(&text.text),
+            ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
             _ => None,
         }) {
         Some(text) => text,
@@ -945,6 +946,7 @@ mod tests {
             Uuid::now_v7(),
             "{\"response\": \"Valid JSON response\"}".to_string(),
             Some(json!({"response": "Valid JSON response"})),
+            None,
             Usage {
                 input_tokens: 10,
                 output_tokens: 20,
@@ -983,6 +985,7 @@ mod tests {
             Uuid::now_v7(),
             "{\"oops: \"Malformed JSON response\"".to_string(),
             None, // malformed
+            None,
             Usage {
                 input_tokens: 15,
                 output_tokens: 25,

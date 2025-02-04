@@ -31,9 +31,9 @@ use crate::inference::types::batch::{
 use crate::inference::types::RequestMessage;
 use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
 use crate::inference::types::{
-    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockOutput, InferenceDatabaseInsert,
-    InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput, Latency,
-    ModelInferenceResponseWithMetadata, Usage,
+    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput,
+    InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
+    Latency, ModelInferenceResponseWithMetadata, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
@@ -1150,11 +1150,12 @@ impl TryFrom<ChatInferenceResponseDatabaseRead> for ChatInferenceResponse {
             input_tokens: value.input_tokens,
             output_tokens: value.output_tokens,
         };
-        let output: Vec<ContentBlockOutput> = serde_json::from_str(&value.output).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: e.to_string(),
-            })
-        })?;
+        let output: Vec<ContentBlockChatOutput> =
+            serde_json::from_str(&value.output).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: e.to_string(),
+                })
+            })?;
         Ok(ChatInferenceResponse {
             inference_id: value.inference_id,
             episode_id: value.episode_id,

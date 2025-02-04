@@ -58,6 +58,14 @@ class ToolCall(ContentBlock):
 
 
 @dataclass
+class Thought(ContentBlock):
+    text: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(type="thought", value=self.text)
+
+
+@dataclass
 class ToolResult:
     name: str
     result: str
@@ -71,6 +79,7 @@ class ToolResult:
 class JsonInferenceOutput:
     raw: str
     parsed: Optional[Dict[str, Any]]
+    thought: Optional[str]
 
 
 @dataclass
@@ -139,6 +148,8 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
             raw_name=block["raw_name"],
             type=block_type,
         )
+    elif block_type == "thought":
+        return Thought(text=block["text"], type=block_type)
     else:
         raise ValueError(f"Unknown content block type: {block}")
 
@@ -169,6 +180,12 @@ class ToolCallChunk(ContentBlockChunk):
 
 
 @dataclass
+class ThoughtChunk(ContentBlockChunk):
+    text: str
+    id: str
+
+
+@dataclass
 class ChatChunk:
     inference_id: UUID
     episode_id: UUID
@@ -182,7 +199,8 @@ class JsonChunk:
     inference_id: UUID
     episode_id: UUID
     variant_name: str
-    raw: str
+    raw: Optional[str]
+    thought: Optional[str]
     usage: Optional[Usage]
 
 
@@ -198,12 +216,13 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             content=[parse_content_block_chunk(block) for block in chunk["content"]],
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
         )
-    elif "raw" in chunk:
+    elif "raw" in chunk or "thought" in chunk:
         return JsonChunk(
             inference_id=UUID(chunk["inference_id"]),
             episode_id=UUID(chunk["episode_id"]),
             variant_name=chunk["variant_name"],
-            raw=chunk["raw"],
+            raw=chunk.get("raw"),
+            thought=chunk.get("thought"),
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
         )
     else:
@@ -221,6 +240,8 @@ def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
             raw_name=block["raw_name"],
             type=block_type,
         )
+    elif block_type == "thought":
+        return ThoughtChunk(id=block["id"], text=block["text"], type=block_type)
     else:
         raise ValueError(f"Unknown content block type: {block}")
 

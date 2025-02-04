@@ -7,6 +7,7 @@ use serde::Deserialize;
 
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
+use crate::inference::types::ContentBlock;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
@@ -18,8 +19,8 @@ use crate::{
     error::{Error, ErrorDetails},
     function::FunctionConfig,
     inference::types::{
-        ContentBlock, ContentBlockOutput, InferenceResult, InferenceResultChunk,
-        InferenceResultStream, Input, JsonInferenceOutput,
+        ContentBlockChatOutput, InferenceResult, InferenceResultChunk, InferenceResultStream,
+        Input, JsonInferenceOutput,
     },
     minijinja_util::TemplateConfig,
 };
@@ -272,7 +273,7 @@ impl Variant for DiclConfig {
 #[derive(Debug, Deserialize, PartialEq)]
 struct ChatExample {
     input: Input,
-    output: Vec<ContentBlockOutput>,
+    output: Vec<ContentBlockChatOutput>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -513,15 +514,16 @@ fn parse_raw_examples(
         match function {
             FunctionConfig::Chat(_) => {
                 // Try parsing `output` as `Vec<ContentBlockOutput>` (for ChatExample)
-                let output = serde_json::from_str::<Vec<ContentBlockOutput>>(&raw_example.output)
-                    .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Failed to parse `output` in example `{:?}`: {}",
-                            raw_example, e
-                        ),
-                    })
-                })?;
+                let output =
+                    serde_json::from_str::<Vec<ContentBlockChatOutput>>(&raw_example.output)
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Failed to parse `output` in example `{:?}`: {}",
+                                    raw_example, e
+                                ),
+                            })
+                        })?;
                 examples.push(Example::Chat(ChatExample { input, output }));
             }
             FunctionConfig::Json(_) => {
@@ -616,10 +618,10 @@ mod tests {
 
         // Mock Output data for ChatExample
         let chat_output = vec![
-            ContentBlockOutput::Text(Text {
+            ContentBlockChatOutput::Text(Text {
                 text: "This is a test response.".to_string(),
             }),
-            ContentBlockOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(ToolCallOutput {
                 id: "tool_call_1".to_string(),
                 raw_name: "search_tool".to_string(),
                 raw_arguments: "{\"query\": \"rust programming\"}".to_string(),
@@ -660,6 +662,7 @@ mod tests {
         let json_output = JsonInferenceOutput {
             raw: "{\"result\": \"success\"}".to_string(),
             parsed: Some(json!({"result": "success"})),
+            thought: None,
         };
 
         let json_example = Example::Json(JsonExample {
@@ -750,7 +753,7 @@ mod tests {
                     }],
                 })
                 .unwrap(),
-                output: serde_json::to_string(&vec![ContentBlockOutput::Text(Text {
+                output: serde_json::to_string(&vec![ContentBlockChatOutput::Text(Text {
                     text: "100 degrees Celsius".to_string(),
                 })])
                 .unwrap(),
@@ -766,7 +769,7 @@ mod tests {
                     }],
                 })
                 .unwrap(),
-                output: serde_json::to_string(&vec![ContentBlockOutput::Text(Text {
+                output: serde_json::to_string(&vec![ContentBlockChatOutput::Text(Text {
                     text: "Osaka (nose grows 4 inches)".to_string(),
                 })])
                 .unwrap(),
@@ -816,6 +819,7 @@ mod tests {
                             "id": 1
                         }
                     })),
+                    thought: None,
                 })
                 .unwrap(),
             },
@@ -836,6 +840,7 @@ mod tests {
                         "result": [1, 2, 3],
                         "status": "ok"
                     })),
+                    thought: None,
                 })
                 .unwrap(),
             },

@@ -9,7 +9,7 @@ use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
-    ChatInferenceResult, ContentBlock, InferenceResult, Input, InputMessageContent,
+    ChatInferenceResult, ContentBlockOutput, InferenceResult, Input, InputMessageContent,
     JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, Usage,
 };
 use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
@@ -149,7 +149,7 @@ impl FunctionConfig {
     pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
-        content_blocks: Vec<ContentBlock>,
+        content_blocks: Vec<ContentBlockOutput>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         inference_config: &'request InferenceConfig<'a, 'request>,
@@ -172,11 +172,11 @@ impl FunctionConfig {
                 // We assume here that the last content block that's text or a tool call is the JSON object.
                 // (this is because we could have used an implicit tool call and there is no other reason for a tool call in a JSON function).
                 let raw = content_blocks
-                    .into_iter()
+                    .iter()
                     .rev()
                     .find_map(|content_block| match content_block {
-                        ContentBlock::Text(text) => Some(text.text),
-                        ContentBlock::ToolCall(tool_call) => Some(tool_call.arguments),
+                        ContentBlockOutput::Text(text) => Some(&text.text),
+                        ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
                         _ => None,
                     })
                     .ok_or_else(|| {
@@ -185,14 +185,22 @@ impl FunctionConfig {
                                 .to_string(),
                         })
                     })?;
-                let parsed_output = serde_json::from_str::<Value>(&raw)
+                let thought =
+                    content_blocks
+                        .iter()
+                        .rev()
+                        .find_map(|content_block| match content_block {
+                            ContentBlockOutput::Thought(thought) => Some(&thought.text),
+                            _ => None,
+                        });
+                let parsed_output = serde_json::from_str::<Value>(raw)
                     .map_err(|e| {
                         Error::new(ErrorDetails::OutputParsing {
                             message: format!(
                                 "Failed to parse output from JSON function response {}",
                                 e
                             ),
-                            raw_output: raw.clone(),
+                            raw_output: raw.to_string(),
                         })
                     })
                     .ok();
@@ -211,8 +219,9 @@ impl FunctionConfig {
                 };
                 Ok(InferenceResult::Json(JsonInferenceResult::new(
                     inference_id,
-                    raw,
+                    raw.to_string(),
                     parsed_output,
+                    thought.cloned(),
                     usage,
                     model_inference_results,
                     output_schema.value().clone(),
@@ -1443,7 +1452,7 @@ mod tests {
             name: "tool_call_name".to_string(),
             arguments: "tool_call_arguments".to_string(),
         };
-        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 10,
@@ -1494,7 +1503,7 @@ mod tests {
             name: "tool_call_name".to_string(),
             arguments: r#"{"name": "Jerry", "age": 30}"#.to_string(),
         };
-        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 10,
@@ -1701,7 +1710,7 @@ mod tests {
             name: "tool_call_name".to_string(),
             arguments: "tool_call_arguments".to_string(),
         };
-        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 10,
@@ -1752,7 +1761,7 @@ mod tests {
             name: "tool_call_name".to_string(),
             arguments: r#"{"answer": "42"}"#.to_string(),
         };
-        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 10,

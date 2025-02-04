@@ -15,7 +15,9 @@ use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
-use crate::inference::types::{parse_chat_output, ContentBlock, ContentBlockOutput, Text};
+use crate::inference::types::{
+    parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
+};
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCall, ToolCallConfig};
 use crate::uuid_util::uuid_elapsed;
 
@@ -467,13 +469,13 @@ enum DemonstrationContentBlock {
     ToolCall(DemonstrationToolCall),
 }
 
-impl TryFrom<DemonstrationContentBlock> for ContentBlock {
+impl TryFrom<DemonstrationContentBlock> for ContentBlockOutput {
     type Error = Error;
     fn try_from(value: DemonstrationContentBlock) -> Result<Self, Self::Error> {
         match value {
-            DemonstrationContentBlock::Text(text) => Ok(ContentBlock::Text(text)),
+            DemonstrationContentBlock::Text(text) => Ok(ContentBlockOutput::Text(text)),
             DemonstrationContentBlock::ToolCall(tool_call) => {
-                Ok(ContentBlock::ToolCall(tool_call.try_into()?))
+                Ok(ContentBlockOutput::ToolCall(tool_call.try_into()?))
             }
         }
     }
@@ -530,13 +532,13 @@ async fn validate_parse_demonstration(
                     parallel_tool_calls: None,
                 },
             )?;
-            let content_blocks: Vec<ContentBlock> = content_blocks
+            let content_blocks: Vec<ContentBlockOutput> = content_blocks
                 .into_iter()
                 .map(|block| block.try_into())
-                .collect::<Result<Vec<ContentBlock>, Error>>()?;
+                .collect::<Result<Vec<ContentBlockOutput>, Error>>()?;
             let parsed_value = parse_chat_output(content_blocks, tool_config.as_ref()).await;
             for block in &parsed_value {
-                if let ContentBlockOutput::ToolCall(tool_call) = block {
+                if let ContentBlockChatOutput::ToolCall(tool_call) = block {
                     if tool_call.name.is_none() {
                         return Err(ErrorDetails::InvalidRequest {
                             message: "Demonstration contains invalid tool name".to_string(),
@@ -1003,7 +1005,7 @@ mod tests {
         let parsed_value = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
             .await
             .unwrap();
-        let expected_parsed_value = serde_json::to_string(&vec![ContentBlock::Text(Text {
+        let expected_parsed_value = serde_json::to_string(&vec![ContentBlockOutput::Text(Text {
             text: "Hello, world!".to_string(),
         })])
         .unwrap();
@@ -1016,7 +1018,7 @@ mod tests {
             .await
             .unwrap();
         let expected_parsed_value =
-            serde_json::to_string(&vec![ContentBlockOutput::ToolCall(ToolCallOutput {
+            serde_json::to_string(&vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
                 id: "".to_string(),
                 name: Some("get_temperature".to_string()),
                 raw_name: "get_temperature".to_string(),

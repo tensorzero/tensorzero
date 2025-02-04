@@ -10,7 +10,7 @@ use tensorzero_internal::{
     embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
     endpoints::inference::InferenceCredentials,
     inference::types::{
-        ContentBlock, ContentBlockOutput, Input, InputMessage, InputMessageContent,
+        ContentBlock, ContentBlockChatOutput, Input, InputMessage, InputMessageContent,
         JsonInferenceOutput, RequestMessage, Role,
     },
 };
@@ -320,7 +320,7 @@ pub async fn test_dicl_inference_request() {
             }],
         }],
     };
-    let output: Vec<ContentBlockOutput> = vec!["100 degrees Celsius".to_string().into()];
+    let output: Vec<ContentBlockChatOutput> = vec!["100 degrees Celsius".to_string().into()];
     let output_string = serde_json::to_string(&output).unwrap();
 
     tasks.push(embed_insert_example(
@@ -340,7 +340,7 @@ pub async fn test_dicl_inference_request() {
             }],
         }],
     };
-    let output: Vec<ContentBlockOutput> =
+    let output: Vec<ContentBlockChatOutput> =
         vec!["Ahmedabad (nose grows 3 inches)".to_string().into()];
     let output_string = serde_json::to_string(&output).unwrap();
 
@@ -361,7 +361,7 @@ pub async fn test_dicl_inference_request() {
             }],
         }],
     };
-    let output: Vec<ContentBlockOutput> = vec![
+    let output: Vec<ContentBlockChatOutput> = vec![
         "Finding the median of an unsorted list of numbers (nose grows 4 inches)"
             .to_string()
             .into(),
@@ -384,7 +384,7 @@ pub async fn test_dicl_inference_request() {
             }],
         }],
     };
-    let output: Vec<ContentBlockOutput> =
+    let output: Vec<ContentBlockChatOutput> =
         vec!["J.K. Rowling (nose grows 5 inches)".to_string().into()];
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
@@ -905,6 +905,7 @@ async fn test_dicl_json_request() {
     let output = JsonInferenceOutput {
         raw: "{\"answer\": \"Ottawa\"}".to_string(),
         parsed: Some(json!({"answer": "Ottawa"})),
+        thought: None,
     };
     let output_string = serde_json::to_string(&output).unwrap();
 
@@ -928,6 +929,7 @@ async fn test_dicl_json_request() {
     let output = JsonInferenceOutput {
         raw: "{\"answer\": \"Ahmedabad (nose grows 3 inches)\"}".to_string(),
         parsed: Some(json!({"answer": "Ahmedabad (nose grows 3 inches)"})),
+        thought: None,
     };
     let output_string = serde_json::to_string(&output).unwrap();
 
@@ -951,6 +953,7 @@ async fn test_dicl_json_request() {
     let output = JsonInferenceOutput {
         raw: "{\"answer\": \"New York City (nose grows 4 inches)\"}".to_string(),
         parsed: Some(json!({"answer": "New York City (nose grows 4 inches)"})),
+        thought: None,
     };
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
@@ -973,6 +976,7 @@ async fn test_dicl_json_request() {
     let output = JsonInferenceOutput {
         raw: "{\"answer\": \"Liverpool (nose grows 5 inches)\"}".to_string(),
         parsed: Some(json!({"answer": "Liverpool (nose grows 5 inches)"})),
+        thought: None,
     };
     let output_string = serde_json::to_string(&output).unwrap();
     tasks.push(embed_insert_example(
