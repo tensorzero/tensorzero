@@ -12,7 +12,7 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::cache::CacheLookupResult;
+use crate::cache::CacheData;
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
@@ -473,7 +473,7 @@ impl ModelInferenceResponse {
     }
 
     pub fn from_cache(
-        cache_lookup: CacheLookupResult,
+        cache_lookup: CacheData,
         request: &ModelInferenceRequest<'_>,
         model_provider_name: &str,
     ) -> Self {

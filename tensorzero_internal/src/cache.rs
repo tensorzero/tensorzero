@@ -120,13 +120,24 @@ impl ModelProviderRequest<'_> {
     }
 }
 
+// The full row written to ClickHouse
 #[derive(Debug, Serialize)]
-struct ModelInferenceCacheRow {
+struct FullCacheRow {
     short_cache_key: u64,
     long_cache_key: String,
-    output: Vec<ContentBlock>,
-    raw_request: String,
-    raw_response: String,
+    // We flatten this so that the fields map directly to columns in the ClickHouse table
+    #[serde(flatten)]
+    data: CacheData,
+}
+
+/// The underlying cached input/output data. These are the fields that we actually retrieve from
+/// ClickHouse when going a cache fetch
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CacheData {
+    #[serde(deserialize_with = "deserialize_json_string")]
+    pub output: Vec<ContentBlock>,
+    pub raw_request: String,
+    pub raw_response: String,
 }
 
 // This doesn't block
@@ -147,26 +158,20 @@ pub fn start_cache_write(
     tokio::spawn(async move {
         clickhouse_client
             .write(
-                &[ModelInferenceCacheRow {
+                &[FullCacheRow {
                     short_cache_key,
                     long_cache_key,
-                    output,
-                    raw_request,
-                    raw_response,
+                    data: CacheData {
+                        output,
+                        raw_request,
+                        raw_response,
+                    },
                 }],
                 "ModelInferenceCache",
             )
             .await
     });
     Ok(())
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CacheLookupResult {
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub output: Vec<ContentBlock>,
-    pub raw_request: String,
-    pub raw_response: String,
 }
 
 pub async fn cache_lookup(
@@ -222,7 +227,7 @@ pub async fn cache_lookup(
     if result.is_empty() {
         return Ok(None);
     }
-    let result: CacheLookupResult = serde_json::from_str(&result).map_err(|e| {
+    let result: CacheData = serde_json::from_str(&result).map_err(|e| {
         Error::new(ErrorDetails::Cache {
             message: format!("Failed to deserialize output: {e}"),
         })
