@@ -30,6 +30,7 @@ class BaseTensorZeroGateway:
         params: Optional[Dict[str, Any]] = None,
         variant_name: Optional[str] = None,
         dryrun: Optional[bool] = None,
+        output_schema: Optional[Dict[str, Any]] = None,
         allowed_tools: Optional[List[str]] = None,
         additional_tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[
@@ -70,6 +71,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         params: Optional[Dict[str, Any]] = None,
         variant_name: Optional[str] = None,
         dryrun: Optional[bool] = None,
+        output_schema: Optional[Dict[str, Any]] = None,
         allowed_tools: Optional[List[str]] = None,
         additional_tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[
@@ -97,6 +99,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
                              Note: You should generally not do this, and instead let the TensorZero gateway assign a
                              particular variant. This field is primarily used for testing or debugging purposes.
         :param dryrun: If true, the request will be executed but won't be stored to the database.
+        :param output_schema: If set, the JSON schema of a JSON function call will be validated against the given JSON Schema.
+                              Overrides the output schema configured for the function.
         :param allowed_tools: If set, restricts the tools available during this inference request.
                               The list of names should be a subset of the tools configured for the function.
                               Tools provided at inference time in `additional_tools` (if any) are always available.
@@ -179,6 +183,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         params: Optional[Dict[str, Any]] = None,
         variant_name: Optional[str] = None,
         dryrun: Optional[bool] = None,
+        output_schema: Optional[Dict[str, Any]] = None,
         allowed_tools: Optional[List[str]] = None,
         additional_tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[
@@ -206,6 +211,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
                              Note: You should generally not do this, and instead let the TensorZero gateway assign a
                              particular variant. This field is primarily used for testing or debugging purposes.
         :param dryrun: If true, the request will be executed but won't be stored to the database.
+        :param output_schema: If set, the JSON schema of a JSON function call will be validated against the given JSON Schema.
+                              Overrides the output schema configured for the function.
         :param allowed_tools: If set, restricts the tools available during this inference request.
                               The list of names should be a subset of the tools configured for the function.
                               Tools provided at inference time in `additional_tools` (if any) are always available.

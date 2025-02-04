@@ -372,6 +372,7 @@ async def test_async_json_success(async_client):
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": {"country": "Japan"}}],
         },
+        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         stream=False,
     )
     assert result.variant_name == "test"
@@ -818,6 +819,7 @@ def test_sync_json_success(sync_client):
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": {"country": "Japan"}}],
         },
+        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         stream=False,
     )
     assert result.variant_name == "test"
@@ -1000,6 +1002,7 @@ def test_prepare_inference_request(sync_client):
         },
         stream=True,
         dryrun=False,
+        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         episode_id=episode_id,
         variant_name="baz",
         params={"chat_completion": {"temperature": 0.1}},
@@ -1035,6 +1038,10 @@ def test_prepare_inference_request(sync_client):
     assert request["input"]["system"] == "you are the bad guy"
     assert request["stream"]
     assert not request["dryrun"]
+    assert request["output_schema"] == {
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+    }
     assert request["episode_id"] == str(episode_id)
     assert request["params"]["chat_completion"]["temperature"] == 0.1
     assert request["tool_choice"] == "auto"
