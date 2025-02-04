@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use futures::future::join_all;
 use rand::Rng;
@@ -7,7 +6,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
-use crate::embeddings::EmbeddingModelConfig;
+use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
@@ -92,7 +91,7 @@ impl Variant for MixtureOfNConfig {
         &self,
         function: &FunctionConfig,
         models: &mut ModelTable,
-        embedding_models: &HashMap<Arc<str>, EmbeddingModelConfig>,
+        embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
@@ -494,12 +493,15 @@ impl FuserConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use reqwest::Client;
     use uuid::Uuid;
 
     use crate::{
+        cache::{CacheEnabledMode, CacheOptions},
         clickhouse::ClickHouseConnectionInfo,
-        endpoints::inference::InferenceCredentials,
+        endpoints::inference::{InferenceCredentials, InferenceIds},
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::{
             providers::dummy::DummyProvider,
@@ -671,6 +673,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cached: false,
         };
 
         let candidate1 = InferenceResult::Chat(
@@ -705,6 +708,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
+            cached: false,
         };
 
         let candidate2 = InferenceResult::Chat(
@@ -767,6 +771,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cached: false,
         };
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
@@ -801,6 +806,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
+            cached: false,
         };
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
@@ -876,6 +882,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            cached: false,
         };
         let inference_id0 = Uuid::now_v7();
         let candidate0 = InferenceResult::Chat(
@@ -910,6 +917,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider1".into(),
             model_name: "ExampleModel1".into(),
+            cached: false,
         };
         let inference_id1 = Uuid::now_v7();
         let candidate1 = InferenceResult::Chat(
@@ -948,12 +956,20 @@ mod tests {
             http_client: &client,
             clickhouse_connection_info: &clickhouse_connection_info,
             credentials: &api_keys,
+            cache_options: &CacheOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly,
+            },
         };
         let input = Input {
             system: None,
             messages: vec![],
         };
         let inference_config = InferenceConfig {
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
             templates: &templates,
             tool_config: None,
             dynamic_output_schema: None,

@@ -423,7 +423,11 @@ async fn get_function_name(
         "SELECT function_name FROM {} WHERE {} = '{}'",
         table_name, identifier_key, target_id
     );
-    let function_name = connection_info.run_query(query).await?.trim().to_string();
+    let function_name = connection_info
+        .run_query(query, None)
+        .await?
+        .trim()
+        .to_string();
     if function_name.is_empty() {
         return Err(Error::new(ErrorDetails::InvalidRequest {
             message: format!("{identifier_type} ID: {target_id} does not exist"),
@@ -590,6 +594,7 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::config_parser::{Config, GatewayConfig, MetricConfig, MetricConfigOptimize};
+    use crate::embeddings::EmbeddingModelTable;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::TemplateConfig;
@@ -612,7 +617,7 @@ mod tests {
         let config = Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -734,7 +739,7 @@ mod tests {
         let config = Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -766,7 +771,7 @@ mod tests {
         let config = Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -791,7 +796,7 @@ mod tests {
         let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics: HashMap::new(),
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -874,7 +879,7 @@ mod tests {
         let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),
@@ -934,7 +939,7 @@ mod tests {
         let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
-            embedding_models: HashMap::new(),
+            embedding_models: EmbeddingModelTable::default(),
             metrics,
             functions: HashMap::new(),
             tools: HashMap::new(),

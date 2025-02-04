@@ -390,7 +390,43 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
 
     println!("API response: {response_json:#?}");
 
-    check_simple_inference_response(response_json, Some(episode_id), &provider, false).await;
+    check_simple_inference_response(response_json, Some(episode_id), &provider, false, false).await;
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+        "cache_options": {"enabled": "on", "lookback_s": 10}
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    check_simple_inference_response(response_json, Some(episode_id), &provider, false, true).await;
 }
 
 pub async fn check_simple_inference_response(
@@ -398,6 +434,7 @@ pub async fn check_simple_inference_response(
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
     is_batch: bool,
+    should_be_cached: bool,
 ) {
     let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
@@ -422,9 +459,14 @@ pub async fn check_simple_inference_response(
 
     let usage = response_json.get("usage").unwrap();
     let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 0);
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 0);
+    if should_be_cached {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -488,13 +530,18 @@ pub async fn check_simple_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        max_tokens
     );
 
     if !is_batch {
@@ -533,10 +580,15 @@ pub async fn check_simple_inference_response(
     assert!(serde_json::from_str::<Value>(raw_response).is_ok());
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    assert!(input_tokens > 0);
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
-    assert!(output_tokens > 0);
-    if !is_batch {
+    if should_be_cached {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
+    if !is_batch && !should_be_cached {
         let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
         assert!(response_time_ms > 0);
         assert!(result.get("ttft_ms").unwrap().is_null());
@@ -572,10 +624,19 @@ pub async fn check_simple_inference_response(
         let id = Uuid::parse_str(id).unwrap();
         assert_eq!(id, inference_id);
     }
+    assert_eq!(
+        result.get("cached").unwrap().as_bool().unwrap(),
+        should_be_cached
+    );
 }
 
 #[cfg(feature = "e2e_tests")]
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
 
@@ -1601,6 +1662,11 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
 pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -2183,6 +2249,10 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -2764,6 +2834,11 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
         return;
     }
 
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -3325,6 +3400,11 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
 pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     // NOTE: The xAI API occasionally returns a tool call despite receiving the "tool_choice": "none" parameter.
     // We'll leave this test running for now, so some flakiness is expected.
     // The bug has been reported to the xAI team.
@@ -3620,6 +3700,11 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     if provider.model_provider_name == "mistral"
         || provider.model_provider_name.contains("gcp_vertex")
     {
+        return;
+    }
+
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -3946,6 +4031,11 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     if provider.model_provider_name == "mistral"
         || provider.model_provider_name.contains("gcp_vertex")
     {
+        return;
+    }
+
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -4600,6 +4690,11 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         return;
     }
 
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -4916,6 +5011,11 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
         return;
     }
 
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -4935,7 +5035,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
                             "type": "tool_call",
                             "id": "123456789",
                             "name": "get_temperature",
-                            "arguments": "{\"location\": \"Tokyo\"}"
+                            "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"
                         }
                     ]
                 },
@@ -5041,7 +5141,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
             },
             {
                 "role": "assistant",
-                "content": [{"type": "tool_call", "id": "123456789", "name": "get_temperature", "arguments": "{\"location\": \"Tokyo\"}"}]
+                "content": [{"type": "tool_call", "id": "123456789", "name": "get_temperature", "arguments": "{\"location\": \"Tokyo\", \"units\": \"celsius\"}"}]
             },
             {
                 "role": "user",
@@ -5080,13 +5180,18 @@ pub async fn check_tool_use_multi_turn_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        max_tokens,
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -5154,7 +5259,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
             content: vec![ContentBlock::ToolCall(ToolCall {
                 id: "123456789".to_string(),
                 name: "get_temperature".to_string(),
-                arguments: "{\"location\": \"Tokyo\"}".to_string(),
+                arguments: "{\"location\": \"Tokyo\", \"units\": \"celsius\"}".to_string(),
             })],
         },
         RequestMessage {
@@ -5190,6 +5295,11 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     // We skip this test for xAI until the fix is deployed.
     // https://gist.github.com/GabrielBianconi/47a4247cfd8b6689e7228f654806272d
     if provider.model_provider_name == "xai" {
+        return;
+    }
+
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -5800,6 +5910,11 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let input_function_name = "basic_test";
@@ -6986,13 +7101,18 @@ pub async fn check_json_mode_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        max_tokens
     );
 
     if !is_batch {
@@ -7235,13 +7355,18 @@ pub async fn check_dynamic_json_mode_inference_response(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        max_tokens
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -7331,6 +7456,10 @@ pub async fn check_dynamic_json_mode_inference_response(
 pub async fn test_json_mode_streaming_inference_request_with_provider(provider: E2ETestProvider) {
     if provider.variant_name.contains("tgi") {
         // TGI does not support streaming in JSON mode (because it doesn't support streaming tools)
+        return;
+    }
+    // OpenAI O1 doesn't support streaming responses
+    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
         return;
     }
     let episode_id = Uuid::now_v7();

@@ -19,9 +19,11 @@ uv run pytest
 """
 
 import os
+import threading
+import time
 from copy import deepcopy
+from dataclasses import dataclass
 from enum import Enum
-from time import time
 from uuid import UUID
 
 import pytest
@@ -63,6 +65,78 @@ async def async_client(request):
             yield client
 
 
+@dataclass
+class CountData:
+    count: int
+
+
+@pytest.mark.asyncio
+async def test_async_gil_unlock(async_client):
+    input = {
+        "system": {"assistant_name": "Alfred Pennyworth"},
+        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+    }
+
+    count_data = CountData(count=0)
+
+    # pass 'count_data' to the thread
+    def incr_count(count_data: CountData):
+        while True:
+            count_data.count += 1
+            time.sleep(0.1)
+
+    thread = threading.Thread(target=incr_count, args=(count_data,), daemon=True)
+
+    start = time.time()
+    thread.start()
+    await async_client.inference(
+        function_name="basic_test",
+        input=input,
+        variant_name="slow",
+        tags={"key": "value"},
+    )
+    val = count_data.count
+    end = time.time()
+
+    # The special 'slow' variant should take at least 5 seconds to run
+    assert end - start >= 5
+    # Verify that our thread was still looping during this time
+    assert val >= 20
+
+
+def test_sync_gil_unlock(sync_client):
+    input = {
+        "system": {"assistant_name": "Alfred Pennyworth"},
+        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+    }
+
+    count_data = CountData(count=0)
+
+    # pass 'count_data' to the thread
+    def incr_count(count_data: CountData):
+        while True:
+            count_data.count += 1
+            time.sleep(0.1)
+
+    thread = threading.Thread(target=incr_count, args=(count_data,), daemon=True)
+
+    start = time.time()
+    thread.start()
+    sync_client.inference(
+        function_name="basic_test",
+        input=input,
+        variant_name="slow",
+        tags={"key": "value"},
+    )
+    val = count_data.count
+    end = time.time()
+
+    # The special 'slow' variant should take at least 5 seconds to run
+    assert end - start >= 5
+    # Verify that our thread was still looping during this time
+    assert val >= 20
+
+
 @pytest.mark.asyncio
 async def test_async_basic_inference(async_client):
     input = {
@@ -75,10 +149,58 @@ async def test_async_basic_inference(async_client):
         input=input,
         episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
         # because the gateway validates some of the properties needed
-        tags={"key": "value"},
     )
     assert input == input_copy, "Input should not be modified by the client"
     assert result.variant_name == "test"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+    time.sleep(1)
+
+    # Test caching
+    result = await async_client.inference(
+        function_name="basic_test",
+        input=input,
+        cache_options={"max_age_s": 10, "enabled": "on"},
+    )
+    assert result.variant_name == "test"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 0  # should be cached
+    assert usage.output_tokens == 0  # should be cached
+
+
+@pytest.mark.asyncio
+async def test_async_default_function_inference(async_client):
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+    }
+    input_copy = deepcopy(input)
+    result = await async_client.inference(
+        model_name="dummy::test",
+        input=input,
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
+        tags={"key": "value"},
+    )
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::test"
     assert isinstance(result, ChatInferenceResponse)
     content = result.content
     assert len(content) == 1
@@ -109,8 +231,8 @@ async def test_async_inference_streaming(async_client):
     last_chunk_duration = None
     async for chunk in stream:
         if previous_chunk_timestamp is not None:
-            last_chunk_duration = time() - previous_chunk_timestamp
-        previous_chunk_timestamp = time()
+            last_chunk_duration = time.time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time.time()
         chunks.append(chunk)
 
     assert last_chunk_duration > 0.01
@@ -512,6 +634,57 @@ def test_sync_basic_inference(sync_client):
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
 
+    # Test caching
+    result = sync_client.inference(
+        function_name="basic_test",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        cache_options={"max_age_s": 10, "enabled": "on"},
+        tags={"key": "value"},
+    )
+    assert result.variant_name == "test"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 0  # should be cached
+    assert usage.output_tokens == 0  # should be cached
+
+
+def test_default_function_inference(sync_client):
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+    }
+    input_copy = deepcopy(input)
+    result = sync_client.inference(
+        model_name="dummy::test",
+        input=input,
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
+        tags={"key": "value"},
+    )
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::test"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
 
 def test_sync_malformed_inference(sync_client):
     with pytest.raises(TensorZeroError) as exc_info:
@@ -541,8 +714,8 @@ def test_sync_inference_streaming(sync_client):
     last_chunk_duration = None
     for chunk in stream:
         if previous_chunk_timestamp is not None:
-            last_chunk_duration = time() - previous_chunk_timestamp
-        previous_chunk_timestamp = time()
+            last_chunk_duration = time.time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time.time()
         chunks.append(chunk)
 
     assert last_chunk_duration > 0.01

@@ -2,6 +2,7 @@ use axum::routing::{get, post};
 use axum::Router;
 use mimalloc::MiMalloc;
 use std::fmt::Display;
+use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,7 +21,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[tokio::main]
 async fn main() {
     // Set up logs and metrics
-    observability::setup_logs();
+    observability::setup_logs(true);
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Load config
@@ -68,11 +69,20 @@ async fn main() {
         .bind_address
         .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 3000)));
 
-    let listener = tokio::net::TcpListener::bind(bind_address)
-        .await
-        .expect_pretty(&format!(
-            "Failed to bind to socket address `{bind_address}`"
-        ));
+    let listener = match tokio::net::TcpListener::bind(bind_address).await {
+        Ok(listener) => listener,
+        Err(e) if e.kind() == ErrorKind::AddrInUse => {
+            tracing::error!(
+                "Failed to bind to socket address {bind_address}: {e}. Tip: Ensure no other process is using port {} or try a different port.",
+                bind_address.port()
+            );
+            std::process::exit(1);
+        }
+        Err(e) => {
+            tracing::error!("Failed to bind to socket address {bind_address}: {e}");
+            std::process::exit(1);
+        }
+    };
 
     tracing::info!(
         "TensorZero Gateway version {} is listening on {}",

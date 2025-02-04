@@ -74,6 +74,35 @@ async def test_async_basic_inference(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_default_function_inference(async_client):
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+    }
+    input_copy = deepcopy(input)
+    result = await async_client.inference(
+        model_name="dummy::test",
+        input=input,
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
+        tags={"key": "value"},
+    )
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::test"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
+@pytest.mark.asyncio
 async def test_async_inference_streaming(async_client):
     stream = await async_client.inference(
         function_name="basic_test",
@@ -478,6 +507,34 @@ def test_sync_basic_inference(sync_client):
         tags={"key": "value"},
     )
     assert result.variant_name == "test"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
+def test_default_function_inference(sync_client):
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+    }
+    input_copy = deepcopy(input)
+    result = sync_client.inference(
+        model_name="dummy::test",
+        input=input,
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
+        tags={"key": "value"},
+    )
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::test"
     assert isinstance(result, ChatInferenceResponse)
     content = result.content
     assert len(content) == 1

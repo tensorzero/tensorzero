@@ -200,7 +200,7 @@ async fn test_inference_with_explicit_broken_region() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
 
     let response_json = response.json::<Value>().await.unwrap();
 
