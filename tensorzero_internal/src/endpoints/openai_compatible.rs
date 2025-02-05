@@ -229,8 +229,20 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
         let function_name = openai_compatible_params
             .model
             .strip_prefix("tensorzero::function_name::")
-            // Allow 'tensorzero::' for backwards compatibility
-            .or_else(|| openai_compatible_params.model.strip_prefix("tensorzero::"))
+            .or_else(|| {
+                // Allow 'tensorzero::' for backwards compatibility
+                if let Some(function_name) =
+                    openai_compatible_params.model.strip_prefix("tensorzero::")
+                {
+                    tracing::warn!(
+                        function_name = function_name,
+                        "Deprecation Warning: Please set the `model` parameter to `tensorzero::function_name::your_function` instead of `tensorzero::your_function.` The latter will be removed in a future release."
+                    );
+                    Some(function_name)
+                } else {
+                    None
+                }
+            })
             .ok_or_else(|| {
                 Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                     message: "model name must start with 'tensorzero::function_name::'".to_string(),
