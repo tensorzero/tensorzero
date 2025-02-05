@@ -34,12 +34,11 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let json_providers = vec![
-        E2ETestProvider {
-            variant_name: "fireworks".to_string(),
-            model_name: "llama3.1-70b-instruct-fireworks".into(),
-            model_provider_name: "fireworks".into(),
-            credentials: HashMap::new(),
+    let json_providers = vec![E2ETestProvider {
+        variant_name: "fireworks".to_string(),
+        model_name: "llama3.1-70b-instruct-fireworks".into(),
+        model_provider_name: "fireworks".into(),
+        credentials: HashMap::new(),
     }];
 
     #[cfg(feature = "e2e_tests")]
