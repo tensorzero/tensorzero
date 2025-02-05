@@ -9,6 +9,7 @@ mod feedback;
 mod health;
 mod inference;
 mod mixture_of_n;
+mod openai_compatible;
 mod prometheus;
 mod providers;
 mod retries;

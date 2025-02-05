@@ -228,17 +228,19 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
     ) -> Result<Self, Self::Error> {
         let function_name = openai_compatible_params
             .model
-            .strip_prefix("tensorzero::")
+            .strip_prefix("tensorzero::function_name::")
+            // Allow 'tensorzero::' for backwards compatibility
+            .or_else(|| openai_compatible_params.model.strip_prefix("tensorzero::"))
             .ok_or_else(|| {
                 Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: "model name must start with 'tensorzero::'".to_string(),
+                    message: "model name must start with 'tensorzero::function_name::'".to_string(),
                 })
             })?;
 
         if function_name.is_empty() {
             return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message:
-                    "function_name (passed in model field after \"tensorzero::\") cannot be empty"
+                    "function_name (passed in model field after \"tensorzero::function_name::\") cannot be empty"
                         .to_string(),
             }
             .into());
