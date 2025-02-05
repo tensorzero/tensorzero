@@ -46,7 +46,7 @@ jobs:
           tool: cargo-nextest,cargo-deny
 
       - name: Build (Rust)
-        run: cargo build --verbose
+        run: cargo build --workspace --verbose
 
       - name: Lint (Rust)
         run: |
@@ -74,13 +74,13 @@ jobs:
           working-directory: clients/python-pyo3
           args: --find-interpreter
           manylinux: auto
-          
+
       - name: "Python: TensorZero Client: Install dependencies"
         working-directory: clients/python
         run: |
           uv venv
           uv pip sync requirements.txt
-      
+
       - name: "Python: TensorZero Client: pyright"
         working-directory: clients/python
         run: |
@@ -92,7 +92,7 @@ jobs:
         run: |
           uv venv
           uv pip sync requirements.txt
-  
+
       - name: "Python: OpenAI Client: pyright"
         working-directory: clients/openai-python
         run: |

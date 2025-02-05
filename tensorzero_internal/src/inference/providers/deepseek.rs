@@ -1,5 +1,3 @@
-use std::sync::OnceLock;
-
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
@@ -17,7 +15,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStream,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{Credential, CredentialLocation};
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
@@ -26,84 +24,61 @@ use super::openai::{
 };
 
 lazy_static! {
-    static ref XAI_DEFAULT_BASE_URL: Url = {
+    static ref DEEPSEEK_DEFAULT_BASE_URL: Url = {
         #[allow(clippy::expect_used)]
-        Url::parse("https://api.x.ai/v1").expect("Failed to parse XAI_DEFAULT_BASE_URL")
+        Url::parse("https://api.deepseek.com/v1")
+            .expect("Failed to parse DEEPSEEK_DEFAULT_BASE_URL")
     };
 }
 
 fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("XAI_API_KEY".to_string())
+    CredentialLocation::Env("DEEPSEEK_API_KEY".to_string())
 }
 
-const PROVIDER_NAME: &str = "xAI";
-const PROVIDER_TYPE: &str = "xai";
+const PROVIDER_NAME: &str = "DeepSeek";
+const PROVIDER_TYPE: &str = "deepseek";
 
 #[derive(Debug)]
-pub struct XAIProvider {
-    model_name: String,
-    credentials: XAICredentials,
-}
-
-static DEFAULT_CREDENTIALS: OnceLock<XAICredentials> = OnceLock::new();
-
-impl XAIProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
-        Ok(XAIProvider {
-            model_name,
-            credentials,
-        })
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum XAICredentials {
+pub enum DeepSeekCredentials {
     Static(SecretString),
     Dynamic(String),
+    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
-impl TryFrom<Credential> for XAICredentials {
+impl TryFrom<Credential> for DeepSeekCredentials {
     type Error = Error;
 
     fn try_from(credentials: Credential) -> Result<Self, Error> {
         match credentials {
-            Credential::Static(key) => Ok(XAICredentials::Static(key)),
-            Credential::Dynamic(key_name) => Ok(XAICredentials::Dynamic(key_name)),
-            Credential::None => Ok(XAICredentials::None),
+            Credential::Static(key) => Ok(DeepSeekCredentials::Static(key)),
+            Credential::Dynamic(key_name) => Ok(DeepSeekCredentials::Dynamic(key_name)),
             #[cfg(any(test, feature = "e2e_tests"))]
-            Credential::Missing => Ok(XAICredentials::None),
+            Credential::Missing => Ok(DeepSeekCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for xAI provider".to_string(),
+                message: "Invalid api_key_location for DeepSeek provider".to_string(),
             })),
         }
     }
 }
 
-impl XAICredentials {
+impl DeepSeekCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<&'a SecretString, Error> {
         match self {
-            XAICredentials::Static(api_key) => Ok(api_key),
-            XAICredentials::Dynamic(key_name) => dynamic_api_keys.get(key_name).ok_or_else(|| {
-                ErrorDetails::ApiKeyMissing {
-                    provider_name: PROVIDER_NAME.to_string(),
-                }
-                .into()
-            }),
-            XAICredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            DeepSeekCredentials::Static(api_key) => Ok(api_key),
+            DeepSeekCredentials::Dynamic(key_name) => {
+                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    ErrorDetails::ApiKeyMissing {
+                        provider_name: PROVIDER_NAME.to_string(),
+                    }
+                    .into()
+                })
+            }
+            #[cfg(any(test, feature = "e2e_tests"))]
+            DeepSeekCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
             .into()),
@@ -111,15 +86,37 @@ impl XAICredentials {
     }
 }
 
-impl InferenceProvider for XAIProvider {
+#[derive(Debug)]
+pub struct DeepSeekProvider {
+    model_name: String,
+    credentials: DeepSeekCredentials,
+}
+
+impl DeepSeekProvider {
+    pub fn new(
+        model_name: String,
+        api_key_location: Option<CredentialLocation>,
+    ) -> Result<Self, Error> {
+        let credential_location = api_key_location.unwrap_or(default_api_key_location());
+        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
+        let provider_credentials = DeepSeekCredentials::try_from(generic_credentials)?;
+
+        Ok(DeepSeekProvider {
+            model_name,
+            credentials: provider_credentials,
+        })
+    }
+}
+
+impl InferenceProvider for DeepSeekProvider {
     async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = XAIRequest::new(&self.model_name, request)?;
-        let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
+        let request_body = DeepSeekRequest::new(&self.model_name, request)?;
+        let request_url = get_chat_url(&DEEPSEEK_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let request_builder = http_client
@@ -133,7 +130,7 @@ impl InferenceProvider for XAIProvider {
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to xAI: {e}"),
+                    message: format!("Error sending request to DeepSeek: {e}"),
                     status_code: e.status(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -163,7 +160,7 @@ impl InferenceProvider for XAIProvider {
             let latency = Latency::NonStreaming {
                 response_time: start_time.elapsed(),
             };
-            Ok(XAIResponseWithMetadata {
+            Ok(DeepSeekResponseWithMetadata {
                 response,
                 raw_response,
                 latency,
@@ -199,7 +196,7 @@ impl InferenceProvider for XAIProvider {
         ),
         Error,
     > {
-        let request_body = XAIRequest::new(&self.model_name, request)?;
+        let request_body = DeepSeekRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
@@ -208,7 +205,7 @@ impl InferenceProvider for XAIProvider {
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
-        let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
+        let request_url = get_chat_url(&DEEPSEEK_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let event_source = http_client
@@ -219,7 +216,7 @@ impl InferenceProvider for XAIProvider {
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to xAI: {e}"),
+                    message: format!("Error sending request: {e}"),
                     status_code: None,
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -253,7 +250,7 @@ impl InferenceProvider for XAIProvider {
         _dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
         Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
-            provider_type: "xAI".to_string(),
+            provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
     }
@@ -271,14 +268,27 @@ impl InferenceProvider for XAIProvider {
     }
 }
 
-/// This struct defines the supported parameters for the xAI API
-/// See the [xAI API documentation](https://docs.x.ai/api/endpoints#chat-completions)
-/// for more details.
-/// We are not handling logprobs, top_logprobs, n,
-/// logit_bias, seed, service_tier, stop, user or response_format.
-/// or the deprecated function_call and functions arguments.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
+enum DeepSeekResponseFormat {
+    #[default]
+    Text,
+    JsonObject,
+}
+
+impl DeepSeekResponseFormat {
+    fn new(json_mode: &ModelInferenceRequestJsonMode) -> Self {
+        match json_mode {
+            ModelInferenceRequestJsonMode::On => DeepSeekResponseFormat::JsonObject,
+            ModelInferenceRequestJsonMode::Off => DeepSeekResponseFormat::Text,
+            ModelInferenceRequestJsonMode::Strict => DeepSeekResponseFormat::JsonObject,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
-struct XAIRequest<'a> {
+struct DeepSeekRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
 
@@ -301,13 +311,15 @@ struct XAIRequest<'a> {
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<DeepSeekResponseFormat>,
 }
 
-impl<'a> XAIRequest<'a> {
+impl<'a> DeepSeekRequest<'a> {
     pub fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest,
-    ) -> Result<XAIRequest<'a>, Error> {
+    ) -> Result<DeepSeekRequest<'a>, Error> {
         let ModelInferenceRequest {
             temperature,
             max_tokens,
@@ -328,15 +340,21 @@ impl<'a> XAIRequest<'a> {
 
         if request.json_mode == ModelInferenceRequestJsonMode::Strict {
             return Err(ErrorDetails::InvalidRequest {
-                message: "The xAI models don't support strict JSON mode.".to_string(),
+                message: "DeepSeek model does not support strict JSON mode.".to_string(),
             }
             .into());
         }
 
+        let response_format = Some(DeepSeekResponseFormat::new(&request.json_mode));
+
+        // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
+        // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check
+        // if a model is an R1 model and if so, remove the system prompt from the request and instead put it in the first user message.
         let messages = prepare_openai_messages(request);
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
-        Ok(XAIRequest {
+
+        Ok(DeepSeekRequest {
             messages,
             model,
             temperature,
@@ -347,29 +365,30 @@ impl<'a> XAIRequest<'a> {
             frequency_penalty,
             stream,
             stream_options,
+            response_format,
             tools,
             tool_choice,
         })
     }
 }
 
-struct XAIResponseWithMetadata<'a> {
+struct DeepSeekResponseWithMetadata<'a> {
     response: OpenAIResponse,
     raw_response: String,
     latency: Latency,
-    request: XAIRequest<'a>,
+    request: DeepSeekRequest<'a>,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
-impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
+impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse {
     type Error = Error;
-    fn try_from(value: XAIResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
-        let XAIResponseWithMetadata {
+    fn try_from(value: DeepSeekResponseWithMetadata<'a>) -> Result<Self, Self::Error> {
+        let DeepSeekResponseWithMetadata {
             mut response,
+            raw_response,
             latency,
             request: request_body,
             generic_request,
-            raw_response,
         } = value;
 
         if response.choices.len() != 1 {
@@ -410,6 +429,7 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 message: format!("Error serializing request body as JSON: {e}"),
             })
         })?;
+
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
@@ -426,12 +446,10 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::borrow::Cow;
     use std::time::Duration;
-
     use uuid::Uuid;
-
-    use super::*;
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::providers::openai::{
@@ -443,7 +461,7 @@ mod tests {
     };
 
     #[test]
-    fn test_xai_request_new() {
+    fn test_deepseek_request_new() {
         let request_with_tools = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -464,22 +482,22 @@ mod tests {
             output_schema: None,
         };
 
-        let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
-            .expect("failed to create xAI Request during test");
+        let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools)
+            .expect("failed to create Deepseek Request during test");
 
-        assert_eq!(xai_request.messages.len(), 1);
-        assert_eq!(xai_request.temperature, Some(0.5));
-        assert_eq!(xai_request.max_tokens, Some(100));
-        assert!(!xai_request.stream);
-        assert_eq!(xai_request.seed, Some(69));
-        assert!(xai_request.tools.is_some());
-        let tools = xai_request.tools.as_ref().unwrap();
+        assert_eq!(deepseek_request.messages.len(), 1);
+        assert_eq!(deepseek_request.temperature, Some(0.5));
+        assert_eq!(deepseek_request.max_tokens, Some(100));
+        assert!(!deepseek_request.stream);
+        assert_eq!(deepseek_request.seed, Some(69));
+        assert!(deepseek_request.tools.is_some());
+        let tools = deepseek_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
-            xai_request.tool_choice,
+            deepseek_request.tool_choice,
             Some(OpenAIToolChoice::Specific(SpecificToolChoice {
                 r#type: OpenAIToolType::Function,
                 function: SpecificToolFunction {
@@ -508,26 +526,26 @@ mod tests {
             output_schema: None,
         };
 
-        let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
-            .expect("failed to create xAI Request");
+        let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools)
+            .expect("failed to create Deepseek Request");
 
-        assert_eq!(xai_request.messages.len(), 2);
-        assert_eq!(xai_request.temperature, Some(0.5));
-        assert_eq!(xai_request.max_tokens, Some(100));
-        assert_eq!(xai_request.top_p, Some(0.9));
-        assert_eq!(xai_request.presence_penalty, Some(0.1));
-        assert_eq!(xai_request.frequency_penalty, Some(0.2));
-        assert!(!xai_request.stream);
-        assert_eq!(xai_request.seed, Some(69));
+        assert_eq!(deepseek_request.messages.len(), 2);
+        assert_eq!(deepseek_request.temperature, Some(0.5));
+        assert_eq!(deepseek_request.max_tokens, Some(100));
+        assert_eq!(deepseek_request.top_p, Some(0.9));
+        assert_eq!(deepseek_request.presence_penalty, Some(0.1));
+        assert_eq!(deepseek_request.frequency_penalty, Some(0.2));
+        assert!(!deepseek_request.stream);
+        assert_eq!(deepseek_request.seed, Some(69));
 
-        assert!(xai_request.tools.is_some());
-        let tools = xai_request.tools.as_ref().unwrap();
+        assert!(deepseek_request.tools.is_some());
+        let tools = deepseek_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
-            xai_request.tool_choice,
+            deepseek_request.tool_choice,
             Some(OpenAIToolChoice::Specific(SpecificToolChoice {
                 r#type: OpenAIToolType::Function,
                 function: SpecificToolFunction {
@@ -537,43 +555,45 @@ mod tests {
         );
 
         let request_with_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
             json_mode: ModelInferenceRequestJsonMode::Strict,
             ..request_with_tools
         };
 
-        let xai_request = XAIRequest::new("grok-beta", &request_with_tools);
-        assert!(xai_request.is_err());
+        let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools);
+        assert!(deepseek_request.is_err());
     }
 
     #[test]
-    fn test_xai_api_base() {
-        assert_eq!(XAI_DEFAULT_BASE_URL.as_str(), "https://api.x.ai/v1");
+    fn test_deepseek_api_base() {
+        assert_eq!(
+            DEEPSEEK_DEFAULT_BASE_URL.as_str(),
+            "https://api.deepseek.com/v1"
+        );
     }
 
     #[test]
-    fn test_credential_to_xai_credentials() {
+    fn test_credential_to_deepseek_credentials() {
         // Test Static credential
         let generic = Credential::Static(SecretString::from("test_key"));
-        let creds: XAICredentials = XAICredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, XAICredentials::Static(_)));
+        let creds: DeepSeekCredentials = DeepSeekCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, DeepSeekCredentials::Static(_)));
 
         // Test Dynamic credential
         let generic = Credential::Dynamic("key_name".to_string());
-        let creds = XAICredentials::try_from(generic).unwrap();
-        assert!(matches!(creds, XAICredentials::Dynamic(_)));
+        let creds = DeepSeekCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, DeepSeekCredentials::Dynamic(_)));
 
         // Test Missing credential (test mode)
         #[cfg(any(test, feature = "e2e_tests"))]
         {
             let generic = Credential::Missing;
-            let creds = XAICredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, XAICredentials::None));
+            let creds = DeepSeekCredentials::try_from(generic).unwrap();
+            assert!(matches!(creds, DeepSeekCredentials::None));
         }
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));
-        let result = XAICredentials::try_from(generic);
+        let result = DeepSeekCredentials::try_from(generic);
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err().get_owned_details(),
@@ -581,7 +601,7 @@ mod tests {
         ));
     }
     #[test]
-    fn test_xai_response_with_metadata_try_into() {
+    fn test_deepseek_response_with_metadata_try_into() {
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
@@ -615,17 +635,17 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
         };
-        let xai_response_with_metadata = XAIResponseWithMetadata {
+        let deepseek_response_with_metadata = DeepSeekResponseWithMetadata {
             response: valid_response,
             raw_response: "test_response".to_string(),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: XAIRequest::new("grok-beta", &generic_request).unwrap(),
+            request: DeepSeekRequest::new("deepseek-chat", &generic_request).unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =
-            xai_response_with_metadata.try_into().unwrap();
+            deepseek_response_with_metadata.try_into().unwrap();
 
         assert_eq!(inference_response.output.len(), 1);
         assert_eq!(

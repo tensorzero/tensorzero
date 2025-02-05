@@ -26,6 +26,14 @@ export const AzureProviderConfigSchema = z.object({
 });
 export type AzureProviderConfig = z.infer<typeof AzureProviderConfigSchema>;
 
+export const DeepSeekProviderConfigSchema = z.object({
+  type: z.literal("deepseek"),
+  model_name: z.string(),
+});
+export type DeepSeekProviderConfig = z.infer<
+  typeof DeepSeekProviderConfigSchema
+>;
+
 export const DummyProviderConfigSchema = z.object({
   type: z.literal("dummy"),
   model_name: z.string(),
@@ -128,6 +136,7 @@ export const ProviderConfigSchema = z.discriminatedUnion("type", [
   AnthropicProviderConfigSchema,
   AWSBedrockProviderConfigSchema,
   AzureProviderConfigSchema,
+  DeepSeekProviderConfigSchema,
   DummyProviderConfigSchema,
   FireworksProviderConfigSchema,
   GCPVertexAnthropicProviderConfigSchema,
