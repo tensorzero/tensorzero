@@ -140,13 +140,20 @@ impl BaseTensorZeroGateway {
     #[new]
     #[pyo3(signature = (base_url, *, timeout=None))]
     fn new(py: Python<'_>, base_url: &str, timeout: Option<u64>) -> PyResult<Self> {
-        let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+        let mut client_builder = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
             url: Url::parse(base_url)
                 .map_err(|e| PyValueError::new_err(format!("Failed to parse base_url: {e:?}")))?,
-            timeout: timeout.map(Duration::from_secs),
-        })
-        .build_http();
-        let client = match client {
+        });
+        if let Some(timeout) = timeout {
+            let http_client = reqwest::Client::builder()
+                .timeout(Duration::from_secs(timeout))
+                .build()
+                .map_err(|e| {
+                    PyValueError::new_err(format!("Failed to build HTTP client: {e:?}"))
+                })?;
+            client_builder = client_builder.with_http_client(http_client);
+        }
+        let client = match client_builder.build_http() {
             Ok(client) => client,
             Err(e) => {
                 return Err(tensorzero_internal_error(
