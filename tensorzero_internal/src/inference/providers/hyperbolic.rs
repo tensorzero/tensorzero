@@ -5,7 +5,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
-    ProviderInferenceResponse, ProviderInferenceResponseStream,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use futures::StreamExt;
@@ -16,7 +16,6 @@ use serde::Serialize;
 use tokio::time::Instant;
 use url::Url;
 
-use super::helpers::peek_first_chunk;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
     OpenAIRequestMessage, OpenAIResponse,
@@ -192,7 +191,7 @@ impl InferenceProvider for HyperbolicProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<(ProviderInferenceResponseStream, String), Error> {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = HyperbolicRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -218,10 +217,7 @@ impl InferenceProvider for HyperbolicProvider {
                 })
             })?;
 
-        let mut stream = Box::pin(stream_openai(event_source, start_time).peekable());
-        // Get a single chunk from the stream and make sure it is OK then send to client.
-        // We want to do this here so that we can tell that the request is working.
-        peek_first_chunk(&mut stream.as_mut(), &raw_request, PROVIDER_TYPE).await?;
+        let stream = stream_openai(event_source, start_time).peekable();
         Ok((stream, raw_request))
     }
 

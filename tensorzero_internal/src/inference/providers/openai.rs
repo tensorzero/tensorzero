@@ -1,4 +1,3 @@
-use futures::stream::Stream;
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest::multipart::{Form, Part};
@@ -25,16 +24,15 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
+use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
-    RequestMessage, Role, Text, TextChunk, Usage,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
-
-use super::helpers::peek_first_chunk;
 
 lazy_static! {
     static ref OPENAI_DEFAULT_BASE_URL: Url = {
@@ -205,7 +203,7 @@ impl InferenceProvider for OpenAIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<(ProviderInferenceResponseStream, String), Error> {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = OpenAIRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -234,10 +232,7 @@ impl InferenceProvider for OpenAIProvider {
                 })
             })?;
 
-        let mut stream = Box::pin(stream_openai(event_source, start_time).peekable());
-        // Get a single chunk from the stream and make sure it is OK then send to client.
-        // We want to do this here so that we can tell that the request is working.
-        peek_first_chunk(&mut stream.as_mut(), &raw_request, PROVIDER_TYPE).await?;
+        let stream = stream_openai(event_source, start_time).peekable();
         Ok((stream, raw_request))
     }
 
@@ -569,10 +564,10 @@ impl EmbeddingProvider for OpenAIProvider {
 pub fn stream_openai(
     mut event_source: EventSource,
     start_time: Instant,
-) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
+) -> ProviderInferenceResponseStreamInner {
     let mut tool_call_ids = Vec::new();
     let mut tool_call_names = Vec::new();
-    async_stream::stream! {
+    Box::pin(async_stream::stream! {
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -616,7 +611,7 @@ pub fn stream_openai(
         }
 
         event_source.close();
-    }
+    })
 }
 
 impl OpenAIProvider {

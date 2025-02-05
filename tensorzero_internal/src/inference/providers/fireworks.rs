@@ -15,13 +15,12 @@ use crate::{
     inference::types::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-        ProviderInferenceResponse, ProviderInferenceResponseStream,
+        PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation},
 };
 
 use super::{
-    helpers::peek_first_chunk,
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
         tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse,
@@ -202,7 +201,7 @@ impl InferenceProvider for FireworksProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
-    ) -> Result<(ProviderInferenceResponseStream, String), Error> {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = FireworksRequest::new(&self.model_name, request);
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
@@ -230,10 +229,7 @@ impl InferenceProvider for FireworksProvider {
                     raw_response: None,
                 })
             })?;
-        let mut stream = Box::pin(stream_openai(event_source, start_time).peekable());
-        // Get a single chunk from the stream and make sure it is OK then send to client.
-        // We want to do this here so that we can tell that the request is working.
-        peek_first_chunk(&mut stream.as_mut(), &raw_request, PROVIDER_TYPE).await?;
+        let stream = stream_openai(event_source, start_time).peekable();
         Ok((stream, raw_request))
     }
 

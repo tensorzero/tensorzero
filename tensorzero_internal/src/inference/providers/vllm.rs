@@ -9,7 +9,6 @@ use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
 
-use super::helpers::peek_first_chunk;
 use super::openai::{
     get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
     OpenAIRequestMessage, OpenAIResponse, OpenAISystemRequestMessage, StreamOptions,
@@ -20,7 +19,8 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, ProviderInferenceResponse, ProviderInferenceResponseStream,
+    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 
@@ -184,7 +184,7 @@ impl InferenceProvider for VLLMProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<(ProviderInferenceResponseStream, String), Error> {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = VLLMRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -212,10 +212,7 @@ impl InferenceProvider for VLLMProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-        let mut stream = Box::pin(stream_openai(event_source, start_time).peekable());
-        // Get a single chunk from the stream and make sure it is OK then send to client.
-        // We want to do this here so that we can tell that the request is working.
-        peek_first_chunk(&mut stream.as_mut(), &raw_request, PROVIDER_TYPE).await?;
+        let stream = stream_openai(event_source, start_time).peekable();
         Ok((stream, raw_request))
     }
 

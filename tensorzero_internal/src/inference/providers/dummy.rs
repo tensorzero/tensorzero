@@ -15,10 +15,11 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
+use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, current_timestamp, ContentBlock, ContentBlockChunk,
-    Latency, ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStream, Usage,
+    Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::model::CredentialLocation;
 use crate::tool::{ToolCall, ToolCallChunk};
@@ -278,7 +279,7 @@ impl InferenceProvider for DummyProvider {
         _request: &'a ModelInferenceRequest<'_>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<(ProviderInferenceResponseStream, String), Error> {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         if self.model_name == "slow" {
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
@@ -327,40 +328,47 @@ impl InferenceProvider for DummyProvider {
 
         let total_tokens = content_chunks.len() as u32;
         let content_chunk_len = content_chunks.len();
-        let stream = tokio_stream::iter(content_chunks.into_iter().enumerate())
-            .map(move |(i, chunk)| {
-                Ok(ProviderInferenceResponseChunk {
-                    created,
-                    content: vec![if is_tool_call {
-                        ContentBlockChunk::ToolCall(ToolCallChunk {
-                            id: "0".to_string(),
-                            raw_name: "get_temperature".to_string(),
-                            raw_arguments: chunk.to_string(),
-                        })
-                    } else {
-                        ContentBlockChunk::Text(crate::inference::types::TextChunk {
-                            text: chunk.to_string(),
-                            id: "0".to_string(),
-                        })
-                    }],
-                    usage: None,
-                    raw_response: "".to_string(),
-                    latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
+        let stream: ProviderInferenceResponseStreamInner = Box::pin(
+            tokio_stream::iter(content_chunks.into_iter().enumerate())
+                .map(move |(i, chunk)| {
+                    Ok(ProviderInferenceResponseChunk {
+                        created,
+                        content: vec![if is_tool_call {
+                            ContentBlockChunk::ToolCall(ToolCallChunk {
+                                id: "0".to_string(),
+                                raw_name: "get_temperature".to_string(),
+                                raw_arguments: chunk.to_string(),
+                            })
+                        } else {
+                            ContentBlockChunk::Text(crate::inference::types::TextChunk {
+                                text: chunk.to_string(),
+                                id: "0".to_string(),
+                            })
+                        }],
+                        usage: None,
+                        raw_response: "".to_string(),
+                        latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
+                    })
                 })
-            })
-            .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
-                created,
-                content: vec![],
-                usage: Some(crate::inference::types::Usage {
-                    input_tokens: 10,
-                    output_tokens: total_tokens,
-                }),
-                raw_response: "".to_string(),
-                latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
-            })))
-            .throttle(std::time::Duration::from_millis(10));
+                .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
+                    created,
+                    content: vec![],
+                    usage: Some(crate::inference::types::Usage {
+                        input_tokens: 10,
+                        output_tokens: total_tokens,
+                    }),
+                    raw_response: "".to_string(),
+                    latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
+                })))
+                .throttle(std::time::Duration::from_millis(10)),
+        );
 
-        Ok((Box::pin(stream), DUMMY_RAW_REQUEST.to_string()))
+        Ok((
+            // We need this verbose path to avoid using `tokio_stream::StreamExt::peekable`,
+            // which produces a different types
+            futures::stream::StreamExt::peekable(stream),
+            DUMMY_RAW_REQUEST.to_string(),
+        ))
     }
 
     async fn start_batch_inference<'a>(

@@ -10,7 +10,7 @@
 ///
 /// In light of this, we have decided to not explicitly support tool calling for TGI and only support JSON mode via `implicit_tool`.
 /// Our implementation currently allows you to use a tool in TGI (nonstreaming), but YMMV.
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
@@ -21,7 +21,6 @@ use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 
-use super::helpers::peek_first_chunk;
 use super::openai::{
     get_chat_url, prepare_openai_messages, prepare_openai_tools, OpenAIRequestMessage, OpenAITool,
     OpenAIToolChoice, OpenAIToolType, StreamOptions,
@@ -34,8 +33,8 @@ use crate::inference::types::batch::{
 };
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
-    TextChunk, Usage,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, Usage,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::ToolCall;
@@ -201,7 +200,7 @@ impl InferenceProvider for TGIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<(ProviderInferenceResponseStream, String), Error> {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let model_name = PROVIDER_NAME.to_lowercase().clone();
         let request_body = TGIRequest::new(&model_name, request)?;
         // TGI integration does not support tools in streaming mode
@@ -238,10 +237,7 @@ impl InferenceProvider for TGIProvider {
                 })
             })?;
 
-        // Get a single chunk from the stream and make sure it is OK then send to client.
-        // We want to do this here so that we can tell that the request is working.
-        let mut stream = Box::pin(stream_tgi(event_source, start_time).peekable());
-        peek_first_chunk(&mut stream.as_mut(), &raw_request, PROVIDER_TYPE).await?;
+        let stream = stream_tgi(event_source, start_time).peekable();
         Ok((stream, raw_request))
     }
 
@@ -273,8 +269,8 @@ impl InferenceProvider for TGIProvider {
 fn stream_tgi(
     mut event_source: EventSource,
     start_time: Instant,
-) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
-    async_stream::stream! {
+) -> ProviderInferenceResponseStreamInner {
+    Box::pin(async_stream::stream! {
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -313,7 +309,7 @@ fn stream_tgi(
         }
 
         event_source.close();
-    }
+    })
 }
 
 /// This struct defines the supported parameters for the TGI API

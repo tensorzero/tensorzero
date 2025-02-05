@@ -1,4 +1,4 @@
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
@@ -20,8 +20,9 @@ use crate::inference::types::{
     Latency, ModelInferenceRequestJsonMode, Role, Text,
 };
 use crate::inference::types::{
-    ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
+    ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
+    TextChunk, Usage,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
@@ -209,7 +210,7 @@ impl InferenceProvider for AnthropicProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
-    ) -> Result<(ProviderInferenceResponseStream, String), Error> {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -234,9 +235,8 @@ impl InferenceProvider for AnthropicProvider {
                     raw_response: None,
                 })
             })?;
-        let mut stream = Box::pin(stream_anthropic(event_source, start_time).peekable());
-        let mut stream_mut = stream.as_mut();
-        let chunk = peek_first_chunk(&mut stream_mut, &raw_request, PROVIDER_TYPE).await?;
+        let mut stream = stream_anthropic(event_source, start_time).peekable();
+        let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
@@ -278,8 +278,8 @@ impl InferenceProvider for AnthropicProvider {
 fn stream_anthropic(
     mut event_source: EventSource,
     start_time: Instant,
-) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
-    async_stream::stream! {
+) -> ProviderInferenceResponseStreamInner {
+    Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
         let mut current_tool_name: Option<String> = None;
         while let Some(ev) = event_source.next().await {
@@ -330,7 +330,7 @@ fn stream_anthropic(
         }
 
         event_source.close();
-    }
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

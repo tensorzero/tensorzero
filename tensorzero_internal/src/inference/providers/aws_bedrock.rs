@@ -11,7 +11,7 @@ use aws_sdk_bedrockruntime::types::{
 };
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use reqwest::StatusCode;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -23,11 +23,12 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
-    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStream, RequestMessage, Role, Text,
-    TextChunk, Usage,
+    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -187,7 +188,7 @@ impl InferenceProvider for AWSBedrockProvider {
         request: &'a ModelInferenceRequest<'_>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<(ProviderInferenceResponseStream, String), Error> {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         // TODO (#55): add support for guardrails and additional fields
 
         let mut messages: Vec<Message> = request
@@ -271,9 +272,8 @@ impl InferenceProvider for AWSBedrockProvider {
             })
         })?;
 
-        let mut stream = Box::pin(stream_bedrock(stream, start_time).peekable());
-        let mut stream_mut = stream.as_mut();
-        let chunk = peek_first_chunk(&mut stream_mut, &raw_request, PROVIDER_TYPE).await?;
+        let mut stream = stream_bedrock(stream, start_time).peekable();
+        let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if self.model_id.contains("claude")
             && matches!(
                 request.json_mode,
@@ -315,8 +315,8 @@ impl InferenceProvider for AWSBedrockProvider {
 fn stream_bedrock(
     mut stream: ConverseStreamOutput,
     start_time: Instant,
-) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
-    async_stream::stream! {
+) -> ProviderInferenceResponseStreamInner {
+    Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
         let mut current_tool_name: Option<String> = None;
 
@@ -350,7 +350,7 @@ fn stream_bedrock(
                 }
             }
         }
-    }
+    })
 }
 
 fn bedrock_to_tensorzero_stream_message(

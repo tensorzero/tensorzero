@@ -1,7 +1,6 @@
 use std::pin::Pin;
 
-use futures::stream::Peekable;
-use futures::Stream;
+use futures::{stream::Peekable, Stream};
 
 use crate::{
     error::{Error, ErrorDetails},
@@ -11,14 +10,14 @@ use crate::{
 /// Gives mutable access to the first chunk of a stream, returning an error if the stream is empty
 pub async fn peek_first_chunk<
     'a,
-    T: Stream<Item = Result<ProviderInferenceResponseChunk, Error>>,
+    T: Stream<Item = Result<ProviderInferenceResponseChunk, Error>> + ?Sized,
 >(
-    stream: &'a mut Pin<&mut Peekable<T>>,
+    stream: &'a mut Peekable<Pin<Box<T>>>,
     raw_request: &str,
     provider_type: &str,
 ) -> Result<&'a mut ProviderInferenceResponseChunk, Error> {
     // If the next stream item is an error, consume and return it
-    if let Some(err) = stream.as_mut().next_if(Result::is_err).await {
+    if let Some(err) = Pin::new(&mut *stream).next_if(Result::is_err).await {
         match err {
             Err(e) => {
                 return Err(e)
@@ -31,7 +30,7 @@ pub async fn peek_first_chunk<
         }
     }
     // Peek at the same item - we already checked that it's not an error.
-    match stream.as_mut().peek_mut().await {
+    match Pin::new(stream).peek_mut().await {
         // Returning `chunk` extends the lifetime of 'stream.as_mut() to 'a,
         // which blocks us from using 'stream' in the other branches of
         // this match.
@@ -49,7 +48,7 @@ pub async fn peek_first_chunk<
         // We check for an error before the `match` block, which makes this unreachable
         Some(Err(_)) => {
             Err(Error::new(ErrorDetails::InternalError {
-                message: "Stream produced error after we peeked non-error (this shoul dnever happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string()
+                message: "Stream produced error after we peeked non-error (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string()
              }))
         }
     }
@@ -67,8 +66,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_peek_empty() {
-        let mut stream = Box::pin(stream::empty().peekable());
-        let err = peek_first_chunk(&mut stream.as_mut(), "test", "test")
+        let mut stream = Box::pin(stream::empty()).peekable();
+        let err = peek_first_chunk(&mut stream, "test", "test")
             .await
             .expect_err("Peeking empty stream should fail");
         let err_msg = err.to_string();
@@ -80,13 +79,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_peek_err() {
-        let mut stream = Box::pin(
-            stream::iter([Err(Error::new(ErrorDetails::InternalError {
+        let mut stream = Box::pin(stream::iter([Err(Error::new(
+            ErrorDetails::InternalError {
                 message: "My test error".to_string(),
-            }))])
-            .peekable(),
-        );
-        let err = peek_first_chunk(&mut stream.as_mut(), "test", "test")
+            },
+        ))]))
+        .peekable();
+        let err = peek_first_chunk(&mut stream, "test", "test")
             .await
             .expect_err("Peeking errored stream should fail");
         assert_eq!(
@@ -109,18 +108,15 @@ mod tests {
             raw_response: "My raw response".to_string(),
             latency: Duration::from_secs(0),
         };
-        let mut stream = Box::pin(
-            stream::iter([
-                Ok(chunk.clone()),
-                Err(Error::new(ErrorDetails::InternalError {
-                    message: "My test error".to_string(),
-                })),
-            ])
-            .peekable(),
-        );
-        let mut stream_mut = stream.as_mut();
+        let mut stream = Box::pin(stream::iter([
+            Ok(chunk.clone()),
+            Err(Error::new(ErrorDetails::InternalError {
+                message: "My test error".to_string(),
+            })),
+        ]))
+        .peekable();
         let peeked_chunk: &mut ProviderInferenceResponseChunk =
-            peek_first_chunk(&mut stream_mut, "test", "test")
+            peek_first_chunk(&mut stream, "test", "test")
                 .await
                 .expect("Peeking stream should succeed");
         assert_eq!(&chunk, peeked_chunk);
