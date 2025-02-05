@@ -40,6 +40,12 @@ function formatProvider(provider: ProviderType): {
         className:
           "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
       };
+    case "deepseek":
+      return {
+        name: "DeepSeek",
+        className:
+          "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+      };
     case "dummy":
       return {
         name: "Dummy",
