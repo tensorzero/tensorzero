@@ -244,6 +244,8 @@ pub(super) enum ProviderConfigHelper {
     AWSBedrock {
         model_id: String,
         region: Option<String>,
+        #[serde(default)]
+        allow_auto_detect_region: bool,
     },
     Azure {
         deployment_id: String,
@@ -343,8 +345,15 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 AnthropicProvider::new(model_name, api_key_location)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
-            ProviderConfigHelper::AWSBedrock { model_id, region } => {
+            ProviderConfigHelper::AWSBedrock {
+                model_id,
+                region,
+                allow_auto_detect_region,
+            } => {
                 let region = region.map(aws_types::region::Region::new);
+                if region.is_none() && !allow_auto_detect_region {
+                    return Err(D::Error::custom("AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`."));
+                }
 
                 // NB: We need to make an async call here to initialize the AWS Bedrock client.
 

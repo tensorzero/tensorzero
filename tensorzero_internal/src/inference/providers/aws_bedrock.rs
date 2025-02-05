@@ -49,7 +49,6 @@ impl AWSBedrockProvider {
         // - The default region (us-east-1)
         let region = RegionProviderChain::first_try(region)
             .or_default_provider()
-            .or_else(Region::new("us-east-1"))
             .region()
             .await
             .ok_or_else(|| {
@@ -849,11 +848,20 @@ mod tests {
 
         #[traced_test]
         async fn third_run() {
-            AWSBedrockProvider::new("test".to_string(), None)
+            // We want auto-detection to fail, so we clear this environment variable.
+            // We use 'nextest' as our runner, so each test runs in its own process
+            std::env::remove_var("AWS_REGION");
+            std::env::remove_var("AWS_DEFAULT_REGION");
+            let err = AWSBedrockProvider::new("test".to_string(), None)
                 .await
-                .unwrap();
+                .expect_err("AWS bedrock provider should fail when it cannot detect region");
+            let err_msg = err.to_string();
+            assert!(
+                err_msg.contains("Failed to determine AWS region."),
+                "Unexpected error message: {err_msg}"
+            );
 
-            assert!(logs_contain("Creating new AWS Bedrock client for region:"));
+            assert!(logs_contain("Failed to determine AWS region."));
         }
 
         #[traced_test]
@@ -872,8 +880,5 @@ mod tests {
         second_run().await;
         third_run().await;
         fourth_run().await;
-
-        // NOTE: There isn't an easy way to test the fallback between the default provider and the last-resort fallback region.
-        // We can only test that the method returns either of these regions when an explicit region is not provided.
     }
 }
