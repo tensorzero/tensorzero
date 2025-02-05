@@ -40,14 +40,12 @@ async fn get_providers() -> E2ETestProviders {
         // },
     ];
 
-    let tool_providers = vec![
-        E2ETestProvider {
-            variant_name: "together".to_string(),
-            model_name: "llama3.1-70b-instruct-turbo".into(),
-            model_provider_name: "together".into(),
-            credentials: HashMap::new(),
-        }
-    ];
+    let tool_providers = vec![E2ETestProvider {
+        variant_name: "together".to_string(),
+        model_name: "llama3.1-70b-instruct-turbo".into(),
+        model_provider_name: "together".into(),
+        credentials: HashMap::new(),
+    }];
 
     #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
