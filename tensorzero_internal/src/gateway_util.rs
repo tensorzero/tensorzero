@@ -6,6 +6,7 @@ use serde::de::DeserializeOwned;
 use tracing::instrument;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::clickhouse_migration_manager;
 use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
 
@@ -39,28 +40,38 @@ impl AppStateData {
     }
 }
 
-async fn setup_clickhouse(
+pub async fn setup_clickhouse(
     config: &Config<'static>,
     clickhouse_url: Option<String>,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    match (config.gateway.observability.enabled, clickhouse_url) {
+    let clickhouse_connection_info = match (config.gateway.observability.enabled, clickhouse_url) {
         // Observability disabled by config
-        (Some(false), _) => Ok(ClickHouseConnectionInfo::new_disabled()),
+        (Some(false), _) => ClickHouseConnectionInfo::new_disabled(),
         // Observability enabled but no ClickHouse URL
-        (Some(true), None) => Err(ErrorDetails::AppState {
-            message: "Missing environment variable TENSORZERO_CLICKHOUSE_URL".to_string(),
+        (Some(true), None) => {
+            return Err(ErrorDetails::AppState {
+                message: "Missing environment variable TENSORZERO_CLICKHOUSE_URL".to_string(),
+            }
+            .into())
         }
-        .into()),
         // Observability enabled and ClickHouse URL provided
-        (Some(true), Some(clickhouse_url)) => ClickHouseConnectionInfo::new(&clickhouse_url).await,
+        (Some(true), Some(clickhouse_url)) => {
+            ClickHouseConnectionInfo::new(&clickhouse_url).await?
+        }
         // Observability default and no ClickHouse URL
         (None, None) => {
             tracing::warn!("Observability not explicitly specified in config and no ClickHouse URL provided. Disabling ClickHouse.");
-            Ok(ClickHouseConnectionInfo::new_disabled())
+            ClickHouseConnectionInfo::new_disabled()
         }
         // Observability default and ClickHouse URL provided
-        (None, Some(clickhouse_url)) => ClickHouseConnectionInfo::new(&clickhouse_url).await,
+        (None, Some(clickhouse_url)) => ClickHouseConnectionInfo::new(&clickhouse_url).await?,
+    };
+
+    // Run ClickHouse migrations (if any) if we have a production ClickHouse connection
+    if let ClickHouseConnectionInfo::Production { .. } = &clickhouse_connection_info {
+        clickhouse_migration_manager::run(&clickhouse_connection_info).await?;
     }
+    Ok(clickhouse_connection_info)
 }
 
 /// Custom Axum extractor that validates the JSON body and deserializes it into a custom type
@@ -196,7 +207,11 @@ mod tests {
             .await
             .expect_err("ClickHouse setup should fail given a bad URL");
         assert!(logs_contain("Invalid ClickHouse database URL"));
+    }
 
+    #[tokio::test]
+    #[traced_test]
+    async fn test_unhealthy_clickhouse() {
         // Sensible URL that doesn't point to ClickHouse
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
@@ -205,11 +220,11 @@ mod tests {
             bind_address: None,
             debug: false,
         };
-        let config = Box::leak(Box::new(Config {
+        let config = Config {
             gateway: gateway_config,
             ..Default::default()
-        }));
-        setup_clickhouse(config, Some("https://tensorzero.com:8123".to_string()))
+        };
+        setup_clickhouse(&config, Some("https://tensorzero.com:8123".to_string()))
             .await
             .expect_err(
                 "ClickHouse setup should fail given a URL that doesn't point to ClickHouse",

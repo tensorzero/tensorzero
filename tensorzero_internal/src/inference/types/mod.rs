@@ -12,8 +12,12 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
+use crate::cache::CacheData;
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
+use crate::{
+    endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
+    variant::InferenceConfig,
+};
 use crate::{error::Error, variant::JsonMode};
 use crate::{function::FunctionConfig, minijinja_util::TemplateConfig};
 use crate::{
@@ -32,7 +36,7 @@ pub mod batch;
  */
 
 /// A request is made that contains an Input
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -124,9 +128,10 @@ pub enum ModelInferenceRequestJsonMode {
 /// and to convert it back to the appropriate response format.
 /// An example of the latter is that we might have prepared a request with Tools available
 /// but the client actually just wants a chat response.
-#[derive(Builder, Clone, Debug, Default, PartialEq)]
+#[derive(Builder, Clone, Debug, Default, PartialEq, Serialize)]
 #[builder(setter(into, strip_option), default)]
 pub struct ModelInferenceRequest<'a> {
+    pub inference_id: Uuid,
     pub messages: Vec<RequestMessage>,
     pub system: Option<String>,
     pub tool_config: Option<Cow<'a, ToolCallConfig>>,
@@ -162,7 +167,7 @@ pub struct ProviderInferenceResponse {
     pub latency: Latency,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Usage {
     pub input_tokens: u32,
     pub output_tokens: u32,
@@ -195,6 +200,7 @@ pub struct ModelInferenceResponse {
     pub usage: Usage,
     pub latency: Latency,
     pub model_provider_name: Arc<str>,
+    pub cached: bool,
 }
 
 /// Finally, in the Variant we convert the ModelInferenceResponse into a ModelInferenceResponseWithMetadata
@@ -212,6 +218,7 @@ pub struct ModelInferenceResponseWithMetadata {
     pub latency: Latency,
     pub model_provider_name: Arc<str>,
     pub model_name: Arc<str>,
+    pub cached: bool,
 }
 
 /* As a Variant might make use of multiple model inferences, we then combine
@@ -261,7 +268,6 @@ pub struct JsonInferenceOutput {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProviderInferenceResponseChunk {
-    pub inference_id: Uuid,
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
     pub usage: Option<Usage>,
@@ -269,22 +275,21 @@ pub struct ProviderInferenceResponseChunk {
     pub latency: Duration,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockChunk {
     Text(TextChunk),
     ToolCall(ToolCallChunk),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TextChunk {
     pub id: String,
     pub text: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ChatInferenceResultChunk {
-    pub inference_id: Uuid,
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -295,7 +300,6 @@ pub struct ChatInferenceResultChunk {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct JsonInferenceResultChunk {
-    pub inference_id: Uuid,
     pub raw: String,
     pub created: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -366,6 +370,7 @@ pub struct ModelInferenceDatabaseInsert {
     pub model_name: String,
     pub model_provider_name: String,
     pub ttft_ms: Option<u32>,
+    pub cached: bool,
 }
 
 #[cfg(test)]
@@ -463,6 +468,32 @@ impl ModelInferenceResponse {
             usage: provider_inference_response.usage,
             latency: provider_inference_response.latency,
             model_provider_name,
+            cached: false,
+        }
+    }
+
+    pub fn from_cache(
+        cache_lookup: CacheData,
+        request: &ModelInferenceRequest<'_>,
+        model_provider_name: &str,
+    ) -> Self {
+        Self {
+            id: Uuid::now_v7(),
+            created: current_timestamp(),
+            output: cache_lookup.output,
+            system: request.system.clone(),
+            input_messages: request.messages.clone(), // maybe we can clean this up
+            raw_request: cache_lookup.raw_request,
+            raw_response: cache_lookup.raw_response,
+            usage: Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+            },
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            model_provider_name: Arc::from(model_provider_name),
+            cached: true,
         }
     }
 }
@@ -481,6 +512,7 @@ impl ModelInferenceResponseWithMetadata {
             latency: model_inference_response.latency,
             model_provider_name: model_inference_response.model_provider_name,
             model_name,
+            cached: model_inference_response.cached,
         }
     }
 }
@@ -516,6 +548,7 @@ impl ModelInferenceDatabaseInsert {
             ttft_ms,
             model_provider_name: result.model_provider_name.to_string(),
             model_name: result.model_name.to_string(),
+            cached: result.cached,
         }
     }
 }
@@ -545,11 +578,15 @@ impl ProviderInferenceResponse {
 }
 
 impl InferenceResult {
-    pub fn get_serialized_model_inferences(&self) -> Vec<serde_json::Value> {
-        let model_inference_responses = match self {
+    pub fn model_inference_results(&self) -> &Vec<ModelInferenceResponseWithMetadata> {
+        match self {
             InferenceResult::Chat(chat_result) => &chat_result.model_inference_results,
             InferenceResult::Json(json_result) => &json_result.model_inference_results,
-        };
+        }
+    }
+
+    pub fn get_serialized_model_inferences(&self) -> Vec<serde_json::Value> {
+        let model_inference_responses = self.model_inference_results();
         let inference_id = match self {
             InferenceResult::Chat(chat_result) => chat_result.inference_id,
             InferenceResult::Json(json_result) => json_result.inference_id,
@@ -736,14 +773,12 @@ pub fn current_timestamp() -> u64 {
 
 impl ProviderInferenceResponseChunk {
     pub fn new(
-        inference_id: Uuid,
         content: Vec<ContentBlockChunk>,
         usage: Option<Usage>,
         raw_response: String,
         latency: Duration,
     ) -> Self {
         Self {
-            inference_id,
             content,
             created: current_timestamp(),
             usage,
@@ -754,13 +789,6 @@ impl ProviderInferenceResponseChunk {
 }
 
 impl InferenceResultChunk {
-    pub fn inference_id(&self) -> Uuid {
-        match self {
-            InferenceResultChunk::Chat(chunk) => chunk.inference_id,
-            InferenceResultChunk::Json(chunk) => chunk.inference_id,
-        }
-    }
-
     pub fn latency(&self) -> Duration {
         match self {
             InferenceResultChunk::Chat(chunk) => chunk.latency,
@@ -795,7 +823,6 @@ impl InferenceResultChunk {
 impl From<ProviderInferenceResponseChunk> for ChatInferenceResultChunk {
     fn from(chunk: ProviderInferenceResponseChunk) -> Self {
         Self {
-            inference_id: chunk.inference_id,
             content: chunk.content,
             created: chunk.created,
             usage: chunk.usage,
@@ -839,7 +866,6 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
         };
 
         Self {
-            inference_id: chunk.inference_id,
             raw,
             created: chunk.created,
             usage: chunk.usage,
@@ -852,6 +878,8 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
 // Define the CollectChunksArgs struct with existing and new fields
 pub struct CollectChunksArgs<'a, 'b> {
     pub value: Vec<InferenceResultChunk>,
+    pub inference_id: Uuid,
+    pub episode_id: Uuid,
     pub function: Arc<FunctionConfig>,
     pub model_name: Arc<str>,
     pub model_provider_name: Arc<str>,
@@ -871,6 +899,8 @@ pub struct CollectChunksArgs<'a, 'b> {
 pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<InferenceResult, Error> {
     let CollectChunksArgs {
         value,
+        inference_id,
+        episode_id,
         function,
         model_name,
         model_provider_name,
@@ -886,17 +916,6 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
-
-    let inference_id = value
-        .first()
-        .ok_or_else(|| {
-            Error::new(ErrorDetails::TypeConversion {
-                message:
-                    "Attempted to create an InferenceResult from an empty response chunk vector"
-                        .to_string(),
-            })
-        })?
-        .inference_id();
     let mut tool_call_blocks: HashMap<String, ContentBlock> = HashMap::new();
     let mut text_blocks: HashMap<String, ContentBlock> = HashMap::new();
     let raw_response: String = value
@@ -1016,6 +1035,10 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, model_name);
     let inference_config = InferenceConfig {
+        ids: InferenceIds {
+            inference_id,
+            episode_id,
+        },
         function_name,
         variant_name: Some(variant_name),
         tool_config,
@@ -1129,6 +1152,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
         let chat_inference_response = ChatInferenceResult::new(
             inference_id,
@@ -1175,6 +1199,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let weather_tool_config = get_temperature_tool_config();
@@ -1221,6 +1246,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1266,6 +1292,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1327,6 +1354,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1410,6 +1438,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1500,6 +1529,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1548,6 +1578,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1618,6 +1649,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1672,6 +1704,7 @@ mod tests {
             },
             model_provider_name: "test_provider".into(),
             model_name: "test_model".into(),
+            cached: false,
         }];
 
         let chat_inference_response = ChatInferenceResult::new(
@@ -1709,6 +1742,8 @@ mod tests {
         let model_provider_name = "test_provider";
         let raw_request = "raw request".to_string();
         let collect_chunks_args = CollectChunksArgs {
+            inference_id: Uuid::now_v7(),
+            episode_id: Uuid::now_v7(),
             value: chunks,
             system: None,
             input_messages: vec![],
@@ -1736,6 +1771,7 @@ mod tests {
 
         // Test case 2: non-empty chunks with no tool calls but content exists
         let inference_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
         let created = current_timestamp();
         let content = vec![ContentBlockChunk::Text(TextChunk {
             text: "Hello,".to_string(),
@@ -1744,7 +1780,6 @@ mod tests {
         let latency = Duration::from_millis(150);
         let chunks = vec![
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
-                inference_id,
                 content,
                 created,
                 usage: None,
@@ -1752,7 +1787,6 @@ mod tests {
                 latency,
             }),
             InferenceResultChunk::Chat(ChatInferenceResultChunk {
-                inference_id,
                 content: vec![ContentBlockChunk::Text(TextChunk {
                     text: " world!".to_string(),
                     id: "0".to_string(),
@@ -1767,6 +1801,8 @@ mod tests {
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
+            inference_id,
+            episode_id,
             value: chunks,
             system: None,
             input_messages: vec![],
@@ -1837,7 +1873,6 @@ mod tests {
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                inference_id,
                 raw: "{\"name\":".to_string(),
                 created,
                 usage: Some(usage1.clone()),
@@ -1845,7 +1880,6 @@ mod tests {
                 latency: Duration::from_millis(150),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                inference_id,
                 raw: "\"John\",\"age\":30}".to_string(),
                 created,
                 usage: Some(usage2.clone()),
@@ -1856,6 +1890,8 @@ mod tests {
         let collect_chunks_args = CollectChunksArgs {
             value: chunks,
             system: None,
+            inference_id,
+            episode_id,
             input_messages: vec![],
             function: json_function_config.clone(),
             model_name: model_name.into(),
@@ -1908,7 +1944,6 @@ mod tests {
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                inference_id,
                 raw: "{\"name\":".to_string(),
                 created,
                 usage: Some(usage.clone()),
@@ -1916,7 +1951,6 @@ mod tests {
                 latency: Duration::from_millis(100),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                inference_id,
                 raw: "\"John\"}".to_string(),
                 created,
                 usage: None,
@@ -1926,6 +1960,8 @@ mod tests {
         ];
         let collect_chunks_args = CollectChunksArgs {
             value: chunks,
+            inference_id,
+            episode_id,
             system: None,
             input_messages: vec![],
             function: json_function_config.clone(),
@@ -1962,6 +1998,7 @@ mod tests {
 
         // Test case 5: chunks with some None content
         let inference_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
         let created = current_timestamp();
         let usage = Usage {
             input_tokens: 15,
@@ -1969,7 +2006,6 @@ mod tests {
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                inference_id,
                 raw: "{\"name\":\"John\",".to_string(),
                 created,
                 usage: Some(usage.clone()),
@@ -1977,7 +2013,6 @@ mod tests {
                 latency: Duration::from_millis(100),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                inference_id,
                 raw: "".to_string(),
                 created,
                 usage: None,
@@ -1985,7 +2020,6 @@ mod tests {
                 latency: Duration::from_millis(200),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                inference_id,
                 raw: "\"age\":30}".to_string(),
                 created,
                 usage: None,
@@ -1995,6 +2029,8 @@ mod tests {
         ];
         let collect_chunks_args = CollectChunksArgs {
             value: chunks,
+            inference_id,
+            episode_id,
             system: None,
             input_messages: vec![],
             function: function_config.clone(),
@@ -2060,7 +2096,6 @@ mod tests {
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                inference_id,
                 raw: "{\"name\":".to_string(),
                 created,
                 usage: Some(usage1.clone()),
@@ -2068,7 +2103,6 @@ mod tests {
                 latency: Duration::from_millis(150),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                inference_id,
                 raw: "\"John\",\"age\":30}".to_string(),
                 created,
                 usage: Some(usage2.clone()),
@@ -2077,6 +2111,8 @@ mod tests {
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
+            inference_id,
+            episode_id,
             value: chunks,
             system: None,
             input_messages: vec![],
@@ -2159,7 +2195,6 @@ mod tests {
         let templates = TemplateConfig::default();
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                inference_id,
                 raw: "{\"name\":".to_string(),
                 created,
                 usage: Some(usage1.clone()),
@@ -2167,7 +2202,6 @@ mod tests {
                 latency: Duration::from_millis(150),
             }),
             InferenceResultChunk::Json(JsonInferenceResultChunk {
-                inference_id,
                 raw: "\"John\",\"age\":30}".to_string(),
                 created,
                 usage: Some(usage2.clone()),
@@ -2176,6 +2210,8 @@ mod tests {
             }),
         ];
         let collect_chunks_args = CollectChunksArgs {
+            inference_id,
+            episode_id,
             value: chunks,
             system: None,
             input_messages: vec![],

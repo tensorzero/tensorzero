@@ -49,7 +49,7 @@ impl Migration for Migration0002<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, namespace);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string()).await?;
+        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
         Ok(())
     }
 

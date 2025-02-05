@@ -116,7 +116,7 @@ sniffio==1.3.1
     #   openai
 stack-data==0.6.3
     # via ipython
-tensorzero==2025.1.7
+tensorzero==2025.2.0
     # via -r requirements.in
 toml==0.10.2
     # via -r requirements.in

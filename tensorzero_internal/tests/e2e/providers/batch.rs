@@ -453,7 +453,7 @@ async fn get_latest_batch_inference(
         "#,
         function_name, variant_name, status, tag_filter
     );
-    let response = clickhouse.run_query(query).await.unwrap();
+    let response = clickhouse.run_query(query, None).await.unwrap();
     if response.is_empty() {
         return None;
     }
@@ -469,7 +469,7 @@ async fn get_all_batch_inferences(
         "SELECT * FROM BatchModelInference WHERE batch_id = '{}' FORMAT JSONEachRow",
         batch_id,
     );
-    let response = clickhouse.run_query(query).await.unwrap();
+    let response = clickhouse.run_query(query, None).await.unwrap();
     let rows = response
         .lines()
         .filter(|line| !line.is_empty())
@@ -647,13 +647,18 @@ pub async fn test_start_simple_batch_inference_request_with_provider(provider: E
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        expected_max_tokens
     );
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
@@ -750,7 +755,7 @@ pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
 
     // Check the response from polling by inference_id
     let inference_id = inferences_json[0]
@@ -775,7 +780,7 @@ pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
 
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -830,7 +835,7 @@ pub async fn test_poll_completed_simple_batch_inference_request_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
 
     // Poll by batch_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -855,7 +860,7 @@ pub async fn test_poll_completed_simple_batch_inference_request_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
 }
 
 pub async fn test_start_inference_params_batch_inference_request_with_provider(
@@ -1194,7 +1199,7 @@ pub async fn test_poll_completed_inference_params_batch_inference_request_with_p
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true).await;
+    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
 
     // Poll by batch_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -1574,16 +1579,22 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         }),
     ];
 
+    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
+
     let expected_inference_params = vec![
         json!({
             "chat_completion": {
-                "max_tokens": 100,
+                "max_tokens": expected_max_tokens,
             }
         }),
-        json!({"chat_completion": {"max_tokens": 100}}),
-        json!({"chat_completion": {"max_tokens": 100}}),
-        json!({"chat_completion": {"max_tokens": 100}}),
-        json!({"chat_completion": {"max_tokens": 100}}),
+        json!({"chat_completion": {"max_tokens": expected_max_tokens}}),
+        json!({"chat_completion": {"max_tokens": expected_max_tokens}}),
+        json!({"chat_completion": {"max_tokens": expected_max_tokens}}),
+        json!({"chat_completion": {"max_tokens": expected_max_tokens}}),
     ];
 
     for inference_id in inference_ids {
@@ -2081,12 +2092,17 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
+    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     let max_tokens = inference_params
         .get("max_tokens")
         .unwrap()
         .as_u64()
         .unwrap();
-    assert_eq!(max_tokens, 100);
+    assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
@@ -2483,13 +2499,18 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        expected_max_tokens
     );
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
@@ -2864,12 +2885,17 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
+    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     let max_tokens = inference_params
         .get("max_tokens")
         .unwrap()
         .as_u64()
         .unwrap();
-    assert_eq!(max_tokens, 100);
+    assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
@@ -3476,11 +3502,13 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
         .send()
         .await
         .unwrap();
-    // Check if the API response is fine
-    assert_eq!(response.status(), StatusCode::OK);
+    let response_status = response.status();
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
+    // Check if the API response is fine
+    assert_eq!(response_status, StatusCode::OK);
+
     let batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
     let batch_id = Uuid::parse_str(batch_id).unwrap();
 
@@ -3563,12 +3591,17 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
+    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     let max_tokens = inference_params
         .get("max_tokens")
         .unwrap()
         .as_u64()
         .unwrap();
-    assert_eq!(max_tokens, 100);
+    assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);
@@ -3911,7 +3944,12 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
         .unwrap()
         .as_u64()
         .unwrap();
-    assert_eq!(max_tokens, 100);
+    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
+    assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
     assert_eq!(model_name, provider.model_name);

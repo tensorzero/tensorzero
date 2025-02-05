@@ -23,6 +23,7 @@ use serde_json::Value;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
+use crate::cache::CacheParamsOptions;
 use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
@@ -53,7 +54,7 @@ pub async fn inference_handler(
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
     let params = (headers, openai_compatible_params).try_into()?;
-    let response = inference(config, http_client, clickhouse_connection_info, params).await?;
+    let response = inference(config, &http_client, clickhouse_connection_info, params).await?;
     match response {
         InferenceOutput::NonStreaming(response) => {
             let openai_compatible_response = OpenAICompatibleResponse::from(response);
@@ -331,7 +332,8 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             _ => None,
         };
         Ok(Params {
-            function_name: function_name.to_string(),
+            function_name: Some(function_name.to_string()),
+            model_name: None,
             episode_id,
             input,
             stream: openai_compatible_params.stream,
@@ -342,6 +344,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             output_schema,
             // OpenAI compatible endpoint does not support dynamic credentials
             credentials: InferenceCredentials::default(),
+            cache_options: CacheParamsOptions::default(),
             tags: HashMap::new(),
         })
     }
@@ -753,7 +756,7 @@ mod tests {
         )
             .try_into()
             .unwrap();
-        assert_eq!(params.function_name, "test_function");
+        assert_eq!(params.function_name, Some("test_function".to_string()));
         assert_eq!(params.episode_id, Some(episode_id));
         assert_eq!(params.variant_name, Some("test_variant".to_string()));
         assert_eq!(params.input.messages.len(), 1);

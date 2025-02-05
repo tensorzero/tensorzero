@@ -113,8 +113,8 @@ WITH sub AS (
         i.variant_name AS variant_name,
         i.episode_id AS episode_id,
         any(f.value) AS value_per_episode
-    FROM tensorzero.${inference_table_name} i
-    JOIN tensorzero.${metric_table_name} f
+    FROM ${inference_table_name} i
+    JOIN ${metric_table_name} f
         ON i.episode_id = f.target_id
     WHERE
         f.metric_name = {metric_name:String}
@@ -160,8 +160,8 @@ WITH sub AS (
            multiple values per episode.
         */
         any(f.value) AS value_per_episode
-    FROM tensorzero.${inference_table_name} i
-    JOIN tensorzero.${metric_table_name} f
+    FROM ${inference_table_name} i
+    JOIN ${metric_table_name} f
         ON i.episode_id = f.target_id
     WHERE
         /* Filter for the metric you're interested in. */
