@@ -29,11 +29,15 @@ use super::{
     InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, RetryConfig, Variant,
 };
 
+fn json_mode_strict() -> JsonMode {
+    JsonMode::Strict
+}
+
 /// The primary configuration for the Dicl variant
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DiclConfig {
     pub weight: f64,
     pub embedding_model: Arc<str>,
@@ -48,6 +52,26 @@ pub struct DiclConfig {
     pub seed: Option<u32>,
     pub json_mode: JsonMode,
     pub retries: RetryConfig,
+}
+
+impl Default for DiclConfig {
+    fn default() -> Self {
+        Self {
+            weight: Default::default(),
+            embedding_model: Default::default(),
+            k: Default::default(),
+            model: Default::default(),
+            system_instructions: Default::default(),
+            temperature: Default::default(),
+            top_p: Default::default(),
+            presence_penalty: Default::default(),
+            frequency_penalty: Default::default(),
+            max_tokens: Default::default(),
+            seed: Default::default(),
+            json_mode: JsonMode::Strict,
+            retries: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,7 +89,7 @@ pub struct UninitializedDiclConfig {
     pub frequency_penalty: Option<f32>,
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
-    #[serde(default)]
+    #[serde(default = "json_mode_strict")]
     pub json_mode: JsonMode,
     #[serde(default)]
     pub retries: RetryConfig,
@@ -489,7 +513,7 @@ impl DiclConfig {
             inference_config,
             stream,
             inference_params,
-            &self.json_mode,
+            Some(self.json_mode),
         )
     }
 }

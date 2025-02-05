@@ -610,7 +610,7 @@ mod tests {
             .get("openai_promptA")
             .unwrap()
         {
-            VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
+            VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode.unwrap(),
             _ => panic!("Expected a chat completion variant"),
         };
         assert_eq!(prompt_a_json_mode, &JsonMode::ImplicitTool);
@@ -623,11 +623,12 @@ mod tests {
             .get("openai_promptB")
             .unwrap()
         {
-            VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
+            VariantConfig::ChatCompletion(chat_config) => chat_config.json_mode,
             _ => panic!("Expected a chat completion variant"),
         };
-        // The default json mode is strict, so this should be strict
-        assert_eq!(prompt_b_json_mode, &JsonMode::Strict);
+        // The json mode is unset (the default will get filled in when we construct a request,
+        // using the variant mode (json/chat)).
+        assert_eq!(prompt_b_json_mode, None);
         // Check that the tool choice for get_weather is set to "specific" and the correct tool
         let function = config.functions.get("weather_helper").unwrap();
         match &**function {

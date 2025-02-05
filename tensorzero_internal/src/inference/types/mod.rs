@@ -1073,8 +1073,8 @@ pub type ProviderInferenceResponseStream =
 pub type InferenceResultStream =
     Pin<Box<dyn Stream<Item = Result<InferenceResultChunk, Error>> + Send>>;
 
-impl From<&JsonMode> for ModelInferenceRequestJsonMode {
-    fn from(json_enforcement: &JsonMode) -> Self {
+impl From<JsonMode> for ModelInferenceRequestJsonMode {
+    fn from(json_enforcement: JsonMode) -> Self {
         match json_enforcement {
             JsonMode::On => ModelInferenceRequestJsonMode::On,
             JsonMode::Strict => ModelInferenceRequestJsonMode::Strict,
