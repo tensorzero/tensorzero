@@ -19,7 +19,7 @@ use pyo3::{
     types::{PyDict, PyString, PyType},
 };
 use python_helpers::{
-    deserialize_from_json, parse_feedback_response, parse_inference_chunk,
+    deserialize_from_pydict, parse_feedback_response, parse_inference_chunk,
     parse_inference_response, parse_tool, python_uuid_to_uuid, serialize_to_dict,
 };
 use tensorzero_rust::{
@@ -238,7 +238,7 @@ impl BaseTensorZeroGateway {
     ) -> PyResult<FeedbackParams> {
         Ok(FeedbackParams {
             metric_name,
-            value: deserialize_from_json(py, &value)?,
+            value: deserialize_from_pydict(py, &value)?,
             episode_id: python_uuid_to_uuid("episode_id", episode_id)?,
             inference_id: python_uuid_to_uuid("inference_id", inference_id)?,
             dryrun,
@@ -269,7 +269,7 @@ impl BaseTensorZeroGateway {
         let episode_id = python_uuid_to_uuid("episode_id", episode_id)?;
 
         let params: Option<InferenceParams> = if let Some(params) = params {
-            deserialize_from_json(py, params)?
+            deserialize_from_pydict(py, params)?
         } else {
             None
         };
@@ -295,24 +295,24 @@ impl BaseTensorZeroGateway {
                     })?,
                 )
             } else {
-                Some(deserialize_from_json(py, &tool_choice)?)
+                Some(deserialize_from_pydict(py, &tool_choice)?)
             }
         } else {
             None
         };
 
         let cache_options: Option<CacheParamsOptions> = if let Some(cache_options) = cache_options {
-            Some(deserialize_from_json(py, cache_options)?)
+            Some(deserialize_from_pydict(py, cache_options)?)
         } else {
             None
         };
         let output_schema: Option<serde_json::Value> = if let Some(output_schema) = output_schema {
-            Some(deserialize_from_json(py, output_schema)?)
+            Some(deserialize_from_pydict(py, output_schema)?)
         } else {
             None
         };
 
-        let input: Input = deserialize_from_json(py, &input)?;
+        let input: Input = deserialize_from_pydict(py, &input)?;
 
         Ok(ClientInferenceParams {
             function_name,
