@@ -267,7 +267,7 @@ pub struct JsonInferenceOutput {
 /// converted into an InferenceResponseChunk and sent to the client.
 /// We then collect all the InferenceResultChunks into an InferenceResult for validation and storage after the fact.
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ProviderInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
     pub created: u64,
@@ -457,6 +457,7 @@ impl ModelInferenceResponse {
     pub fn new(
         provider_inference_response: ProviderInferenceResponse,
         model_provider_name: Arc<str>,
+        cached: bool,
     ) -> Self {
         Self {
             id: provider_inference_response.id,
@@ -469,7 +470,7 @@ impl ModelInferenceResponse {
             usage: provider_inference_response.usage,
             latency: provider_inference_response.latency,
             model_provider_name,
-            cached: false,
+            cached,
         }
     }
 
@@ -481,7 +482,7 @@ impl ModelInferenceResponse {
         Self {
             id: Uuid::now_v7(),
             created: current_timestamp(),
-            output: cache_lookup.output.chunks,
+            output: cache_lookup.output.blocks,
             system: request.system.clone(),
             input_messages: request.messages.clone(), // maybe we can clean this up
             raw_request: cache_lookup.raw_request,
@@ -893,6 +894,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
     pub templates: &'a TemplateConfig<'a>,
     pub tool_config: Option<&'b ToolCallConfig>,
+    pub cached: bool,
 }
 
 // Modify the collect_chunks function to accept CollectChunksArgs
@@ -914,6 +916,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         dynamic_output_schema,
         templates,
         tool_config,
+        cached,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -1032,7 +1035,8 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         usage.clone(),
         latency.clone(),
     );
-    let model_inference_response = ModelInferenceResponse::new(model_response, model_provider_name);
+    let model_inference_response =
+        ModelInferenceResponse::new(model_response, model_provider_name, cached);
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, model_name);
     let inference_config = InferenceConfig {
@@ -1758,6 +1762,7 @@ mod tests {
             dynamic_output_schema: None,
             templates: &templates,
             tool_config: None,
+            cached: false,
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
@@ -1817,6 +1822,7 @@ mod tests {
             dynamic_output_schema: None,
             templates: &templates,
             tool_config: None,
+            cached: false,
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
@@ -1904,6 +1910,7 @@ mod tests {
             dynamic_output_schema: None,
             templates: &templates,
             tool_config: None,
+            cached: false,
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {
@@ -1975,6 +1982,7 @@ mod tests {
             dynamic_output_schema: None,
             templates: &templates,
             tool_config: None,
+            cached: false,
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert!(result.is_ok());
@@ -2044,6 +2052,7 @@ mod tests {
             dynamic_output_schema: None,
             templates: &templates,
             tool_config: None,
+            cached: false,
         };
         let result = collect_chunks(collect_chunks_args).await;
         if let Ok(InferenceResult::Chat(chat_response)) = result {
@@ -2127,6 +2136,7 @@ mod tests {
             dynamic_output_schema: None,
             templates: &templates,
             tool_config: None,
+            cached: false,
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {
@@ -2226,6 +2236,7 @@ mod tests {
             dynamic_output_schema: Some(dynamic_output_schema),
             templates: &templates,
             tool_config: None,
+            cached: false,
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {

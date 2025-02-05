@@ -1,4 +1,3 @@
-use crate::inference::types::batch::deserialize_json_string;
 use futures::StreamExt;
 use reqwest::Client;
 use secrecy::SecretString;
@@ -14,7 +13,7 @@ use url::Url;
 
 use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
-    CacheData, CachedProviderInferenceResponseChunk, ModelProviderRequest,
+    CacheData, ModelProviderRequest, StreamingCacheData,
 };
 use crate::endpoints::inference::InferenceClients;
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -48,7 +47,7 @@ use crate::{
         },
     },
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -62,13 +61,6 @@ pub struct StreamResponse {
     pub raw_request: String,
     pub model_provider_name: Arc<str>,
     pub cached: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(transparent)]
-pub struct StreamingCacheData {
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub chunks: Vec<CachedProviderInferenceResponseChunk>,
 }
 
 impl StreamResponse {
@@ -159,8 +151,9 @@ impl ModelConfig {
                             &response.raw_response,
                         );
                     }
+                    // We already checked the cache above (and returned early if it was a hit), so this response was not from the cache
                     let model_inference_response =
-                        ModelInferenceResponse::new(response, provider_name.clone());
+                        ModelInferenceResponse::new(response, provider_name.clone(), false);
 
                     return Ok(model_inference_response);
                 }

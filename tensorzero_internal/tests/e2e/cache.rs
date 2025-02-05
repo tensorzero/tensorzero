@@ -360,9 +360,6 @@ pub async fn check_test_streaming_cache_with_err(
             }
         }
 
-        let chunk_cached = chunk_json.get("cached").unwrap().as_bool().unwrap();
-        assert_eq!(chunk_cached, expect_cached);
-
         let chunk_episode_id = chunk_json.get("episode_id").unwrap().as_str().unwrap();
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
@@ -480,6 +477,9 @@ pub async fn check_test_streaming_cache_with_err(
 
     let model_inference_id = result.get("id").unwrap().as_str().unwrap();
     assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let result_cached = result.get("cached").unwrap().as_bool().unwrap();
+    assert_eq!(result_cached, expect_cached);
 
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();

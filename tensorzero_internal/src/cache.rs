@@ -8,7 +8,7 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ModelInferenceRequest, ModelInferenceResponse,
     ProviderInferenceResponseChunk,
 };
-use crate::model::{StreamResponse, StreamingCacheData};
+use crate::model::StreamResponse;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -149,7 +149,7 @@ pub struct CacheData<T: CacheOutput> {
 /// A marker trait for types that can be used in the 'output' field of `CacheData`
 /// This ensures that we don't accidentally try to serialize/deserialize the wrong type
 /// to/from ClickHouse
-/// We use a marker type rather than an enum so that the expected type can be enforced by the caller
+/// We use a marker trait rather than an enum so that the expected type can be enforced by the caller
 /// (e.g. `infer_stream` will never try to deserialize a `NonStreamingCacheData`)
 pub trait CacheOutput {}
 
@@ -160,7 +160,14 @@ impl CacheOutput for NonStreamingCacheData {}
 #[serde(transparent)]
 pub struct NonStreamingCacheData {
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub chunks: Vec<ContentBlock>,
+    pub blocks: Vec<ContentBlock>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct StreamingCacheData {
+    #[serde(deserialize_with = "deserialize_json_string")]
+    pub chunks: Vec<CachedProviderInferenceResponseChunk>,
 }
 
 // This doesn't block
@@ -185,7 +192,7 @@ pub fn start_cache_write(
                     short_cache_key,
                     long_cache_key,
                     data: CacheData {
-                        output: NonStreamingCacheData { chunks: output },
+                        output: NonStreamingCacheData { blocks: output },
                         raw_request,
                         raw_response,
                     },
@@ -206,6 +213,7 @@ pub struct CachedProviderInferenceResponseChunk {
     pub raw_response: String,
 }
 
+// This starts a trailing write to the cache (without blocking the http response)
 pub fn start_cache_write_streaming(
     clickhouse_client: &ClickHouseConnectionInfo,
     cache_key: CacheKey,

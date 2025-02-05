@@ -107,6 +107,7 @@ struct InferenceMetadata {
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
+    #[allow(dead_code)] // We may start exposing this in the response
     pub cached: bool,
 }
 
@@ -490,7 +491,7 @@ fn create_stream(
                 tags,
                 tool_config,
                 dynamic_output_schema,
-                cached: _,
+                cached,
             } = metadata;
 
             let config = config.clone();
@@ -512,6 +513,7 @@ fn create_stream(
                     dynamic_output_schema,
                     templates,
                     tool_config: tool_config.as_ref(),
+                    cached,
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;
@@ -551,7 +553,6 @@ fn prepare_response_chunk(
         metadata.inference_id,
         metadata.episode_id,
         metadata.variant_name.clone(),
-        metadata.cached,
     )
 }
 
@@ -695,7 +696,6 @@ pub struct ChatInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
-    pub cached: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -706,7 +706,6 @@ pub struct JsonInferenceResponseChunk {
     pub raw: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
-    pub cached: bool,
 }
 
 impl InferenceResponseChunk {
@@ -715,7 +714,6 @@ impl InferenceResponseChunk {
         inference_id: Uuid,
         episode_id: Uuid,
         variant_name: String,
-        cached: bool,
     ) -> Self {
         match inference_result {
             InferenceResultChunk::Chat(result) => {
@@ -725,7 +723,6 @@ impl InferenceResponseChunk {
                     variant_name,
                     content: result.content,
                     usage: result.usage,
-                    cached,
                 })
             }
             InferenceResultChunk::Json(result) => {
@@ -735,7 +732,6 @@ impl InferenceResponseChunk {
                     variant_name,
                     raw: result.raw,
                     usage: result.usage,
-                    cached,
                 })
             }
         }
