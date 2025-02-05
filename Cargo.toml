@@ -6,6 +6,7 @@ members = [
     "ui/app/utils/minijinja",
     "clients/rust",
     "clients/python-pyo3",
+    "provider-proxy",
 ]
 resolver = "2"
 

@@ -1,0 +1,250 @@
+//! An HTTP/HTTPS proxy that caches non-error responses to disk.
+//! Heavily based on https://github.com/hatoo/http-mitm-proxy (MIT-licensed),
+//! with the openssl dependency and `default_client` removed.
+#![allow(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
+
+mod mitm_server;
+mod streaming_body_collector;
+mod tls;
+
+use std::{fs::OpenOptions, future::Future};
+use std::io::Write;
+use std::path::PathBuf;
+
+use anyhow::Context as _;
+use bytes::{Bytes, BytesMut};
+use clap::Parser;
+use http_body_util::{BodyExt, Full, combinators::BoxBody};
+use hyper::service::service_fn;
+use mitm_server::MitmProxy;
+use moka::sync::Cache;
+use sha2::{Digest, Sha256};
+use streaming_body_collector::StreamingBodyCollector;
+use tokio::sync::oneshot;
+use tracing::level_filters::LevelFilter;
+
+fn make_root_cert() -> rcgen::CertifiedKey {
+    let mut param = rcgen::CertificateParams::default();
+
+    param.distinguished_name = rcgen::DistinguishedName::new();
+    param.distinguished_name.push(
+        rcgen::DnType::CommonName,
+        rcgen::DnValue::Utf8String("<HTTP-MITM-PROXY CA>".to_string()),
+    );
+    param.key_usages = vec![
+        rcgen::KeyUsagePurpose::KeyCertSign,
+        rcgen::KeyUsagePurpose::CrlSign,
+    ];
+    param.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+
+    let key_pair = rcgen::KeyPair::generate().unwrap();
+    let cert = param.self_signed(&key_pair).unwrap();
+
+    rcgen::CertifiedKey { cert, key_pair }
+}
+
+fn hash_value(request: &serde_json::Value) -> Result<String, anyhow::Error> {
+    let mut hasher = Sha256::new();
+    hasher.update(
+        serde_json::to_string(&request).with_context(|| "Failed to stringify request json")?,
+    );
+    Ok(hex::encode(hasher.finalize()))
+}
+
+fn save_cache_body(
+    path: PathBuf,
+    parts: http::response::Parts,
+    body: BytesMut,
+) -> Result<(), anyhow::Error> {
+    let path_str = path.to_string_lossy().into_owned();
+    tracing::info!(path = path_str, "Finished processing request");
+    match OpenOptions::new().write(true).create_new(true).open(&path) {
+        Ok(mut file) => {
+            let mut reconstructed = hyper::Response::from_parts(parts, body);
+            reconstructed.extensions_mut().clear();
+            let json_response =
+                http_serde_ext::response::serialize(&reconstructed, serde_json::value::Serializer)
+                    .with_context(|| format!("Failed to serialize response for path {path_str}"))?;
+            let json_str = serde_json::to_string(&json_response)
+                .with_context(|| format!("Failed to stringify response for path {path_str}"))?;
+            file.write_all(json_str.as_bytes())
+                .with_context(|| format!("Failed to write to file for path {path_str}"))?;
+            tracing::info!(path = path_str, "Wrote response to cache");
+            Ok(())
+        }
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::AlreadyExists {
+                // Log the error but otherwise continue on, as it's the client's fault
+                tracing::error!(
+                    path = path_str,
+                    "Cache file already exists - two duplicate requests were likely made in parallel"
+                );
+                Ok(())
+            } else {
+                Err(e).with_context(|| format!("Failed to open cache file for path {path_str}"))
+            }
+        }
+    }
+}
+
+async fn check_cache<
+    E: std::fmt::Debug + 'static,
+    T: Future<Output = Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error>>,
+    F: FnOnce() -> T,
+>(
+    cache_path: PathBuf,
+    request: &hyper::Request<Bytes>,
+    missing: F,
+) -> Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error> {
+    let mut request = request.clone();
+    request.extensions_mut().clear();
+    let json_request = http_serde_ext::request::serialize(&request, serde_json::value::Serializer)
+        .with_context(|| "Failed to serialize request")?;
+    let hash = hash_value(&json_request)?;
+    let filename = format!(
+        "{}-{}",
+        request.uri().host().expect("Missing request host"),
+        hash
+    );
+
+    let path = cache_path.join(filename);
+    let path_str = path.to_string_lossy().into_owned();
+    if path.exists() {
+        tracing::info!("Cache hit: {}", path_str);
+        let path_str_clone = path_str.clone();
+        tokio::task::spawn_blocking(move || {
+            let file = std::fs::read_to_string(path)
+                .with_context(|| format!("Failed to read cache file {path_str}"))?;
+            let response: serde_json::Value = serde_json::from_str(&file).with_context(|| {
+                format!("Failed to deserialize response to JSON from {path_str}")
+            })?;
+            let response: hyper::Response<Bytes> = http_serde_ext::response::deserialize(response)
+                .with_context(|| format!("Failed to deserialize HTTP response from {path_str}"))?;
+            Ok(response.map(|b| BoxBody::new(Full::new(b).map_err(|e| match e {}))))
+        })
+        .await
+        .with_context(|| format!("Failed to await tokio spawn_blocking for {path_str_clone}"))?
+    } else {
+        tracing::info!("Cache miss: {}", path_str);
+        let response = match missing().await {
+            Ok(response) => response,
+            Err(e) => {
+                tracing::error!(
+                    e = e.as_ref() as &dyn std::error::Error,
+                    "Failed to forward request"
+                );
+                let body = Full::new(Bytes::from(format!("Failed to forward request: {e:?}")));
+                let resp = http::Response::builder()
+                    .status(http::StatusCode::BAD_GATEWAY)
+                    .body(BoxBody::new(body.map_err(|e| match e {})))
+                    .unwrap();
+                return Ok(resp);
+            }
+        };
+        if response.status().is_success() {
+            let (parts, body) = response.into_parts();
+            let mut hyper_response = hyper::Response::from_parts(parts.clone(), body);
+            // We need to clear the extensions in order to be able to serialize the response
+            hyper_response.extensions_mut().clear();
+
+            // Start streaming the response to the client, running the provided callback once the whole body has been received
+            // This lets us forward streaming responses without needing to wait for the entire response, while
+            // still caching the entire response to disk.
+            let body_collector = hyper_response.map(|b| {
+                StreamingBodyCollector::new(
+                    b,
+                    Box::new(move |body| {
+                        tokio::task::spawn_blocking(move || {
+                            if let Err(e) = save_cache_body(path, parts, body) {
+                                tracing::error!(
+                                    err = e.as_ref() as &dyn std::error::Error,
+                                    "Failed to save cache body"
+                                );
+                            }
+                        });
+                    }),
+                )
+            });
+
+            Ok(body_collector.map(|b| BoxBody::new(b)))
+        } else {
+            tracing::warn!("Skipping caching of non-success response: {:?}", response);
+            Ok(response)
+        }
+    }
+}
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+pub struct Args {
+    /// Path to the cache directory
+    #[arg(long, default_value = "request_cache")]
+    pub cache_path: PathBuf,
+    /// Port to listen on
+    #[arg(long, default_value = "3003")]
+    pub port: u16,
+}
+
+pub async fn run_server(args: Args, server_started: oneshot::Sender<()>) {
+    use tracing_subscriber::EnvFilter;
+
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .try_init()
+        .unwrap();
+
+    std::fs::create_dir_all(&args.cache_path).expect("Failed to create cache directory");
+
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls ring provider");
+
+    let root_cert = make_root_cert();
+
+    let proxy = MitmProxy::new(
+        // This is the root cert that will be used to sign the fake certificates
+        Some(root_cert),
+        Some(Cache::new(128)),
+    );
+
+    let client = reqwest::Client::new();
+    let server = proxy
+        .bind(
+            ("127.0.0.1", args.port),
+            service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
+                let client = client.clone();
+                let cache_path = args.cache_path.clone();
+                async move {
+                    let (parts, body) = req.into_parts();
+                    let body_bytes = body
+                        .collect()
+                        .await
+                        .with_context(|| "Failed to collect body")?
+                        .to_bytes();
+                    let bytes_request = hyper::Request::from_parts(parts, body_bytes);
+                    let response = check_cache(cache_path, &bytes_request, || async {
+                        let request: reqwest::Request =
+                            bytes_request.clone().try_into().with_context(
+                                || "Failed to convert Request from `hyper` to `reqwest`",
+                            )?;
+                        Ok(http::Response::from(client.execute(request).await?).map(BoxBody::new))
+                    })
+                    .await?;
+
+                    Ok::<_, anyhow::Error>(response)
+                }
+            }),
+        )
+        .await
+        .unwrap();
+
+    tracing::info!("HTTP Proxy is listening on http://127.0.0.1:{}", args.port);
+    server_started
+        .send(())
+        .expect("Failed to send server started signal");
+    server.await;
+}
