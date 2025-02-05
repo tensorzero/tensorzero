@@ -4952,7 +4952,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    if provider.variant_name.contains("azure") || provider.variant_name.contains("together") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -6029,7 +6029,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     }
 
     // NB: Azure doesn't return usage during streaming
-    if provider.variant_name.contains("azure") {
+    if provider.variant_name.contains("azure") || provider.variant_name.contains("together") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -6194,7 +6194,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    if provider.variant_name.contains("azure") || provider.variant_name.contains("together") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -6694,7 +6694,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     }
 
     // NB: Azure doesn't return usage during streaming
-    if provider.variant_name.contains("azure") {
+    if provider.variant_name.contains("azure") || provider.variant_name.contains("together") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -6929,7 +6929,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    if provider.variant_name.contains("azure") || provider.variant_name.contains("together") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
