@@ -11,4 +11,5 @@ mod inference;
 mod mixture_of_n;
 mod prometheus;
 mod providers;
+mod proxy;
 mod retries;
