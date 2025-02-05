@@ -168,27 +168,27 @@ type = "google_ai_studio_gemini"
 model_name = "gemini-1.5-pro-002"
 api_key_location = "dynamic::google_ai_studio_api_key"
 
-[models."llama3.1-70b-instruct-fireworks"]
+[models."llama3.3-70b-instruct-fireworks"]
 routing = ["fireworks"]
 
-[models."llama3.1-70b-instruct-fireworks".providers.fireworks]
+[models."llama3.3-70b-instruct-fireworks".providers.fireworks]
 type = "fireworks"
 model_name = "accounts/fireworks/models/llama-v3p3-70b-instruct"
 
-[models."llama3.1-70b-instruct-fireworks-dynamic"]
+[models."llama3.3-70b-instruct-fireworks-dynamic"]
 routing = ["fireworks"]
 
-[models."llama3.1-70b-instruct-fireworks-dynamic".providers.fireworks]
+[models."llama3.3-70b-instruct-fireworks-dynamic".providers.fireworks]
 type = "fireworks"
 model_name = "accounts/fireworks/models/llama-v3p3-70b-instruct"
 api_key_location = "dynamic::fireworks_api_key"
 
-[models.firefunction-v2]
+[models.qwen2p5-72b-instruct]
 routing = ["fireworks"]
 
-[models.firefunction-v2.providers.fireworks]
+[models.qwen2p5-72b-instruct.providers.fireworks]
 type = "fireworks"
-model_name = "accounts/fireworks/models/firefunction-v2"
+model_name = "accounts/fireworks/models/qwen2p5-72b-instruct"
 
 [models."llama3.1-8b-instruct-together"]
 routing = ["together"]
@@ -516,25 +516,19 @@ max_tokens = 100
 
 [functions.basic_test.variants.fireworks]
 type = "chat_completion"
-model = "llama3.1-70b-instruct-fireworks"
+model = "qwen2p5-72b-instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.fireworks-dynamic]
 type = "chat_completion"
-model = "llama3.1-70b-instruct-fireworks-dynamic"
+model = "llama3.3-70b-instruct-fireworks-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.fireworks-shorthand]
 type = "chat_completion"
 model = "fireworks::accounts/fireworks/models/llama-v3p1-8b-instruct"
-system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
-
-[functions.basic_test.variants.fireworks-firefunction]
-type = "chat_completion"
-model = "firefunction-v2"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -852,7 +846,7 @@ max_tokens = 100
 
 [functions.json_success.variants.fireworks]
 type = "chat_completion"
-model = "llama3.1-70b-instruct-fireworks"
+model = "llama3.3-70b-instruct-fireworks"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -860,7 +854,7 @@ max_tokens = 100
 
 [functions.json_success.variants.fireworks-implicit]
 type = "chat_completion"
-model = "firefunction-v2"
+model = "qwen2p5-72b-instruct"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -1115,7 +1109,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.fireworks]
 type = "chat_completion"
-model = "llama3.1-70b-instruct-fireworks"
+model = "llama3.3-70b-instruct-fireworks"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
@@ -1123,7 +1117,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.fireworks-implicit]
 type = "chat_completion"
-model = "firefunction-v2"
+model = "qwen2p5-72b-instruct"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -1400,9 +1394,9 @@ model = "gpt-4o-mini-azure"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
-[functions.weather_helper.variants.fireworks-firefunction]
+[functions.weather_helper.variants.fireworks]
 type = "chat_completion"
-model = "firefunction-v2"
+model = "qwen2p5-72b-instruct"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -1472,12 +1466,6 @@ system_schema = "../../fixtures/config/functions/weather_helper_parallel/system_
 tools = ["get_temperature", "get_humidity"]
 tool_choice = "auto"
 # We use an inference-time parameter to set `parallel_tool_calls = true` for the test
-
-[functions.weather_helper_parallel.variants.fireworks-firefunction]
-type = "chat_completion"
-model = "firefunction-v2"
-system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
-max_tokens = 100
 
 [functions.weather_helper_parallel.variants.openai]
 type = "chat_completion"
