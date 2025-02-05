@@ -42,9 +42,10 @@ async fn main() {
     let args = Args::parse();
 
     let client = match (args.gateway_url, args.config_path) {
-        (Some(gateway_url), None) => {
-            ClientBuilder::new(ClientBuilderMode::HTTPGateway { url: gateway_url })
-        }
+        (Some(gateway_url), None) => ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+            url: gateway_url,
+            timeout: None,
+        }),
         (None, Some(config_path)) => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_path,
             clickhouse_url: std::env::var("CLICKHOUSE_URL").ok(),

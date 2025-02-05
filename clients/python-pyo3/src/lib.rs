@@ -8,7 +8,7 @@
 ///
 /// This module defines several Python classes (`BaseTensorZeroGateway`, `TensorZeroGateway`, `AsyncTensorZeroGateway`),
 /// and defines methods on them.
-use std::{collections::HashMap, future::Future, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use futures::StreamExt;
 use pyo3::{
@@ -138,10 +138,12 @@ impl StreamWrapper {
 #[pymethods]
 impl BaseTensorZeroGateway {
     #[new]
-    fn new(py: Python<'_>, base_url: &str) -> PyResult<Self> {
+    #[pyo3(signature = (base_url, *, timeout=None))]
+    fn new(py: Python<'_>, base_url: &str, timeout: Option<u64>) -> PyResult<Self> {
         let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
             url: Url::parse(base_url)
                 .map_err(|e| PyValueError::new_err(format!("Failed to parse base_url: {e:?}")))?,
+            timeout: timeout.map(Duration::from_secs),
         })
         .build_http();
         let client = match client {
@@ -331,15 +333,22 @@ impl BaseTensorZeroGateway {
 #[pymethods]
 impl TensorZeroGateway {
     #[new]
-    fn new(py: Python<'_>, base_url: &str) -> PyResult<(Self, BaseTensorZeroGateway)> {
-        Ok((Self {}, BaseTensorZeroGateway::new(py, base_url)?))
+    #[pyo3(signature = (base_url, *, timeout=None))]
+    fn new(
+        py: Python<'_>,
+        base_url: &str,
+        timeout: Option<u64>,
+    ) -> PyResult<(Self, BaseTensorZeroGateway)> {
+        Ok((Self {}, BaseTensorZeroGateway::new(py, base_url, timeout)?))
     }
 
     /// Initialize the TensorZero client.
     ///
     /// :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+    /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
     #[allow(unused_variables)]
-    fn __init__(this: Py<Self>, base_url: &str) -> Py<Self> {
+    #[pyo3(signature = (base_url, *, timeout=None))]
+    fn __init__(this: Py<Self>, base_url: &str, timeout: Option<u64>) -> Py<Self> {
         // The actual logic is in the 'new' method - this method just exists to generate a docstring
         this
     }
@@ -541,15 +550,22 @@ struct AsyncTensorZeroGateway {}
 #[pymethods]
 impl AsyncTensorZeroGateway {
     #[new]
-    fn new(py: Python<'_>, base_url: &str) -> PyResult<(Self, BaseTensorZeroGateway)> {
-        Ok((Self {}, BaseTensorZeroGateway::new(py, base_url)?))
+    #[pyo3(signature = (base_url, *, timeout=None))]
+    fn new(
+        py: Python<'_>,
+        base_url: &str,
+        timeout: Option<u64>,
+    ) -> PyResult<(Self, BaseTensorZeroGateway)> {
+        Ok((Self {}, BaseTensorZeroGateway::new(py, base_url, timeout)?))
     }
 
     /// Initialize the TensorZero client.
     ///
     /// :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+    /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
     #[allow(unused_variables)]
-    fn __init__(this: Py<Self>, base_url: &str) -> Py<Self> {
+    #[pyo3(signature = (base_url, *, timeout=None))]
+    fn __init__(this: Py<Self>, base_url: &str, timeout: Option<u64>) -> Py<Self> {
         // The actual logic is in the 'new' method - this method just exists to generate a docstring
         this
     }

@@ -52,6 +52,7 @@ pub struct E2ETestProviders {
 pub async fn make_http_gateway() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
         url: get_gateway_endpoint("/"),
+        timeout: None,
     })
     .build()
     .await

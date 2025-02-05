@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use std::fmt::Debug;
@@ -96,12 +96,14 @@ pub enum ClientBuilderError {
     Clickhouse(TensorZeroError),
     #[error("Failed to parse config: {0}")]
     ConfigParsing(TensorZeroError),
+    #[error("Failed to build HTTP client: {0}")]
+    HTTPClientBuild(reqwest::Error),
 }
 
 /// Controls how a `Client` is run
 pub enum ClientBuilderMode {
     /// In HTTPGateway mode, we make HTTP requests to a TensorZero gateway server.
-    HTTPGateway { url: Url },
+    HTTPGateway { url: Url, timeout: Option<Duration> },
     /// In EmbeddedGateway mode, we run an embedded gateway using a config file.
     /// We do not launch an HTTP server - we only make outgoing HTTP requests to model providers and to ClickHouse.
     EmbeddedGateway {
@@ -160,13 +162,25 @@ impl ClientBuilder {
     /// Builds a `Client` in HTTPGateway mode, erroring if the mode is not HTTPGateway
     /// This allows avoiding calling the async `build` method
     pub fn build_http(self) -> Result<Client, ClientBuilderError> {
-        let ClientBuilderMode::HTTPGateway { url } = self.mode else {
+        let ClientBuilderMode::HTTPGateway { url, timeout } = self.mode else {
             return Err(ClientBuilderError::NotHTTPGateway);
+        };
+        let http_client = match self.http_client {
+            Some(http_client) => http_client,
+            None => {
+                let mut http_client_builder = reqwest::Client::builder();
+                if let Some(timeout) = timeout {
+                    http_client_builder = http_client_builder.timeout(timeout);
+                }
+                http_client_builder
+                    .build()
+                    .map_err(ClientBuilderError::HTTPClientBuild)?
+            }
         };
         Ok(Client {
             mode: ClientMode::HTTPGateway(HTTPGateway {
                 base_url: url,
-                http_client: self.http_client.unwrap_or_default(),
+                http_client,
             }),
         })
     }
