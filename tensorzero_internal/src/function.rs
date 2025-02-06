@@ -285,11 +285,11 @@ impl FunctionConfig {
     }
 }
 
-/// Validate all input messages that contain text.
+/// Validate all input messages that contain text (not raw_text).
 /// The validation is done based on the input's role and the function's schemas.
 /// We first validate the system message (if it exists)
 /// Next we validate all messages containing text blocks.
-/// If there are multiple text blocks in a message we reject.
+/// If there are multiple text or raw text blocks in a message we reject.
 fn validate_all_text_input(
     system_schema: Option<&JSONSchemaFromPath>,
     user_schema: Option<&JSONSchemaFromPath>,
@@ -307,18 +307,35 @@ fn validate_all_text_input(
         })),
     }?;
     for (index, message) in input.messages.iter().enumerate() {
+        // Only for Text blocks, not RawText blocks since we don't validate those
         let mut content: Option<&Value> = None;
+        let mut text_seen = false;
         for block in message.content.iter() {
-            if let InputMessageContent::Text { value } = block {
-                // Throw an error if we have multiple text blocks in a message
-                if content.is_some() {
-                    return Err(Error::new(ErrorDetails::InvalidMessage {
-                        message: format!(
-                            "Message at index {index} has multiple text content blocks"
-                        ),
-                    }));
+            match block {
+                InputMessageContent::Text { value } => {
+                    // Throw an error if we have multiple text blocks in a message
+                    if text_seen {
+                        return Err(Error::new(ErrorDetails::InvalidMessage {
+                            message: format!(
+                                "Message at index {index} has multiple text content blocks"
+                            ),
+                        }));
+                    }
+                    content = Some(value);
+                    text_seen = true;
                 }
-                content = Some(value);
+                InputMessageContent::RawText { .. } => {
+                    // Throw an error if we have multiple raw text blocks in a message
+                    if text_seen {
+                        return Err(Error::new(ErrorDetails::InvalidMessage {
+                            message: format!(
+                                "Message at index {index} has multiple text content blocks"
+                            ),
+                        }));
+                    }
+                    text_seen = true;
+                }
+                _ => {}
             }
         }
         if let Some(content) = content {
@@ -776,6 +793,12 @@ mod tests {
                 role: Role::Assistant,
                 content: vec!["assistant content".to_string().into()],
             },
+            InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::RawText {
+                    value: "raw text".to_string(),
+                }],
+            },
         ];
 
         let input = Input {
@@ -814,6 +837,86 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_input_chat_multiple_text_blocks() {
+        let system_schema = create_test_schema();
+        let user_schema = create_test_schema();
+        let assistant_schema = create_test_schema();
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: Some(system_schema),
+            user_schema: Some(user_schema),
+            assistant_schema: Some(assistant_schema),
+            tools: vec![],
+            ..Default::default()
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
+
+        let messages = vec![
+            InputMessage {
+                role: Role::User,
+                content: vec![
+                    "user content".to_string().into(),
+                    "extra content".to_string().into(),
+                ],
+            },
+            InputMessage {
+                role: Role::Assistant,
+                content: vec!["assistant content".to_string().into()],
+            },
+            InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::RawText {
+                    value: "raw text".to_string(),
+                }],
+            },
+        ];
+
+        let input = Input {
+            system: Some(json!("system content")),
+            messages,
+        };
+
+        let validation_result = function_config.validate_input(&input);
+        assert_eq!(
+            validation_result.unwrap_err(),
+            ErrorDetails::InvalidMessage {
+                message: "Message at index 0 has multiple text content blocks".to_string(),
+            }
+            .into()
+        );
+
+        let messages = vec![
+            InputMessage {
+                role: Role::User,
+                content: vec![
+                    json!({ "name": "user name" }).into(),
+                    InputMessageContent::RawText {
+                        value: "raw text".to_string(),
+                    },
+                ],
+            },
+            InputMessage {
+                role: Role::Assistant,
+                content: vec![json!({ "name": "assistant name" }).into()],
+            },
+        ];
+
+        let input = Input {
+            system: Some(json!({ "name": "system name" })),
+            messages,
+        };
+
+        let validation_result = function_config.validate_input(&input).unwrap_err();
+        assert_eq!(
+            validation_result,
+            ErrorDetails::InvalidMessage {
+                message: "Message at index 0 has multiple text content blocks".to_string(),
+            }
+            .into()
+        );
+    }
+
+    #[test]
     fn test_validate_input_json_no_schema() {
         let output_schema = json!({});
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
@@ -835,6 +938,12 @@ mod tests {
             InputMessage {
                 role: Role::Assistant,
                 content: vec!["assistant content".to_string().into()],
+            },
+            InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::RawText {
+                    value: "raw text".to_string(),
+                }],
             },
         ];
 
