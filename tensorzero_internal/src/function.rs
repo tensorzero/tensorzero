@@ -837,7 +837,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_input_chat_multiple_text_blocks() {
+    fn test_validate_input_raw_bypass_schemas() {
         let system_schema = create_test_schema();
         let user_schema = create_test_schema();
         let assistant_schema = create_test_schema();
@@ -846,6 +846,48 @@ mod tests {
             system_schema: Some(system_schema),
             user_schema: Some(user_schema),
             assistant_schema: Some(assistant_schema),
+            tools: vec![],
+            ..Default::default()
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
+
+        let messages = vec![
+            InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::RawText {
+                    value: "user content".to_string(),
+                }],
+            },
+            InputMessage {
+                role: Role::Assistant,
+                content: vec![InputMessageContent::RawText {
+                    value: "assistant content".to_string(),
+                }],
+            },
+            InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::RawText {
+                    value: "raw text".to_string(),
+                }],
+            },
+        ];
+
+        let input = Input {
+            system: Some(json!({ "name": "system name" })),
+            messages,
+        };
+
+        let validation_result = function_config.validate_input(&input);
+        assert!(validation_result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_input_chat_multiple_text_blocks() {
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
             tools: vec![],
             ..Default::default()
         };
@@ -872,7 +914,7 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(Value::String("system content".to_string())),
             messages,
         };
 
@@ -902,7 +944,7 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(json!({ "name": "system name" })),
+            system: Some(Value::String("system content".to_string())),
             messages,
         };
 
