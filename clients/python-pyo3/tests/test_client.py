@@ -44,7 +44,7 @@ from uuid_utils import uuid7
 
 PWD = os.path.dirname(os.path.abspath(__file__))
 TEST_CONFIG_PATH = os.path.join(
-    PWD, "../../../tensorzero_internal/tests/e2e/tensorzero.toml"
+    PWD, "../../../tensorzero-internal/tests/e2e/tensorzero.toml"
 )
 
 
