@@ -32,6 +32,19 @@ class Text(ContentBlock):
         return dict(type="text", value=self.text)
 
 
+"""
+This class does not subclass ContentBlock since it cannot be output by the API.
+"""
+
+
+@dataclass
+class RawText:
+    value: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(type="raw_text", value=self.value)
+
+
 @dataclass
 class ToolCall(ContentBlock):
     arguments: Optional[Dict[str, Any]]
@@ -47,6 +60,11 @@ class ToolCall(ContentBlock):
             id=self.id,
             name=self.raw_name,
         )
+
+
+"""
+This class does not subclass ContentBlock since it cannot be output by the API.
+"""
 
 
 @dataclass

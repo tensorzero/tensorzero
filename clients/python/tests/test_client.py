@@ -29,6 +29,7 @@ from tensorzero import (
     ChatInferenceResponse,
     FeedbackResponse,
     JsonInferenceResponse,
+    RawText,
     TensorZeroGateway,
     Text,
     ToolCall,
@@ -77,7 +78,7 @@ async def test_async_basic_inference(async_client):
 async def test_async_default_function_inference(async_client):
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
-        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+        "messages": [{"role": "user", "content": [RawText(value="Hello")]}],
     }
     input_copy = deepcopy(input)
     result = await async_client.inference(
