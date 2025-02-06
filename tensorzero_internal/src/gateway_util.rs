@@ -118,23 +118,23 @@ where
 }
 
 pub fn setup_http_client() -> Result<Client, Error> {
-    #[cfg(not(any(feature = "e2e_tests", feature = "batch_tests")))]
-    let proxy_url: Option<String> = None;
-
-    #[cfg(any(feature = "e2e_tests", feature = "batch_tests"))]
-    let proxy_url = std::env::var("TENSORZERO_E2E_PROXY").ok().map(|url| {
-        tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {}", url);
-        url
-    });
-
     let mut http_client_builder = Client::builder();
-    if let Some(proxy_url) = proxy_url {
-        http_client_builder = http_client_builder.proxy(Proxy::all(proxy_url).map_err(|e| {
-            Error::new(ErrorDetails::AppState {
-                message: format!("Invalid proxy URL: {}", e),
-            })
-        })?);
+
+    if cfg!(any(feature = "e2e_tests", feature = "batch_tests")) {
+        if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
+            tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
+            http_client_builder = http_client_builder
+                .proxy(Proxy::all(proxy_url).map_err(|e| {
+                    Error::new(ErrorDetails::AppState {
+                        message: format!("Invalid proxy URL: {}", e),
+                    })
+                })?)
+                // When running e2e tests, we use `provider-proxy` as an MITM proxy
+                // for caching, so we need to accept the invalid (self-signed) cert.
+                .danger_accept_invalid_certs(true);
+        }
     }
+
     http_client_builder.build().map_err(|e| {
         Error::new(ErrorDetails::AppState {
             message: format!("Failed to build HTTP client: {}", e),
