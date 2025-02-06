@@ -1,7 +1,7 @@
 import tiktoken
 
 
-def check_example_length(messages, max_token=2048):
+def check_example_length(messages, max_token=65_536):
     encoding = tiktoken.get_encoding("cl100k_base")
 
     def num_tokens_from_messages(messages, tokens_per_message=3, tokens_per_name=1):
