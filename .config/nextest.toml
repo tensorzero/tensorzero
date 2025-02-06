@@ -5,10 +5,6 @@ slow-timeout = { period = "10s", terminate-after = 3 }
 [profile.ci]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 
-[profile.unit]
-retries = 0
-slow-timeout = { period = "2s", terminate-after = 1 }
-
 # Note: use the following commands to debug test groups:
 # cargo nextest show-config test-groups
 # cargo nextest show-config test-groups --features e2e_tests
@@ -35,3 +31,9 @@ test-group = 'e2e_together'
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::xai::)'
 test-group = 'e2e_xai'
+
+[[profile.default.overrides]]
+# Settings for running unit tests
+filter = 'not binary(e2e)'
+retries = 0
+slow-timeout = { period = "2s", terminate-after = 1 }
