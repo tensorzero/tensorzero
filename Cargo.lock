@@ -2985,6 +2985,7 @@ dependencies = [
  "serde_json",
  "tensorzero",
  "tokio",
+ "tracing",
  "url",
  "uuid",
 ]

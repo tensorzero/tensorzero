@@ -24,6 +24,7 @@ reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 tokio-stream = "0.1.15"
 tokio = { version = "1.38.1", features = ["full"] }
+tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
 pyo3 = { version = "0.23.3", features = ["experimental-async"] }
 axum = { version = "0.7.5", features = ["macros"] }
 futures = "0.3.30"
