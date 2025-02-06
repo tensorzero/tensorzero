@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
@@ -18,11 +18,12 @@ use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
-    RequestMessage, Usage,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
+    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode,
+    ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
 use crate::model::{build_creds_caching_default_with_fn, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -330,14 +331,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<
-        (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            String,
-        ),
-        Error,
-    > {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body: GCPVertexGeminiRequest =
             GCPVertexGeminiRequest::new(request, &self.model_id)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
@@ -363,21 +357,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     raw_response: None,
                 })
             })?;
-        let mut stream = Box::pin(stream_gcp_vertex_gemini(event_source, start_time));
-        let chunk = match stream.next().await {
-            Some(Ok(chunk)) => chunk,
-            Some(Err(e)) => return Err(e),
-            None => {
-                return Err(ErrorDetails::InferenceServer {
-                    message: "Stream ended before first chunk".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                }
-                .into())
-            }
-        };
-        Ok((chunk, stream, raw_request))
+        let stream = stream_gcp_vertex_gemini(event_source, start_time).peekable();
+        Ok((stream, raw_request))
     }
 
     async fn start_batch_inference<'a>(
@@ -408,8 +389,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
 fn stream_gcp_vertex_gemini(
     mut event_source: EventSource,
     start_time: Instant,
-) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
-    async_stream::stream! {
+) -> ProviderInferenceResponseStreamInner {
+    Box::pin(async_stream::stream! {
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -452,7 +433,7 @@ fn stream_gcp_vertex_gemini(
                 }
             }
          }
-    }
+    })
 }
 
 #[derive(Debug, PartialEq, Serialize)]

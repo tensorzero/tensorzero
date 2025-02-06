@@ -15,6 +15,7 @@ use crate::endpoints::inference::InferenceClients;
 use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
 
+use crate::inference::providers::helpers::peek_first_chunk;
 use crate::inference::providers::hyperbolic::HyperbolicProvider;
 use crate::inference::providers::sglang::SGLangProvider;
 use crate::inference::providers::tgi::TGIProvider;
@@ -36,8 +37,8 @@ use crate::{
             vllm::VLLMProvider, xai::XAIProvider,
         },
         types::{
-            ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse,
-            ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+            ModelInferenceRequest, ModelInferenceResponse, PeekableProviderInferenceResponseStream,
+            ProviderInferenceResponse,
         },
     },
 };
@@ -125,15 +126,7 @@ impl ModelConfig {
         request: &'request ModelInferenceRequest<'request>,
         client: &'request Client,
         api_keys: &'request InferenceCredentials,
-    ) -> Result<
-        (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            String,
-            Arc<str>,
-        ),
-        Error,
-    > {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String, Arc<str>), Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let provider_config = self.providers.get(provider_name).ok_or_else(|| {
@@ -151,8 +144,11 @@ impl ModelConfig {
                 .await;
             match response {
                 Ok(response) => {
-                    let (chunk, stream, raw_request) = response;
-                    return Ok((chunk, stream, raw_request, provider_name.clone()));
+                    let (mut stream, raw_request) = response;
+                    // Get a single chunk from the stream and make sure it is OK then send to client.
+                    // We want to do this here so that we can tell that the request is working.
+                    peek_first_chunk(&mut stream, &raw_request, provider_name).await?;
+                    return Ok((stream, raw_request, provider_name.clone()));
                 }
                 Err(error) => {
                     provider_errors.insert(provider_name.to_string(), error);
@@ -527,14 +523,7 @@ impl ProviderConfig {
         request: &ModelInferenceRequest<'_>,
         client: &Client,
         api_keys: &InferenceCredentials,
-    ) -> Result<
-        (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            String,
-        ),
-        Error,
-    > {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         match self {
             ProviderConfig::Anthropic(provider) => {
                 provider.infer_stream(request, client, api_keys).await
@@ -1310,10 +1299,11 @@ mod tests {
             routing: vec!["good_provider".to_string().into()],
             providers: HashMap::from([("good_provider".to_string().into(), good_provider_config)]),
         };
-        let (initial_chunk, stream, raw_request, model_provider_name) = model_config
+        let (mut stream, raw_request, model_provider_name) = model_config
             .infer_stream(&request, &Client::new(), &api_keys)
             .await
             .unwrap();
+        let initial_chunk = stream.next().await.unwrap().unwrap();
         assert_eq!(
             initial_chunk.content,
             vec![ContentBlockChunk::Text(TextChunk {
@@ -1416,10 +1406,11 @@ mod tests {
                 ("good_provider".to_string().into(), good_provider_config),
             ]),
         };
-        let (initial_chunk, stream, raw_request, model_provider_name) = model_config
+        let (mut stream, raw_request, model_provider_name) = model_config
             .infer_stream(&request, &Client::new(), &api_keys)
             .await
             .unwrap();
+        let initial_chunk = stream.next().await.unwrap().unwrap();
         assert_eq!(&*model_provider_name, "good_provider");
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
         assert!(logs_contain("Error sending request to Dummy provider"));

@@ -18,8 +18,8 @@ use crate::{
     error::{Error, ErrorDetails},
     function::FunctionConfig,
     inference::types::{
-        ContentBlock, ContentBlockOutput, InferenceResult, InferenceResultChunk,
-        InferenceResultStream, Input, JsonInferenceOutput,
+        ContentBlock, ContentBlockOutput, InferenceResult, InferenceResultStream, Input,
+        JsonInferenceOutput,
     },
     minijinja_util::TemplateConfig,
 };
@@ -146,7 +146,7 @@ impl Variant for DiclConfig {
         inference_config: &'request InferenceConfig<'static, 'request>,
         clients: &'request InferenceClients<'request>,
         inference_params: InferenceParams,
-    ) -> Result<(InferenceResultChunk, InferenceResultStream, ModelUsedInfo), Error> {
+    ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         // So this can be mutably borrowed by the prepare_request function
         let mut inference_params = inference_params;
 
@@ -182,27 +182,22 @@ impl Variant for DiclConfig {
         })?;
 
         // Actually run the inference
-        let (inference_result_chunk, inference_result_stream, mut model_used_info) =
-            infer_model_request_stream(
-                request,
-                self.model.clone(),
-                &model_config,
-                function,
-                clients,
-                inference_params,
-                self.retries,
-            )
-            .await?;
+        let (inference_result_stream, mut model_used_info) = infer_model_request_stream(
+            request,
+            self.model.clone(),
+            &model_config,
+            function,
+            clients,
+            inference_params,
+            self.retries,
+        )
+        .await?;
 
         // Add the embedding to the model inference results
         model_used_info
             .previous_model_inference_results
             .push(embedding_response.into());
-        Ok((
-            inference_result_chunk,
-            inference_result_stream,
-            model_used_info,
-        ))
+        Ok((inference_result_stream, model_used_info))
     }
 
     fn validate(

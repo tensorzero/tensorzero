@@ -15,7 +15,7 @@ use crate::{
     inference::types::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-        ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+        PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation},
 };
@@ -201,14 +201,7 @@ impl InferenceProvider for FireworksProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
-    ) -> Result<
-        (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            String,
-        ),
-        Error,
-    > {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = FireworksRequest::new(&self.model_name, request);
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
@@ -236,23 +229,8 @@ impl InferenceProvider for FireworksProvider {
                     raw_response: None,
                 })
             })?;
-        let mut stream = Box::pin(stream_openai(event_source, start_time));
-        // Get a single chunk from the stream and make sure it is OK then send to client.
-        // We want to do this here so that we can tell that the request is working.
-        let chunk = match stream.next().await {
-            Some(Ok(chunk)) => chunk,
-            Some(Err(e)) => return Err(e),
-            None => {
-                return Err(ErrorDetails::InferenceServer {
-                    message: "Stream ended before first chunk".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                }
-                .into())
-            }
-        };
-        Ok((chunk, stream, raw_request))
+        let stream = stream_openai(event_source, start_time).peekable();
+        Ok((stream, raw_request))
     }
 
     async fn start_batch_inference<'a>(

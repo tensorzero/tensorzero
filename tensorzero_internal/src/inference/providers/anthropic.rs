@@ -1,4 +1,4 @@
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
@@ -20,11 +20,14 @@ use crate::inference::types::{
     Latency, ModelInferenceRequestJsonMode, Role, Text,
 };
 use crate::inference::types::{
-    ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStream, RequestMessage, TextChunk, Usage,
+    ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
+    TextChunk, Usage,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
+
+use super::helpers::peek_first_chunk;
 
 lazy_static! {
     static ref ANTHROPIC_BASE_URL: Url = {
@@ -207,14 +210,7 @@ impl InferenceProvider for AnthropicProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
-    ) -> Result<
-        (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            String,
-        ),
-        Error,
-    > {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -239,27 +235,16 @@ impl InferenceProvider for AnthropicProvider {
                     raw_response: None,
                 })
             })?;
-        let mut stream = Box::pin(stream_anthropic(event_source, start_time));
-        let mut chunk = match stream.next().await {
-            Some(Ok(chunk)) => chunk,
-            Some(Err(e)) => return Err(e),
-            None => {
-                return Err(Error::new(ErrorDetails::InferenceServer {
-                    message: "Stream ended before first chunk".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                }))
-            }
-        };
+        let mut stream = stream_anthropic(event_source, start_time).peekable();
+        let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
         ) && matches!(request.function_type, FunctionType::Json)
         {
-            chunk = prefill_json_chunk_response(chunk);
+            prefill_json_chunk_response(chunk);
         }
-        Ok((chunk, stream, raw_request))
+        Ok((stream, raw_request))
     }
 
     async fn start_batch_inference<'a>(
@@ -293,8 +278,8 @@ impl InferenceProvider for AnthropicProvider {
 fn stream_anthropic(
     mut event_source: EventSource,
     start_time: Instant,
-) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
-    async_stream::stream! {
+) -> ProviderInferenceResponseStreamInner {
+    Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
         let mut current_tool_name: Option<String> = None;
         while let Some(ev) = event_source.next().await {
@@ -345,7 +330,7 @@ fn stream_anthropic(
         }
 
         event_source.close();
-    }
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -676,10 +661,7 @@ pub(crate) fn prefill_json_response(
     Ok(content)
 }
 
-pub(crate) fn prefill_json_chunk_response(
-    chunk: ProviderInferenceResponseChunk,
-) -> ProviderInferenceResponseChunk {
-    let mut chunk = chunk;
+pub(crate) fn prefill_json_chunk_response(chunk: &mut ProviderInferenceResponseChunk) {
     if chunk.content.is_empty() {
         chunk.content = vec![ContentBlockChunk::Text(TextChunk {
             text: "{".to_string(),
@@ -701,7 +683,6 @@ pub(crate) fn prefill_json_chunk_response(
             })).unwrap_or_default()
         });
     }
-    chunk
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -2324,7 +2305,8 @@ mod tests {
             raw_response: "".to_string(),
             latency: Duration::from_millis(0),
         };
-        let result = prefill_json_chunk_response(chunk);
+        let mut result = chunk.clone();
+        prefill_json_chunk_response(&mut result);
         assert_eq!(
             result.content,
             vec![ContentBlockChunk::Text(TextChunk {
@@ -2343,7 +2325,8 @@ mod tests {
                 id: "0".to_string(),
             })],
         };
-        let result = prefill_json_chunk_response(chunk);
+        let mut result = chunk.clone();
+        prefill_json_chunk_response(&mut result);
         assert_eq!(
             result.content,
             vec![ContentBlockChunk::Text(TextChunk {
@@ -2369,7 +2352,8 @@ mod tests {
                 }),
             ],
         };
-        let result = prefill_json_chunk_response(chunk.clone());
+        let mut result = chunk.clone();
+        prefill_json_chunk_response(&mut result);
         assert_eq!(result, chunk);
 
         // Test case 4: Non-text block (should remain unchanged)
@@ -2384,7 +2368,8 @@ mod tests {
                 raw_arguments: "{}".to_string(),
             })],
         };
-        let result = prefill_json_chunk_response(chunk.clone());
+        let mut result = chunk.clone();
+        prefill_json_chunk_response(&mut result);
         assert_eq!(result, chunk);
     }
 

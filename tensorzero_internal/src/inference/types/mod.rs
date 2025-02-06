@@ -1,4 +1,5 @@
 use derive_builder::Builder;
+use futures::stream::Peekable;
 use futures::Stream;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -1067,8 +1068,38 @@ impl From<ToolCallChunk> for ToolCall {
     }
 }
 
-pub type ProviderInferenceResponseStream =
+// We use a very specific combination of `Pin` and `Peekable` here, due to a combination of several requirements:
+// * Inside of a model provider (e.g. anthropic), we may want to peek and modify the first chunk
+//   to fix the start of a JSON response.
+// * Outside of a model provider, we always want to peek at the first chunk to make sure that the HTTP request
+//   actually succeeded.
+// * The model providers produce distinct stream types (arising from different `async_stream` calls), so we
+//   need to use a trait object.
+//
+// Combining all of these requirements, we need to wrap the entire `Pin<Box<dyn Stream>>` in `Peekable`.
+// The `Peekable` type needs to be 'visible' (not erased inside the trait object), so that we can
+// check the first chunk with 'peek()' outside of a model provider implementation. While we could have
+// two `Peekable` types (one erased inside the trait object, one visible outside), this would add
+// additional runtime overhead, and make things more difficult to reason about.
+//
+// We cannot write `Peekable<dyn Stream>`, since `Peekable` does not support the special unsized coercions that standard
+// library types support (e.g. `Box<MyStreamType>` -> `Box<dyn Stream>`)'
+// We also cannot write `Pin<Peekable>`, since the argument to `Pin` needs to implement `DerefMut`.
+// This gives us the particular combination of types below.
+//
+// We split this into an 'inner' type to make it easier to write `stream_<provider>` functions
+// (e.g. `stream_anthropic`). These functions can return `ProviderInferenceResponseStreamInner`,
+// which will cause the compiler to coerce `Pin<Box<SomeUnderlyingStreamType>>` into
+// `Pin<Box<dyn Stream>>`. The caller than then write `stream_anthropic().peekable()` to produce
+// a `PeekableProviderInferenceResponseStream`. If we attempted to directly return a `Peekable<Pin<Box<dyn Stream>>>`,
+// the compiler would fail to coerce `Peekable<Pin<Box<SomeUnderlyingStreamType>>>` into `Peekable<Pin<Box<dyn Stream>>>`.
+// (due to the fact that unsized coercions are not supported on `Peekable` or other user-defined types).
+// This would require `stream_<provider>` functions to first introduce a local variable with the correct
+// `Pin<Box<dyn Stream>>` type, and then call `.peekable()` on that.
+pub type ProviderInferenceResponseStreamInner =
     Pin<Box<dyn Stream<Item = Result<ProviderInferenceResponseChunk, Error>> + Send>>;
+
+pub type PeekableProviderInferenceResponseStream = Peekable<ProviderInferenceResponseStreamInner>;
 
 pub type InferenceResultStream =
     Pin<Box<dyn Stream<Item = Result<InferenceResultChunk, Error>> + Send>>;
