@@ -1,5 +1,5 @@
 [package]
-name = "tensorzero_internal"
+name = "tensorzero-internal"
 version = "0.1.0"
 edition = "2021"
 
