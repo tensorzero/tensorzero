@@ -88,7 +88,7 @@ async fn test_stream_with_error() {
 
     let mut good_chunks = 0;
     // Check we receive all client chunks correctly
-    for i in 0..16 {
+    loop {
         match event_stream.next().await {
             Some(Ok(e)) => match e {
                 Event::Open => continue,
@@ -103,7 +103,7 @@ async fn test_stream_with_error() {
                             error_str.contains("Dummy error in stream"),
                             "Unexpected error: {error_str}"
                         );
-                        assert_eq!(i, 5);
+                        assert_eq!(good_chunks, 3);
                     } else {
                         let _chunk: InferenceResponseChunk =
                             serde_json::from_str(&message.data).unwrap();
@@ -113,7 +113,7 @@ async fn test_stream_with_error() {
             },
             Some(Err(e)) => {
                 if matches!(e, reqwest_eventsource::Error::StreamEnded) {
-                    continue;
+                    break;
                 }
                 panic!("Unexpected error: {e:?}");
             }
@@ -122,5 +122,5 @@ async fn test_stream_with_error() {
             }
         }
     }
-    assert_eq!(good_chunks, 15);
+    assert_eq!(good_chunks, 17);
 }
