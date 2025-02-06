@@ -606,6 +606,21 @@ async def test_async_dynamic_credentials(async_client):
     assert usage.output_tokens == 10
 
 
+def test_sync_error():
+    with pytest.raises(Exception) as exc_info:
+        with TensorZeroGateway("http://localhost:3000"):
+            raise Exception("My error")
+    assert str(exc_info.value) == "My error"
+
+
+@pytest.mark.asyncio
+async def test_async_error():
+    with pytest.raises(Exception) as exc_info:
+        async with AsyncTensorZeroGateway("http://localhost:3000"):
+            raise Exception("My error")
+    assert str(exc_info.value) == "My error"
+
+
 @pytest.fixture(params=[ClientType.HttpGateway, ClientType.EmbeddedGateway])
 def sync_client(request):
     if request.param == ClientType.HttpGateway:
