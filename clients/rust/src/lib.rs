@@ -96,6 +96,8 @@ pub enum ClientBuilderError {
     Clickhouse(TensorZeroError),
     #[error("Failed to parse config: {0}")]
     ConfigParsing(TensorZeroError),
+    #[error("Failed to build HTTP client: {0}")]
+    HTTPClientBuild(reqwest::Error),
 }
 
 /// Controls how a `Client` is run
