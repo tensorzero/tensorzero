@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{error::Error, path::PathBuf, sync::Arc};
 
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use std::fmt::Debug;
@@ -289,6 +289,16 @@ impl Client {
         &self,
         resp: Result<reqwest::Response, reqwest::Error>,
     ) -> Result<T, TensorZeroError> {
+        if let Err(e) = &resp {
+            println!("resp: {:#}", e);
+            println!("is_timeout: {:?}", e.is_timeout());
+            println!("display: {:?}", e.to_string());
+            let source = e.source();
+            if let Some(e) = source {
+                println!("source: {:?}", e);
+                println!("display for source: {:?}", e.to_string());
+            }
+        }
         let resp = resp.map_err(|e| TensorZeroError::Other {
             source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
                 message: format!("Error from server: {e}"),

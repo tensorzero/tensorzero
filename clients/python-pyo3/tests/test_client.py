@@ -34,6 +34,7 @@ from tensorzero import (
     FeedbackResponse,
     JsonInferenceResponse,
     TensorZeroError,
+    TensorZeroInternalError,
     TensorZeroGateway,
     Text,
     ToolCall,
@@ -1223,19 +1224,21 @@ async def test_async_timeout():
     async with AsyncTensorZeroGateway(
         "http://localhost:3000", timeout=1
     ) as async_client:
-        with pytest.raises(TensorZeroError):
+        with pytest.raises(TensorZeroInternalError) as exc_info:
             await async_client.inference(
                 function_name="basic_test",
                 variant_name="slow",
-                input={"messages": [{"role": "user", "content": "Hello"}]},
+                input={"system": {"assistant_name": "Alfred Pennyworth"}, "messages": [{"role": "user", "content": "Hello"}]},
             )
+    assert "timeout" in str(exc_info.value).lower()
 
 
 def test_sync_timeout():
     with TensorZeroGateway("http://localhost:3000", timeout=1) as sync_client:
-        with pytest.raises(TensorZeroError):
+        with pytest.raises(TensorZeroInternalError) as exc_info:
             sync_client.inference(
                 function_name="basic_test",
                 variant_name="slow",
-                input={"messages": [{"role": "user", "content": "Hello"}]},
+                input={"system": {"assistant_name": "Alfred Pennyworth"}, "messages": [{"role": "user", "content": "Hello"}]},
             )
+    assert "timeout" in str(exc_info.value).lower()
