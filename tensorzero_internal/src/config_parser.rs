@@ -1826,6 +1826,94 @@ mod tests {
         toml::from_str(config_str).expect("Failed to parse sample config")
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_bedrock_err_no_auto_detect_region() {
+        let config_str = r#"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        "#;
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err =
+            Config::load_from_toml(config, base_path.clone()).expect_err("Failed to load bedrock");
+        let err_msg = err.to_string();
+        assert!(
+            err_msg
+                .contains("requires a region to be provided, or `allow_auto_detect_region = true`"),
+            "Unexpected error message: {err_msg}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_bedrock_err_auto_detect_region() {
+        // We want auto-detection to fail, so we clear this environment variable.
+        // We use 'nextest' as our runner, so each test runs in its own process
+        std::env::remove_var("AWS_REGION");
+        std::env::remove_var("AWS_DEFAULT_REGION");
+
+        let config_str = r#"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        allow_auto_detect_region = true
+        "#;
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err =
+            Config::load_from_toml(config, base_path.clone()).expect_err("Failed to load bedrock");
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("Failed to determine AWS region."),
+            "Unexpected error message: {err_msg}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_bedrock_region_and_allow_auto() {
+        let config_str = r#"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+        [functions.basic_test]
+        type = "chat"
+
+        [functions.basic_test.variants.test]
+        type = "chat_completion"
+        weight = 1
+        model = "my-model"
+
+        [models."my-model"]
+        routing = ["aws-bedrock"]
+
+        [models.my-model.providers.aws-bedrock]
+        type = "aws_bedrock"
+        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        allow_auto_detect_region = true
+        region = "us-east-2"
+        "#;
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        Config::load_from_toml(config, base_path.clone())
+            .expect("Failed to construct config with valid AWS bedrock provider");
+    }
+
     #[test]
     fn test_tensorzero_example_file() {
         env::set_var("OPENAI_API_KEY", "sk-something");

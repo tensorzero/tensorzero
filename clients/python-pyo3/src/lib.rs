@@ -19,7 +19,7 @@ use pyo3::{
     types::{PyDict, PyString, PyType},
 };
 use python_helpers::{
-    deserialize_from_json, parse_feedback_response, parse_inference_chunk,
+    deserialize_from_pydict, parse_feedback_response, parse_inference_chunk,
     parse_inference_response, parse_tool, python_uuid_to_uuid, serialize_to_dict,
 };
 use tensorzero_rust::{
@@ -159,7 +159,7 @@ impl BaseTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
     #[allow(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -171,6 +171,7 @@ impl BaseTensorZeroGateway {
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
         dryrun: Option<bool>,
+        output_schema: Option<&Bound<'_, PyDict>>,
         allowed_tools: Option<Vec<String>>,
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
@@ -189,6 +190,7 @@ impl BaseTensorZeroGateway {
             params,
             variant_name,
             dryrun,
+            output_schema,
             allowed_tools,
             additional_tools,
             tool_choice,
@@ -236,7 +238,7 @@ impl BaseTensorZeroGateway {
     ) -> PyResult<FeedbackParams> {
         Ok(FeedbackParams {
             metric_name,
-            value: deserialize_from_json(py, &value)?,
+            value: deserialize_from_pydict(py, &value)?,
             episode_id: python_uuid_to_uuid("episode_id", episode_id)?,
             inference_id: python_uuid_to_uuid("inference_id", inference_id)?,
             dryrun,
@@ -255,6 +257,7 @@ impl BaseTensorZeroGateway {
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
         dryrun: Option<bool>,
+        output_schema: Option<&Bound<'_, PyDict>>,
         allowed_tools: Option<Vec<String>>,
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
@@ -266,7 +269,7 @@ impl BaseTensorZeroGateway {
         let episode_id = python_uuid_to_uuid("episode_id", episode_id)?;
 
         let params: Option<InferenceParams> = if let Some(params) = params {
-            deserialize_from_json(py, params)?
+            deserialize_from_pydict(py, params)?
         } else {
             None
         };
@@ -292,19 +295,24 @@ impl BaseTensorZeroGateway {
                     })?,
                 )
             } else {
-                Some(deserialize_from_json(py, &tool_choice)?)
+                Some(deserialize_from_pydict(py, &tool_choice)?)
             }
         } else {
             None
         };
 
         let cache_options: Option<CacheParamsOptions> = if let Some(cache_options) = cache_options {
-            Some(deserialize_from_json(py, cache_options)?)
+            Some(deserialize_from_pydict(py, cache_options)?)
+        } else {
+            None
+        };
+        let output_schema: Option<serde_json::Value> = if let Some(output_schema) = output_schema {
+            Some(deserialize_from_pydict(py, output_schema)?)
         } else {
             None
         };
 
-        let input: Input = deserialize_from_json(py, &input)?;
+        let input: Input = deserialize_from_pydict(py, &input)?;
 
         Ok(ClientInferenceParams {
             function_name,
@@ -324,7 +332,7 @@ impl BaseTensorZeroGateway {
             input,
             credentials: credentials.unwrap_or_default(),
             cache_options: cache_options.unwrap_or_default(),
-            ..Default::default()
+            output_schema,
         })
     }
 }
@@ -444,7 +452,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
     #[allow(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -462,6 +470,8 @@ impl TensorZeroGateway {
     ///                      Note: You should generally not do this, and instead let the TensorZero gateway assign a
     ///                      particular variant. This field is primarily used for testing or debugging purposes.
     /// :param dryrun: If true, the request will be executed but won't be stored to the database.
+    /// :param output_schema: If set, the JSON schema of a JSON function call will be validated against the given JSON Schema.
+    ///                       Overrides the output schema configured for the function.
     /// :param allowed_tools: If set, restricts the tools available during this inference request.
     ///                       The list of names should be a subset of the tools configured for the function.
     ///                       Tools provided at inference time in `additional_tools` (if any) are always available.
@@ -485,6 +495,7 @@ impl TensorZeroGateway {
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
         dryrun: Option<bool>,
+        output_schema: Option<&Bound<'_, PyDict>>,
         allowed_tools: Option<Vec<String>>,
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
@@ -506,6 +517,7 @@ impl TensorZeroGateway {
                     params,
                     variant_name,
                     dryrun,
+                    output_schema,
                     allowed_tools,
                     additional_tools,
                     tool_choice,
@@ -626,7 +638,7 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
     #[allow(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -644,6 +656,8 @@ impl AsyncTensorZeroGateway {
     ///                      Note: You should generally not do this, and instead let the TensorZero gateway assign a
     ///                      particular variant. This field is primarily used for testing or debugging purposes.
     /// :param dryrun: If true, the request will be executed but won't be stored to the database.
+    /// :param output_schema: If set, the JSON schema of a JSON function call will be validated against the given JSON Schema.
+    ///                       Overrides the output schema configured for the function.
     /// :param allowed_tools: If set, restricts the tools available during this inference request.
     ///                       The list of names should be a subset of the tools configured for the function.
     ///                       Tools provided at inference time in `additional_tools` (if any) are always available.
@@ -667,6 +681,7 @@ impl AsyncTensorZeroGateway {
         params: Option<&Bound<'_, PyDict>>,
         variant_name: Option<String>,
         dryrun: Option<bool>,
+        output_schema: Option<&Bound<'_, PyDict>>,
         allowed_tools: Option<Vec<String>>,
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
@@ -685,6 +700,7 @@ impl AsyncTensorZeroGateway {
             params,
             variant_name,
             dryrun,
+            output_schema,
             allowed_tools,
             additional_tools,
             tool_choice,
