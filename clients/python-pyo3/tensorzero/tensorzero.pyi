@@ -18,7 +18,7 @@ from tensorzero import (
 )
 
 class BaseTensorZeroGateway:
-    def __init__(self, base_url: str): ...
+    def __init__(self, base_url: str, *, timeout: Optional[float] = None): ...
     def inference(
         self,
         *,
@@ -58,6 +58,28 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         Initialize the TensorZero client.
 
         :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+        """
+
+    @classmethod
+    def build_http(
+        self, base_url: str, *, timeout: Optional[float] = None
+    ) -> "TensorZeroGateway":
+        """
+        Build a TensorZeroGateway instance.
+
+        :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+        :param timeout: (Optional) The timeout for the HTTP request.
+        """
+
+    @classmethod
+    def build_embedded(
+        self, *, config_path: Optional[str] = None, clickhouse_url: Optional[str] = None
+    ) -> "TensorZeroGateway":
+        """
+        Build a TensorZeroGateway instance.
+
+        :param config_path: (Optional) The path to the TensorZero configuration file.
+        :param clickhouse_url: (Optional) The URL of the ClickHouse database.
         """
 
     def inference(
@@ -170,6 +192,28 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         Initialize the TensorZero client.
 
         :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+        """
+
+    @classmethod
+    async def build_http(
+        self, base_url: str, *, timeout: Optional[float] = None
+    ) -> "AsyncTensorZeroGateway":
+        """
+        Build an AsyncTensorZeroGateway instance.
+
+        :param base_url: (Required) The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+        :param timeout: (Optional) The timeout for the HTTP request.
+        """
+
+    @classmethod
+    async def build_embedded(
+        self, *, config_path: Optional[str] = None, clickhouse_url: Optional[str] = None
+    ) -> "AsyncTensorZeroGateway":
+        """
+        Build an AsyncTensorZeroGateway instance.
+
+        :param config_path: (Optional) The path to the TensorZero configuration file.
+        :param clickhouse_url: (Optional) The URL of the ClickHouse database.
         """
 
     async def inference(  # type: ignore[override]
