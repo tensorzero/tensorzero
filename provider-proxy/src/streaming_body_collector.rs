@@ -16,7 +16,7 @@ pub struct StreamingBodyCollector<T> {
 
 use std::{
     pin::Pin,
-    task::{Context, Poll, ready},
+    task::{ready, Context, Poll},
 };
 
 use bytes::{Bytes, BytesMut};

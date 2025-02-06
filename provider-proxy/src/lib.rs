@@ -7,14 +7,14 @@ mod mitm_server;
 mod streaming_body_collector;
 mod tls;
 
-use std::{fs::OpenOptions, future::Future};
 use std::io::Write;
 use std::path::PathBuf;
+use std::{fs::OpenOptions, future::Future};
 
 use anyhow::Context as _;
 use bytes::{Bytes, BytesMut};
 use clap::Parser;
-use http_body_util::{BodyExt, Full, combinators::BoxBody};
+use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use hyper::service::service_fn;
 use mitm_server::MitmProxy;
 use moka::sync::Cache;
@@ -228,9 +228,9 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<()>) {
                     let bytes_request = hyper::Request::from_parts(parts, body_bytes);
                     let response = check_cache(cache_path, &bytes_request, || async {
                         let request: reqwest::Request =
-                            bytes_request.clone().try_into().with_context(
-                                || "Failed to convert Request from `hyper` to `reqwest`",
-                            )?;
+                            bytes_request.clone().try_into().with_context(|| {
+                                "Failed to convert Request from `hyper` to `reqwest`"
+                            })?;
                         Ok(http::Response::from(client.execute(request).await?).map(BoxBody::new))
                     })
                     .await?;

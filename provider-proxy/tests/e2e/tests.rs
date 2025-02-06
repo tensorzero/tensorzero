@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use provider_proxy::{Args, run_server};
+use provider_proxy::{run_server, Args};
 use rand::Rng;
 use tokio::sync::oneshot;
 use warp::Filter;
@@ -11,12 +11,14 @@ async fn test_provider_proxy() {
 
     let proxy_port: u16 = rand::rng().random_range(1024..65535);
     let temp_dir = tempfile::tempdir().unwrap();
-    let _proxy_handle = tokio::spawn(run_server(Args {
-        cache_path: temp_dir.path().to_path_buf(),
-        port: proxy_port,
-    }, server_started_tx));
+    let _proxy_handle = tokio::spawn(run_server(
+        Args {
+            cache_path: temp_dir.path().to_path_buf(),
+            port: proxy_port,
+        },
+        server_started_tx,
+    ));
 
-    let target_port = rand::rng().random_range(1024..65535);
     let target_server = warp::path("timestamp-good")
         .map(|| {
             format!(
@@ -40,8 +42,8 @@ async fn test_provider_proxy() {
         shutdown_rx.await.unwrap();
     };
 
-    let (_addr, target_server_fut) = warp::serve(target_server)
-        .bind_with_graceful_shutdown(([127, 0, 0, 1], target_port), shutdown_fut);
+    let (target_server_addr, target_server_fut) =
+        warp::serve(target_server).bind_with_graceful_shutdown(([127, 0, 0, 1], 0), shutdown_fut);
     let target_server_handle = tokio::spawn(target_server_fut);
 
     server_started_rx.await.unwrap();
@@ -53,7 +55,7 @@ async fn test_provider_proxy() {
         .unwrap();
 
     let first_local_response = client
-        .post(format!("http://127.0.0.1:{}/timestamp-good", target_port))
+        .post(format!("http://{target_server_addr}/timestamp-good"))
         .send()
         .await
         .unwrap();
@@ -81,7 +83,7 @@ async fn test_provider_proxy() {
     }
 
     let second_local_response = client
-        .post(format!("http://127.0.0.1:{}/timestamp-good", target_port))
+        .post(format!("http://{target_server_addr}/timestamp-good"))
         .send()
         .await
         .unwrap();
@@ -96,7 +98,7 @@ async fn test_provider_proxy() {
 
     // An error response should not be cached
     let first_bad_response = client
-        .post(format!("http://127.0.0.1:{}/timestamp-bad", target_port))
+        .post(format!("http://{target_server_addr}/timestamp-bad"))
         .send()
         .await
         .unwrap();
@@ -107,7 +109,7 @@ async fn test_provider_proxy() {
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     let second_bad_response = client
-        .post(format!("http://127.0.0.1:{}/timestamp-bad", target_port))
+        .post(format!("http://{target_server_addr}/timestamp-bad"))
         .send()
         .await
         .unwrap();
@@ -121,7 +123,7 @@ async fn test_provider_proxy() {
 
     // When the target server is down, we should get an error
     let bad_gateway_response = client
-        .post(format!("http://127.0.0.1:{}/timestamp-bad", target_port))
+        .post(format!("http://{target_server_addr}/timestamp-bad"))
         .send()
         .await
         .unwrap();

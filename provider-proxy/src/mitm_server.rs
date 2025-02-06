@@ -1,17 +1,17 @@
 //! Code is from https://github.com/hatoo/http-mitm-proxy/blob/7c8c3bde77173af6385d5d0ffaea6105498df1ff/src/lib.rs (MIT-licensed)
 #![allow(clippy::panic, clippy::unwrap_used)]
 
-use http_body_util::{BodyExt, Empty, combinators::BoxBody};
+use crate::tls::{generate_cert, CertifiedKeyDer};
+use http_body_util::{combinators::BoxBody, BodyExt, Empty};
 use hyper::{
-    Method, Request, Response, StatusCode,
     body::{Body, Incoming},
     server,
-    service::{HttpService, service_fn},
+    service::{service_fn, HttpService},
+    Method, Request, Response, StatusCode,
 };
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use moka::sync::Cache;
 use std::{borrow::Borrow, error::Error as StdError, future::Future, sync::Arc};
-use crate::tls::{CertifiedKeyDer, generate_cert};
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio_rustls::rustls;
 

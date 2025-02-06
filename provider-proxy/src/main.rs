@@ -1,5 +1,5 @@
 use clap::Parser;
-use provider_proxy::{Args, run_server};
+use provider_proxy::{run_server, Args};
 use tokio::sync::oneshot;
 
 #[tokio::main]
