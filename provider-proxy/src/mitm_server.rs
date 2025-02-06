@@ -11,7 +11,7 @@ use hyper::{
 };
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use moka::sync::Cache;
-use std::{borrow::Borrow, error::Error as StdError, future::Future, sync::Arc};
+use std::{borrow::Borrow, error::Error as StdError, future::Future, net::SocketAddr, sync::Arc};
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio_rustls::rustls;
 
@@ -49,7 +49,7 @@ where
         self,
         addr: A,
         service: S,
-    ) -> Result<impl Future<Output = ()>, std::io::Error>
+    ) -> Result<(SocketAddr, impl Future<Output = ()>), std::io::Error>
     where
         S: HttpService<Incoming> + Clone + Send + 'static,
         S::Error: Into<Box<dyn StdError + Send + Sync>>,
@@ -62,7 +62,7 @@ where
 
         let proxy = Arc::new(self);
 
-        Ok(async move {
+        Ok((listener.local_addr()?, async move {
             loop {
                 let Ok((stream, _)) = listener.accept().await else {
                     continue;
@@ -86,7 +86,7 @@ where
                     }
                 });
             }
-        })
+        }))
     }
 
     /// Transform a service to a service that can be used in hyper server.

@@ -9,12 +9,11 @@ use warp::Filter;
 async fn test_provider_proxy() {
     let (server_started_tx, server_started_rx) = oneshot::channel();
 
-    let proxy_port: u16 = rand::rng().random_range(1024..65535);
     let temp_dir = tempfile::tempdir().unwrap();
     let _proxy_handle = tokio::spawn(run_server(
         Args {
             cache_path: temp_dir.path().to_path_buf(),
-            port: proxy_port,
+            port: 0,
         },
         server_started_tx,
     ));
@@ -46,10 +45,10 @@ async fn test_provider_proxy() {
         warp::serve(target_server).bind_with_graceful_shutdown(([127, 0, 0, 1], 0), shutdown_fut);
     let target_server_handle = tokio::spawn(target_server_fut);
 
-    server_started_rx.await.unwrap();
+    let proxy_addr = server_started_rx.await.unwrap();
 
     let client = reqwest::Client::builder()
-        .proxy(reqwest::Proxy::all(format!("http://127.0.0.1:{}", proxy_port)).unwrap())
+        .proxy(reqwest::Proxy::all(format!("http://{proxy_addr}")).unwrap())
         .danger_accept_invalid_certs(true)
         .build()
         .unwrap();

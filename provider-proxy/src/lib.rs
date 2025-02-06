@@ -8,6 +8,7 @@ mod streaming_body_collector;
 mod tls;
 
 use std::io::Write;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::{fs::OpenOptions, future::Future};
 
@@ -185,7 +186,7 @@ pub struct Args {
     pub port: u16,
 }
 
-pub async fn run_server(args: Args, server_started: oneshot::Sender<()>) {
+pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>) {
     use tracing_subscriber::EnvFilter;
 
     tracing_subscriber::fmt()
@@ -212,7 +213,7 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<()>) {
     );
 
     let client = reqwest::Client::new();
-    let server = proxy
+    let (server_addr, server) = proxy
         .bind(
             ("127.0.0.1", args.port),
             service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
@@ -242,9 +243,9 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<()>) {
         .await
         .unwrap();
 
-    tracing::info!("HTTP Proxy is listening on http://127.0.0.1:{}", args.port);
+    tracing::info!("HTTP Proxy is listening on http://{server_addr}");
     server_started
-        .send(())
+        .send(server_addr)
         .expect("Failed to send server started signal");
     server.await;
 }
