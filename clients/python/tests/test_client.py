@@ -324,7 +324,12 @@ async def test_async_json_streaming(async_client):
         function_name="json_success",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {"role": "user", "content": {"country": "Japan"}},
+                {"role": "assistant", "content": "ok"},
+                # This function has a user schema but we can bypass with RawText
+                {"role": "user", "content": [RawText(value="Hello")]},
+            ],
         },
         stream=True,
     )

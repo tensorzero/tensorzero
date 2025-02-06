@@ -32,13 +32,9 @@ class Text(ContentBlock):
         return dict(type="text", value=self.text)
 
 
-"""
-This class does not subclass ContentBlock since it cannot be output by the API.
-"""
-
-
 @dataclass
 class RawText:
+    # This class does not subclass ContentBlock since it cannot be output by the API.
     value: str
 
     def to_dict(self) -> Dict[str, Any]:
@@ -62,13 +58,10 @@ class ToolCall(ContentBlock):
         )
 
 
-"""
-This class does not subclass ContentBlock since it cannot be output by the API.
-"""
-
-
+@dataclass
 @dataclass
 class ToolResult:
+    # This class does not subclass ContentBlock since it cannot be output by the API.
     name: str
     result: str
     id: str
