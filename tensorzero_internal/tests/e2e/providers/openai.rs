@@ -32,12 +32,27 @@ async fn get_providers() -> E2ETestProviders {
         Err(_) => HashMap::new(),
     };
 
-    let standard_providers = vec![E2ETestProvider {
+    let standard_without_o1 = vec![E2ETestProvider {
         variant_name: "openai".to_string(),
         model_name: "gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
         credentials: HashMap::new(),
     }];
+
+    let standard_providers = vec![
+        E2ETestProvider {
+            variant_name: "openai".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            variant_name: "openai-o1".to_string(),
+            model_name: "o1-2024-12-17".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "openai-dynamic".to_string(),
@@ -65,6 +80,12 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            variant_name: "openai-o1".to_string(),
+            model_name: "o1-2024-12-17".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     #[cfg(feature = "e2e_tests")]
@@ -81,7 +102,7 @@ async fn get_providers() -> E2ETestProviders {
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
-        parallel_tool_use_inference: standard_providers.clone(),
+        parallel_tool_use_inference: standard_without_o1.clone(),
         json_mode_inference: json_providers.clone(),
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
@@ -354,6 +375,46 @@ async fn test_default_function_invalid_model_name() {
         "Unexpected error: {text}"
     );
     assert_eq!(status, StatusCode::BAD_GATEWAY);
+}
+
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+async fn test_o1_streaming_unsupported() {
+    use reqwest::StatusCode;
+
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "openai-o1",
+        "episode_id": episode_id,
+        "input":
+            {"system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital of Japan?"
+                }
+            ]},
+        "stream": true,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let text = response.text().await.unwrap();
+    // This check will cause our CI to start failing when OpenAI enables streaming support for o1
+    // When this happens, we should delete this test, and remove all of the "o1" cjecks from
+    // our streaming tests (e.g. `test_tool_multi_turn_inference_request_with_provider`)
+    assert!(
+        text.contains("'stream' does not support true with this model"),
+        "Unexpected error: {text}"
+    );
 }
 
 #[cfg(feature = "e2e_tests")]
