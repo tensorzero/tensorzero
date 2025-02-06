@@ -1,10 +1,68 @@
 use futures::StreamExt;
-use reqwest::Client;
 use serde_json::json;
-use tensorzero::InferenceResponseChunk;
+use tensorzero::{
+    Client, ClientInferenceParams, InferenceOutput, InferenceResponseChunk, Input, InputMessage,
+    InputMessageContent, Role,
+};
 
-use crate::common::get_gateway_endpoint;
+use crate::{
+    common::get_gateway_endpoint,
+    providers::common::{make_embedded_gateway, make_http_gateway},
+};
 use reqwest_eventsource::{Event, RequestBuilderExt};
+
+#[tokio::test]
+async fn test_client_stream_with_error_http_gateway() {
+    test_client_stream_with_error(make_http_gateway().await).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_client_stream_with_error_embedded_gateway() {
+    test_client_stream_with_error(make_embedded_gateway().await).await;
+}
+
+async fn test_client_stream_with_error(client: Client) {
+    let res = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("err_in_stream".to_string()),
+            input: Input {
+                system: Some(json!({
+                    "assistant_name": "AskJeeves",
+                })),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text {
+                        value: "Please write me a sentence about Megumin making an explosion."
+                            .into(),
+                    }],
+                }],
+            },
+            stream: Some(true),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let InferenceOutput::Streaming(stream) = res else {
+        panic!("Expected a stream");
+    };
+    let stream = stream.enumerate().collect::<Vec<_>>().await;
+    assert_eq!(stream.len(), 17);
+
+    for (i, chunk) in stream {
+        if i == 3 {
+            let err = chunk
+                .expect_err("Expected error after 3 chunks")
+                .to_string();
+            assert!(
+                err.contains("Dummy error in stream"),
+                "Unexpected error: `{err}`"
+            );
+        } else {
+            chunk.expect("Expected first few chunks to be Ok");
+        }
+    }
+}
 
 #[tokio::test]
 async fn test_stream_with_error() {
@@ -22,7 +80,7 @@ async fn test_stream_with_error() {
         "stream": true,
     });
 
-    let mut event_stream = Client::new()
+    let mut event_stream = reqwest::Client::new()
         .post(get_gateway_endpoint("/inference"))
         .json(&payload)
         .eventsource()

@@ -1222,3 +1222,50 @@ def test_sync_dynamic_credentials(sync_client):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
+
+
+def test_sync_err_in_stream(sync_client):
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="err_in_stream",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        stream=True,
+    )
+
+    next(result)
+    next(result)
+    next(result)
+    with pytest.raises(TensorZeroError) as exc_info:
+        next(result)
+    assert "Dummy error in stream" in str(exc_info.value)
+    remaining_chunks = list(result)
+    assert len(remaining_chunks) == 13
+
+
+@pytest.mark.asyncio
+async def test_async_err_in_stream(async_client):
+    result = await async_client.inference(
+        function_name="basic_test",
+        variant_name="err_in_stream",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        stream=True,
+    )
+
+    # anext() was added in Python 3.10, use __anext__() for older versions
+    await result.__anext__()
+    await result.__anext__()
+    await result.__anext__()
+    with pytest.raises(TensorZeroError) as exc_info:
+        await result.__anext__()
+    assert "Dummy error in stream" in str(exc_info.value)
+    # Make this an async collect into a list
+    remaining_chunks = []
+    async for chunk in result:
+        remaining_chunks.append(chunk)
+    assert len(remaining_chunks) == 13
