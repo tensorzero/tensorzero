@@ -279,9 +279,10 @@ pub async fn inference(
                 )
                 .await;
 
-            // Make sure the response worked (incl. first chunk) prior to launching the thread and starting to return chunks
-            let (chunk, stream, model_used_info) = match result {
-                Ok((chunk, stream, model_used_info)) => (chunk, stream, model_used_info),
+            // Make sure the response worked prior to launching the thread and starting to return chunks.
+            // The provider has already checked that the first chunk is OK.
+            let (stream, model_used_info) = match result {
+                Ok((stream, model_used_info)) => (stream, model_used_info),
                 Err(e) => {
                     tracing::warn!(
                         "functions.{function_name:?}.variants.{variant_name:?} failed during inference: {e}",
@@ -318,7 +319,6 @@ pub async fn inference(
                 function,
                 config.clone(),
                 inference_metadata,
-                chunk,
                 stream,
                 clickhouse_connection_info,
             );
@@ -448,16 +448,11 @@ fn create_stream(
     function: Arc<FunctionConfig>,
     config: Arc<Config<'static>>,
     metadata: InferenceMetadata,
-    first_chunk: InferenceResultChunk,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
 ) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
-        let mut buffer = vec![first_chunk.clone()];
-
-        // Send the first chunk
-        yield Ok(prepare_response_chunk(&metadata, first_chunk));
-
+        let mut buffer = vec![];
         while let Some(chunk) = stream.next().await {
             match chunk {
                 Ok(chunk) => {

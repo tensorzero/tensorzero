@@ -11,22 +11,24 @@ use aws_sdk_bedrockruntime::types::{
 };
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use reqwest::StatusCode;
 use std::time::Duration;
 use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
+use super::helpers::peek_first_chunk;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
-    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStream, RequestMessage, Role, Text,
-    TextChunk, Usage,
+    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -79,22 +81,21 @@ impl InferenceProvider for AWSBedrockProvider {
     ) -> Result<ProviderInferenceResponse, Error> {
         // TODO (#55): add support for guardrails and additional fields
 
-        let messages: Vec<Message> = request
+        let mut messages: Vec<Message> = request
             .messages
             .iter()
             .map(Message::try_from)
             .collect::<Result<Vec<_>, _>>()?;
 
-        let messages = if self.model_id.contains("claude")
+        if self.model_id.contains("claude")
             && request.function_type == FunctionType::Json
             && matches!(
                 request.json_mode,
                 ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-            ) {
-            prefill_json_message(messages)?
-        } else {
-            messages
-        };
+            )
+        {
+            prefill_json_message(&mut messages)?;
+        }
 
         let mut inference_config = InferenceConfiguration::builder();
         // TODO (#55): add support for top_p, stop_sequences, etc.
@@ -186,32 +187,24 @@ impl InferenceProvider for AWSBedrockProvider {
         request: &'a ModelInferenceRequest<'_>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<
-        (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            String,
-        ),
-        Error,
-    > {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         // TODO (#55): add support for guardrails and additional fields
 
-        let messages: Vec<Message> = request
+        let mut messages: Vec<Message> = request
             .messages
             .iter()
             .map(Message::try_from)
             .collect::<Result<Vec<_>, _>>()?;
 
-        let messages = if self.model_id.contains("claude")
+        if self.model_id.contains("claude")
             && request.function_type == FunctionType::Json
             && matches!(
                 request.json_mode,
                 ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-            ) {
-            prefill_json_message(messages)?
-        } else {
-            messages
-        };
+            )
+        {
+            prefill_json_message(&mut messages)?;
+        }
 
         let mut inference_config = InferenceConfiguration::builder();
         // TODO (#55): add support for top_p, stop_sequences, etc.
@@ -278,19 +271,8 @@ impl InferenceProvider for AWSBedrockProvider {
             })
         })?;
 
-        let mut stream = Box::pin(stream_bedrock(stream, start_time));
-        let mut chunk = match stream.next().await {
-            Some(Ok(chunk)) => chunk,
-            Some(Err(e)) => return Err(e),
-            None => {
-                return Err(Error::new(ErrorDetails::InferenceServer {
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: None,
-                    message: "Stream ended before first chunk".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                }))
-            }
-        };
+        let mut stream = stream_bedrock(stream, start_time).peekable();
+        let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if self.model_id.contains("claude")
             && matches!(
                 request.json_mode,
@@ -298,10 +280,10 @@ impl InferenceProvider for AWSBedrockProvider {
             )
             && matches!(request.function_type, FunctionType::Json)
         {
-            chunk = prefill_json_chunk_response(chunk);
+            prefill_json_chunk_response(chunk);
         }
 
-        Ok((chunk, stream, raw_request))
+        Ok((stream, raw_request))
     }
 
     async fn start_batch_inference<'a>(
@@ -332,8 +314,8 @@ impl InferenceProvider for AWSBedrockProvider {
 fn stream_bedrock(
     mut stream: ConverseStreamOutput,
     start_time: Instant,
-) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
-    async_stream::stream! {
+) -> ProviderInferenceResponseStreamInner {
+    Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
         let mut current_tool_name: Option<String> = None;
 
@@ -367,7 +349,7 @@ fn stream_bedrock(
                 }
             }
         }
-    }
+    })
 }
 
 fn bedrock_to_tensorzero_stream_message(
@@ -501,7 +483,7 @@ impl From<Role> for ConversationRole {
 }
 
 /// Prefill messages for AWS Bedrock when conditions are met
-fn prefill_json_message(mut messages: Vec<Message>) -> Result<Vec<Message>, Error> {
+fn prefill_json_message(messages: &mut Vec<Message>) -> Result<(), Error> {
     // Add a JSON-prefill message for AWS Bedrock's JSON mode
     messages.push(Message::try_from(&RequestMessage {
         role: Role::Assistant,
@@ -509,7 +491,7 @@ fn prefill_json_message(mut messages: Vec<Message>) -> Result<Vec<Message>, Erro
             text: "Here is the JSON requested:\n{".to_string(),
         })],
     })?);
-    Ok(messages)
+    Ok(())
 }
 
 impl TryFrom<&ContentBlock> for BedrockContentBlock {

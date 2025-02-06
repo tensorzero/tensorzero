@@ -5,7 +5,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, ProviderInferenceResponseStream,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use futures::StreamExt;
@@ -191,14 +191,7 @@ impl InferenceProvider for HyperbolicProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<
-        (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            String,
-        ),
-        Error,
-    > {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = HyperbolicRequest::new(&self.model_name, request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -224,23 +217,8 @@ impl InferenceProvider for HyperbolicProvider {
                 })
             })?;
 
-        let mut stream = Box::pin(stream_openai(event_source, start_time));
-        // Get a single chunk from the stream and make sure it is OK then send to client.
-        // We want to do this here so that we can tell that the request is working.
-        let chunk = match stream.next().await {
-            Some(Ok(chunk)) => chunk,
-            Some(Err(e)) => return Err(e),
-            None => {
-                return Err(ErrorDetails::InferenceServer {
-                    message: "Stream ended before first chunk".to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                }
-                .into())
-            }
-        };
-        Ok((chunk, stream, raw_request))
+        let stream = stream_openai(event_source, start_time).peekable();
+        Ok((stream, raw_request))
     }
 
     async fn start_batch_inference<'a>(

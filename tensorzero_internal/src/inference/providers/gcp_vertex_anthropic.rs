@@ -1,7 +1,7 @@
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::ExposeSecret;
@@ -19,14 +19,15 @@ use crate::inference::types::{
     Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
 use crate::inference::types::{
-    ModelInferenceRequest, ProviderInferenceResponse, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStream, RequestMessage, Usage,
+    ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
 use crate::model::{build_creds_caching_default_with_fn, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use super::gcp_vertex_gemini::{default_api_key_location, GCPVertexCredentials};
+use super::helpers::peek_first_chunk;
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
@@ -153,14 +154,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<
-        (
-            ProviderInferenceResponseChunk,
-            ProviderInferenceResponseStream,
-            String,
-        ),
-        Error,
-    > {
+    ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = GCPVertexAnthropicRequestBody::new(request)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -186,28 +180,16 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                     raw_response: None,
                 })
             })?;
-        let mut stream = Box::pin(stream_anthropic(event_source, start_time));
-        let mut chunk = match stream.next().await {
-            Some(Ok(chunk)) => chunk,
-            Some(Err(e)) => return Err(e),
-            None => {
-                return Err(ErrorDetails::InferenceServer {
-                    message: "Stream ended before first chunk".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                    raw_response: None,
-                }
-                .into())
-            }
-        };
+        let mut stream = stream_anthropic(event_source, start_time).peekable();
+        let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
         ) && matches!(request.function_type, FunctionType::Json)
         {
-            chunk = prefill_json_chunk_response(chunk);
+            prefill_json_chunk_response(chunk);
         }
-        Ok((chunk, stream, raw_request))
+        Ok((stream, raw_request))
     }
 
     async fn start_batch_inference<'a>(
@@ -241,8 +223,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 fn stream_anthropic(
     mut event_source: EventSource,
     start_time: Instant,
-) -> impl Stream<Item = Result<ProviderInferenceResponseChunk, Error>> {
-    async_stream::stream! {
+) -> ProviderInferenceResponseStreamInner {
+    Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
         let mut current_tool_name: Option<String> = None;
         while let Some(ev) = event_source.next().await {
@@ -293,7 +275,7 @@ fn stream_anthropic(
         }
 
         event_source.close();
-    }
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -489,16 +471,14 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             .iter()
             .map(GCPVertexAnthropicMessage::try_from)
             .collect::<Result<Vec<_>, _>>()?;
-        let messages = prepare_messages(request_messages)?;
-        let messages = if matches!(
+        let mut messages = prepare_messages(request_messages)?;
+        if matches!(
             request.json_mode,
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
         ) && matches!(request.function_type, FunctionType::Json)
         {
-            prefill_json_message(messages)
-        } else {
-            messages
-        };
+            prefill_json_message(&mut messages)
+        }
 
         // Workaround for GCP Vertex AI Anthropic API limitation: they don't support explicitly specifying "none"
         // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
@@ -604,9 +584,7 @@ fn prepare_messages(
     Ok(consolidated_messages)
 }
 
-fn prefill_json_message(
-    mut messages: Vec<GCPVertexAnthropicMessage>,
-) -> Vec<GCPVertexAnthropicMessage> {
+fn prefill_json_message(messages: &mut Vec<GCPVertexAnthropicMessage>) {
     // Add a JSON-prefill message for Anthropic's JSON mode
     messages.push(GCPVertexAnthropicMessage {
         role: GCPVertexAnthropicRole::Assistant,
@@ -614,7 +592,6 @@ fn prefill_json_message(
             text: "Here is the JSON requested:\n{",
         }],
     });
-    messages
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -2222,7 +2199,8 @@ mod tests {
             }],
         }];
 
-        let result = prefill_json_message(input_messages);
+        let mut result = input_messages.clone();
+        prefill_json_message(&mut result);
 
         assert_eq!(result.len(), 2);
 
