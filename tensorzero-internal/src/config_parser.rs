@@ -122,19 +122,14 @@ impl std::fmt::Display for MetricConfigLevel {
 }
 
 impl<'c> Config<'c> {
-    #[instrument]
-    pub fn load() -> Result<Config<'c>, Error> {
-        let config_path = UninitializedConfig::get_config_path();
-        let config_path = Path::new(&config_path);
-        Self::load_from_path(config_path)
-    }
-
     pub fn load_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
         let config_table = match UninitializedConfig::read_toml_config(config_path)? {
             Some(table) => table,
             None => {
-                tracing::warn!("No config file found at {config_path:?}, using default config");
-                return Ok(Config::default());
+                return Err(ErrorDetails::Config {
+                    message: format!("Config file not found: {config_path:?}"),
+                }
+                .into())
             }
         };
         let base_path = match PathBuf::from(&config_path).parent() {
@@ -362,16 +357,6 @@ struct UninitializedConfig {
 }
 
 impl UninitializedConfig {
-    /// Load and validate the TensorZero config file
-    /// Use a path provided as a CLI argument (`./gateway path/to/tensorzero.toml`), or default to
-    /// `tensorzero.toml` in the current directory if no path is provided.
-    fn get_config_path() -> String {
-        match std::env::args().nth(1) {
-            Some(path) => path,
-            None => "config/tensorzero.toml".to_string(),
-        }
-    }
-
     /// Read a file from the file system and parse it as TOML
     fn read_toml_config(path: &Path) -> Result<Option<toml::Table>, Error> {
         if !path.exists() {
@@ -1854,7 +1839,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_bedrock_err_auto_detect_region() {
+    async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
         // We want auto-detection to fail, so we clear this environment variable.
         // We use 'nextest' as our runner, so each test runs in its own process
         std::env::remove_var("AWS_REGION");
@@ -1936,13 +1921,12 @@ mod tests {
     #[traced_test]
     #[test]
     fn test_config_load_no_config_file() {
-        let config = Config::load_from_path(Path::new("nonexistent.toml")).unwrap();
-        assert!(logs_contain("using default config"));
-        assert_eq!(config.gateway, GatewayConfig::default());
-        assert_eq!(config.models.len(), 0);
-        assert_eq!(config.embedding_models.len(), 0);
-        assert_eq!(config.functions.len(), 0);
-        assert_eq!(config.metrics.len(), 0);
-        assert_eq!(config.tools.len(), 0);
+        let err = Config::load_from_path(Path::new("nonexistent.toml"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Config file not found"),
+            "Unexpected error message: {err}"
+        );
     }
 }

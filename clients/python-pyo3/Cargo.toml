@@ -17,12 +17,14 @@ crate-type = ["cdylib"]
 futures = { workspace = true }
 pyo3 = { workspace = true }
 pyo3-async-runtimes = { version = "0.23.0", features = ["tokio-runtime"] }
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tensorzero_rust = { package = "tensorzero", path = "../rust", features = [
     "pyo3",
 ] }
 tokio.workspace = true
+tracing = { workspace = true, features = ["release_max_level_debug"] }
 url.workspace = true
 uuid.workspace = true
 

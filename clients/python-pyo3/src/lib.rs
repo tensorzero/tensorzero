@@ -8,7 +8,7 @@
 ///
 /// This module defines several Python classes (`BaseTensorZeroGateway`, `TensorZeroGateway`, `AsyncTensorZeroGateway`),
 /// and defines methods on them.
-use std::{collections::HashMap, future::Future, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use futures::StreamExt;
 use pyo3::{
@@ -138,13 +138,22 @@ impl StreamWrapper {
 #[pymethods]
 impl BaseTensorZeroGateway {
     #[new]
-    fn new(py: Python<'_>, base_url: &str) -> PyResult<Self> {
-        let client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+    #[pyo3(signature = (base_url, *, timeout=None))]
+    fn new(py: Python<'_>, base_url: &str, timeout: Option<u64>) -> PyResult<Self> {
+        let mut client_builder = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
             url: Url::parse(base_url)
                 .map_err(|e| PyValueError::new_err(format!("Failed to parse base_url: {e:?}")))?,
-        })
-        .build_http();
-        let client = match client {
+        });
+        if let Some(timeout) = timeout {
+            let http_client = reqwest::Client::builder()
+                .timeout(Duration::from_secs(timeout))
+                .build()
+                .map_err(|e| {
+                    PyValueError::new_err(format!("Failed to build HTTP client: {e:?}"))
+                })?;
+            client_builder = client_builder.with_http_client(http_client);
+        }
+        let client = match client_builder.build_http() {
             Ok(client) => client,
             Err(e) => {
                 return Err(tensorzero_internal_error(
@@ -206,8 +215,8 @@ impl BaseTensorZeroGateway {
 #[pyclass(extends=BaseTensorZeroGateway)]
 /// A synchronous client for a TensorZero gateway.
 ///
-/// To connect to a running HTTP gateway, call `TensorZeroGateway(base_url = "http://gateway_url")`
-/// To create an embedded gateway, call `TensorZeroGateway.create_embedded_gateway(config_path = "/path/to/tensorzero.toml")`
+/// To connect to a running HTTP gateway, call `TensorZeroGateway.build_http(base_url = "http://gateway_url")`
+/// To create an embedded gateway, call `TensorZeroGateway.build_embedded(config_path = "/path/to/tensorzero.toml", clickhouse_url = "http://clickhouse_url")`
 struct TensorZeroGateway {}
 
 /// Calls `tokio::Runtime::block_on` without holding the Python GIL.
@@ -339,15 +348,40 @@ impl BaseTensorZeroGateway {
 #[pymethods]
 impl TensorZeroGateway {
     #[new]
-    fn new(py: Python<'_>, base_url: &str) -> PyResult<(Self, BaseTensorZeroGateway)> {
-        Ok((Self {}, BaseTensorZeroGateway::new(py, base_url)?))
+    #[pyo3(signature = (base_url, *, timeout=None))]
+    fn new(
+        py: Python<'_>,
+        base_url: &str,
+        timeout: Option<u64>,
+    ) -> PyResult<(Self, BaseTensorZeroGateway)> {
+        tracing::warn!("TensorZeroGateway.__init__ is deprecated. Use TensorZeroGateway.build_http or TensorZeroGateway.build_embedded instead.");
+        Ok((Self {}, BaseTensorZeroGateway::new(py, base_url, timeout)?))
     }
 
+    #[classmethod]
+    #[pyo3(signature = (gateway_url, *, timeout=None))]
+    /// Initialize the TensorZero client, using the HTTP gateway.
+    /// :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+    /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
+    /// :return: A `TensorZeroGateway` instance configured to use the HTTP gateway.
+    fn build_http(
+        cls: &Bound<'_, PyType>,
+        gateway_url: &str,
+        timeout: Option<u64>,
+    ) -> PyResult<Py<TensorZeroGateway>> {
+        let client = BaseTensorZeroGateway::new(cls.py(), gateway_url, timeout)?;
+        let instance = PyClassInitializer::from(client).add_subclass(TensorZeroGateway {});
+        Py::new(cls.py(), instance)
+    }
+
+    /// **Deprecated** (use `build_http` or `build_embedded` instead)
     /// Initialize the TensorZero client.
     ///
     /// :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+    /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
     #[allow(unused_variables)]
-    fn __init__(this: Py<Self>, base_url: &str) -> Py<Self> {
+    #[pyo3(signature = (base_url, *, timeout=None))]
+    fn __init__(this: Py<Self>, base_url: &str, timeout: Option<u64>) -> Py<Self> {
         // The actual logic is in the 'new' method - this method just exists to generate a docstring
         this
     }
@@ -379,7 +413,7 @@ impl TensorZeroGateway {
     /// :param config_path: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
     /// :return: A `TensorZeroGateway` instance configured to use an embedded gateway.
-    fn create_embedded_gateway(
+    fn build_embedded(
         cls: &Bound<'_, PyType>,
         config_path: &str,
         clickhouse_url: Option<String>,
@@ -553,15 +587,42 @@ struct AsyncTensorZeroGateway {}
 #[pymethods]
 impl AsyncTensorZeroGateway {
     #[new]
-    fn new(py: Python<'_>, base_url: &str) -> PyResult<(Self, BaseTensorZeroGateway)> {
-        Ok((Self {}, BaseTensorZeroGateway::new(py, base_url)?))
+    #[pyo3(signature = (base_url, *, timeout=None))]
+    fn new(
+        py: Python<'_>,
+        base_url: &str,
+        timeout: Option<u64>,
+    ) -> PyResult<(Self, BaseTensorZeroGateway)> {
+        tracing::warn!("AsyncTensorZeroGateway.__init__ is deprecated. Use AsyncTensorZeroGateway.build_http or AsyncTensorZeroGateway.build_embedded instead.");
+        Ok((Self {}, BaseTensorZeroGateway::new(py, base_url, timeout)?))
     }
 
+    #[classmethod]
+    #[pyo3(signature = (gateway_url, *, timeout=None))]
+    fn build_http<'a>(
+        cls: &Bound<'a, PyType>,
+        gateway_url: &str,
+        timeout: Option<u64>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let gateway_url = gateway_url.to_string();
+        pyo3_async_runtimes::tokio::future_into_py(cls.py(), async move {
+            Python::with_gil(|py| {
+                let client = BaseTensorZeroGateway::new(py, &gateway_url, timeout)?;
+                let instance =
+                    PyClassInitializer::from(client).add_subclass(AsyncTensorZeroGateway {});
+                Py::new(py, instance)
+            })
+        })
+    }
+
+    /// **Deprecated** (use `build_http` or `build_embedded` instead)
     /// Initialize the TensorZero client.
     ///
     /// :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+    /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
     #[allow(unused_variables)]
-    fn __init__(this: Py<Self>, base_url: &str) -> Py<Self> {
+    #[pyo3(signature = (base_url, *, timeout=None))]
+    fn __init__(this: Py<Self>, base_url: &str, timeout: Option<u64>) -> Py<Self> {
         // The actual logic is in the 'new' method - this method just exists to generate a docstring
         this
     }
@@ -576,13 +637,13 @@ impl AsyncTensorZeroGateway {
     }
 
     async fn __aexit__(
-        this: Py<Self>,
+        _this: Py<Self>,
         _exc_type: Py<PyAny>,
         _exc_value: Py<PyAny>,
         _traceback: Py<PyAny>,
-    ) -> Py<Self> {
+    ) -> PyResult<()> {
         // TODO - implement closing the 'reqwest' connection pool: https://github.com/tensorzero/tensorzero/issues/857
-        this
+        Ok(())
     }
 
     // We make this a class method rather than adding parameters to the `__init__` method,
@@ -600,7 +661,7 @@ impl AsyncTensorZeroGateway {
     /// :param config_path: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
     /// :return: A `Future` that resolves to an `AsyncTensorZeroGateway` instance configured to use an embedded gateway.
-    fn create_embedded_gateway<'a>(
+    fn build_embedded<'a>(
         // This is a classmethod, so it receives the class object as a parameter.
         cls: &Bound<'a, PyType>,
         config_path: &str,

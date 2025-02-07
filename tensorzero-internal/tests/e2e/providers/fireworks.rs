@@ -15,40 +15,38 @@ async fn get_providers() -> E2ETestProviders {
 
     let providers = vec![E2ETestProvider {
         variant_name: "fireworks".to_string(),
-        model_name: "llama3.1-8b-instruct-fireworks".into(),
+        model_name: "qwen2p5-72b-instruct".into(),
         model_provider_name: "fireworks".into(),
         credentials: HashMap::new(),
     }];
 
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "fireworks-dynamic".to_string(),
-        model_name: "llama3.1-8b-instruct-fireworks-dynamic".into(),
+        model_name: "llama3.3-70b-instruct-fireworks-dynamic".into(),
         model_provider_name: "fireworks".into(),
         credentials,
     }];
 
-    // NOTE: FireFunction might not be available serverlessly anymore so we have temporarily disabled it
-    // let tool_providers = vec![E2ETestProvider {
-    //     variant_name: "fireworks-firefunction".to_string(),
-    //     model_name: "firefunction-v2".into(),
-    //     model_provider_name: "fireworks".into(),
-    //     credentials: HashMap::new(),
-    // }];
-    let tool_providers = vec![];
+    let tool_providers = vec![E2ETestProvider {
+        variant_name: "fireworks".to_string(),
+        model_name: "qwen2p5-72b-instruct".into(),
+        model_provider_name: "fireworks".into(),
+        credentials: HashMap::new(),
+    }];
 
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "fireworks".to_string(),
-            model_name: "llama3.1-8b-instruct-fireworks".into(),
+            model_name: "llama3.3-70b-instruct-fireworks".into(),
             model_provider_name: "fireworks".into(),
             credentials: HashMap::new(),
         },
-        // E2ETestProvider {
-        //     variant_name: "fireworks-implicit".to_string(),
-        //     model_name: "firefunction-v2".into(),
-        //     model_provider_name: "fireworks".into(),
-        //     credentials: HashMap::new(),
-        // },
+        E2ETestProvider {
+            variant_name: "fireworks-implicit".to_string(),
+            model_name: "qwen2p5-72b-instruct".into(),
+            model_provider_name: "fireworks".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     #[cfg(feature = "e2e_tests")]
@@ -65,7 +63,7 @@ async fn get_providers() -> E2ETestProviders {
         tool_use_inference: tool_providers.clone(),
         tool_multi_turn_inference: tool_providers.clone(),
         dynamic_tool_use_inference: tool_providers.clone(),
-        parallel_tool_use_inference: tool_providers,
+        parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers,
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers,
