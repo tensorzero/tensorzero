@@ -7,6 +7,10 @@ services:
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
+    environment:
+      - CLICKHOUSE_USER=chuser
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_PASSWORD=chpassword
     ulimits:
       nofile:
         soft: 262144
@@ -33,7 +37,7 @@ services:
     volumes:
       - ./config:/app/config:ro
     environment:
-      - TENSORZERO_CLICKHOUSE_URL=http://clickhouse:8123/tensorzero_ui_fixtures
+      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
     env_file:
       - ${ENV_FILE:-../.env}
     ports:
