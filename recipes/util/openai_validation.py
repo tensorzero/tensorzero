@@ -16,7 +16,7 @@ def check_example_length(messages, max_token=65_536):
         return num_tokens
 
     total_tokens = num_tokens_from_messages(messages)
-    return total_tokens <= max_token
+    return total_tokens <= max_token, total_tokens
 
 
 def check_system_user_messages(messages):
