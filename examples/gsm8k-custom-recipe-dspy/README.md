@@ -26,7 +26,7 @@ See `tensorzero.toml` for the main configuration details.
 
 To get started, create a `.env` file with your Together API key (`TOGETHER_API_KEY`) and run the following command.
 Docker Compose will launch the TensorZero gateway and a test ClickHouse database.
-Set `TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero` and `TOGETHER_API_KEY` in the shell your notebook will run in.
+Set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero` and `TOGETHER_API_KEY` in the shell your notebook will run in.
 
 ```bash
 docker compose up
