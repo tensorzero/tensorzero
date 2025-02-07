@@ -278,7 +278,6 @@ pub struct JsonInferenceResult {
 pub struct JsonInferenceOutput {
     pub raw: String,
     pub parsed: Option<Value>,
-    pub thought: Option<String>,
 }
 
 /// In the streaming case we convert ProviderInferenceResponseChunks into a InferenceResultChunk, which is then
@@ -668,17 +667,12 @@ impl JsonInferenceResult {
         inference_id: Uuid,
         raw: String,
         parsed: Option<Value>,
-        thought: Option<String>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         output_schema: Value,
         inference_params: InferenceParams,
     ) -> Self {
-        let output = JsonInferenceOutput {
-            raw,
-            parsed,
-            thought,
-        };
+        let output = JsonInferenceOutput { raw, parsed };
         Self {
             inference_id,
             created: current_timestamp(),
@@ -2003,10 +1997,6 @@ mod tests {
                     "{\"name\":\"John\",\"age\":30}".to_string()
                 );
                 assert_eq!(
-                    json_result.output.thought,
-                    Some("Thought 1Thought 2".to_string())
-                );
-                assert_eq!(
                     json_result.usage,
                     Usage {
                         input_tokens: 15,
@@ -2076,7 +2066,6 @@ mod tests {
                 assert_eq!(json_result.usage, usage);
                 assert_eq!(json_result.output.parsed, None);
                 assert_eq!(json_result.output.raw, "{\"name\":\"John\"}".to_string());
-                assert_eq!(json_result.output.thought, Some("Thought 1".to_string()));
                 assert_eq!(json_result.model_inference_results.len(), 1);
                 let model_inference_result = json_result.model_inference_results.first().unwrap();
                 assert_eq!(&*model_inference_result.model_name, model_name);
@@ -2243,10 +2232,6 @@ mod tests {
                 assert_eq!(
                     json_result.output.raw,
                     "{\"name\":\"John\",\"age\":30}".to_string()
-                );
-                assert_eq!(
-                    json_result.output.thought,
-                    Some("Thought 1Thought 2".to_string())
                 );
                 assert_eq!(
                     json_result.usage,

@@ -79,7 +79,6 @@ class ToolResult:
 class JsonInferenceOutput:
     raw: str
     parsed: Optional[Dict[str, Any]]
-    thought: Optional[str]
 
 
 @dataclass
@@ -199,8 +198,7 @@ class JsonChunk:
     inference_id: UUID
     episode_id: UUID
     variant_name: str
-    raw: Optional[str]
-    thought: Optional[str]
+    raw: str
     usage: Optional[Usage]
 
 
@@ -216,13 +214,12 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             content=[parse_content_block_chunk(block) for block in chunk["content"]],
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
         )
-    elif "raw" in chunk or "thought" in chunk:
+    elif "raw" in chunk:
         return JsonChunk(
             inference_id=UUID(chunk["inference_id"]),
             episode_id=UUID(chunk["episode_id"]),
             variant_name=chunk["variant_name"],
-            raw=chunk.get("raw"),
-            thought=chunk.get("thought"),
+            raw=chunk["raw"],
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
         )
     else:

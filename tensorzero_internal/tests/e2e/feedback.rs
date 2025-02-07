@@ -353,7 +353,6 @@ async fn e2e_test_demonstration_feedback_json() {
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo"})),
         raw: "{\"answer\":\"Tokyo\"}".to_string(),
-        thought: None,
     };
     assert_eq!(retrieved_value, expected_value);
 

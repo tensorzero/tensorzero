@@ -778,7 +778,6 @@ mod tests {
             Uuid::now_v7(),
             "{\"response\": \"Valid JSON response\"}".to_string(),
             Some(json!({"response": "Valid JSON response"})),
-            None,
             Usage {
                 input_tokens: 10,
                 output_tokens: 20,
@@ -814,7 +813,6 @@ mod tests {
             Uuid::now_v7(),
             "{\"oops: \"Malformed JSON response\"".to_string(),
             None, // malformed
-            None,
             Usage {
                 input_tokens: 15,
                 output_tokens: 25,
@@ -998,7 +996,6 @@ mod tests {
         let expected_content = JsonInferenceOutput {
             raw: "{\"answer\":\"Hello\"}".to_string(),
             parsed: Some(json!({"answer": "Hello"})),
-            thought: None,
         };
         match fused {
             InferenceResult::Json(fused) => {

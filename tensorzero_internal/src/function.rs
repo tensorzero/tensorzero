@@ -185,14 +185,6 @@ impl FunctionConfig {
                                 .to_string(),
                         })
                     })?;
-                let thought =
-                    content_blocks
-                        .iter()
-                        .rev()
-                        .find_map(|content_block| match content_block {
-                            ContentBlockOutput::Thought(thought) => Some(&thought.text),
-                            _ => None,
-                        });
                 let parsed_output = serde_json::from_str::<Value>(raw)
                     .map_err(|e| {
                         Error::new(ErrorDetails::OutputParsing {
@@ -221,7 +213,6 @@ impl FunctionConfig {
                     inference_id,
                     raw.to_string(),
                     parsed_output,
-                    thought.cloned(),
                     usage,
                     model_inference_results,
                     output_schema.value().clone(),

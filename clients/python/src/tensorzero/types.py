@@ -180,7 +180,6 @@ class JsonChunk:
     episode_id: UUID
     variant_name: str
     raw: Optional[str]
-    thought: Optional[str]
     usage: Optional[Usage]
 
 
@@ -196,13 +195,12 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             content=[parse_content_block_chunk(block) for block in chunk["content"]],
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
         )
-    elif "raw" in chunk or "thought" in chunk:
+    elif "raw" in chunk:
         return JsonChunk(
             inference_id=UUID(chunk["inference_id"]),
             episode_id=UUID(chunk["episode_id"]),
             variant_name=chunk["variant_name"],
             raw=chunk.get("raw"),
-            thought=chunk.get("thought"),
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
         )
     else:

@@ -662,7 +662,6 @@ mod tests {
         let json_output = JsonInferenceOutput {
             raw: "{\"result\": \"success\"}".to_string(),
             parsed: Some(json!({"result": "success"})),
-            thought: None,
         };
 
         let json_example = Example::Json(JsonExample {
@@ -819,7 +818,6 @@ mod tests {
                             "id": 1
                         }
                     })),
-                    thought: None,
                 })
                 .unwrap(),
             },
@@ -840,7 +838,6 @@ mod tests {
                         "result": [1, 2, 3],
                         "status": "ok"
                     })),
-                    thought: None,
                 })
                 .unwrap(),
             },
