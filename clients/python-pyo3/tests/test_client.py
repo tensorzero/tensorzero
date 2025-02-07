@@ -33,6 +33,7 @@ from tensorzero import (
     ChatInferenceResponse,
     FeedbackResponse,
     JsonInferenceResponse,
+    RawText,
     TensorZeroError,
     TensorZeroGateway,
     Text,
@@ -43,7 +44,7 @@ from uuid_utils import uuid7
 
 PWD = os.path.dirname(os.path.abspath(__file__))
 TEST_CONFIG_PATH = os.path.join(
-    PWD, "../../../tensorzero_internal/tests/e2e/tensorzero.toml"
+    PWD, "../../../tensorzero-internal/tests/e2e/tensorzero.toml"
 )
 
 
@@ -189,7 +190,7 @@ async def test_async_basic_inference(async_client):
 async def test_async_default_function_inference(async_client):
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
-        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+        "messages": [{"role": "user", "content": [RawText(value="Hello")]}],
     }
     input_copy = deepcopy(input)
     result = await async_client.inference(
@@ -435,7 +436,12 @@ async def test_async_json_streaming(async_client):
         function_name="json_success",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {"role": "user", "content": {"country": "Japan"}},
+                {"role": "assistant", "content": "ok"},
+                # This function has a user schema but we can bypass with RawText
+                {"role": "user", "content": [RawText(value="Hello")]},
+            ],
         },
         stream=True,
     )
@@ -484,6 +490,7 @@ async def test_async_json_success(async_client):
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": {"country": "Japan"}}],
         },
+        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         stream=False,
     )
     assert result.variant_name == "test"
@@ -597,6 +604,21 @@ async def test_async_dynamic_credentials(async_client):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
+
+
+def test_sync_error():
+    with pytest.raises(Exception) as exc_info:
+        with TensorZeroGateway("http://localhost:3000"):
+            raise Exception("My error")
+    assert str(exc_info.value) == "My error"
+
+
+@pytest.mark.asyncio
+async def test_async_error():
+    with pytest.raises(Exception) as exc_info:
+        async with AsyncTensorZeroGateway("http://localhost:3000"):
+            raise Exception("My error")
+    assert str(exc_info.value) == "My error"
 
 
 @pytest.fixture(params=[ClientType.HttpGateway, ClientType.EmbeddedGateway])
@@ -956,6 +978,7 @@ def test_sync_json_success(sync_client):
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": {"country": "Japan"}}],
         },
+        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         stream=False,
     )
     assert result.variant_name == "test"
@@ -1138,6 +1161,7 @@ def test_prepare_inference_request(sync_client):
         stream=True,
         dryrun=False,
         episode_id=episode_id,
+        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         variant_name="baz",
         params={"chat_completion": {"temperature": 0.1}},
         tool_choice="auto",
@@ -1173,6 +1197,10 @@ def test_prepare_inference_request(sync_client):
     assert request["stream"]
     assert not request["dryrun"]
     assert request["episode_id"] == str(episode_id)
+    assert request["output_schema"] == {
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+    }
     assert request["params"]["chat_completion"]["temperature"] == 0.1
     assert request["tool_choice"] == "auto"
     assert request["additional_tools"][0] == {
@@ -1209,3 +1237,26 @@ def test_sync_dynamic_credentials(sync_client):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
+
+
+@pytest.mark.asyncio
+async def test_async_timeout():
+    async with AsyncTensorZeroGateway(
+        "http://localhost:3000", timeout=1
+    ) as async_client:
+        with pytest.raises(TensorZeroError):
+            await async_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={"messages": [{"role": "user", "content": "Hello"}]},
+            )
+
+
+def test_sync_timeout():
+    with TensorZeroGateway("http://localhost:3000", timeout=1) as sync_client:
+        with pytest.raises(TensorZeroError):
+            sync_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={"messages": [{"role": "user", "content": "Hello"}]},
+            )
