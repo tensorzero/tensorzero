@@ -33,6 +33,7 @@ from tensorzero import (
     ChatInferenceResponse,
     FeedbackResponse,
     JsonInferenceResponse,
+    RawText,
     TensorZeroError,
     TensorZeroGateway,
     Text,
@@ -43,7 +44,7 @@ from uuid_utils import uuid7
 
 PWD = os.path.dirname(os.path.abspath(__file__))
 TEST_CONFIG_PATH = os.path.join(
-    PWD, "../../../tensorzero_internal/tests/e2e/tensorzero.toml"
+    PWD, "../../../tensorzero-internal/tests/e2e/tensorzero.toml"
 )
 
 
@@ -191,7 +192,7 @@ async def test_async_basic_inference(async_client):
 async def test_async_default_function_inference(async_client):
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
-        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+        "messages": [{"role": "user", "content": [RawText(value="Hello")]}],
     }
     input_copy = deepcopy(input)
     result = await async_client.inference(
@@ -437,7 +438,12 @@ async def test_async_json_streaming(async_client):
         function_name="json_success",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {"role": "user", "content": {"country": "Japan"}},
+                {"role": "assistant", "content": "ok"},
+                # This function has a user schema but we can bypass with RawText
+                {"role": "user", "content": [RawText(value="Hello")]},
+            ],
         },
         stream=True,
     )
@@ -600,6 +606,21 @@ async def test_async_dynamic_credentials(async_client):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
+
+
+def test_sync_error():
+    with pytest.raises(Exception) as exc_info:
+        with TensorZeroGateway("http://localhost:3000"):
+            raise Exception("My error")
+    assert str(exc_info.value) == "My error"
+
+
+@pytest.mark.asyncio
+async def test_async_error():
+    with pytest.raises(Exception) as exc_info:
+        async with AsyncTensorZeroGateway("http://localhost:3000"):
+            raise Exception("My error")
+    assert str(exc_info.value) == "My error"
 
 
 @pytest.fixture(params=[ClientType.HttpGateway, ClientType.EmbeddedGateway])

@@ -637,13 +637,13 @@ impl AsyncTensorZeroGateway {
     }
 
     async fn __aexit__(
-        this: Py<Self>,
+        _this: Py<Self>,
         _exc_type: Py<PyAny>,
         _exc_value: Py<PyAny>,
         _traceback: Py<PyAny>,
-    ) -> Py<Self> {
+    ) -> PyResult<()> {
         // TODO - implement closing the 'reqwest' connection pool: https://github.com/tensorzero/tensorzero/issues/857
-        this
+        Ok(())
     }
 
     // We make this a class method rather than adding parameters to the `__init__` method,
