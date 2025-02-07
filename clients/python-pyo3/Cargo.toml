@@ -24,6 +24,7 @@ tensorzero_rust = { package = "tensorzero", path = "../rust", features = [
     "pyo3",
 ] }
 tokio.workspace = true
+tracing = { workspace = true, features = ["release_max_level_debug"] }
 url.workspace = true
 uuid.workspace = true
 

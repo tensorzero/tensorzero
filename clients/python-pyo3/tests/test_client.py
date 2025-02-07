@@ -56,10 +56,12 @@ class ClientType(Enum):
 @pytest_asyncio.fixture(params=[ClientType.HttpGateway, ClientType.EmbeddedGateway])
 async def async_client(request):
     if request.param == ClientType.HttpGateway:
-        async with AsyncTensorZeroGateway("http://localhost:3000") as client:
+        async with await AsyncTensorZeroGateway.build_http(
+            "http://localhost:3000"
+        ) as client:
             yield client
     else:
-        async with await AsyncTensorZeroGateway.create_embedded_gateway(
+        async with await AsyncTensorZeroGateway.build_embedded(
             config_path=TEST_CONFIG_PATH,
             clickhouse_url="http://localhost:8123/tensorzero-python-e2e",
         ) as client:
@@ -624,10 +626,10 @@ async def test_async_error():
 @pytest.fixture(params=[ClientType.HttpGateway, ClientType.EmbeddedGateway])
 def sync_client(request):
     if request.param == ClientType.HttpGateway:
-        with TensorZeroGateway("http://localhost:3000") as client:
+        with TensorZeroGateway.build_http("http://localhost:3000") as client:
             yield client
     else:
-        with TensorZeroGateway.create_embedded_gateway(
+        with TensorZeroGateway.build_embedded(
             config_path=TEST_CONFIG_PATH,
             clickhouse_url="http://localhost:8123/tensorzero-python-e2e",
         ) as client:
