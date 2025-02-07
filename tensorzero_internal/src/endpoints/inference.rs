@@ -456,13 +456,17 @@ fn create_stream(
         let mut buffer = vec![first_chunk.clone()];
 
         // Send the first chunk
-        yield Ok(prepare_response_chunk(&metadata, first_chunk));
+        if let Some(chunk) = prepare_response_chunk(&metadata, first_chunk) {
+            yield Ok(chunk);
+        }
 
         while let Some(chunk) = stream.next().await {
             match chunk {
                 Ok(chunk) => {
                     buffer.push(chunk.clone());
-                    yield Ok(prepare_response_chunk(&metadata, chunk));
+                    if let Some(chunk) = prepare_response_chunk(&metadata, chunk) {
+                        yield Ok(chunk);
+                    }
                 }
                 Err(e) => yield Err(e),
             }
@@ -547,7 +551,7 @@ fn create_stream(
 fn prepare_response_chunk(
     metadata: &InferenceMetadata,
     chunk: InferenceResultChunk,
-) -> InferenceResponseChunk {
+) -> Option<InferenceResponseChunk> {
     InferenceResponseChunk::new(
         chunk,
         metadata.inference_id,
@@ -700,9 +704,7 @@ pub struct JsonInferenceResponseChunk {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
     pub variant_name: String,
-    pub raw: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub thought: Option<String>,
+    pub raw: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
 }
@@ -713,8 +715,8 @@ impl InferenceResponseChunk {
         inference_id: Uuid,
         episode_id: Uuid,
         variant_name: String,
-    ) -> Self {
-        match inference_result {
+    ) -> Option<Self> {
+        Some(match inference_result {
             InferenceResultChunk::Chat(result) => {
                 InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
                     inference_id,
@@ -725,16 +727,16 @@ impl InferenceResponseChunk {
                 })
             }
             InferenceResultChunk::Json(result) => {
+                let raw = result.raw?;
                 InferenceResponseChunk::Json(JsonInferenceResponseChunk {
                     inference_id,
                     episode_id,
                     variant_name,
-                    raw: result.raw,
-                    thought: result.thought,
+                    raw,
                     usage: result.usage,
                 })
             }
-        }
+        })
     }
 }
 
@@ -858,7 +860,7 @@ mod tests {
             dynamic_output_schema: None,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk);
+        let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
         match result {
             InferenceResponseChunk::Chat(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);
@@ -908,13 +910,13 @@ mod tests {
             dynamic_output_schema: None,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk);
+        let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
         match result {
             InferenceResponseChunk::Json(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);
                 assert_eq!(c.episode_id, inference_metadata.episode_id);
                 assert_eq!(c.variant_name, inference_metadata.variant_name);
-                assert_eq!(c.raw, Some("Test content".to_string()));
+                assert_eq!(c.raw, "Test content".to_string());
                 assert!(c.usage.is_none());
             }
             InferenceResponseChunk::Chat(_) => {
