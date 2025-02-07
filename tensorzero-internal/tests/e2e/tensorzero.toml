@@ -836,6 +836,14 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "on"
 max_tokens = 100
 
+[functions.json_success.variants.azure-strict]
+type = "chat_completion"
+model = "gpt-4o-mini-azure"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "strict"
+max_tokens = 100
+
 [functions.json_success.variants.azure-implicit]
 type = "chat_completion"
 model = "gpt-4o-mini-azure"
@@ -1097,6 +1105,14 @@ model = "gpt-4o-mini-azure"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
+max_tokens = 100
+
+[functions.dynamic_json.variants.azure-strict]
+type = "chat_completion"
+model = "gpt-4o-mini-azure"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "strict"
 max_tokens = 100
 
 [functions.dynamic_json.variants.azure-implicit]
