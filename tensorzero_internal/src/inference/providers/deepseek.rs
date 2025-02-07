@@ -25,8 +25,9 @@ use crate::tool::ToolCallChunk;
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
-    tensorzero_to_openai_system_message, OpenAIRequestMessage, OpenAIResponseToolCall, OpenAITool,
-    OpenAIToolChoice, OpenAIUsage, OpenAIUserRequestMessage, StreamOptions,
+    tensorzero_to_openai_system_message, OpenAIAssistantRequestMessage, OpenAIRequestMessage,
+    OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIUsage,
+    OpenAIUserRequestMessage, StreamOptions,
 };
 
 lazy_static! {
@@ -611,6 +612,7 @@ pub(super) fn prepare_deepseek_messages<'a>(
     ) {
         messages.insert(0, system_msg);
     }
+    messages = coalesce_consecutive_messages(messages);
     messages
 }
 
@@ -689,6 +691,59 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
     }
 }
 
+/// If a message is a system, user, or assistant message and the next message is the same type, coalesce them into a single message
+/// Required for DeepSeek reasoner type models
+fn coalesce_consecutive_messages(messages: Vec<OpenAIRequestMessage>) -> Vec<OpenAIRequestMessage> {
+    let mut result = messages;
+    let mut i = 0;
+    while i < result.len().saturating_sub(1) {
+        let current = &result[i];
+        let next = &result[i + 1];
+
+        match (current, next) {
+            (OpenAIRequestMessage::System(curr), OpenAIRequestMessage::System(next)) => {
+                let combined = format!("{}\n\n{}", curr.content, next.content);
+                result[i] = OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+                    content: Cow::Owned(combined),
+                });
+                result.remove(i + 1);
+            }
+            (OpenAIRequestMessage::User(curr), OpenAIRequestMessage::User(next)) => {
+                let combined = format!("{}\n\n{}", curr.content, next.content);
+                result[i] = OpenAIRequestMessage::User(OpenAIUserRequestMessage {
+                    content: Cow::Owned(combined),
+                });
+                result.remove(i + 1);
+            }
+            (OpenAIRequestMessage::Assistant(curr), OpenAIRequestMessage::Assistant(next)) => {
+                let combined_content = match (curr.content.as_ref(), next.content.as_ref()) {
+                    (Some(c1), Some(c2)) => Some(format!("{}\n\n{}", c1, c2)),
+                    (Some(c), None) | (None, Some(c)) => Some(c.to_string()),
+                    (None, None) => None,
+                };
+
+                let combined_tool_calls = match (&curr.tool_calls, &next.tool_calls) {
+                    (Some(t1), Some(t2)) => {
+                        let mut combined = t1.clone();
+                        combined.extend(t2.iter().cloned());
+                        Some(combined)
+                    }
+                    (Some(t), None) | (None, Some(t)) => Some(t.clone()),
+                    (None, None) => None,
+                };
+
+                result[i] = OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
+                    content: combined_content.map(Cow::Owned),
+                    tool_calls: combined_tool_calls,
+                });
+                result.remove(i + 1);
+            }
+            _ => i += 1,
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -698,7 +753,8 @@ mod tests {
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::providers::openai::{
-        OpenAIToolType, OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
+        OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
+        OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
     };
     use crate::inference::types::{
         FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
@@ -945,9 +1001,13 @@ mod tests {
 
         // Test case 2: Reasoner model with system message
         let messages = prepare_deepseek_messages(&request, "deepseek-reasoner");
-        assert_eq!(messages.len(), 2);
-        assert!(matches!(messages[0], OpenAIRequestMessage::User(_)));
-        assert!(matches!(messages[1], OpenAIRequestMessage::User(_)));
+        assert_eq!(messages.len(), 1);
+        match &messages[0] {
+            OpenAIRequestMessage::User(user_msg) => {
+                assert_eq!(user_msg.content, "System prompt\n\nHello");
+            }
+            _ => panic!("Expected a user message"),
+        }
 
         // Test case 3: Regular model without system message
         let request_no_system = ModelInferenceRequest {
@@ -1011,5 +1071,154 @@ mod tests {
         assert!(matches!(messages[1], OpenAIRequestMessage::User(_)));
         assert!(matches!(messages[2], OpenAIRequestMessage::Assistant(_)));
         assert!(matches!(messages[3], OpenAIRequestMessage::User(_)));
+    }
+
+    // Helper constructors for test messages.
+    fn system_message(content: &str) -> OpenAIRequestMessage {
+        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+            content: Cow::Borrowed(content),
+        })
+    }
+    fn user_message(content: &str) -> OpenAIRequestMessage {
+        OpenAIRequestMessage::User(OpenAIUserRequestMessage {
+            content: Cow::Borrowed(content),
+        })
+    }
+    fn assistant_message<'a>(
+        content: Option<&'a str>,
+        tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
+    ) -> OpenAIRequestMessage<'a> {
+        OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
+            content: content.map(Cow::Borrowed),
+            tool_calls,
+        })
+    }
+    fn tool_message<'a>(content: &'a str, tool_call_id: &'a str) -> OpenAIRequestMessage<'a> {
+        OpenAIRequestMessage::Tool(OpenAIToolRequestMessage {
+            content,
+            tool_call_id,
+        })
+    }
+
+    #[test]
+    fn test_coalesce_consecutive_messages() {
+        // Create dummy tool calls to test assistant message merging.
+        let tool_call1 = OpenAIRequestToolCall {
+            id: "tc1",
+            r#type: OpenAIToolType::Function,
+            function: OpenAIRequestFunctionCall {
+                name: "func1",
+                arguments: "args1",
+            },
+        };
+        let tool_call2 = OpenAIRequestToolCall {
+            id: "tc2",
+            r#type: OpenAIToolType::Function,
+            function: OpenAIRequestFunctionCall {
+                name: "func2",
+                arguments: "args2",
+            },
+        };
+
+        // Test 1: Empty input.
+        let input: Vec<OpenAIRequestMessage> = vec![];
+        let output = coalesce_consecutive_messages(input);
+        assert!(output.is_empty());
+
+        // Test 2: Single message (system) remains unchanged.
+        let input = vec![system_message("Only system message")];
+        let output = coalesce_consecutive_messages(input);
+        assert_eq!(output, vec![system_message("Only system message")]);
+
+        // Test 3: Consecutive system messages are merged.
+        let input = vec![
+            system_message("Sys1"),
+            system_message("Sys2"),
+            system_message("Sys3"),
+        ];
+        let output = coalesce_consecutive_messages(input);
+        let expected = vec![system_message("Sys1\n\nSys2\n\nSys3")];
+        assert_eq!(output, expected);
+
+        // Test 4: Consecutive user messages are merged.
+        let input = vec![user_message("User1"), user_message("User2")];
+        let output = coalesce_consecutive_messages(input);
+        let expected = vec![user_message("User1\n\nUser2")];
+        assert_eq!(output, expected);
+
+        // Test 5: Consecutive assistant messages with both content and tool_calls.
+        let input = vec![
+            assistant_message(Some("Ass1"), Some(vec![tool_call1.clone()])),
+            assistant_message(Some("Ass2"), Some(vec![tool_call2.clone()])),
+        ];
+        let output = coalesce_consecutive_messages(input);
+        let expected = vec![assistant_message(
+            Some("Ass1\n\nAss2"),
+            Some(vec![tool_call1.clone(), tool_call2.clone()]),
+        )];
+        assert_eq!(output, expected);
+
+        // Test 6: Consecutive assistant messages where one message lacks content/tool_calls.
+        let input = vec![
+            assistant_message(Some("Ass3"), None),
+            assistant_message(None, Some(vec![tool_call1.clone()])),
+        ];
+        let output = coalesce_consecutive_messages(input);
+        // Merging: (Some("Ass3"), None) gives Some("Ass3"), and (None, Some(...)) gives the available tool_calls.
+        let expected = vec![assistant_message(
+            Some("Ass3"),
+            Some(vec![tool_call1.clone()]),
+        )];
+        assert_eq!(output, expected);
+
+        // Test 7: Assistant messages with both None contents but with tool_calls.
+        let input = vec![
+            assistant_message(None, Some(vec![tool_call1.clone()])),
+            assistant_message(None, Some(vec![tool_call2.clone()])),
+        ];
+        let output = coalesce_consecutive_messages(input);
+        let expected = vec![assistant_message(
+            None,
+            Some(vec![tool_call1.clone(), tool_call2.clone()]),
+        )];
+        assert_eq!(output, expected);
+
+        // Test 8: Mixed message types should not merge across types.
+        let input = vec![
+            system_message("Sys1"),
+            user_message("User1"),
+            system_message("Sys2"),
+            assistant_message(Some("Ass1"), None),
+            tool_message("Tool1", "id1"),
+            tool_message("Tool2", "id2"),
+            assistant_message(Some("Ass2"), None),
+            assistant_message(Some("Ass3"), None),
+        ];
+        let output = coalesce_consecutive_messages(input);
+        // Only the two assistant messages at the end should merge.
+        let expected = vec![
+            system_message("Sys1"),
+            user_message("User1"),
+            system_message("Sys2"),
+            assistant_message(Some("Ass1"), None),
+            tool_message("Tool1", "id1"),
+            tool_message("Tool2", "id2"),
+            assistant_message(Some("Ass2\n\nAss3"), None),
+        ];
+        assert_eq!(output, expected);
+
+        // Test 9: More than two consecutive assistant messages.
+        let input = vec![
+            assistant_message(Some("A1"), Some(vec![tool_call1.clone()])),
+            assistant_message(None, None),
+            assistant_message(Some("A3"), None),
+        ];
+        let output = coalesce_consecutive_messages(input);
+        // First merge: ("A1", None) => "A1" with tool_calls preserved; then ("A1", "A3") => "A1\n\nA3".
+        let expected = vec![assistant_message(
+            Some("A1\n\nA3"),
+            Some(vec![tool_call1.clone()]),
+        )];
+        assert_eq!(output, expected);
     }
 }

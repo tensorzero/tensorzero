@@ -571,7 +571,7 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     assert_eq!(variant_name, provider.variant_name);
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
-    assert!(output.keys().len() == 3);
+    assert!(output.keys().len() == 2);
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
     assert!(parsed_output
         .get("answer")
@@ -583,9 +583,6 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     let raw_output = output.get("raw").unwrap().as_str().unwrap();
     let raw_output: Value = serde_json::from_str(raw_output).unwrap();
     assert_eq!(&raw_output, output.get("parsed").unwrap());
-    // Check the thought JSON output as well
-    let thought_output = output.get("thought").unwrap().as_str().unwrap();
-    assert!(thought_output.to_lowercase().contains("tokyo"));
 
     let usage = response_json.get("usage").unwrap();
     let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
@@ -777,7 +774,6 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
 
     let mut inference_id: Option<Uuid> = None;
     let mut full_content = String::new();
-    let mut full_thought = String::new();
     let mut input_tokens = 0;
     let mut output_tokens = 0;
     for chunk in chunks.clone() {
@@ -808,13 +804,6 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
             full_content.push_str(raw);
         }
 
-        let thought = chunk_json
-            .get("thought")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default();
-        if !thought.is_empty() {
-            full_thought.push_str(thought);
-        }
         if let Some(usage) = chunk_json.get("usage") {
             input_tokens += usage.get("input_tokens").unwrap().as_u64().unwrap();
             output_tokens += usage.get("output_tokens").unwrap().as_u64().unwrap();
@@ -823,7 +812,6 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
 
     let inference_id = inference_id.unwrap();
     assert!(full_content.to_lowercase().contains("tokyo"));
-    assert!(full_thought.to_lowercase().contains("tokyo"));
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
@@ -875,7 +863,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Value = serde_json::from_str(output).unwrap();
     let output = output.as_object().unwrap();
-    assert_eq!(output.keys().len(), 3);
+    assert_eq!(output.keys().len(), 2);
     let clickhouse_parsed = output.get("parsed").unwrap().as_object().unwrap();
     let clickhouse_raw = output.get("raw").unwrap().as_str().unwrap();
     let clickhouse_raw: Value = serde_json::from_str(clickhouse_raw).unwrap();
@@ -884,9 +872,6 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
     let full_content_parsed: Value = serde_json::from_str(&full_content).unwrap();
     let full_content_parsed = full_content_parsed.as_object().unwrap();
     assert_eq!(clickhouse_parsed, full_content_parsed);
-
-    let thought = output.get("thought").unwrap().as_str().unwrap();
-    assert_eq!(thought, full_thought);
 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
@@ -987,4 +972,13 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 2);
+    let thought = output
+        .iter()
+        .find(|block| matches!(block, ContentBlock::Thought(_)))
+        .unwrap();
+    let thought = match thought {
+        ContentBlock::Thought(thought) => thought,
+        _ => panic!("Expected a thought block"),
+    };
+    assert!(thought.text.to_lowercase().contains("tokyo"));
 }

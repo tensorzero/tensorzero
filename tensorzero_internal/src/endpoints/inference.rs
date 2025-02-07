@@ -727,12 +727,14 @@ impl InferenceResponseChunk {
                 })
             }
             InferenceResultChunk::Json(result) => {
-                let raw = result.raw?;
+                if result.raw.is_none() && result.usage.is_none() {
+                    return None;
+                }
                 InferenceResponseChunk::Json(JsonInferenceResponseChunk {
                     inference_id,
                     episode_id,
                     variant_name,
-                    raw,
+                    raw: result.raw.unwrap_or_default(),
                     usage: result.usage,
                 })
             }
