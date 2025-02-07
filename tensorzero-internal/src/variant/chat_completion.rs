@@ -66,6 +66,9 @@ impl ChatCompletionConfig {
                     };
                     content.push(text_content.into());
                 }
+                InputMessageContent::RawText { value: text } => {
+                    content.push(text.clone().into());
+                }
                 // The following two clones are probably removable.
                 // We will need to implement a ToolCallRef type or something so that we can avoid cloning the ToolCall and ToolResult.
                 InputMessageContent::ToolCall(tool_call) => {

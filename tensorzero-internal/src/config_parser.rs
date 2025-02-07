@@ -1854,7 +1854,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_bedrock_err_auto_detect_region() {
+    async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
         // We want auto-detection to fail, so we clear this environment variable.
         // We use 'nextest' as our runner, so each test runs in its own process
         std::env::remove_var("AWS_REGION");

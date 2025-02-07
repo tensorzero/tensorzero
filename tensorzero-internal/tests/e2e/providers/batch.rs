@@ -878,7 +878,7 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": [{"type": "raw_text", "value": "What is the capital city of Japan?"}]
                 }
             ]}],
         "params": {
@@ -973,7 +973,7 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "raw_text", "value": "What is the capital city of Japan?"}]
             }
         ]
     });

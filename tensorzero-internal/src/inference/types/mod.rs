@@ -61,6 +61,7 @@ pub enum InputMessageContent {
     Text { value: Value },
     ToolCall(ToolCall),
     ToolResult(ToolResult),
+    RawText { value: String },
     // We may extend this in the future to include other types of content
 }
 
