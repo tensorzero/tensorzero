@@ -805,7 +805,7 @@ mod tests {
     use tracing_test::traced_test;
 
     #[tokio::test]
-    async fn test_get_aws_bedrock_client() {
+    async fn test_get_aws_bedrock_client_no_aws_credentials() {
         #[traced_test]
         async fn first_run() {
             AWSBedrockProvider::new("test".to_string(), Some(Region::new("uk-hogwarts-1")))

@@ -1,9 +1,11 @@
 use axum::routing::{get, post};
 use axum::Router;
+use clap::Parser;
 use mimalloc::MiMalloc;
 use std::fmt::Display;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
@@ -18,14 +20,42 @@ use tensorzero_internal::observability;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
+#[derive(Parser, Debug)]
+#[command(version, about)]
+struct Args {
+    /// Path to tensorzero.toml
+    #[arg(long)]
+    config_file: Option<PathBuf>,
+
+    /// Deprecated: use `--config-file` instead
+    tensorzero_toml: Option<PathBuf>,
+}
+
 #[tokio::main]
 async fn main() {
     // Set up logs and metrics
     observability::setup_logs(true);
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
+    let args = Args::parse();
 
-    // Load config
-    let config: Arc<Config> = Arc::new(Config::load().expect_pretty("Failed to load config"));
+    if args.tensorzero_toml.is_some() && args.config_file.is_some() {
+        tracing::error!("Cannot specify both `--config-file` and a positional path argument");
+        std::process::exit(1);
+    }
+
+    if args.tensorzero_toml.is_some() {
+        tracing::warn!(
+            "`Specifying a positional path argument is deprecated. Use `--config-file` instead."
+        );
+    }
+
+    let config_path = args.config_file.or(args.tensorzero_toml);
+
+    let config = if let Some(path) = &config_path {
+        Arc::new(Config::load_from_path(Path::new(&path)).expect_pretty("Failed to load config"))
+    } else {
+        Arc::new(Config::default())
+    };
 
     // Initialize AppState
     let app_state = gateway_util::AppStateData::new(config.clone())
@@ -84,10 +114,14 @@ async fn main() {
         }
     };
 
+    let config_path_pretty = if let Some(path) = &config_path {
+        format!("config file `{}`", path.to_string_lossy())
+    } else {
+        "no config file".to_string()
+    };
+
     tracing::info!(
-        "TensorZero Gateway version {} is listening on {}",
-        TENSORZERO_VERSION,
-        bind_address
+        "TensorZero Gateway version {TENSORZERO_VERSION} is listening on {bind_address} with {config_path_pretty}",
     );
 
     axum::serve(listener, router)
