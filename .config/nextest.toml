@@ -1,9 +1,17 @@
 [profile.default]
 retries = { backoff = "fixed", count = 2, delay = "5s", jitter = true }
 slow-timeout = { period = "10s", terminate-after = 3 }
+# We look for tests with names containing "no_aws_credentials"
+# These tests require that the surrounding environment has no AWS credentials
+# (including in places like `~/.aws`)
+# We don't have a good way of isolating these tests to ensure that they pass
+# on developer machines (with AWS credentials set up), so we exclude them by default.
+# On CI, we use the 'ci' profile, which runs all tests.
+default-filter = "not test(no_aws_credentials)"
 
 [profile.ci]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
+default-filter = "all()"
 
 [profile.unit]
 retries = 0

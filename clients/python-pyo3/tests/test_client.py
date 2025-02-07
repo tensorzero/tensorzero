@@ -606,6 +606,21 @@ async def test_async_dynamic_credentials(async_client):
     assert usage.output_tokens == 10
 
 
+def test_sync_error():
+    with pytest.raises(Exception) as exc_info:
+        with TensorZeroGateway("http://localhost:3000"):
+            raise Exception("My error")
+    assert str(exc_info.value) == "My error"
+
+
+@pytest.mark.asyncio
+async def test_async_error():
+    with pytest.raises(Exception) as exc_info:
+        async with AsyncTensorZeroGateway("http://localhost:3000"):
+            raise Exception("My error")
+    assert str(exc_info.value) == "My error"
+
+
 @pytest.fixture(params=[ClientType.HttpGateway, ClientType.EmbeddedGateway])
 def sync_client(request):
     if request.param == ClientType.HttpGateway:
@@ -1222,3 +1237,26 @@ def test_sync_dynamic_credentials(sync_client):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
+
+
+@pytest.mark.asyncio
+async def test_async_timeout():
+    async with AsyncTensorZeroGateway(
+        "http://localhost:3000", timeout=1
+    ) as async_client:
+        with pytest.raises(TensorZeroError):
+            await async_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={"messages": [{"role": "user", "content": "Hello"}]},
+            )
+
+
+def test_sync_timeout():
+    with TensorZeroGateway("http://localhost:3000", timeout=1) as sync_client:
+        with pytest.raises(TensorZeroError):
+            sync_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={"messages": [{"role": "user", "content": "Hello"}]},
+            )
