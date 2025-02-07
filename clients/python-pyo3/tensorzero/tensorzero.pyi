@@ -18,7 +18,7 @@ from tensorzero import (
 )
 
 class BaseTensorZeroGateway:
-    def __init__(self, base_url: str): ...
+    def __init__(self, base_url: str, *, timeout: Optional[float] = None): ...
     def inference(
         self,
         *,
@@ -30,6 +30,7 @@ class BaseTensorZeroGateway:
         params: Optional[Dict[str, Any]] = None,
         variant_name: Optional[str] = None,
         dryrun: Optional[bool] = None,
+        output_schema: Optional[Dict[str, Any]] = None,
         allowed_tools: Optional[List[str]] = None,
         additional_tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[
@@ -59,6 +60,28 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
         """
 
+    @classmethod
+    def build_http(
+        self, gateway_url: str, *, timeout: Optional[float] = None
+    ) -> "TensorZeroGateway":
+        """
+        Build a TensorZeroGateway instance.
+
+        :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+        :param timeout: (Optional) The timeout for the HTTP request.
+        """
+
+    @classmethod
+    def build_embedded(
+        self, *, config_path: Optional[str] = None, clickhouse_url: Optional[str] = None
+    ) -> "TensorZeroGateway":
+        """
+        Build a TensorZeroGateway instance.
+
+        :param config_path: (Optional) The path to the TensorZero configuration file.
+        :param clickhouse_url: (Optional) The URL of the ClickHouse database.
+        """
+
     def inference(
         self,
         *,
@@ -70,6 +93,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         params: Optional[Dict[str, Any]] = None,
         variant_name: Optional[str] = None,
         dryrun: Optional[bool] = None,
+        output_schema: Optional[Dict[str, Any]] = None,
         allowed_tools: Optional[List[str]] = None,
         additional_tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[
@@ -97,6 +121,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
                              Note: You should generally not do this, and instead let the TensorZero gateway assign a
                              particular variant. This field is primarily used for testing or debugging purposes.
         :param dryrun: If true, the request will be executed but won't be stored to the database.
+        :param output_schema: If set, the JSON schema of a JSON function call will be validated against the given JSON Schema.
+                              Overrides the output schema configured for the function.
         :param allowed_tools: If set, restricts the tools available during this inference request.
                               The list of names should be a subset of the tools configured for the function.
                               Tools provided at inference time in `additional_tools` (if any) are always available.
@@ -168,6 +194,28 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
         """
 
+    @classmethod
+    async def build_http(
+        self, gateway_url: str, *, timeout: Optional[float] = None
+    ) -> "AsyncTensorZeroGateway":
+        """
+        Build an AsyncTensorZeroGateway instance.
+
+        :param gateway_url: (Required) The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+        :param timeout: (Optional) The timeout for the HTTP request.
+        """
+
+    @classmethod
+    async def build_embedded(
+        self, *, config_path: Optional[str] = None, clickhouse_url: Optional[str] = None
+    ) -> "AsyncTensorZeroGateway":
+        """
+        Build an AsyncTensorZeroGateway instance.
+
+        :param config_path: (Optional) The path to the TensorZero configuration file.
+        :param clickhouse_url: (Optional) The URL of the ClickHouse database.
+        """
+
     async def inference(  # type: ignore[override]
         self,
         *,
@@ -179,6 +227,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         params: Optional[Dict[str, Any]] = None,
         variant_name: Optional[str] = None,
         dryrun: Optional[bool] = None,
+        output_schema: Optional[Dict[str, Any]] = None,
         allowed_tools: Optional[List[str]] = None,
         additional_tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[
@@ -206,6 +255,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
                              Note: You should generally not do this, and instead let the TensorZero gateway assign a
                              particular variant. This field is primarily used for testing or debugging purposes.
         :param dryrun: If true, the request will be executed but won't be stored to the database.
+        :param output_schema: If set, the JSON schema of a JSON function call will be validated against the given JSON Schema.
+                              Overrides the output schema configured for the function.
         :param allowed_tools: If set, restricts the tools available during this inference request.
                               The list of names should be a subset of the tools configured for the function.
                               Tools provided at inference time in `additional_tools` (if any) are always available.

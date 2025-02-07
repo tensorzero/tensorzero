@@ -73,7 +73,7 @@ jobs:
         with:
           working-directory: clients/python-pyo3
           args: --find-interpreter
-          manylinux: auto
+          container: off
 
       - name: "Python: TensorZero Client: Install dependencies"
         working-directory: clients/python
