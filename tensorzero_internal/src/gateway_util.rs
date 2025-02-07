@@ -60,7 +60,7 @@ pub async fn setup_clickhouse(
         }
         // Observability default and no ClickHouse URL
         (None, None) => {
-            tracing::warn!("Observability not explicitly specified in config and no ClickHouse URL provided. Disabling ClickHouse.");
+            tracing::warn!("Observability not explicitly specified in config and no ClickHouse URL provided. Disabling observability.");
             ClickHouseConnectionInfo::new_disabled()
         }
         // Observability default and ClickHouse URL provided
