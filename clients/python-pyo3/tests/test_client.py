@@ -593,10 +593,6 @@ async def test_async_json_streaming_reasoning(async_client):
         stream=True,
     )
     chunks = [chunk async for chunk in stream]
-    expected_thinking = [
-        "hmmm",
-        "hmmm",
-    ]
     expected_text = [
         '{"name"',
         ':"John"',
@@ -615,15 +611,10 @@ async def test_async_json_streaming_reasoning(async_client):
         previous_episode_id = chunk.episode_id
         variant_name = chunk.variant_name
         assert variant_name == "json_reasoner"
-        if i < len(expected_thinking):
-            assert chunk.raw is None
-            assert chunk.thought == expected_thinking[i]
-        elif i < len(expected_thinking) + len(expected_text):
-            assert chunk.raw == expected_text[i - len(expected_thinking)]
-            assert chunk.thought is None
+        if i < len(expected_text):
+            assert chunk.raw == expected_text[i]
         else:
-            assert chunk.raw is None
-            assert chunk.thought is None
+            assert chunk.raw == ""
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 10
 
@@ -662,7 +653,6 @@ async def test_async_json_reasoning(async_client):
     assert isinstance(result, JsonInferenceResponse)
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
-    assert result.output.thought == "hmmm"
     assert result.usage.input_tokens == 10
     assert result.usage.output_tokens == 10
 
@@ -1243,10 +1233,6 @@ def test_sync_json_streaming_reasoning(sync_client):
         stream=True,
     )
     chunks = list(stream)
-    expected_thinking = [
-        "hmmm",
-        "hmmm",
-    ]
     expected_text = [
         '{"name"',
         ':"John"',
@@ -1265,15 +1251,10 @@ def test_sync_json_streaming_reasoning(sync_client):
         previous_episode_id = chunk.episode_id
         variant_name = chunk.variant_name
         assert variant_name == "json_reasoner"
-        if i < len(expected_thinking):
-            assert chunk.raw is None
-            assert chunk.thought == expected_thinking[i]
-        elif i < len(expected_thinking) + len(expected_text):
-            assert chunk.raw == expected_text[i - len(expected_thinking)]
-            assert chunk.thought is None
+        if i < len(expected_text):
+            assert chunk.raw == expected_text[i]
         else:
-            assert chunk.raw is None
-            assert chunk.thought is None
+            assert chunk.raw == ""
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 10
 
@@ -1310,7 +1291,6 @@ def test_sync_json_reasoning(sync_client):
     assert isinstance(result, JsonInferenceResponse)
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
-    assert result.output.thought == "hmmm"
     assert result.usage.input_tokens == 10
     assert result.usage.output_tokens == 10
 
