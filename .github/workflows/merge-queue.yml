@@ -205,7 +205,7 @@ jobs:
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for production deployment tests
         run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=http://172.17.0.1:8123/tensorzero" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@172.17.0.1:8123/tensorzero" >> $GITHUB_ENV
 
       - name: Set up .env file for production deployment tests
         run: |
