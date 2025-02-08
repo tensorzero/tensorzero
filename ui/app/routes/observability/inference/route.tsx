@@ -7,6 +7,7 @@ import {
   queryFeedbackByTargetId,
 } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
+import { TensorZeroClient } from "~/utils/tensorzero";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./BasicInfo";
@@ -22,6 +23,8 @@ import { Tooltip } from "~/components/ui/tooltip";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { useState } from "react";
+import { useConfig } from "~/context/config";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -62,6 +65,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const { inference, model_inferences, feedback, feedback_bounds } = loaderData;
   const navigate = useNavigate();
+  const [variantInferenceIsLoading, setVariantInferenceIsLoading] = useState(false);
 
   const topFeedback = feedback[0] as { id: string } | undefined;
   const bottomFeedback = feedback[feedback.length - 1] as
@@ -97,6 +101,20 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   const num_feedbacks = feedback.length;
 
+  const onVariantSelect = (variant: string) => {
+    console.log("variant", variant);
+    setVariantInferenceIsLoading(true);
+    setTimeout(() => {
+      setVariantInferenceIsLoading(false);
+    }, 5000);
+    // TODO: Query the variant inference
+    // TODO: Update the inference state with the variant inference
+    setVariantInferenceIsLoading(false);
+  };
+
+  const config = useConfig();
+  const variants = Object.keys(config.functions[inference.function_name]?.variants || {});
+
   return (
     <div className="container mx-auto space-y-6 p-4">
       <h2 className="mb-4 text-2xl font-semibold">
@@ -105,7 +123,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       </h2>
       <div className="mb-6 h-px w-full bg-gray-200"></div>
 
-      <BasicInfo inference={inference} />
+      <BasicInfo inference={inference} tryWithVariantProps={{ variants, onVariantSelect, isLoading: variantInferenceIsLoading }} />
       <Input input={inference.input} />
       <Output output={inference.output} />
       <Card>
