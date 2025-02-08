@@ -37,3 +37,5 @@ WORKDIR /app
 EXPOSE 3000
 
 ENTRYPOINT ["gateway"]
+
+CMD ["--config-file", "config/tensorzero.toml"]
