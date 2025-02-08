@@ -1,19 +1,25 @@
-"use client"
-
-import { useState } from "react"
-import { Button } from "~/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "~/components/ui/dropdown-menu"
-import { ChevronDown } from "lucide-react"
-import { useConfig } from "~/context/config";
+import { useState } from "react";
+import { Button } from "~/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
+import { ChevronDown } from "lucide-react";
 
 export interface TryWithVariantButtonProps {
-  variants: string[]
-  onVariantSelect: (variant: string) => void
-  isLoading: boolean
+  variants: string[];
+  onVariantSelect: (variant: string) => void;
+  isLoading: boolean;
 }
 
-export function TryWithVariantButton({ variants, onVariantSelect, isLoading }: TryWithVariantButtonProps) {
-  const [isOpen, setIsOpen] = useState(false)
+export function TryWithVariantButton({
+  variants,
+  onVariantSelect,
+  isLoading,
+}: TryWithVariantButtonProps) {
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
@@ -27,8 +33,8 @@ export function TryWithVariantButton({ variants, onVariantSelect, isLoading }: T
           <DropdownMenuItem
             key={variant}
             onSelect={() => {
-              onVariantSelect(variant)
-              setIsOpen(false)
+              onVariantSelect(variant);
+              setIsOpen(false);
             }}
             className="font-mono text-sm"
           >
@@ -37,6 +43,5 @@ export function TryWithVariantButton({ variants, onVariantSelect, isLoading }: T
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
-  )
+  );
 }
-

@@ -14,6 +14,7 @@ export default [
     "api/function/:function_name/feedback_counts",
     "routes/api/function/$function_name/feedback_counts.route.ts",
   ),
+  route("api/tensorzero/inference", "routes/api/tensorzero/inference.ts"),
   route(
     "observability/inferences",
     "routes/observability/inferences/route.tsx",

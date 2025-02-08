@@ -4,13 +4,19 @@ import { Badge } from "~/components/ui/badge";
 import { Link } from "react-router";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import { useConfig } from "~/context/config";
-import { type TryWithVariantButtonProps, TryWithVariantButton } from "./TryWithVariantButton";
+import {
+  type TryWithVariantButtonProps,
+  TryWithVariantButton,
+} from "./TryWithVariantButton";
 interface BasicInfoProps {
   inference: ParsedInferenceRow;
   tryWithVariantProps: TryWithVariantButtonProps;
 }
 
-export default function BasicInfo({ inference, tryWithVariantProps }: BasicInfoProps) {
+export default function BasicInfo({
+  inference,
+  tryWithVariantProps,
+}: BasicInfoProps) {
   const config = useConfig();
   const variantType =
     config.functions[inference.function_name]?.variants[inference.variant_name]

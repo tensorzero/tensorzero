@@ -2,6 +2,9 @@
 TensorZero Client (for internal use only for now)
 */
 
+import { z } from "zod";
+import { contentBlockOutputSchema } from "./clickhouse/common";
+
 /**
  * JSON types.
  */
@@ -10,71 +13,85 @@ export type JSONValue =
   | number
   | boolean
   | null
-  | JSONObject
-  | JSONArray;
-export interface JSONObject {
-  [key: string]: JSONValue;
-}
-export type JSONArray = Array<JSONValue>;
+  | { [key: string]: JSONValue }
+  | JSONValue[];
+export const JSONValueSchema: z.ZodType = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.record(JSONValueSchema),
+    z.array(JSONValueSchema),
+  ]),
+);
 
 /**
  * Roles for input messages.
  */
-export type Role = "system" | "user" | "assistant" | "tool";
-
-/**
- * An input message’s content may be structured.
- */
-export type InputMessageContent =
-  | { type: "text"; value: JSONValue }
-  | { type: "raw_text"; value: string }
-  | { type: "tool_call"; value: ToolCall }
-  | { type: "tool_result"; value: ToolResult };
-
-/**
- * An input message sent by the client.
- */
-export interface InputMessage {
-  role: Role;
-  content: InputMessageContent[];
-}
-
-/**
- * The inference input object.
- */
-export interface Input {
-  system?: JSONValue;
-  messages: InputMessage[];
-}
-
-/**
- * A Tool that the LLM may call.
- */
-export interface Tool {
-  description: string;
-  parameters: JSONValue;
-  name: string;
-  strict?: boolean;
-}
+export const RoleSchema = z.enum(["system", "user", "assistant", "tool"]);
+export type Role = z.infer<typeof RoleSchema>;
 
 /**
  * A tool call request.
  */
-export interface ToolCall {
-  name: string;
+export const ToolCallSchema = z.object({
+  name: z.string(),
   /** The arguments as a JSON string. */
-  arguments: string;
-  id: string;
-}
+  arguments: z.string(),
+  id: z.string(),
+});
+export type ToolCall = z.infer<typeof ToolCallSchema>;
 
 /**
  * A tool call result.
  */
-export interface ToolResult {
-  name: string;
-  result: string;
-  id: string;
-}
+export const ToolResultSchema = z.object({
+  name: z.string(),
+  result: z.string(),
+  id: z.string(),
+});
+export type ToolResult = z.infer<typeof ToolResultSchema>;
+
+/**
+ * An input message's content may be structured.
+ */
+export const InputMessageContentSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("text"), value: JSONValueSchema }),
+  z.object({ type: z.literal("raw_text"), value: z.string() }),
+  z.object({ type: z.literal("tool_call"), value: ToolCallSchema }),
+  z.object({ type: z.literal("tool_result"), value: ToolResultSchema }),
+]);
+export type InputMessageContent = z.infer<typeof InputMessageContentSchema>;
+
+/**
+ * An input message sent by the client.
+ */
+export const InputMessageSchema = z.object({
+  role: RoleSchema,
+  content: z.array(InputMessageContentSchema),
+});
+export type InputMessage = z.infer<typeof InputMessageSchema>;
+
+/**
+ * The inference input object.
+ */
+export const InputSchema = z.object({
+  system: JSONValueSchema.optional(),
+  messages: z.array(InputMessageSchema),
+});
+export type Input = z.infer<typeof InputSchema>;
+
+/**
+ * A Tool that the LLM may call.
+ */
+export const ToolSchema = z.object({
+  description: z.string(),
+  parameters: JSONValueSchema,
+  name: z.string(),
+  strict: z.boolean().optional(),
+});
+export type Tool = z.infer<typeof ToolSchema>;
 
 /**
  * Tool choice, which controls how tools are selected.
@@ -84,12 +101,17 @@ export interface ToolResult {
  * - "required": the model must call a tool
  * - { specific: "tool_name" }: force a specific tool
  */
-export type ToolChoice = "none" | "auto" | "required" | { specific: string };
+export const ToolChoiceSchema = z.union([
+  z.enum(["none", "auto", "required"]),
+  z.object({ specific: z.string() }),
+]);
+export type ToolChoice = z.infer<typeof ToolChoiceSchema>;
 
 /**
  * Inference parameters allow runtime overrides for a given variant.
  */
-export type InferenceParams = Record<string, JSONObject>;
+export const InferenceParamsSchema = z.record(z.record(JSONValueSchema));
+export type InferenceParams = z.infer<typeof InferenceParamsSchema>;
 
 /**
  * The request type for inference. These fields correspond roughly
@@ -97,92 +119,85 @@ export type InferenceParams = Record<string, JSONObject>;
  *
  * Exactly one of `function_name` or `model_name` should be provided.
  */
-export interface InferenceRequest {
-  function_name?: string;
-  model_name?: string;
-  episode_id?: string;
-  input: Input;
-  stream?: boolean;
-  params?: InferenceParams;
-  variant_name?: string;
-  dryrun?: boolean;
-  tags?: Record<string, string>;
-  allowed_tools?: string[];
-  additional_tools?: Tool[];
-  tool_choice?: ToolChoice;
-  parallel_tool_calls?: boolean;
-  output_schema?: JSONValue;
-  credentials?: Record<string, string>;
-}
-
-/**
- * For chat functions the API returns a list of content blocks.
- */
-export type ContentBlock =
-  | { type: "text"; text: string }
-  | {
-      type: "tool_call";
-      id: string;
-      name: string | null;
-      arguments: JSONObject | null;
-      raw_arguments: string;
-      raw_name: string;
-    };
+export const InferenceRequestSchema = z.object({
+  function_name: z.string().optional(),
+  model_name: z.string().optional(),
+  episode_id: z.string().optional(),
+  input: InputSchema,
+  stream: z.boolean().optional(),
+  params: InferenceParamsSchema.optional(),
+  variant_name: z.string().optional(),
+  dryrun: z.boolean().optional(),
+  tags: z.record(z.string()).optional(),
+  allowed_tools: z.array(z.string()).optional(),
+  additional_tools: z.array(ToolSchema).optional(),
+  tool_choice: ToolChoiceSchema.optional(),
+  parallel_tool_calls: z.boolean().optional(),
+  output_schema: JSONValueSchema.optional(),
+  credentials: z.record(z.string()).optional(),
+});
+export type InferenceRequest = z.infer<typeof InferenceRequestSchema>;
 
 /**
  * Inference responses vary based on the function type.
  */
-export interface ChatInferenceResponse {
-  inference_id: string;
-  episode_id: string;
-  variant_name: string;
-  content: ContentBlock[];
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
-}
+export const ChatInferenceResponseSchema = z.object({
+  inference_id: z.string(),
+  episode_id: z.string(),
+  variant_name: z.string(),
+  content: z.array(contentBlockOutputSchema),
+  usage: z
+    .object({
+      input_tokens: z.number(),
+      output_tokens: z.number(),
+    })
+    .optional(),
+});
+export type ChatInferenceResponse = z.infer<typeof ChatInferenceResponseSchema>;
 
-export interface JSONInferenceResponse {
-  inference_id: string;
-  episode_id: string;
-  variant_name: string;
-  output: {
-    raw: string;
-    parsed: JSONValue | null;
-  };
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
-}
+export const JSONInferenceResponseSchema = z.object({
+  inference_id: z.string(),
+  episode_id: z.string(),
+  variant_name: z.string(),
+  output: z.object({
+    raw: z.string(),
+    parsed: JSONValueSchema.nullable(),
+  }),
+  usage: z
+    .object({
+      input_tokens: z.number(),
+      output_tokens: z.number(),
+    })
+    .optional(),
+});
+export type JSONInferenceResponse = z.infer<typeof JSONInferenceResponseSchema>;
 
 /**
  * The overall inference response is a union of chat and JSON responses.
  */
-export type InferenceResponse = ChatInferenceResponse | JSONInferenceResponse;
+export const InferenceResponseSchema = z.union([
+  ChatInferenceResponseSchema,
+  JSONInferenceResponseSchema,
+]);
+export type InferenceResponse = z.infer<typeof InferenceResponseSchema>;
 
 /**
  * Feedback requests attach a metric value to a given inference or episode.
  */
-export interface FeedbackRequest {
-  dryrun?: boolean;
-  episode_id?: string;
-  inference_id?: string;
-  metric_name: string;
-  tags?: Record<string, string>;
-  value: JSONValue;
-}
+export const FeedbackRequestSchema = z.object({
+  dryrun: z.boolean().optional(),
+  episode_id: z.string().optional(),
+  inference_id: z.string().optional(),
+  metric_name: z.string(),
+  tags: z.record(z.string()).optional(),
+  value: JSONValueSchema,
+});
+export type FeedbackRequest = z.infer<typeof FeedbackRequestSchema>;
 
-export interface FeedbackResponse {
-  feedback_id: string;
-}
+export const FeedbackResponseSchema = z.object({
+  feedback_id: z.string(),
+});
+export type FeedbackResponse = z.infer<typeof FeedbackResponseSchema>;
 
 /**
  * A client for calling the TensorZero Gateway inference and feedback endpoints.

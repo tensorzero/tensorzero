@@ -20,7 +20,7 @@ function renderContentBlock(block: ContentBlockOutput, index: number) {
       return (
         <div key={index} className="rounded-md bg-muted p-4">
           <h3 className="mb-2 text-lg font-medium">Text</h3>
-          <pre className="overflow-x-auto">
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words">
             <code className="text-sm">{block.text}</code>
           </pre>
         </div>
@@ -29,7 +29,7 @@ function renderContentBlock(block: ContentBlockOutput, index: number) {
       return (
         <div key={index} className="rounded-md bg-muted p-4">
           <h3 className="mb-2 text-lg font-medium">Tool: {block.name}</h3>
-          <pre className="overflow-x-auto">
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words">
             <code className="text-sm">
               {JSON.stringify(block.arguments, null, 2)}
             </code>
@@ -51,7 +51,7 @@ export default function Output({ output }: OutputProps) {
             {output.parsed && (
               <div className="rounded-md bg-muted p-4">
                 <h3 className="mb-2 text-lg font-medium">Parsed Output</h3>
-                <pre className="overflow-x-auto">
+                <pre className="overflow-x-auto whitespace-pre-wrap break-words">
                   <code className="text-sm">
                     {JSON.stringify(output.parsed, null, 2)}
                   </code>
@@ -60,7 +60,7 @@ export default function Output({ output }: OutputProps) {
             )}
             <div className="rounded-md bg-muted p-4">
               <h3 className="mb-2 text-lg font-medium">Raw Output</h3>
-              <pre className="overflow-x-auto">
+              <pre className="overflow-x-auto whitespace-pre-wrap break-words">
                 <code className="text-sm">{output.raw}</code>
               </pre>
             </div>
