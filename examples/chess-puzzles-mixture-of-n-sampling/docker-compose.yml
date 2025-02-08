@@ -39,6 +39,7 @@ services:
       - ./config:/app/config:ro
     environment:
       - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
+      - TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml
     env_file:
       - ${ENV_FILE:-.env}
     ports:
