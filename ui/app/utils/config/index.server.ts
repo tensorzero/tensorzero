@@ -7,13 +7,24 @@ import { z } from "zod";
 import { EmbeddingModelConfigSchema, ModelConfigSchema } from "./models";
 import { ToolConfigSchema } from "./tool";
 import type { FunctionConfig } from "./function";
-import path from "path";
 
-const CONFIG_PATH =
-  process.env.TENSORZERO_UI_CONFIG_PATH ||
-  path.join("config", "tensorzero.toml");
+const CONFIG_PATH = process.env.TENSORZERO_UI_CONFIG_PATH;
 
-export async function loadConfig(config_path: string): Promise<Config> {
+export async function loadConfig(config_path?: string): Promise<Config> {
+  if (!config_path) {
+    // If there's no config path, we'll use the default empty config
+    // Here, we don't include the `tensorzero::default` function because
+    // the variants are dynamically defined.
+    // If needed for a feature, we should add it in a way that accounts for this.
+    return {
+      gateway: { disable_observability: false },
+      models: {},
+      embedding_models: {},
+      functions: {},
+      metrics: {},
+      tools: {},
+    };
+  }
   const tomlContent = await fs.readFile(config_path, "utf-8");
   const parsedConfig = parse(tomlContent);
   const validatedConfig = RawConfig.parse(parsedConfig);
