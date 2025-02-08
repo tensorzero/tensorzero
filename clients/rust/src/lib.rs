@@ -369,14 +369,27 @@ impl Client {
                             if message.data == "[DONE]" {
                                 break;
                             }
-                            let data: InferenceResponseChunk =
-                                serde_json::from_str(&message.data).map_err(|e| {
+                            let json: serde_json::Value = serde_json::from_str(&message.data).map_err(|e| {
+                                tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                                    message: format!("Error deserializing inference response chunk: {e:?}"),
+                                })
+                            })?;
+                            if let Some(err) = json.get("error") {
+                                yield Err(tensorzero_internal::error::Error::new(ErrorDetails::StreamError {
+                                    source: Box::new(tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                                        message: format!("Stream produced an error: {err:?}")
+                                    }))
+                                }));
+                            } else {
+                                let data: InferenceResponseChunk =
+                                serde_json::from_value(json).map_err(|e| {
                                     tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
-                                        message: format!("Error deserializing inference response chunk: {e:?}"),
+                                        message: format!("Error deserializing json value as InferenceResponseChunk: {e:?}"),
                                     })
                                 })?;
+                                yield Ok(data);
+                            }
 
-                            yield Ok(data);
                         }
                     }
                 }
