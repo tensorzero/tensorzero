@@ -25,6 +25,7 @@ interface VariantResponseModalProps {
   onClose: () => void;
   inference: ParsedInferenceRow;
   inferenceUsage: InferenceUsage;
+  selectedVariant: string;
 }
 
 interface VariantResponseInfo {
@@ -39,6 +40,7 @@ export function VariantResponseModal({
   onClose,
   inference,
   inferenceUsage,
+  selectedVariant,
 }: VariantResponseModalProps) {
   const [variantResponse, setVariantResponse] =
     useState<VariantResponseInfo | null>(null);
@@ -46,11 +48,12 @@ export function VariantResponseModal({
     null,
   );
   const [showRawResponse, setShowRawResponse] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const baselineResponse: VariantResponseInfo = {
     output: inference.output,
     usage: inferenceUsage,
   };
-  const variant = inference.variant_name;
+  const originalVariant = inference.variant_name;
 
   const variantInferenceFetcher = useFetcher();
 
@@ -58,10 +61,11 @@ export function VariantResponseModal({
     if (isOpen) {
       setVariantResponse(null);
       setShowRawResponse(false);
+      setError(null);
       const request = {
         function_name: inference.function_name,
         input: inference.input,
-        variant_name: variant,
+        variant_name: selectedVariant,
         dryrun: true,
       };
       variantInferenceFetcher.submit(
@@ -73,26 +77,44 @@ export function VariantResponseModal({
       );
       setIsLoading(true);
     }
-  }, [isOpen, variant]);
+  }, [isOpen, selectedVariant]);
 
   useEffect(() => {
-    if (variantInferenceFetcher.data) {
-      setIsLoading(false);
-      console.log("variantInferenceFetcher.data", variantInferenceFetcher.data);
-      const inferenceOutput = variantInferenceFetcher.data as InferenceResponse;
-      console.log("inferenceOutput", inferenceOutput);
-
-      const variantResponse: VariantResponseInfo = {
-        output:
-          "content" in inferenceOutput
-            ? inferenceOutput.content
-            : inferenceOutput.output,
-        usage: inferenceOutput.usage,
-      };
-      setVariantResponse(variantResponse);
-      setRawResponse(inferenceOutput);
+    if (
+      variantInferenceFetcher.state === "submitting" ||
+      variantInferenceFetcher.state === "loading"
+    ) {
+      setIsLoading(true);
+      return;
     }
-  }, [variantInferenceFetcher.data]);
+
+    setIsLoading(false);
+
+    if (variantInferenceFetcher.data) {
+      setError(null);
+      try {
+        const inferenceOutput =
+          variantInferenceFetcher.data as InferenceResponse;
+        const variantResponse: VariantResponseInfo = {
+          output:
+            "content" in inferenceOutput
+              ? inferenceOutput.content
+              : inferenceOutput.output,
+          usage: inferenceOutput.usage,
+        };
+        setVariantResponse(variantResponse);
+        setRawResponse(inferenceOutput);
+      } catch (err) {
+        setError("Failed to process response data");
+        console.error("Error processing response:", err);
+      }
+    } else if (
+      variantInferenceFetcher.state === "idle" &&
+      variantInferenceFetcher.data === undefined
+    ) {
+      setError("Failed to fetch response. Please try again.");
+    }
+  }, [variantInferenceFetcher.data, variantInferenceFetcher.state]);
 
   const ResponseColumn = ({
     title,
@@ -101,15 +123,15 @@ export function VariantResponseModal({
     title: string;
     response: VariantResponseInfo | null;
   }) => (
-    <div className="flex-1">
+    <div className="flex flex-1 flex-col">
       <h3 className="mb-2 text-sm font-semibold">{title}</h3>
       {response && (
         <>
-          <div className="mb-4">
+          <div className="flex-1">
             <Output output={response.output} />
           </div>
           {response.usage && (
-            <div>
+            <div className="mt-4">
               <h4 className="mb-1 text-xs font-semibold">Usage</h4>
               <p className="text-xs">
                 Input tokens: {response.usage.input_tokens}
@@ -135,11 +157,11 @@ export function VariantResponseModal({
           <DialogTitle>
             Comparing{" "}
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">
-              baseline
+              {originalVariant}
             </code>{" "}
             vs{" "}
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">
-              {variant}
+              {selectedVariant}
             </code>
           </DialogTitle>
         </DialogHeader>
@@ -148,9 +170,16 @@ export function VariantResponseModal({
             <div className="flex h-32 items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin" />
             </div>
+          ) : error ? (
+            <div className="flex h-32 items-center justify-center">
+              <div className="text-center text-red-600">
+                <p className="font-semibold">Error</p>
+                <p className="text-sm">{error}</p>
+              </div>
+            </div>
           ) : (
             <>
-              <div className="flex space-x-4">
+              <div className="flex min-h-[300px] space-x-4">
                 <ResponseColumn title="Original" response={baselineResponse} />
                 <ResponseColumn title="New" response={variantResponse} />
               </div>

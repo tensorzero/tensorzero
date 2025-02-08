@@ -200,6 +200,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           onClose={handleModalClose}
           inference={inference}
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
+          selectedVariant={selectedVariant}
         />
       )}
     </div>
