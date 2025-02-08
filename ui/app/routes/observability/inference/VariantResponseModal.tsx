@@ -42,6 +42,9 @@ export function VariantResponseModal({
 }: VariantResponseModalProps) {
   const [variantResponse, setVariantResponse] =
     useState<VariantResponseInfo | null>(null);
+  const [rawResponse, setRawResponse] = useState<InferenceResponse | null>(
+    null,
+  );
   const [showRawResponse, setShowRawResponse] = useState(false);
   const baselineResponse: VariantResponseInfo = {
     output: inference.output,
@@ -87,6 +90,7 @@ export function VariantResponseModal({
         usage: inferenceOutput.usage,
       };
       setVariantResponse(variantResponse);
+      setRawResponse(inferenceOutput);
     }
   }, [variantInferenceFetcher.data]);
 
@@ -167,7 +171,7 @@ export function VariantResponseModal({
                 </Button>
                 {showRawResponse && (
                   <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-gray-100 p-4 text-xs">
-                    <code>{JSON.stringify(variantResponse, null, 2)}</code>
+                    <code>{JSON.stringify(rawResponse, null, 2)}</code>
                   </pre>
                 )}
               </div>
