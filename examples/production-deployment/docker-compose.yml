@@ -15,7 +15,7 @@ services:
       - "3000:3000"
     restart: unless-stopped
     healthcheck:
-      test: wget --spider --tries 1 http://localhost:3000/status || exit 1
+      test: wget --spider --tries 1 http://localhost:3000/status
       interval: 15s
       timeout: 1s
       retries: 2
