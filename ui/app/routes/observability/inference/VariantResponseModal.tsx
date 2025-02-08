@@ -15,8 +15,9 @@ import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import { useFetcher } from "react-router";
 import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
 import type { ContentBlockOutput } from "~/utils/clickhouse/common";
-import Output from "./Output";
+import { OutputContent } from "./Output";
 import type { InferenceResponse } from "~/utils/tensorzero";
+import { Card, CardContent } from "~/components/ui/card";
 
 interface VariantResponseModalProps {
   isOpen: boolean;
@@ -128,7 +129,12 @@ export function VariantResponseModal({
       {response && (
         <>
           <div className="flex-1">
-            <Output output={response.output} />
+            <h4 className="mb-1 text-xs font-semibold">Output</h4>
+            <Card>
+              <CardContent className="pt-8">
+                <OutputContent output={response.output} />
+              </CardContent>
+            </Card>
           </div>
           {response.usage && (
             <div className="mt-4">
