@@ -63,7 +63,7 @@ async def async_client(request):
     else:
         async with await AsyncTensorZeroGateway.build_embedded(
             config_path=TEST_CONFIG_PATH,
-            clickhouse_url="http://localhost:8123/tensorzero-python-e2e",
+            clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
         ) as client:
             yield client
 
@@ -631,7 +631,7 @@ def sync_client(request):
     else:
         with TensorZeroGateway.build_embedded(
             config_path=TEST_CONFIG_PATH,
-            clickhouse_url="http://localhost:8123/tensorzero-python-e2e",
+            clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
         ) as client:
             yield client
 
