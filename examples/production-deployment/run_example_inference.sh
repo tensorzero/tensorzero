@@ -1,6 +1,7 @@
 #!/bin/bash
 
-curl -X POST http://localhost:3000/inference \
+# Make inference request and store response
+INFERENCE_RESPONSE=$(curl -s -S -X POST http://localhost:3000/inference \
   --fail-with-body \
   -H "Content-Type: application/json" \
   -d '{
@@ -14,13 +15,23 @@ curl -X POST http://localhost:3000/inference \
         }
       ]
     }
-  }' || exit 1
+  }') || exit 1
 
-curl -X POST http://localhost:3000/feedback \
+# Print inference response
+echo "$INFERENCE_RESPONSE"
+
+# Extract episode_id from response
+EPISODE_ID=$(echo $INFERENCE_RESPONSE | jq -r '.episode_id')
+
+# Make feedback request and store response
+FEEDBACK_RESPONSE=$(curl -s -S -X POST http://localhost:3000/feedback \
   --fail-with-body \
   -H "Content-Type: application/json" \
-  -d '{
-    "metric_name": "task_success",
-    "inference_id": "00000000-0000-0000-0000-000000000000",
-    "value": true
-  }' || exit 1
+  -d "{
+    \"metric_name\": \"task_success\",
+    \"episode_id\": \"$EPISODE_ID\",
+    \"value\": true
+  }") || exit 1
+
+# Print feedback response
+echo "$FEEDBACK_RESPONSE"
