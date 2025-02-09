@@ -215,7 +215,7 @@ jobs:
         run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
 
       - name: Run inference for production deployment tests
-        run: examples/production-deployment/run_example_inference.sh
+        run: examples/production-deployment/run.sh
 
       - name: Take down docker compose for production deployment tests
         run: |
