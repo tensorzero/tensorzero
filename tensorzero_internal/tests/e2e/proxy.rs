@@ -15,8 +15,8 @@ async fn test_setup_http_client() {
     if std::env::var("TENSORZERO_E2E_PROXY").is_ok() {
         let headers = response.headers();
         assert!(
-            headers.contains_key("x-tensorzero-cache"),
-            "x-tensorzero-cache header not found"
+            headers.contains_key("x-tensorzero-provider-proxy-cache"),
+            "x-tensorzero-provider-proxy-cache header not found"
         );
     }
 }
@@ -31,5 +31,7 @@ async fn test_setup_http_client_no_proxy() {
         .send()
         .await
         .unwrap();
+    let headers = response.headers();
     assert_eq!(response.status(), 200);
+    assert!(!headers.contains_key("x-tensorzero-provider-proxy-cache"));
 }
