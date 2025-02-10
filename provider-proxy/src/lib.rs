@@ -144,11 +144,10 @@ async fn check_cache<
                     "Failed to forward request"
                 );
                 let body = Full::new(Bytes::from(format!("Failed to forward request: {e:?}")));
-                let resp = http::Response::builder()
+                http::Response::builder()
                     .status(http::StatusCode::BAD_GATEWAY)
                     .body(BoxBody::new(body.map_err(|e| match e {})))
-                    .unwrap();
-                resp
+                    .with_context(|| "Failed to build response")?
             }
         };
         if response.status().is_success() {
