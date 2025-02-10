@@ -1,6 +1,7 @@
 name: Merge Queue Checks
 
 on:
+  push:
   merge_group:
 
 env:
