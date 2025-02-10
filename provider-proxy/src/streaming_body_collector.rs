@@ -45,7 +45,6 @@ where
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         let this = self.as_mut().project();
         let frame = this.body.poll_frame(cx);
-        tracing::info!("poll_frame: {:?}", frame);
         let frame = ready!(frame);
         match &frame {
             Some(Ok(frame)) => {
@@ -74,7 +73,6 @@ where
 
     fn is_end_stream(&self) -> bool {
         let res = self.body.is_end_stream();
-        tracing::info!("is_end_stream: {:?}", res);
         res
     }
 
