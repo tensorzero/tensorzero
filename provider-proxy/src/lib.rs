@@ -25,6 +25,8 @@ use streaming_body_collector::StreamingBodyCollector;
 use tokio::sync::oneshot;
 use tracing::level_filters::LevelFilter;
 
+const CACHE_HEADER_NAME: &str = "x-tensorzero-provider-proxy-hit";
+
 fn make_root_cert() -> rcgen::CertifiedKey {
     let mut param = rcgen::CertificateParams::default();
 
@@ -182,8 +184,7 @@ async fn check_cache<
     };
     // Insert this header at the very end, to ensure that we never store this
     // header in the cache.
-    resp.headers_mut()
-        .insert("x-tensorzero-provider-proxy-hit", cache_hit);
+    resp.headers_mut().insert(CACHE_HEADER_NAME, cache_hit);
     Ok(resp)
 }
 

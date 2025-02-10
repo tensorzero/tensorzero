@@ -16,11 +16,17 @@ async fn start_target_server(
         .route(
             "/timestamp-good",
             post(|| async {
-                format!(
+                let mut res = http::Response::new(format!(
                     "Hello at {:?} {}",
                     Instant::now(),
                     rand::rng().random::<u32>()
-                )
+                ));
+                res.headers_mut().insert(
+                    "x-my-custom-header",
+                    http::HeaderValue::from_str(&format!("{}", rand::rng().random::<u32>()))
+                        .unwrap(),
+                );
+                res
             }),
         )
         .route(
@@ -79,6 +85,11 @@ async fn test_provider_proxy() {
         .await
         .unwrap();
     assert_eq!(first_local_response.status(), 200);
+    let mut first_local_headers = first_local_response.headers().clone();
+    assert!(first_local_headers.contains_key("x-my-custom-header"));
+    // Remove this header so that we can compare the remaining headers between requests
+    let cached = first_local_headers.remove("x-tensorzero-provider-proxy-hit").unwrap();
+    assert_eq!(cached, "false");
     let first_local_response_body = first_local_response.text().await.unwrap();
 
     // Wait for a file to show up on disk
@@ -107,6 +118,10 @@ async fn test_provider_proxy() {
         .await
         .unwrap();
     assert_eq!(second_local_response.status(), 200);
+    let mut second_local_headers = second_local_response.headers().clone();
+    let cached = second_local_headers.remove("x-tensorzero-provider-proxy-hit").unwrap();
+    assert_eq!(cached, "true");
+    assert_eq!(first_local_headers, second_local_headers);
     let second_local_response_body = second_local_response.text().await.unwrap();
 
     tracing::info!("first_local_response_body: {}", first_local_response_body);
