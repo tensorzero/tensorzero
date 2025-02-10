@@ -11,6 +11,8 @@ services:
     ports:
       - "3000:3000"
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: wget --spider --tries 1 http://localhost:3000/status
       interval: 15s

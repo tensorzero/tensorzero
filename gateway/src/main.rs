@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 
+use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::config_parser::Config;
 use tensorzero_internal::endpoints;
 use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
@@ -61,6 +62,15 @@ async fn main() {
     let app_state = gateway_util::AppStateData::new(config.clone())
         .await
         .expect_pretty("Failed to initialize AppState");
+
+    // Create a new observability_enabled_pretty string for the log message below
+    let observability_enabled_pretty = match &app_state.clickhouse_connection_info {
+        ClickHouseConnectionInfo::Disabled => "disabled".to_string(),
+        ClickHouseConnectionInfo::Mock { healthy, .. } => {
+            format!("mocked (healthy={healthy})")
+        }
+        ClickHouseConnectionInfo::Production { .. } => "enabled".to_string(),
+    };
 
     // Set debug mode
     error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
@@ -121,7 +131,7 @@ async fn main() {
     };
 
     tracing::info!(
-        "TensorZero Gateway version {TENSORZERO_VERSION} is listening on {bind_address} with {config_path_pretty}",
+        "TensorZero Gateway version {TENSORZERO_VERSION} is listening on {bind_address} with {config_path_pretty} and observability {observability_enabled_pretty}.",
     );
 
     axum::serve(listener, router)
