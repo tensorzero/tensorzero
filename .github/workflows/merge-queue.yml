@@ -203,19 +203,16 @@ jobs:
       - name: Build Docker container for production deployment tests
         run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
 
-      - name: Set up TENSORZERO_CLICKHOUSE_URL for production deployment tests
-        run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@172.17.0.1:8123/tensorzero" >> $GITHUB_ENV
-
       - name: Set up .env file for production deployment tests
         run: |
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
 
       - name: Run docker compose for production deployment tests
         run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
 
       - name: Run inference for production deployment tests
-        run: examples/production-deployment/run_example_inference.sh
+        run: examples/production-deployment/run.sh
 
       - name: Take down docker compose for production deployment tests
         run: |
