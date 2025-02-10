@@ -44,7 +44,7 @@ DOCKER_BUILDKIT=1 docker buildx build \
   --attest type=provenance,mode=max \
   --attest type=sbom \
   --push \
-  gateway/
+  .
 ```
 
 > [!IMPORTANT]
@@ -62,14 +62,14 @@ docker buildx create \
   --bootstrap
 ```
 
-Every time you want to build the Docker container, you need to run from the root of the repository:
+Every time you want to build the Docker container, you need to run from `ui/`:
 
 ```bash
 DOCKER_BUILDKIT=1 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   -t tensorzero/ui:latest \
   -t tensorzero/ui:XXXX.XX.X \
-  -f ui/Dockerfile \
+  -f Dockerfile \
   --attest type=provenance,mode=max \
   --attest type=sbom \
   --push \
