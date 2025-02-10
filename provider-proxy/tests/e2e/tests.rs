@@ -88,7 +88,7 @@ async fn test_provider_proxy() {
     let mut first_local_headers = first_local_response.headers().clone();
     assert!(first_local_headers.contains_key("x-my-custom-header"));
     // Remove this header so that we can compare the remaining headers between requests
-    let cached = first_local_headers.remove("x-tensorzero-provider-proxy-hit").unwrap();
+    let cached = first_local_headers.remove("x-tensorzero-provider-proxy-cache").unwrap();
     assert_eq!(cached, "false");
     let first_local_response_body = first_local_response.text().await.unwrap();
 
@@ -119,7 +119,7 @@ async fn test_provider_proxy() {
         .unwrap();
     assert_eq!(second_local_response.status(), 200);
     let mut second_local_headers = second_local_response.headers().clone();
-    let cached = second_local_headers.remove("x-tensorzero-provider-proxy-hit").unwrap();
+    let cached = second_local_headers.remove("x-tensorzero-provider-proxy-cache").unwrap();
     assert_eq!(cached, "true");
     assert_eq!(first_local_headers, second_local_headers);
     let second_local_response_body = second_local_response.text().await.unwrap();

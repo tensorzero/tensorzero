@@ -25,7 +25,7 @@ use streaming_body_collector::StreamingBodyCollector;
 use tokio::sync::oneshot;
 use tracing::level_filters::LevelFilter;
 
-const CACHE_HEADER_NAME: &str = "x-tensorzero-provider-proxy-hit";
+const CACHE_HEADER_NAME: &str = "x-tensorzero-provider-proxy-cache";
 
 fn make_root_cert() -> rcgen::CertifiedKey {
     let mut param = rcgen::CertificateParams::default();
