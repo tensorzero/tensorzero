@@ -69,7 +69,7 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
 
 // Converts a Python dictionary to json with `json.dumps`,
 /// then deserializes to a Rust type via serde
-pub fn deserialize_from_json<'a, T: serde::de::DeserializeOwned>(
+pub fn deserialize_from_pydict<'a, T: serde::de::DeserializeOwned>(
     py: Python<'a>,
     dict: &Bound<'a, PyAny>,
 ) -> PyResult<T> {
@@ -131,7 +131,7 @@ pub fn parse_tool(py: Python<'_>, key_vals: HashMap<String, Bound<'_, PyAny>>) -
     } else {
         false
     };
-    let tool_params: serde_json::Value = deserialize_from_json(py, params)?;
+    let tool_params: serde_json::Value = deserialize_from_pydict(py, params)?;
     Ok(Tool {
         name: name.extract()?,
         description: description.extract()?,

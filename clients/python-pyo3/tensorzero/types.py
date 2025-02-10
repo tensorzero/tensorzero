@@ -41,6 +41,15 @@ class Text(ContentBlock):
 
 
 @dataclass
+class RawText:
+    # This class does not subclass ContentBlock since it cannot be output by the API.
+    value: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(type="raw_text", value=self.value)
+
+
+@dataclass
 class ToolCall(ContentBlock):
     arguments: Optional[Dict[str, Any]]
     id: str
@@ -59,6 +68,7 @@ class ToolCall(ContentBlock):
 
 @dataclass
 class ToolResult:
+    # This class does not subclass ContentBlock since it cannot be output by the API.
     name: str
     result: str
     id: str

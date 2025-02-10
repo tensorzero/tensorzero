@@ -7,7 +7,7 @@ on:
 
 env:
   FORCE_COLOR: 1
-  TENSORZERO_CLICKHOUSE_URL: "http://localhost:8123/tensorzero"
+  TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
 
 jobs:
   validate:
@@ -73,7 +73,7 @@ jobs:
         with:
           working-directory: clients/python-pyo3
           args: --find-interpreter
-          manylinux: auto
+          container: off
 
       - name: "Python: TensorZero Client: Install dependencies"
         working-directory: clients/python
@@ -137,9 +137,9 @@ jobs:
           echo "OPENAI_API_KEY=not_used" >> .env
           echo "FIREWORKS_API_KEY=not_used" >> .env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero_ui_fixtures" >> .env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> .env
           docker compose -f fixtures/docker-compose.yml up -d --build
 
       - name: Run ui tests
         working-directory: ui
-        run: TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero_ui_fixtures pnpm test
+        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test

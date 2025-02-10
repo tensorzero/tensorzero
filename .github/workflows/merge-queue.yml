@@ -77,10 +77,10 @@ jobs:
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
-        run: docker compose -f tensorzero_internal/tests/e2e/docker-compose.yml up -d --wait
+        run: docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait
 
       - name: Launch the gateway for E2E tests
         run: |
@@ -205,7 +205,7 @@ jobs:
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for production deployment tests
         run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=http://172.17.0.1:8123/tensorzero" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@172.17.0.1:8123/tensorzero" >> $GITHUB_ENV
 
       - name: Set up .env file for production deployment tests
         run: |
@@ -220,7 +220,7 @@ jobs:
       - name: Take down docker compose for production deployment tests
         run: |
           docker compose -f examples/production-deployment/docker-compose.yml down
-          docker compose -f tensorzero_internal/tests/e2e/docker-compose.yml down
+          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml down
 
       - name: Install dependencies
         working-directory: ui
@@ -244,12 +244,12 @@ jobs:
           echo "OPENAI_API_KEY=not_used" >> .env
           echo "FIREWORKS_API_KEY=not_used" >> .env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero_ui_fixtures" >> .env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> .env
           docker compose -f fixtures/docker-compose.yml up -d --build
 
       - name: Run ui tests
         working-directory: ui
-        run: TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero_ui_fixtures pnpm test
+        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test
 
       - name: Take down ui tests
         working-directory: ui
@@ -258,24 +258,3 @@ jobs:
       - name: Print clickhouse wakeup logs
         if: always()
         run: cat clickhouse_wakeup_logs.txt
-
-      - name: Set up TENSORZERO_CLICKHOUSE_URL for batch tests
-        run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
-      - name: Launch the gateway for batch tests
-        run: |
-          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES'
-          cargo run-e2e > batch_logs.txt 2>&1 &
-          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
-          while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
-            echo "Waiting for gateway to be healthy..."
-            sleep 1
-          done
-
-      - name: Run batch tests
-        run: |
-          cargo test-batch
-
-      - name: Print batch logs
-        if: always()
-        run: cat batch_logs.txt

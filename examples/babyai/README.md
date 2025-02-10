@@ -4,7 +4,6 @@
 
 [BabyAI](https://github.com/mila-iqia/babyai) is a grid world environment designed to test the sample efficiency of grounded language acquisition. Each task is described in natural language (e.g., "put the red ball next to the blue ball"). To complete a task, the agent must execute a sequence of actions given partial observations of the environment. The set of actions are "go forward," "turn right," "turn left," "pick up," "drop," and "toggle." An example observation is, "you carry a yellow ball\n a wall 2 steps right\n a red ball 1 step forward".
 
-
 <p align="center">
   <img src=https://github.com/mila-iqia/babyai/blob/master/media/GoTo.png?raw=true alt="BabyAI">
 </p>
@@ -14,6 +13,7 @@ We use the [BALROG agentic LLM benchmark](https://github.com/balrog-ai/BALROG) i
 ## Setup
 
 ### Requirements
+
 This example makes use of the BALROG python package, which requires `cmake` to be installed.
 
 #### Linux
@@ -58,6 +58,7 @@ pip install -r requirements.txt
 ```
 
 #### Using `conda`
+
 ```bash
 conda env create -f environment.yml
 conda activate babyai
@@ -67,10 +68,11 @@ uv pip sync requirements.txt
 ## Running the Example
 
 You can run the example in the `babyai.ipynb` notebook.
-Make sure to install the dependencies in the `requirements.txt` file and set `TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your notebook will run in.
+Make sure to install the dependencies in the `requirements.txt` file and set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero` in the shell your notebook will run in.
 It should not require any changes to run and will automatically connect to the TensorZero Gateway you started.
 
 The notebook will evaluate the performance of the default `gpt-4o-mini` variant on the five tasks in the BabyAI environment.
+
 <!-- If you look at the `tensorzero.toml` file, you'll see that we've defined a best-of-n variant type for the `play_chess_board` function. -->
 <!-- This means that we'll run 5 separate inference requests to the LLM, and use another LLM to select the best result.
 These are all instances of the `gpt-4o-mini` variant.
@@ -103,4 +105,5 @@ We find that the history_and_reasoning variant perfoms best and that using our f
 
 You now have a ClickHouse database with a ton of trajectories of LLMs trying to solve BabyAI tasks.
 Consider our library of [recipes](https://github.com/tensorzero/tensorzero/tree/main/recipes) for ideas on how to use this dataset to improve further!
+
 <!-- Since this data ended up in ClickHouse, we also included a test set at `data/lichess_easy_puzzles_test.csv` (use `dryrun=True` to avoid leaking it) to evaluate variants on held-out data. -->
