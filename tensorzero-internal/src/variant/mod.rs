@@ -24,6 +24,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
+use crate::model::StreamResponse;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
@@ -111,6 +112,7 @@ pub struct ModelUsedInfo {
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
+    pub cached: bool,
 }
 
 pub trait Variant {
@@ -501,9 +503,14 @@ async fn infer_model_request_stream<'request>(
     inference_params: InferenceParams,
     retry_config: RetryConfig,
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-    let (stream, raw_request, model_provider_name) = (|| async {
+    let StreamResponse {
+        stream,
+        raw_request,
+        model_provider_name,
+        cached,
+    } = (|| async {
         model_config
-            .infer_stream(&request, clients.http_client, clients.credentials)
+            .infer_stream(&request, clients, &model_name)
             .await
     })
     .retry(retry_config.get_backoff())
@@ -518,6 +525,7 @@ async fn infer_model_request_stream<'request>(
         previous_model_inference_results: vec![],
         system,
         input_messages,
+        cached,
     };
     let config_type = function.config_type();
     let stream =

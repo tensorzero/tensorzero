@@ -446,6 +446,15 @@ model_name = "text-embedding-3-small"
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
+[functions.basic_test_no_system_schema]
+type = "chat"
+
+[functions.basic_test_no_system_schema.variants.test]
+type = "chat_completion"
+weight = 1
+model = "test"
+max_tokens = 100
+
 [functions.basic_test]
 type = "chat"
 system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
