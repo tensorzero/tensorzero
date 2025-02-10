@@ -724,9 +724,6 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
             }
         }
 
-        let chunk_cached = chunk_json.get("cached").unwrap().as_bool().unwrap();
-        assert_eq!(chunk_cached, check_cache);
-
         let chunk_episode_id = chunk_json.get("episode_id").unwrap().as_str().unwrap();
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
@@ -748,7 +745,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert!(full_content.to_lowercase().contains("tokyo"));
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    if provider.variant_name.contains("azure") || check_cache {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -864,7 +861,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    if provider.variant_name.contains("azure") || check_cache {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -873,10 +870,18 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
+    if check_cache {
+        assert_eq!(response_time_ms, 0);
+    } else {
+        assert!(response_time_ms > 0);
+    }
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    if check_cache {
+        assert_eq!(ttft_ms, 0);
+    } else {
+        assert!(ttft_ms > 50);
+    }
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();

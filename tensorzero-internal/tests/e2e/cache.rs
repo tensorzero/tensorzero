@@ -499,7 +499,7 @@ pub async fn check_test_streaming_cache_with_err(
 
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
-        assert!(serde_json::from_str::<Value>(line).is_ok());
+        serde_json::from_str::<Value>(line).expect("Failed to deserialize response line");
     }
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();

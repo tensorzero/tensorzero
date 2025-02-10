@@ -1,5 +1,4 @@
 use futures::StreamExt;
-use reqwest::Client;
 use serde_json::json;
 use tensorzero::InferenceResponseChunk;
 
