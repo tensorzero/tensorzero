@@ -474,18 +474,18 @@ mod tests {
 
     #[test]
     fn test_set_clickhouse_format_settings() {
-        let mut database_url = Url::parse("http://localhost:8123/").unwrap();
+        let mut database_url = Url::parse("http://chuser:chpassword@localhost:8123/").unwrap();
         set_clickhouse_format_settings(&mut database_url);
-        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_skip_unknown_fields=0&input_format_null_as_default=0");
+        assert_eq!(database_url.to_string(), "http://chuser:chpassword@localhost:8123/?input_format_skip_unknown_fields=0&input_format_null_as_default=0");
 
-        let mut database_url = Url::parse("http://localhost:8123/?input_format_skip_unknown_fields=1&input_format_defaults_for_omitted_fields=1&input_format_null_as_default=1").unwrap();
+        let mut database_url = Url::parse("http://chuser:chpassword@localhost:8123/?input_format_skip_unknown_fields=1&input_format_defaults_for_omitted_fields=1&input_format_null_as_default=1").unwrap();
         set_clickhouse_format_settings(&mut database_url);
-        assert_eq!(database_url.to_string(), "http://localhost:8123/?input_format_defaults_for_omitted_fields=1&input_format_skip_unknown_fields=0&input_format_null_as_default=0");
+        assert_eq!(database_url.to_string(), "http://chuser:chpassword@localhost:8123/?input_format_defaults_for_omitted_fields=1&input_format_skip_unknown_fields=0&input_format_null_as_default=0");
     }
 
     #[test]
     fn test_validate_clickhouse_url() {
-        let database_url = Url::parse("http://localhost:8123/").unwrap();
+        let database_url = Url::parse("http://chuser:chpassword@localhost:8123/").unwrap();
         let result = validate_clickhouse_url_get_db_name(&database_url).unwrap();
         assert_eq!(result, None);
 
@@ -524,7 +524,8 @@ mod tests {
         assert!(validate_clickhouse_url_get_db_name(&database_url).is_ok());
 
         let database_url =
-            Url::parse("http://localhost:8123/?database=tensorzero_e2e_tests").unwrap();
+            Url::parse("http://chuser:chpassword@localhost:8123/?database=tensorzero_e2e_tests")
+                .unwrap();
         let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
         assert_eq!(
             err,
@@ -536,7 +537,8 @@ mod tests {
         );
 
         let database_url =
-            Url::parse("http://localhost:8123/database/tensorzero_e2e_tests").unwrap();
+            Url::parse("http://chuser:chpassword@localhost:8123/database/tensorzero_e2e_tests")
+                .unwrap();
         let err = validate_clickhouse_url_get_db_name(&database_url).unwrap_err();
         assert_eq!(
             err,
@@ -546,11 +548,12 @@ mod tests {
             .into()
         );
 
-        let database_url = Url::parse("http://localhost:8123/database?foo=bar").unwrap();
+        let database_url =
+            Url::parse("http://chuser:chpassword@localhost:8123/database?foo=bar").unwrap();
         let database = validate_clickhouse_url_get_db_name(&database_url).unwrap();
         assert_eq!(database, Some("database".to_string()));
 
-        let database_url = Url::parse("http://localhost:8123/database/").unwrap();
+        let database_url = Url::parse("http://chuser:chpassword@localhost:8123/database/").unwrap();
         let database = validate_clickhouse_url_get_db_name(&database_url).unwrap();
         assert_eq!(database, Some("database".to_string()));
     }

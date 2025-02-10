@@ -77,7 +77,7 @@ jobs:
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
         run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
         run: docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait
@@ -205,7 +205,7 @@ jobs:
 
       - name: Set up TENSORZERO_CLICKHOUSE_URL for production deployment tests
         run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=http://172.17.0.1:8123/tensorzero" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@172.17.0.1:8123/tensorzero" >> $GITHUB_ENV
 
       - name: Set up .env file for production deployment tests
         run: |
@@ -244,12 +244,12 @@ jobs:
           echo "OPENAI_API_KEY=not_used" >> .env
           echo "FIREWORKS_API_KEY=not_used" >> .env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero_ui_fixtures" >> .env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> .env
           docker compose -f fixtures/docker-compose.yml up -d --build
 
       - name: Run ui tests
         working-directory: ui
-        run: TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero_ui_fixtures pnpm test
+        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test
 
       - name: Take down ui tests
         working-directory: ui
