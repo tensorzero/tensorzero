@@ -91,9 +91,6 @@ where
 
     /// Transform a service to a service that can be used in hyper server.
     /// URL for requests that passed to service are full URL including scheme.
-    /// See `examples/https.rs` for usage.
-    /// If you want to serve simple HTTP proxy server, you can use `bind` method instead.
-    /// `bind` will call this method internally.
     pub fn wrap_service<S>(
         proxy: Arc<Self>,
         service: S,
