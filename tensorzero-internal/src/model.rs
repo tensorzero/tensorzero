@@ -1,9 +1,8 @@
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use reqwest::Client;
 use secrecy::SecretString;
 use serde::de::Error as SerdeError;
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use std::{env, fs};

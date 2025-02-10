@@ -16,7 +16,6 @@ use serde::Serialize;
 use tokio::time::Instant;
 use url::Url;
 
-use super::helpers::peek_first_chunk;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
     OpenAIRequestMessage, OpenAIResponse,

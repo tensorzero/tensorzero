@@ -21,7 +21,6 @@ use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 
-use super::helpers::peek_first_chunk;
 use super::openai::{
     get_chat_url, prepare_openai_messages, prepare_openai_tools, OpenAIRequestMessage, OpenAITool,
     OpenAIToolChoice, OpenAIToolType, StreamOptions,

@@ -17,7 +17,6 @@ use crate::inference::types::{
 };
 use crate::model::{Credential, CredentialLocation};
 
-use super::helpers::peek_first_chunk;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,

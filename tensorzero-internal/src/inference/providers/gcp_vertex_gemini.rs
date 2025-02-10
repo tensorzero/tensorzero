@@ -28,7 +28,6 @@ use crate::inference::types::{
 use crate::model::{build_creds_caching_default_with_fn, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use super::helpers::peek_first_chunk;
 
 const PROVIDER_NAME: &str = "GCP Vertex Gemini";
 const PROVIDER_TYPE: &str = "gcp_vertex_gemini";

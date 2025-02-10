@@ -20,7 +20,6 @@ use crate::inference::types::{
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 
-use super::helpers::peek_first_chunk;
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice, OpenAIToolChoiceString,

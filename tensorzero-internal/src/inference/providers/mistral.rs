@@ -24,7 +24,6 @@ use crate::{
 };
 
 use super::{
-    helpers::peek_first_chunk,
     openai::{
         get_chat_url, tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage,
         OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
