@@ -208,6 +208,13 @@ jobs:
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host-gateway:8123/tensorzero" >> examples/production-deployment/.env
 
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
+        with:
+          ## limits ssh access and adds the ssh public keys of the listed GitHub users
+          limit-access-to-users: GabrielBianconi
+          wait-timeout-minutes: 15
+
       - name: Run docker compose for production deployment tests
         run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
 
