@@ -191,7 +191,7 @@ async def test_async_inference_streaming_missing_function(async_client):
     assert exc_info.value.status_code == 400
     assert (
         str(exc_info.value)
-        == "Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: function_name (passed in model field after \"tensorzero::\") cannot be empty'}"
+        == "Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: function_name (passed in model field after \"tensorzero::function_name::\") cannot be empty'}"
     )
 
 
@@ -213,7 +213,7 @@ async def test_async_inference_streaming_malformed_function(async_client):
     assert exc_info.value.status_code == 400
     assert (
         str(exc_info.value)
-        == "Error code: 400 - {'error': \"Invalid request to OpenAI-compatible endpoint: model name must start with 'tensorzero::'\"}"
+        == "Error code: 400 - {'error': \"Invalid request to OpenAI-compatible endpoint: model name must start with 'tensorzero::function_name::'\"}"
     )
 
 
