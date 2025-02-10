@@ -848,7 +848,9 @@ async fn e2e_test_inference_json_success() {
         input_messages[0],
         RequestMessage {
             role: Role::User,
-            content: vec!["What is the capital city of Japan?".to_string().into()],
+            content: vec!["What is the name of the capital city of Japan?"
+                .to_string()
+                .into()],
         }
     );
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -1504,7 +1506,7 @@ pub async fn e2e_test_dynamic_api_key() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "stream": false,
@@ -1532,7 +1534,7 @@ pub async fn e2e_test_dynamic_api_key() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "stream": false,
@@ -1606,7 +1608,7 @@ pub async fn e2e_test_dynamic_api_key() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -1661,7 +1663,7 @@ async fn test_inference_invalid_params() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "params": {
@@ -1726,7 +1728,7 @@ async fn test_inference_invalid_default_function_arg() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
     });
@@ -1756,7 +1758,7 @@ async fn test_inference_invalid_default_function_arg() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
     });
@@ -1784,7 +1786,7 @@ async fn test_inference_invalid_default_function_arg() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
     });
@@ -1814,7 +1816,7 @@ async fn test_inference_invalid_default_function_arg() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
     });
@@ -1842,7 +1844,7 @@ async fn test_inference_invalid_default_function_arg() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
     });
@@ -1871,7 +1873,7 @@ async fn test_inference_invalid_default_function_arg() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
     });

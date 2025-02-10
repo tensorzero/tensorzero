@@ -756,7 +756,7 @@ mod tests {
                     messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![InputMessageContent::Text {
-                            value: json!("What is the capital city of Japan?"),
+                            value: json!("What is the name of the capital city of Japan?"),
                         }],
                     }],
                 })
