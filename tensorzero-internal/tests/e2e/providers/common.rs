@@ -2574,8 +2574,9 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Azure doesn't support `tool_choice: "required"`
-    if provider.model_provider_name == "azure" {
+    // Azure and Together don't support `tool_choice: "required"`
+    if provider.model_provider_name == "azure" || provider.model_provider_name.contains("together")
+    {
         return;
     }
 
@@ -2861,8 +2862,9 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
 pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Azure doesn't support `tool_choice: "required"`
-    if provider.model_provider_name == "azure" {
+    // Azure and Together don't support `tool_choice: "required"`
+    if provider.model_provider_name == "azure" || provider.model_provider_name.contains("together")
+    {
         return;
     }
 
@@ -3733,11 +3735,13 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Mistral and GCP Vertex don't support ToolChoice::Specific.
+    // GCP Vertex AI, Mistral, and Together don't support ToolChoice::Specific.
+    // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
-    if provider.model_provider_name == "mistral"
-        || provider.model_provider_name.contains("gcp_vertex")
+    if provider.model_provider_name == "gcp_vertex"
+        || provider.model_provider_name.contains("mistral")
+        || provider.model_provider_name.contains("together")
     {
         return;
     }
@@ -4064,11 +4068,13 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
 pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Mistral and GCP Vertex don't support ToolChoice::Specific.
+    // GCP Vertex AI, Mistral, and Together don't support ToolChoice::Specific.
+    // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
-    if provider.model_provider_name == "mistral"
-        || provider.model_provider_name.contains("gcp_vertex")
+    if provider.model_provider_name == "gcp_vertex"
+        || provider.model_provider_name.contains("mistral")
+        || provider.model_provider_name.contains("together")
     {
         return;
     }
@@ -4477,7 +4483,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Call a function."
+                    "content": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
                 }
             ]},
         "tool_choice": "required",
@@ -4600,7 +4606,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo? Call a function."}]
+                    "content": [{"type": "text", "value": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
                 }
             ]
         }
@@ -4692,9 +4698,11 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo? Call a function."
-            .to_string()
-            .into()],
+        content: vec![
+            "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -4744,7 +4752,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Call a function."
+                    "content": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
                 }
             ]},
         "tool_choice": "required",
@@ -4886,7 +4894,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo? Call a function."}]
+                    "content": [{"type": "text", "value": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
                 }
             ]
         }
@@ -5019,9 +5027,11 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo? Call a function."
-            .to_string()
-            .into()],
+        content: vec![
+            "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();

@@ -212,12 +212,12 @@ type = "together"
 model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
 api_key_location = "dynamic::together_api_key"
 
-[models."llama3.1-70b-instruct-turbo-together"]
+[models."llama3.1-405b-instruct-turbo-together"]
 routing = ["together"]
 
-[models."llama3.1-70b-instruct-turbo-together".providers.together]
+[models."llama3.1-405b-instruct-turbo-together".providers.together]
 type = "together"
-model_name = "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
+model_name = "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo"
 
 [models."HuggingFaceTB/SmolLM-1.7B-Instruct"]
 routing = ["sglang"]
@@ -672,7 +672,7 @@ max_tokens = 100
 
 [functions.basic_test.variants.together-tool]
 type = "chat_completion"
-model = "llama3.1-70b-instruct-turbo-together"
+model = "llama3.1-405b-instruct-turbo-together"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -1494,7 +1494,7 @@ max_tokens = 400
 
 [functions.weather_helper.variants.together-tool]
 type = "chat_completion"
-model = "llama3.1-70b-instruct-turbo-together"
+model = "llama3.1-405b-instruct-turbo-together"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -1534,7 +1534,7 @@ system_template = "../../fixtures/config/functions/weather_helper_parallel/promp
 [functions.weather_helper_parallel.variants.together-tool]
 type = "chat_completion"
 weight = 1
-model = "llama3.1-70b-instruct-turbo-together"
+model = "llama3.1-405b-instruct-turbo-together"
 system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
 [functions.best_of_n]
