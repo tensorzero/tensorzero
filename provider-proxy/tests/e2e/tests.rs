@@ -1,9 +1,49 @@
-use std::time::Instant;
+use std::{
+    future::{Future, IntoFuture},
+    net::SocketAddr,
+    time::Instant,
+};
 
+use axum::{routing::post, Router};
 use provider_proxy::{run_server, Args};
 use rand::Rng;
-use tokio::sync::oneshot;
-use warp::Filter;
+use tokio::{sync::oneshot, task::JoinHandle};
+
+async fn start_target_server(
+    shutdown_signal: impl Future<Output = ()> + Send + 'static,
+) -> (SocketAddr, JoinHandle<Result<(), std::io::Error>>) {
+    let app = Router::new()
+        .route(
+            "/timestamp-good",
+            post(|| async {
+                format!(
+                    "Hello at {:?} {}",
+                    Instant::now(),
+                    rand::rng().random::<u32>()
+                )
+            }),
+        )
+        .route(
+            "/timestamp-bad",
+            post(|| async {
+                let mut resp = http::Response::new(format!(
+                    "Bad request at {:?} {}",
+                    Instant::now(),
+                    rand::rng().random::<u32>()
+                ));
+                *resp.status_mut() = http::StatusCode::BAD_REQUEST;
+                resp
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = tokio::spawn(
+        axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_signal)
+            .into_future(),
+    );
+    (addr, handle)
+}
 
 #[tokio::test]
 async fn test_provider_proxy() {
@@ -18,32 +58,12 @@ async fn test_provider_proxy() {
         server_started_tx,
     ));
 
-    let target_server = warp::path("timestamp-good")
-        .map(|| {
-            format!(
-                "Hello at {:?} {}",
-                Instant::now(),
-                rand::rng().random::<u32>()
-            )
-        })
-        .or(warp::path("timestamp-bad").map(|| {
-            let mut resp = warp::http::Response::new(format!(
-                "Bad request at {:?} {}",
-                Instant::now(),
-                rand::rng().random::<u32>()
-            ));
-            *resp.status_mut() = warp::http::StatusCode::BAD_REQUEST;
-            resp
-        }));
-
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let shutdown_fut = async {
         shutdown_rx.await.unwrap();
     };
 
-    let (target_server_addr, target_server_fut) =
-        warp::serve(target_server).bind_with_graceful_shutdown(([127, 0, 0, 1], 0), shutdown_fut);
-    let target_server_handle = tokio::spawn(target_server_fut);
+    let (target_server_addr, target_server_handle) = start_target_server(shutdown_fut).await;
 
     let proxy_addr = server_started_rx.await.unwrap();
 
@@ -118,7 +138,7 @@ async fn test_provider_proxy() {
     assert_ne!(first_bad_response_body, second_bad_response_body);
 
     shutdown_tx.send(()).unwrap();
-    target_server_handle.await.unwrap();
+    target_server_handle.await.unwrap().unwrap();
 
     // When the target server is down, we should get an error
     let bad_gateway_response = client
