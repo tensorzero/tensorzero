@@ -66,7 +66,7 @@ pip install -r requirements.txt
 ## Running the Example
 
 You can run the example in the `chess_puzzles.ipynb` notebook.
-Make sure to install the dependencies in the `requirements.txt` file and set `TENSORZERO_CLICKHOUSE_URL=http://localhost:8123/tensorzero` in the shell your notebook will run in.
+Make sure to install the dependencies in the `requirements.txt` file and set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero` in the shell your notebook will run in.
 It should not require any changes to run and will automatically connect to the TensorZero Gateway you started.
 
 The notebook will evaluate the performance of the default `gpt-4o-mini` variant on the test set of chess puzzles.
