@@ -44,7 +44,7 @@ DOCKER_BUILDKIT=1 docker buildx build \
   --attest type=provenance,mode=max \
   --attest type=sbom \
   --push \
-  gateway/
+  .
 ```
 
 > [!IMPORTANT]
