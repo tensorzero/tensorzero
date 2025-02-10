@@ -124,12 +124,7 @@ impl StreamWrapper {
         };
         let chunk = match chunk {
             Ok(chunk) => chunk,
-            Err(e) => {
-                return Err(tensorzero_internal_error(
-                    py,
-                    &format!("Failed to read streaming chunk: {e:?}"),
-                )?);
-            }
+            Err(e) => return Err(convert_error(py, err_to_http(e))?),
         };
         parse_inference_chunk(py, chunk)
     }

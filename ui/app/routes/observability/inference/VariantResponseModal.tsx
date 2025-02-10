@@ -151,10 +151,6 @@ export function VariantResponseModal({
       )}
     </div>
   );
-  console.log("isOpen", isOpen);
-  console.log("isLoading", isLoading);
-  console.log("variantResponse", variantResponse);
-  console.log("baselineResponse", baselineResponse);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

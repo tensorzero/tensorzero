@@ -4,9 +4,11 @@ build-backend = "maturin"
 
 [project]
 name = "tensorzero"
+license = "Apache-2.0"
 requires-python = ">=3.8"
 dependencies = ["httpx>=0.27.0", "uuid-utils>=0.9.0"]
 dynamic = ["version"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+

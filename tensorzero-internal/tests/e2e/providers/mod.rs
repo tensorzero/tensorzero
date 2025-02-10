@@ -3,7 +3,7 @@ mod aws_bedrock;
 mod azure;
 #[cfg(feature = "batch_tests")]
 mod batch;
-mod common;
+pub mod common;
 mod deepseek;
 mod fireworks;
 mod gcp_vertex_anthropic;
