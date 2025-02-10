@@ -19,7 +19,6 @@ use crate::inference::types::{
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 
-use super::helpers::peek_first_chunk;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,
@@ -192,11 +191,11 @@ impl InferenceProvider for XAIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
-<<<<<<< HEAD:tensorzero_internal/src/inference/providers/xai.rs
-    ) -> Result<(ProviderInferenceResponseStream, String), Error> {
-=======
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
+        let request_body = XAIRequest::new(&self.model_name, request)?;
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
+                message: format!("Error serializing request: {e}"),
                 raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),

@@ -9,7 +9,6 @@ use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
 
-use super::helpers::peek_first_chunk;
 use super::openai::{
     get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
     OpenAIRequestMessage, OpenAIResponse, OpenAISystemRequestMessage, StreamOptions,
@@ -213,10 +212,11 @@ impl InferenceProvider for VLLMProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-<<<<<<< HEAD:tensorzero_internal/src/inference/providers/vllm.rs
-        let mut stream = Box::pin(stream_openai(event_source, start_time).peekable());
-        // Get a single chunk from the stream and make sure it is OK then send to client.
-        // We want to do this here so that we can tell that the request is working.
+        let stream = stream_openai(event_source, start_time).peekable();
+        Ok((stream, raw_request))
+    }
+
+    async fn start_batch_inference<'a>(
         &'a self,
         _requests: &'a [ModelInferenceRequest<'_>],
         _client: &'a reqwest::Client,

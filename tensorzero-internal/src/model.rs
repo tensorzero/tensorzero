@@ -1,8 +1,9 @@
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use reqwest::Client;
 use secrecy::SecretString;
 use serde::de::Error as SerdeError;
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use std::{env, fs};
@@ -28,7 +29,10 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::{current_timestamp, ProviderInferenceResponseChunk, Usage};
+use crate::inference::types::{
+    current_timestamp, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, Usage,
+};
 use crate::model_table::{BaseModelTable, ShorthandModelConfig};
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -42,10 +46,7 @@ use crate::{
             openai::OpenAIProvider, provider_trait::InferenceProvider, together::TogetherProvider,
             vllm::VLLMProvider, xai::XAIProvider,
         },
-        types::{
-            ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse,
-            ProviderInferenceResponseStream,
-        },
+        types::{ModelInferenceRequest, ModelInferenceResponse, ProviderInferenceResponse},
     },
 };
 use serde::Deserialize;
@@ -58,7 +59,7 @@ pub struct ModelConfig {
 }
 
 pub struct StreamResponse {
-    pub stream: ProviderInferenceResponseStream,
+    pub stream: PeekableProviderInferenceResponseStream,
     pub raw_request: String,
     pub model_provider_name: Arc<str>,
     pub cached: bool,
@@ -70,7 +71,7 @@ impl StreamResponse {
         model_provider_name: Arc<str>,
     ) -> Self {
         Self {
-            stream: Box::pin(futures::stream::iter(
+            stream: (Box::pin(futures::stream::iter(
                 cache_lookup.output.chunks.into_iter().map(|c| {
                     Ok(ProviderInferenceResponseChunk {
                         content: c.content,
@@ -88,7 +89,8 @@ impl StreamResponse {
                         latency: Duration::from_secs(0),
                     })
                 }),
-            )),
+            )) as ProviderInferenceResponseStreamInner)
+                .peekable(),
             raw_request: cache_lookup.raw_request,
             model_provider_name,
             cached: true,
@@ -209,16 +211,34 @@ impl ModelConfig {
                 .await;
             match response {
                 Ok(response) => {
-                    let (mut stream, raw_request) = response;
+                    let (stream, raw_request) = response;
+                    // Note - we cache the chunks here so that we store the raw model provider input and response chunks
+                    // in the cache. We don't want this logic in `collect_chunks`, which would cause us to cache the result
+                    // of higher-level transformations (e.g. dicl)
+                    let mut stream = if clients.cache_options.enabled.write() {
+                        stream_with_cache_write(
+                            raw_request.clone(),
+                            ModelProviderRequest {
+                                request,
+                                model_name,
+                                provider_name,
+                            },
+                            clients,
+                            stream,
+                        )
+                        .await?
+                    } else {
+                        stream
+                    };
                     // Get a single chunk from the stream and make sure it is OK then send to client.
                     // We want to do this here so that we can tell that the request is working.
                     peek_first_chunk(&mut stream, &raw_request, provider_name).await?;
-                    Ok(StreamResponse {
+                    return Ok(StreamResponse {
                         stream,
                         raw_request,
                         model_provider_name: provider_name.clone(),
                         cached: false,
-                    })
+                    });
                 }
                 Err(error) => {
                     provider_errors.insert(provider_name.to_string(), error);
@@ -273,11 +293,11 @@ async fn stream_with_cache_write(
     raw_request: String,
     model_request: ModelProviderRequest<'_>,
     clients: &InferenceClients<'_>,
-    mut stream: ProviderInferenceResponseStream,
-) -> Result<ProviderInferenceResponseStream, Error> {
+    mut stream: PeekableProviderInferenceResponseStream,
+) -> Result<PeekableProviderInferenceResponseStream, Error> {
     let cache_key = model_request.get_cache_key()?;
     let clickhouse_info = clients.clickhouse_connection_info.clone();
-    Ok(Box::pin(async_stream::stream! {
+    Ok((Box::pin(async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
         while let Some(chunk) = stream.next().await {
@@ -302,7 +322,7 @@ async fn stream_with_cache_write(
                 &raw_request,
             );
         }
-    }))
+    }) as ProviderInferenceResponseStreamInner).peekable())
 }
 #[derive(Debug)]
 pub enum ProviderConfig {
@@ -1408,6 +1428,7 @@ mod tests {
             mut stream,
             raw_request,
             model_provider_name,
+            cached: _,
         } = model_config
             .infer_stream(&request, &Client::new(), &api_keys)
             .await
