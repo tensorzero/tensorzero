@@ -497,9 +497,12 @@ pub async fn check_test_streaming_cache_with_err(
     assert!(raw_request.to_lowercase().contains("raw request"));
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
 
-    // Check if raw_response is valid JSONL
+    // Check if raw_response is non-empty
     for line in raw_response.lines() {
-        serde_json::from_str::<Value>(line).expect("Failed to deserialize response line");
+        assert!(
+            !line.is_empty(),
+            "Unexpected empty line in raw_response: {raw_response:?}"
+        );
     }
 
     let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();

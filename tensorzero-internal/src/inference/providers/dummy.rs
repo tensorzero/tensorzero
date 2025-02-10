@@ -359,7 +359,7 @@ impl InferenceProvider for DummyProvider {
                             })
                         }],
                         usage: None,
-                        raw_response: "".to_string(),
+                        raw_response: chunk.to_string(),
                         latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                     })
                 })
