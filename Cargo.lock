@@ -2065,7 +2065,7 @@ dependencies = [
  "async-stream",
  "axum",
  "eventsource-stream",
- "futures-core",
+ "futures",
  "mimalloc",
  "reqwest",
  "serde_json",
