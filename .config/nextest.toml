@@ -1,3 +1,5 @@
+nextest-version = { recommended = "0.9.87" }
+
 [profile.default]
 retries = { backoff = "fixed", count = 2, delay = "5s", jitter = true }
 slow-timeout = { period = "10s", terminate-after = 3 }
