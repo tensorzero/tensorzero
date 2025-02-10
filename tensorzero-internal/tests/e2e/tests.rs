@@ -13,3 +13,4 @@ mod openai_compatible;
 mod prometheus;
 mod providers;
 mod retries;
+mod streaming_errors;
