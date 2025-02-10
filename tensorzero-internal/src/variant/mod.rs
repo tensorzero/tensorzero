@@ -19,11 +19,12 @@ use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, Input, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, ModelInferenceResponseWithMetadata, RequestMessage,
+    ModelInferenceResponseWithMetadata, RequestMessage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
+use crate::model::StreamResponse;
 use crate::tool::{create_dynamic_implicit_tool_config, ToolCallConfig};
 use crate::{inference::types::InferenceResult, model::ModelConfig};
 
@@ -44,12 +45,11 @@ pub enum VariantConfig {
 /// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
 /// we support coercing tool calls into JSON mode.
 /// This is represented as a tool config in the
-#[derive(Debug, Default, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum JsonMode {
     Off,
     On,
-    #[default]
     Strict,
     ImplicitTool,
 }
@@ -112,6 +112,7 @@ pub struct ModelUsedInfo {
     pub input_messages: Vec<RequestMessage>,
     pub inference_params: InferenceParams,
     pub previous_model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
+    pub cached: bool,
 }
 
 pub trait Variant {
@@ -393,7 +394,7 @@ fn prepare_model_inference_request<'a, 'request>(
     inference_config: &'request InferenceConfig<'a, 'request>,
     stream: bool,
     inference_params: &InferenceParams,
-    json_mode: &'a JsonMode,
+    json_mode: Option<JsonMode>,
 ) -> Result<ModelInferenceRequest<'request>, Error>
 where
     'a: 'request,
@@ -411,13 +412,13 @@ where
             frequency_penalty: inference_params.chat_completion.frequency_penalty,
             seed: inference_params.chat_completion.seed,
             stream,
-            json_mode: ModelInferenceRequestJsonMode::Off,
+            json_mode: json_mode.unwrap_or(JsonMode::Off).into(),
             function_type: FunctionType::Chat,
             output_schema: None,
         },
         FunctionConfig::Json(json_config) => {
             let tool_config = match json_mode {
-                JsonMode::ImplicitTool => match inference_config.dynamic_output_schema {
+                Some(JsonMode::ImplicitTool) => match inference_config.dynamic_output_schema {
                     Some(schema) => Some(Cow::Owned(create_dynamic_implicit_tool_config(
                         schema.value.clone(),
                     ))),
@@ -441,7 +442,7 @@ where
                 frequency_penalty: inference_params.chat_completion.frequency_penalty,
                 seed: inference_params.chat_completion.seed,
                 stream,
-                json_mode: json_mode.into(),
+                json_mode: json_mode.unwrap_or(JsonMode::Strict).into(),
                 function_type: FunctionType::Json,
                 output_schema,
             }
@@ -502,9 +503,14 @@ async fn infer_model_request_stream<'request>(
     inference_params: InferenceParams,
     retry_config: RetryConfig,
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-    let (stream, raw_request, model_provider_name) = (|| async {
+    let StreamResponse {
+        stream,
+        raw_request,
+        model_provider_name,
+        cached,
+    } = (|| async {
         model_config
-            .infer_stream(&request, clients.http_client, clients.credentials)
+            .infer_stream(&request, clients, &model_name)
             .await
     })
     .retry(retry_config.get_backoff())
@@ -519,6 +525,7 @@ async fn infer_model_request_stream<'request>(
         previous_model_inference_results: vec![],
         system,
         input_messages,
+        cached,
     };
     let config_type = function.config_type();
     let stream =
@@ -662,7 +669,7 @@ mod tests {
             &inference_config,
             stream,
             &inference_params,
-            &json_mode,
+            Some(json_mode),
         )
         .unwrap();
 
@@ -709,7 +716,7 @@ mod tests {
             &inference_config,
             stream,
             &inference_params,
-            &json_mode,
+            Some(json_mode),
         )
         .unwrap();
 
@@ -753,7 +760,7 @@ mod tests {
             &inference_config_dynamic,
             stream,
             &inference_params,
-            &json_mode,
+            Some(json_mode),
         )
         .unwrap();
 
@@ -775,7 +782,7 @@ mod tests {
             &inference_config,
             stream,
             &inference_params,
-            &json_mode,
+            Some(json_mode),
         )
         .unwrap();
 
@@ -793,7 +800,7 @@ mod tests {
             &inference_config,
             stream,
             &inference_params,
-            &json_mode,
+            Some(json_mode),
         )
         .unwrap();
 

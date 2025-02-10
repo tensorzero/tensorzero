@@ -107,6 +107,8 @@ struct InferenceMetadata {
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
+    #[allow(dead_code)] // We may start exposing this in the response
+    pub cached: bool,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -313,6 +315,7 @@ pub async fn inference(
                 tags: params.tags,
                 tool_config,
                 dynamic_output_schema: output_schema,
+                cached: model_used_info.cached,
             };
 
             let stream = create_stream(
@@ -488,6 +491,7 @@ fn create_stream(
                 tags,
                 tool_config,
                 dynamic_output_schema,
+                cached,
             } = metadata;
 
             let config = config.clone();
@@ -509,6 +513,7 @@ fn create_stream(
                     dynamic_output_schema,
                     templates,
                     tool_config: tool_config.as_ref(),
+                    cached,
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;
@@ -851,6 +856,7 @@ mod tests {
             tags: HashMap::new(),
             tool_config: None,
             dynamic_output_schema: None,
+            cached: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);
@@ -900,6 +906,7 @@ mod tests {
             tags: HashMap::new(),
             tool_config: None,
             dynamic_output_schema: None,
+            cached: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk);

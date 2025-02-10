@@ -1,10 +1,17 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::deserialize_json_string;
-use crate::inference::types::{ContentBlock, ModelInferenceRequest, ModelInferenceResponse};
+use crate::inference::types::{
+    ContentBlock, ContentBlockChunk, ModelInferenceRequest, ModelInferenceResponse,
+    ProviderInferenceResponseChunk,
+};
+use crate::model::StreamResponse;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -122,22 +129,45 @@ impl ModelProviderRequest<'_> {
 
 // The full row written to ClickHouse
 #[derive(Debug, Serialize)]
-struct FullCacheRow {
+struct FullCacheRow<T: CacheOutput> {
     short_cache_key: u64,
     long_cache_key: String,
     // We flatten this so that the fields map directly to columns in the ClickHouse table
     #[serde(flatten)]
-    data: CacheData,
+    data: CacheData<T>,
 }
 
 /// The underlying cached input/output data. These are the fields that we actually retrieve from
 /// ClickHouse when going a cache fetch
 #[derive(Debug, Deserialize, Serialize)]
-pub struct CacheData {
-    #[serde(deserialize_with = "deserialize_json_string")]
-    pub output: Vec<ContentBlock>,
+pub struct CacheData<T: CacheOutput> {
+    pub output: T,
     pub raw_request: String,
     pub raw_response: String,
+}
+
+/// A marker trait for types that can be used in the 'output' field of `CacheData`
+/// This ensures that we don't accidentally try to serialize/deserialize the wrong type
+/// to/from ClickHouse
+/// We use a marker trait rather than an enum so that the expected type can be enforced by the caller
+/// (e.g. `infer_stream` will never try to deserialize a `NonStreamingCacheData`)
+pub trait CacheOutput {}
+
+impl CacheOutput for StreamingCacheData {}
+impl CacheOutput for NonStreamingCacheData {}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct NonStreamingCacheData {
+    #[serde(deserialize_with = "deserialize_json_string")]
+    pub blocks: Vec<ContentBlock>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct StreamingCacheData {
+    #[serde(deserialize_with = "deserialize_json_string")]
+    pub chunks: Vec<CachedProviderInferenceResponseChunk>,
 }
 
 // This doesn't block
@@ -162,9 +192,58 @@ pub fn start_cache_write(
                     short_cache_key,
                     long_cache_key,
                     data: CacheData {
-                        output,
+                        output: NonStreamingCacheData { blocks: output },
                         raw_request,
                         raw_response,
+                    },
+                }],
+                "ModelInferenceCache",
+            )
+            .await
+    });
+    Ok(())
+}
+
+/// A subset of `ProviderInferenceResponseChunk` containing only the fields we want to cache
+/// For example, we exclude 'usage', and fill it in with 0 input/output tokens when we
+/// return a cached chunk.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CachedProviderInferenceResponseChunk {
+    pub content: Vec<ContentBlockChunk>,
+    pub raw_response: String,
+}
+
+// This starts a trailing write to the cache (without blocking the http response)
+pub fn start_cache_write_streaming(
+    clickhouse_client: &ClickHouseConnectionInfo,
+    cache_key: CacheKey,
+    chunks: Vec<ProviderInferenceResponseChunk>,
+    raw_request: &str,
+) -> Result<(), Error> {
+    let short_cache_key = cache_key.get_short_key()?;
+    let long_cache_key = cache_key.get_long_key();
+
+    let output = StreamingCacheData {
+        chunks: chunks
+            .into_iter()
+            .map(|c| CachedProviderInferenceResponseChunk {
+                content: c.content,
+                raw_response: c.raw_response,
+            })
+            .collect(),
+    };
+    let raw_request = raw_request.to_string();
+    let clickhouse_client = clickhouse_client.clone();
+    tokio::spawn(async move {
+        clickhouse_client
+            .write(
+                &[FullCacheRow {
+                    short_cache_key,
+                    long_cache_key,
+                    data: CacheData {
+                        output,
+                        raw_request,
+                        raw_response: String::new(),
                     },
                 }],
                 "ModelInferenceCache",
@@ -179,6 +258,31 @@ pub async fn cache_lookup(
     request: ModelProviderRequest<'_>,
     max_age_s: Option<u32>,
 ) -> Result<Option<ModelInferenceResponse>, Error> {
+    let result = cache_lookup_inner::<NonStreamingCacheData>(
+        clickhouse_connection_info,
+        &request,
+        max_age_s,
+    )
+    .await?;
+    Ok(result.map(|result| {
+        ModelInferenceResponse::from_cache(result, request.request, request.provider_name)
+    }))
+}
+
+pub async fn cache_lookup_streaming(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    request: ModelProviderRequest<'_>,
+    max_age_s: Option<u32>,
+) -> Result<Option<StreamResponse>, Error> {
+    let result = cache_lookup_inner(clickhouse_connection_info, &request, max_age_s).await?;
+    Ok(result.map(|result| StreamResponse::from_cache(result, Arc::from(request.provider_name))))
+}
+
+pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    request: &ModelProviderRequest<'_>,
+    max_age_s: Option<u32>,
+) -> Result<Option<CacheData<T>>, Error> {
     let cache_key = request.get_cache_key()?;
     // NOTE: the short cache key is just so the ClickHouse index can be as efficient as possible
     // but we always check against the long cache key before returning a result
@@ -227,16 +331,12 @@ pub async fn cache_lookup(
     if result.is_empty() {
         return Ok(None);
     }
-    let result: CacheData = serde_json::from_str(&result).map_err(|e| {
+    let result: CacheData<T> = serde_json::from_str(&result).map_err(|e| {
         Error::new(ErrorDetails::Cache {
             message: format!("Failed to deserialize output: {e}"),
         })
     })?;
-    Ok(Some(ModelInferenceResponse::from_cache(
-        result,
-        request.request,
-        request.provider_name,
-    )))
+    Ok(Some(result))
 }
 
 #[cfg(test)]
