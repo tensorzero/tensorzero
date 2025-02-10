@@ -1430,7 +1430,19 @@ mod tests {
             model_provider_name,
             cached: _,
         } = model_config
-            .infer_stream(&request, &Client::new(), &api_keys)
+            .infer_stream(
+                &request,
+                &InferenceClients {
+                    http_client: &Client::new(),
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+                    credentials: &api_keys,
+                    cache_options: &CacheOptions {
+                        max_age_s: None,
+                        enabled: CacheEnabledMode::Off,
+                    },
+                },
+                "my_model",
+            )
             .await
             .unwrap();
         let initial_chunk = stream.next().await.unwrap().unwrap();
