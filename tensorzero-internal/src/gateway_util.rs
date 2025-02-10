@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
-use reqwest::Client;
+use reqwest::{Client, Proxy};
 use serde::de::DeserializeOwned;
 use tracing::instrument;
 
@@ -29,8 +29,7 @@ impl AppStateData {
                 })
             });
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url).await?;
-
-        let http_client = Client::new();
+        let http_client = setup_http_client()?;
 
         Ok(Self {
             config,
@@ -116,6 +115,31 @@ where
 
         Ok(StructuredJson(deserialized))
     }
+}
+
+pub fn setup_http_client() -> Result<Client, Error> {
+    let mut http_client_builder = Client::builder();
+
+    if cfg!(any(feature = "e2e_tests", feature = "batch_tests")) {
+        if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
+            tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
+            http_client_builder = http_client_builder
+                .proxy(Proxy::all(proxy_url).map_err(|e| {
+                    Error::new(ErrorDetails::AppState {
+                        message: format!("Invalid proxy URL: {}", e),
+                    })
+                })?)
+                // When running e2e tests, we use `provider-proxy` as an MITM proxy
+                // for caching, so we need to accept the invalid (self-signed) cert.
+                .danger_accept_invalid_certs(true);
+        }
+    }
+
+    http_client_builder.build().map_err(|e| {
+        Error::new(ErrorDetails::AppState {
+            message: format!("Failed to build HTTP client: {}", e),
+        })
+    })
 }
 
 #[cfg(test)]
