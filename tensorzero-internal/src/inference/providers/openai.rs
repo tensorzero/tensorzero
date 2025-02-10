@@ -34,7 +34,6 @@ use crate::inference::types::{
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-
 lazy_static! {
     static ref OPENAI_DEFAULT_BASE_URL: Url = {
         #[allow(clippy::expect_used)]
