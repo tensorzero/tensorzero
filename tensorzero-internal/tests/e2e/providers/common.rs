@@ -3,6 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
+use rand::Rng;
 #[cfg(feature = "e2e_tests")]
 use reqwest::{Client, StatusCode};
 #[cfg(feature = "e2e_tests")]
@@ -370,7 +371,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "stream": false,
@@ -405,7 +406,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "stream": false,
@@ -502,7 +503,7 @@ pub async fn check_simple_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -602,7 +603,9 @@ pub async fn check_simple_inference_response(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -639,22 +642,45 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
 
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
+    // Generate random u32
+    let seed = rand::thread_rng().gen_range(0..u32::MAX);
 
+    let original_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, false,
+    )
+    .await;
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let cached_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, true,
+    )
+    .await;
+    assert_eq!(original_content, cached_content);
+}
+
+#[cfg(feature = "e2e_tests")]
+pub async fn test_simple_streaming_inference_request_with_provider_cache(
+    provider: &E2ETestProvider,
+    episode_id: Uuid,
+    seed: u32,
+    tag_value: &str,
+    check_cache: bool,
+) -> String {
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input":
             {
-               "system": {"assistant_name": "Dr. Mehta"},
+               "system": {"assistant_name": format!("Dr. Mehta #{seed}")},
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "stream": true,
         "tags": {"key": tag_value},
+        "cache_options": {"enabled": "on", "lookback_s": 10}
     });
 
     let mut event_source = Client::new()
@@ -721,7 +747,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     assert!(full_content.to_lowercase().contains("tokyo"));
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    if provider.variant_name.contains("azure") || check_cache {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -757,11 +783,11 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": "Dr. Mehta"},
+        "system": {"assistant_name": format!("Dr. Mehta #{seed}")},
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -837,7 +863,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    if provider.variant_name.contains("azure") || check_cache {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -846,40 +872,46 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
+    if check_cache {
+        assert_eq!(response_time_ms, 0);
+    } else {
+        assert!(response_time_ms > 0);
+    }
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    if check_cache {
+        assert_eq!(ttft_ms, 0);
+    } else {
+        assert!(ttft_ms > 50);
+    }
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        format!("You are a helpful and friendly assistant named Dr. Mehta #{seed}")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
     // Check the InferenceTag Table
-    let result = select_inference_tags_clickhouse(
-        &clickhouse,
-        "basic_test",
-        "key",
-        &tag_value,
-        inference_id,
-    )
-    .await
-    .unwrap();
+    let result =
+        select_inference_tags_clickhouse(&clickhouse, "basic_test", "key", tag_value, inference_id)
+            .await
+            .unwrap();
     let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
+    full_content
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -896,7 +928,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "raw_text", "value": "What is the capital city of Japan?"}],
+                    "content": [{"type": "raw_text", "value": "What is the name of the capital city of Japan?"}],
                 }
             ]},
         "params": {
@@ -931,7 +963,7 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
 }
 
 // This function is also used by batch tests. If you adjust the prompt checked by this function
-// ("What is the capital city of Japan?"), make sure to update the batch tests to start batch
+// ("What is the name of the capital city of Japan?"), make sure to update the batch tests to start batch
 // jobs with the correct prompt.
 pub async fn check_inference_params_response(
     response_json: Value,
@@ -1000,7 +1032,7 @@ pub async fn check_inference_params_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "raw_text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "raw_text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -1108,7 +1140,9 @@ pub async fn check_inference_params_response(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -1132,7 +1166,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "params": {
@@ -1253,7 +1287,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -1367,7 +1401,9 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -7182,7 +7218,9 @@ pub async fn check_json_mode_inference_response(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -7426,7 +7464,9 @@ pub async fn check_dynamic_json_mode_inference_response(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -7691,7 +7731,9 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();

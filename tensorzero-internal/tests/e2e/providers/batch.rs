@@ -543,7 +543,7 @@ pub async fn test_start_simple_batch_inference_request_with_provider(provider: E
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]}],
         "tags": [{"foo": "bar", "test_type": "batch_simple", "variant_name": provider.variant_name}],
@@ -619,7 +619,7 @@ pub async fn test_start_simple_batch_inference_request_with_provider(provider: E
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -629,7 +629,9 @@ pub async fn test_start_simple_batch_inference_request_with_provider(provider: E
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -878,7 +880,7 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "raw_text", "value": "What is the capital city of Japan?"}]
+                    "content": [{"type": "raw_text", "value": "What is the name of the capital city of Japan?"}]
                 }
             ]}],
         "params": {
@@ -973,7 +975,7 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "raw_text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "raw_text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -983,7 +985,9 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -3577,7 +3581,9 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -3925,7 +3931,9 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
