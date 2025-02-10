@@ -1,0 +1,63 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   MODELS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[models.my_gpt_4o_mini]
+routing = ["openai"]
+
+[models."my_gpt_4o_mini".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.generate_instruction]
+type = "json"
+system_schema = "functions/generate_instruction/system_schema.json"
+output_schema = "functions/generate_instruction/output_schema.json"
+
+[functions.generate_instruction.variants.baseline]
+type = "chat_completion"
+weight = 1.0
+model = "my_gpt_4o_mini"
+system_template = "functions/generate_instruction/baseline/system_template.minijinja"
+
+[functions.generate_answer_chat]
+type = "chat"
+system_schema = "functions/generate_answer_chat/system_schema.json"
+user_schema = "functions/generate_answer_chat/user_schema.json"
+
+[functions.generate_answer_chat.variants.search_template]
+type = "chat_completion"
+weight = 1.0
+model = "my_gpt_4o_mini"
+system_template = "functions/generate_answer_chat/search_template/system_template.minijinja"
+user_template = "functions/generate_answer_chat/search_template/user_template.minijinja"
+
+[functions.generate_answer_json]
+type = "json"
+output_schema = "functions/generate_answer_json/output_schema.json"
+system_schema = "functions/generate_answer_json/system_schema.json"
+user_schema = "functions/generate_answer_json/user_schema.json"
+
+[functions.generate_answer_json.variants.search_template]
+type = "chat_completion"
+weight = 1.0
+model = "my_gpt_4o_mini"
+system_template = "functions/generate_answer_json/search_template/system_template.minijinja"
+user_template = "functions/generate_answer_json/search_template/user_template.minijinja"
+
+[functions.judge_answer]
+type = "json"
+output_schema = "functions/judge_answer/output_schema.json"
+system_schema = "functions/judge_answer/system_schema.json"
+user_schema = "functions/judge_answer/user_schema.json"
+
+[functions.judge_answer.variants.baseline]
+type = "chat_completion"
+weight = 1.0
+model = "my_gpt_4o_mini"
+system_template = "functions/judge_answer/baseline/system_template.minijinja"
+user_template = "functions/judge_answer/baseline/user_template.minijinja"
