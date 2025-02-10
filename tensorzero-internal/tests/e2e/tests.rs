@@ -12,5 +12,6 @@ mod mixture_of_n;
 mod openai_compatible;
 mod prometheus;
 mod providers;
+mod proxy;
 mod retries;
 mod streaming_errors;
