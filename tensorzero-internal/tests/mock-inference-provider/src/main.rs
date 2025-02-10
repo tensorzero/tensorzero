@@ -5,7 +5,7 @@ use axum::{
     response::sse::{Event, Sse},
     response::{IntoResponse, Response},
 };
-use futures_core::Stream;
+use futures::Stream;
 use mimalloc::MiMalloc;
 use serde_json::json;
 use std::net::SocketAddr;
