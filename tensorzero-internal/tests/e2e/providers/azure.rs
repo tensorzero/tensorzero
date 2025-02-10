@@ -40,6 +40,12 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "azure".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            variant_name: "azure-strict".to_string(),
+            model_name: "gpt-4o-mini-azure".into(),
+            model_provider_name: "azure".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     E2ETestProviders {

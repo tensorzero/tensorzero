@@ -407,6 +407,13 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "flaky_basic_test"
 
+[models.err_in_stream]
+routing = ["dummy"]
+
+[models.err_in_stream.providers.dummy]
+type = "dummy"
+model_name = "err_in_stream"
+
 [models.flaky_best_of_n_judge]
 routing = ["dummy"]
 
@@ -772,6 +779,12 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 max_tokens = 100
 retries = { num_retries = 5, max_delay_s = 0.1 }
 
+[functions.basic_test.variants.err_in_stream]
+type = "chat_completion"
+model = "err_in_stream"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.basic_test.variants.dicl]
 type = "experimental_dynamic_in_context_learning"
 model = "gpt-4o-mini-2024-07-18"
@@ -868,6 +881,14 @@ model = "gpt-4o-mini-azure"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
+max_tokens = 100
+
+[functions.json_success.variants.azure-strict]
+type = "chat_completion"
+model = "gpt-4o-mini-azure"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "strict"
 max_tokens = 100
 
 [functions.json_success.variants.azure-implicit]
@@ -1153,6 +1174,14 @@ model = "gpt-4o-mini-azure"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
+max_tokens = 100
+
+[functions.dynamic_json.variants.azure-strict]
+type = "chat_completion"
+model = "gpt-4o-mini-azure"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "strict"
 max_tokens = 100
 
 [functions.dynamic_json.variants.azure-implicit]

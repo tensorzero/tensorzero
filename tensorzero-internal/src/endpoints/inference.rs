@@ -560,16 +560,19 @@ fn prepare_serialized_events(
 ) -> impl Stream<Item = Result<Event, Error>> {
     async_stream::stream! {
         while let Some(chunk) = stream.next().await {
-            // NOTE - in the future, we may want to end the stream early if we get an error
-            // For now, we just ignore the error and try to get more chunks
-            let Ok(chunk) = chunk else {
-                continue;
+            let chunk_json = match chunk {
+                Ok(chunk) => {
+                    serde_json::to_value(chunk).map_err(|e| {
+                        Error::new(ErrorDetails::Inference {
+                            message: format!("Failed to convert chunk to JSON: {}", e),
+                        })
+                    })?
+                },
+                Err(e) => {
+                    // NOTE - in the future, we may want to end the stream early if we get an error
+                    serde_json::json!({"error": e.to_string()})
+                }
             };
-            let chunk_json = serde_json::to_value(chunk).map_err(|e| {
-                Error::new(ErrorDetails::Inference {
-                    message: format!("Failed to convert chunk to JSON: {}", e),
-                })
-            })?;
             yield Event::default().json_data(chunk_json).map_err(|e| {
                 Error::new(ErrorDetails::Inference {
                     message: format!("Failed to convert Value to Event: {}", e),

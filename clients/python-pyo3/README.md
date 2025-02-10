@@ -47,7 +47,7 @@ uv run python
 The TensorZero client comes in both synchronous (`TensorZeroGateway`) and asynchronous (`AsyncTensorZeroGateway`) variants.
 Each of these classes can be constructed in one of two ways:
 
-* HTTP gateway mode. This constructs a client that makes requests to the specified TensorZero HTTP gateway:
+- HTTP gateway mode. This constructs a client that makes requests to the specified TensorZero HTTP gateway:
 
 ```python
 from tensorzero import TensorZeroGateway, AsyncTensorZeroGateway
@@ -56,14 +56,14 @@ client = TensorZeroGateway(base_url="http://localhost:3000")
 async_client = AsyncTensorZeroGateway(base_url="http://localhost:3000")
 ```
 
-* Embedded gateway mode. This starts an in-memory TensorZero gateway using the provided config file and Clickhouse url
+- Embedded gateway mode. This starts an in-memory TensorZero gateway using the provided config file and Clickhouse url
   Note that `AsyncTensorZeroGateway.create_embedded_gateway` returns a `Future`, which you must `await` to get the client.
 
 ```python
 from tensorzero import TensorZeroGateway, AsyncTensorZeroGateway
 
-client = TensorZeroGateway.create_embedded_gateway(config_path="/path/to/tensorzero.toml", clickhouse_url="http://localhost:8123/tensorzero-python-e2e")
-async_client = await AsyncTensorZeroGateway.create_embedded_gateway(config_path="/path/to/tensorzero.toml", clickhouse_url="http://localhost:8123/tensorzero-python-e2e")
+client = TensorZeroGateway.create_embedded_gateway(config_path="/path/to/tensorzero.toml", clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e")
+async_client = await AsyncTensorZeroGateway.create_embedded_gateway(config_path="/path/to/tensorzero.toml", clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e")
 ```
 
 ### Non-Streaming Inference
@@ -145,9 +145,11 @@ if __name__ == "__main__":
 ```
 
 ## Note on naming
+
 There are several different names in use in this client:
-* `python-pyo3` - this is *only* used as the name of the top-level directory, to distinguish it from the pure-python implementation
+
+- `python-pyo3` - this is _only_ used as the name of the top-level directory, to distinguish it from the pure-python implementation
   In the future, we'll delete the pure-python client and rename this to 'python'
-* `tensorzero_python` - this is the rust *crate* name, so that we get sensible output from running Cargo
-* `tensorzero` - this is the name of the Python package (python code can use `import tensorzero`)
-* `tensorzero_rust` - this is the (locally-renamed) Rust client package, which avoids conflicts with pyo3-generated code.
+- `tensorzero_python` - this is the rust _crate_ name, so that we get sensible output from running Cargo
+- `tensorzero` - this is the name of the Python package (python code can use `import tensorzero`)
+- `tensorzero_rust` - this is the (locally-renamed) Rust client package, which avoids conflicts with pyo3-generated code.

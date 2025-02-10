@@ -5,6 +5,7 @@ use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use tokio::time::Instant;
 use url::Url;
 
@@ -259,18 +260,8 @@ fn get_azure_chat_url(endpoint: &Url, deployment_id: &str) -> Result<Url, Error>
         .push("chat")
         .push("completions");
     url.query_pairs_mut()
-        .append_pair("api-version", "2024-06-01");
+        .append_pair("api-version", "2024-10-21");
     Ok(url)
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(tag = "type")]
-enum AzureResponseFormat {
-    #[allow(dead_code)]
-    JsonObject,
-    #[default]
-    Text,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -340,12 +331,7 @@ struct AzureRequest<'a> {
 
 impl<'a> AzureRequest<'a> {
     pub fn new(request: &'a ModelInferenceRequest) -> AzureRequest<'a> {
-        let response_format = match request.json_mode {
-            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
-                AzureResponseFormat::JsonObject
-            }
-            ModelInferenceRequestJsonMode::Off => AzureResponseFormat::Text,
-        };
+        let response_format = AzureResponseFormat::new(&request.json_mode, request.output_schema);
         let messages = prepare_openai_messages(request);
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         AzureRequest {
@@ -360,6 +346,37 @@ impl<'a> AzureRequest<'a> {
             seed: request.seed,
             tools,
             tool_choice: tool_choice.map(AzureToolChoice::from),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
+pub enum AzureResponseFormat {
+    #[default]
+    Text,
+    JsonObject,
+    JsonSchema {
+        json_schema: Value,
+    },
+}
+
+impl AzureResponseFormat {
+    fn new(json_mode: &ModelInferenceRequestJsonMode, output_schema: Option<&Value>) -> Self {
+        // Note: Some models on Azure won't support strict JSON mode.
+        // Azure will 400 if you try to use it for those.
+        // See these docs: https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/structured-outputs
+        match json_mode {
+            ModelInferenceRequestJsonMode::On => AzureResponseFormat::JsonObject,
+            ModelInferenceRequestJsonMode::Off => AzureResponseFormat::Text,
+            ModelInferenceRequestJsonMode::Strict => match output_schema {
+                Some(schema) => {
+                    let json_schema = json!({"name": "response", "strict": true, "schema": schema});
+                    AzureResponseFormat::JsonSchema { json_schema }
+                }
+                None => AzureResponseFormat::JsonObject,
+            },
         }
     }
 }

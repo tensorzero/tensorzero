@@ -6,7 +6,7 @@ from tensorzero import AsyncTensorZeroGateway
 async def main():
     async with AsyncTensorZeroGateway("http://localhost:3000") as gateway:
         response = await gateway.inference(
-            model_name="openai::gpt4o-mini",
+            model_name="openai::gpt-4o-mini",
             input={
                 "messages": [
                     {
