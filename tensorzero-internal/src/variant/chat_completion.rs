@@ -38,7 +38,7 @@ pub struct ChatCompletionConfig {
     pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
     #[serde(default)]
-    pub json_mode: JsonMode, // Only for JSON functions, not for chat functions
+    pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     #[serde(default)]
     pub retries: RetryConfig,
 }
@@ -144,7 +144,7 @@ impl ChatCompletionConfig {
             inference_config,
             stream,
             inference_params,
-            &self.json_mode,
+            self.json_mode,
         )
     }
 }
@@ -419,7 +419,7 @@ mod tests {
             system_template: None,
             user_template: None,
             assistant_template: None,
-            json_mode: JsonMode::On,
+            json_mode: Some(JsonMode::On),
             temperature: None,
             top_p: None,
             presence_penalty: None,
@@ -488,7 +488,7 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             assistant_template: Some(assistant_template_name.into()),
-            json_mode: JsonMode::On,
+            json_mode: Some(JsonMode::On),
             ..Default::default()
         };
 
@@ -571,7 +571,7 @@ mod tests {
             system_template: Some(system_template_name.into()),
             user_template: Some(user_template_name.into()),
             assistant_template: Some(assistant_template_name.into()),
-            json_mode: JsonMode::On,
+            json_mode: Some(JsonMode::On),
             ..Default::default()
         };
 
