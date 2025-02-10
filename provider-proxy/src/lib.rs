@@ -15,6 +15,7 @@ use std::{fs::OpenOptions, future::Future};
 use anyhow::Context as _;
 use bytes::{Bytes, BytesMut};
 use clap::Parser;
+use http::HeaderValue;
 use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use hyper::service::service_fn;
 use mitm_server::MitmProxy;
@@ -88,6 +89,9 @@ fn save_cache_body(
     }
 }
 
+const HEADER_TRUE: HeaderValue = HeaderValue::from_static("true");
+const HEADER_FALSE: HeaderValue = HeaderValue::from_static("false");
+
 async fn check_cache<
     E: std::fmt::Debug + 'static,
     T: Future<Output = Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error>>,
@@ -110,10 +114,10 @@ async fn check_cache<
 
     let path = cache_path.join(filename);
     let path_str = path.to_string_lossy().into_owned();
-    if path.exists() {
+    let (mut resp, cache_hit) = if path.exists() {
         tracing::info!("Cache hit: {}", path_str);
         let path_str_clone = path_str.clone();
-        tokio::task::spawn_blocking(move || {
+        let resp = tokio::task::spawn_blocking(move || {
             let file = std::fs::read_to_string(path)
                 .with_context(|| format!("Failed to read cache file {path_str}"))?;
             let response: serde_json::Value = serde_json::from_str(&file).with_context(|| {
@@ -121,10 +125,13 @@ async fn check_cache<
             })?;
             let response: hyper::Response<Bytes> = http_serde_ext::response::deserialize(response)
                 .with_context(|| format!("Failed to deserialize HTTP response from {path_str}"))?;
-            Ok(response.map(|b| BoxBody::new(Full::new(b).map_err(|e| match e {}))))
+            Ok::<_, anyhow::Error>(
+                response.map(|b| BoxBody::new(Full::new(b).map_err(|e| match e {}))),
+            )
         })
         .await
-        .with_context(|| format!("Failed to await tokio spawn_blocking for {path_str_clone}"))?
+        .with_context(|| format!("Failed to await tokio spawn_blocking for {path_str_clone}"))??;
+        (resp, HEADER_TRUE)
     } else {
         tracing::info!("Cache miss: {}", path_str);
         let response = match missing().await {
@@ -139,7 +146,7 @@ async fn check_cache<
                     .status(http::StatusCode::BAD_GATEWAY)
                     .body(BoxBody::new(body.map_err(|e| match e {})))
                     .unwrap();
-                return Ok(resp);
+                resp
             }
         };
         if response.status().is_success() {
@@ -167,12 +174,17 @@ async fn check_cache<
                 )
             });
 
-            Ok(body_collector.map(|b| BoxBody::new(b)))
+            (body_collector.map(|b| BoxBody::new(b)), HEADER_FALSE)
         } else {
             tracing::warn!("Skipping caching of non-success response: {:?}", response);
-            Ok(response)
+            (response, HEADER_FALSE)
         }
-    }
+    };
+    // Insert this header at the very end, to ensure that we never store this
+    // header in the cache.
+    resp.headers_mut()
+        .insert("x-tensorzero-provider-proxy-hit", cache_hit);
+    Ok(resp)
 }
 
 #[derive(Parser, Debug)]
