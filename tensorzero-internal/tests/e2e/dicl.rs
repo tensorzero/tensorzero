@@ -47,7 +47,7 @@ pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "stream": false,
@@ -122,7 +122,7 @@ pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
