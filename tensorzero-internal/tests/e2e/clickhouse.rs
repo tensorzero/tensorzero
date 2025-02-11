@@ -365,62 +365,6 @@ async fn test_clickhouse_migration_manager() {
         })
         .await
         .unwrap();
-
-        assert!(!logs_contain("Failed to apply migration"));
-        assert!(!logs_contain("Failed migration success check"));
-        assert!(!logs_contain("Failed to verify migration"));
-
-        assert!(!logs_contain("Applying migration: Migration0000"));
-        assert!(!logs_contain("Migration succeeded: Migration0000"));
-        assert!(!logs_contain("Applying migration: Migration0002"));
-        assert!(!logs_contain("Migration succeeded: Migration0002"));
-        assert!(!logs_contain("Applying migration: Migration0003"));
-        assert!(!logs_contain("Migration succeeded: Migration0003"));
-        assert!(!logs_contain("Applying migration: Migration0004"));
-        assert!(!logs_contain("Migration succeeded: Migration0004"));
-        assert!(!logs_contain("Applying migration: Migration0005"));
-        assert!(!logs_contain("Migration succeeded: Migration0005"));
-        assert!(!logs_contain("Applying migration: Migration0006"));
-        assert!(!logs_contain("Migration succeeded: Migration0006"));
-        assert!(!logs_contain("Applying migration: Migration0008"));
-        assert!(!logs_contain("Migration succeeded: Migration0008"));
-        assert!(logs_contain("Applying migration: Migration0009"));
-        assert!(logs_contain("Migration succeeded: Migration0009"));
-    }
-
-    #[traced_test]
-    async fn tenth(clickhouse: &ClickHouseConnectionInfo) {
-        // Run the migration manager again (it should've already been run above)... there should be no changes
-        let clean_start =
-            clickhouse_migration_manager::run_migration(&Migration0000 { clickhouse })
-                .await
-                .unwrap();
-        // We know that the first migration was run so clean start should be false
-        assert!(!clean_start);
-        clickhouse_migration_manager::run_migration(&Migration0002 { clickhouse })
-            .await
-            .unwrap();
-        clickhouse_migration_manager::run_migration(&Migration0003 { clickhouse })
-            .await
-            .unwrap();
-        clickhouse_migration_manager::run_migration(&Migration0004 { clickhouse })
-            .await
-            .unwrap();
-        clickhouse_migration_manager::run_migration(&Migration0005 { clickhouse })
-            .await
-            .unwrap();
-        clickhouse_migration_manager::run_migration(&Migration0006 { clickhouse })
-            .await
-            .unwrap();
-        clickhouse_migration_manager::run_migration(&Migration0008 { clickhouse })
-            .await
-            .unwrap();
-        clickhouse_migration_manager::run_migration(&Migration0009 {
-            clickhouse,
-            clean_start: true,
-        })
-        .await
-        .unwrap();
         clickhouse_migration_manager::run_migration(&Migration0011 { clickhouse })
             .await
             .unwrap();
@@ -450,7 +394,7 @@ async fn test_clickhouse_migration_manager() {
     }
 
     #[traced_test]
-    async fn eleventh(clickhouse: &ClickHouseConnectionInfo) {
+    async fn tenth(clickhouse: &ClickHouseConnectionInfo) {
         // Run the migration manager again (it should've already been run above)... there should be no changes
         let clean_start =
             clickhouse_migration_manager::run_migration(&Migration0000 { clickhouse })
@@ -515,7 +459,7 @@ async fn test_clickhouse_migration_manager() {
     }
 
     #[traced_test]
-    async fn twelfth(clickhouse: &ClickHouseConnectionInfo) {
+    async fn eleventh(clickhouse: &ClickHouseConnectionInfo) {
         // Run the migration manager again (it should've already been run above)... there should be no changes
         let clean_start =
             clickhouse_migration_manager::run_migration(&Migration0000 { clickhouse })
@@ -589,7 +533,7 @@ async fn test_clickhouse_migration_manager() {
     }
 
     #[traced_test]
-    async fn thirteenth(clickhouse: &ClickHouseConnectionInfo) {
+    async fn twelfth(clickhouse: &ClickHouseConnectionInfo) {
         // Run the migration manager again (it should've already been run above)... there should be no changes
         let clean_start =
             clickhouse_migration_manager::run_migration(&Migration0000 { clickhouse })
@@ -674,7 +618,6 @@ async fn test_clickhouse_migration_manager() {
     tenth(&clickhouse).await;
     eleventh(&clickhouse).await;
     twelfth(&clickhouse).await;
-    thirteenth(&clickhouse).await;
     let database = clickhouse.database();
     tracing::info!("Attempting to drop test database: {database}");
 

@@ -416,11 +416,11 @@ async fn get_function_name(
         MetricConfigLevel::Episode => "Episode",
     };
     let identifier_key = match metric_config_level {
-        MetricConfigLevel::Inference => "id",
-        MetricConfigLevel::Episode => "episode_id",
+        MetricConfigLevel::Inference => "id_uint",
+        MetricConfigLevel::Episode => "episode_id_uint",
     };
     let query = format!(
-        "SELECT function_name FROM {} WHERE {} = '{}'",
+        "SELECT function_name FROM {} WHERE {} = toUInt128(toUUID('{}'))",
         table_name, identifier_key, target_id
     );
     let function_name = connection_info
