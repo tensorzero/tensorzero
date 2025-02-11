@@ -3,7 +3,7 @@
 
 services:
   gateway:
-    image: tensorzero/gateway
+    image: tensorzero/gateway:2025.02.2
     volumes:
       - ./config:/app/config:ro
       - ${GCP_VERTEX_CREDENTIALS_PATH:-/dev/null}:/app/gcp-credentials.json:ro

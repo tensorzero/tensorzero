@@ -3,10 +3,10 @@
 
 services:
   gateway:
-    image: tensorzero/gateway
+    image: tensorzero/gateway:2025.02.2
     volumes:
       - ./config:/app/config:ro
     # environment:
-      # - OLLAMA_API_KEY=${OLLAMA_API_KEY:?Environment variable OLLAMA_API_KEY must be set.}
+    # - OLLAMA_API_KEY=${OLLAMA_API_KEY:?Environment variable OLLAMA_API_KEY must be set.}
     ports:
       - "3000:3000"

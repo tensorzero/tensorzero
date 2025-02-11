@@ -17,7 +17,7 @@ services:
       timeout: 1s
 
   gateway:
-    image: tensorzero/gateway
+    image: tensorzero/gateway:2025.02.2
     volumes:
       # Mount our tensorzero.toml file into the container
       - ./config:/app/config:ro
@@ -31,7 +31,7 @@ services:
         condition: service_healthy
 
   ui:
-    image: tensorzero/ui
+    image: tensorzero/ui:2025.02.2
     volumes:
       # Mount our tensorzero.toml file into the container
       - ./config:/app/config:ro

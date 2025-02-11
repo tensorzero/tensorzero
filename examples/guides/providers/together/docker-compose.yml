@@ -3,7 +3,7 @@
 
 services:
   gateway:
-    image: tensorzero/gateway
+    image: tensorzero/gateway:2025.02.2
     volumes:
       - ./config:/app/config:ro
     environment:
