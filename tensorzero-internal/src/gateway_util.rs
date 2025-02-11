@@ -45,7 +45,10 @@ pub async fn setup_clickhouse(
 ) -> Result<ClickHouseConnectionInfo, Error> {
     let clickhouse_connection_info = match (config.gateway.observability.enabled, clickhouse_url) {
         // Observability disabled by config
-        (Some(false), _) => ClickHouseConnectionInfo::new_disabled(),
+        (Some(false), _) => {
+            tracing::info!("Disabling observability: `gateway.observability.enabled` is set to false in config.");
+            ClickHouseConnectionInfo::new_disabled()
+        }
         // Observability enabled but no ClickHouse URL
         (Some(true), None) => {
             return Err(ErrorDetails::AppState {
