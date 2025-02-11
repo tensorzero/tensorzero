@@ -13,7 +13,7 @@ use super::check_table_exists;
 /// ignores the embedded timestamps. To rectify this we should sort by
 /// toUUIDv7(id), which correctly handles the timestamp.
 ///
-/// This migration also installs a user-defined function `int_to_uuid` which converts a UInt128 to a UUID
+/// This migration also installs a user-defined function `uint_to_uuid` which converts a UInt128 to a UUID
 /// assuming the UInt128 was created from toUInt128(uuid).
 ///
 /// This migration should subsume migrations 0007 and 0010.
@@ -94,7 +94,7 @@ impl Migration for Migration0013<'_> {
         if !result.contains("UInt128") {
             return Ok(true);
         }
-        let query = "SELECT 1 FROM system.functions WHERE name = 'int_to_uuid'".to_string();
+        let query = "SELECT 1 FROM system.functions WHERE name = 'uint_to_uuid'".to_string();
         let result = self.clickhouse.run_query(query, None).await?;
         if !result.contains("1") {
             return Ok(true);
@@ -156,8 +156,8 @@ impl Migration for Migration0013<'_> {
             ORDER BY (episode_id_uint, id_uint);
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
-        // Create the `int_to_uuid` function
-        let query = r#"CREATE FUNCTION IF NOT EXISTS int_to_uuid AS (x) -> reinterpretAsUUID(
+        // Create the `uint_to_uuid` function
+        let query = r#"CREATE FUNCTION IF NOT EXISTS uint_to_uuid AS (x) -> reinterpretAsUUID(
             concat(
                 substring(reinterpretAsString(x), 9, 8),
                 substring(reinterpretAsString(x), 1, 8)
@@ -347,7 +347,7 @@ impl Migration for Migration0013<'_> {
             DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView;\n\
             \n\
             -- Drop the function\n\
-            DROP FUNCTION IF EXISTS int_to_uuid;\n\
+            DROP FUNCTION IF EXISTS uint_to_uuid;\n\
             \n\
             -- Drop the tables\n\
             DROP TABLE IF EXISTS InferenceById;\n\
