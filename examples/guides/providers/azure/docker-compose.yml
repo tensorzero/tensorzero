@@ -10,3 +10,5 @@ services:
       - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:?Environment variable AZURE_OPENAI_API_KEY must be set.}
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

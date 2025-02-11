@@ -10,3 +10,5 @@ services:
       - FIREWORKS_API_KEY=${FIREWORKS_API_KEY:?Environment variable FIREWORKS_API_KEY must be set.}
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

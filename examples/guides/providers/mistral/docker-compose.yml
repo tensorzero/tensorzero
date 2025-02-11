@@ -10,3 +10,5 @@ services:
       - MISTRAL_API_KEY=${MISTRAL_API_KEY:?Environment variable MISTRAL_API_KEY must be set.}
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
