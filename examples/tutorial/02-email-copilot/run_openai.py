@@ -3,7 +3,7 @@ from tensorzero import TensorZeroGateway
 
 with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
     inference_result = client.chat.completions.create(
-        model="tensorzero::draft_email",
+        model="tensorzero::function_name::draft_email",
         messages=[
             {
                 "role": "user",
