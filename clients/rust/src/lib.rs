@@ -107,7 +107,7 @@ pub enum ClientBuilderMode {
     /// In EmbeddedGateway mode, we run an embedded gateway using a config file.
     /// We do not launch an HTTP server - we only make outgoing HTTP requests to model providers and to ClickHouse.
     EmbeddedGateway {
-        config_path: PathBuf,
+        config_path: Option<PathBuf>,
         clickhouse_url: Option<String>,
     },
 }
@@ -138,9 +138,15 @@ impl ClientBuilder {
                 config_path,
                 clickhouse_url,
             } => {
-                let config = Arc::new(Config::load_from_path(config_path).map_err(|e| {
-                    ClientBuilderError::ConfigParsing(TensorZeroError::Other { source: e.into() })
-                })?);
+                let config = if let Some(config_path) = config_path {
+                    Arc::new(Config::load_from_path(config_path).map_err(|e| {
+                        ClientBuilderError::ConfigParsing(TensorZeroError::Other {
+                            source: e.into(),
+                        })
+                    })?)
+                } else {
+                    Arc::new(Config::default())
+                };
                 let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url.clone())
                     .await
                     .map_err(|e| {
@@ -422,9 +428,9 @@ mod tests {
     async fn test_missing_clickhouse() {
         // This config file requires ClickHouse, so it should fail if no ClickHouse URL is provided
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: PathBuf::from(
+            config_path: Some(PathBuf::from(
                 "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
-            ),
+            )),
             clickhouse_url: None,
         })
         .build()

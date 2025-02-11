@@ -155,6 +155,11 @@ jobs:
           uv pip install pyright
           uv run pyright
 
+      - name: "Python: PyO3 Client: stubtest"
+        working-directory: clients/python-pyo3
+        run: |
+          uv run stubtest tensorzero.tensorzero
+
       - name: "Python: PyO3 Client: pytest"
         working-directory: clients/python-pyo3
         run: |
