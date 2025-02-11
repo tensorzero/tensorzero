@@ -46,7 +46,7 @@ pub struct DiclConfig {
     pub frequency_penalty: Option<f32>,
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
-    pub json_mode: JsonMode,
+    pub json_mode: Option<JsonMode>,
     pub retries: RetryConfig,
 }
 
@@ -65,8 +65,7 @@ pub struct UninitializedDiclConfig {
     pub frequency_penalty: Option<f32>,
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
-    #[serde(default)]
-    pub json_mode: JsonMode,
+    pub json_mode: Option<JsonMode>,
     #[serde(default)]
     pub retries: RetryConfig,
 }
@@ -484,7 +483,7 @@ impl DiclConfig {
             inference_config,
             stream,
             inference_params,
-            &self.json_mode,
+            self.json_mode,
         )
     }
 }

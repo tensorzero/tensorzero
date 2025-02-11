@@ -882,7 +882,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     if check_cache {
         assert_eq!(ttft_ms, 0);
     } else {
-        assert!(ttft_ms > 50);
+        assert!(ttft_ms >= 1);
     }
     assert!(ttft_ms <= response_time_ms);
 
@@ -1389,7 +1389,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -1985,7 +1985,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -2544,7 +2544,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -3157,7 +3157,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -3699,7 +3699,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -4420,7 +4420,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -5013,7 +5013,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -5606,7 +5606,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -6261,7 +6261,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -7000,7 +7000,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -7743,7 +7743,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();

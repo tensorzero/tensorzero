@@ -122,7 +122,7 @@ enum OpenAICompatibleMessage {
 #[serde(rename_all = "snake_case")]
 enum OpenAICompatibleResponseFormat {
     Text,
-    JsonSchema { schema: Value },
+    JsonSchema { json_schema: Value },
     JsonObject,
 }
 
@@ -342,7 +342,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             parallel_tool_calls: openai_compatible_params.parallel_tool_calls,
         };
         let output_schema = match openai_compatible_params.response_format {
-            Some(OpenAICompatibleResponseFormat::JsonSchema { schema }) => Some(schema),
+            Some(OpenAICompatibleResponseFormat::JsonSchema { json_schema }) => Some(json_schema),
             _ => None,
         };
         Ok(Params {

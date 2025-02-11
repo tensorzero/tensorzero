@@ -2,3 +2,4 @@
 openai
 pytest
 pytest-asyncio
+pydantic
