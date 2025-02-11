@@ -1,6 +1,7 @@
 import asyncio
 from typing import Any, Awaitable, Callable, Dict, Optional
 
+from minijinja import Environment
 from tensorzero import AsyncTensorZeroGateway, InferenceResponse
 
 
@@ -62,6 +63,7 @@ async def generate_answer(
     query: str,
     semaphore: asyncio.Semaphore,
     output_schema: Dict[str, Any] = None,
+    system_args: Dict[str, Any] = None,
     variant_name: str = "search_template",
     dryrun: bool = True,
     max_retries: int = 1,
@@ -69,6 +71,10 @@ async def generate_answer(
     """
     Generate an answer from the client with retries.
     """
+
+    if system_args:
+        env = Environment(templates={"system": instruction})
+        instruction = env.render_template("system", **system_args)
 
     async def inference_call() -> Optional["InferenceResponse"]:
         async with semaphore:
