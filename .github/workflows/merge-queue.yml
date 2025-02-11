@@ -152,6 +152,7 @@ jobs:
       - name: "Python: PyO3 Client: pyright"
         working-directory: clients/python-pyo3
         run: |
+          uv venv
           uv pip install pyright
           uv run pyright
 
