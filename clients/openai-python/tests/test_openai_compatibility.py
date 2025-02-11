@@ -26,6 +26,7 @@ from uuid import UUID
 import pytest
 import pytest_asyncio
 from openai import AsyncOpenAI
+from pydantic import BaseModel, ValidationError
 from tensorzero.util import uuid7
 
 
@@ -87,6 +88,29 @@ async def test_async_basic_inference(async_client):
     assert usage.prompt_tokens == 10
     assert usage.completion_tokens == 10
     assert usage.total_tokens == 20
+
+
+class DummyModel(BaseModel):
+    name: str
+
+
+@pytest.mark.asyncio
+async def test_async_basic_inference_json_schema(async_client):
+    messages = [
+        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {"role": "user", "content": "Hello"},
+    ]
+
+    with pytest.raises(ValidationError) as exc_info:
+        await async_client.beta.chat.completions.parse(
+            extra_headers={"episode_id": str(uuid7())},
+            messages=messages,
+            model="tensorzero::function_name::basic_test",
+            temperature=0.4,
+            response_format=DummyModel,
+        )
+
+    assert "Megumin gleefully" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -540,7 +564,7 @@ async def test_dynamic_json_mode_inference_openai(async_client):
         },
         messages=messages,
         model="tensorzero::function_name::dynamic_json",
-        response_format={"type": "json_schema", "schema": output_schema},
+        response_format={"type": "json_schema", "json_schema": output_schema},
     )
     assert result.model == "openai"
     assert result.episode_id == episode_id
