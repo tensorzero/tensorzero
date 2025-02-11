@@ -2,6 +2,7 @@ name: Merge Queue Checks
 
 on:
   merge_group:
+  push:
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -112,7 +113,7 @@ jobs:
         run: cat provider_proxy_logs.txt
 
       - name: Upload provider-proxy cache
-        if: ${{ false }} # Change to `if: ${{ always() }}` to start uploading the cache
+        if: ${{ true }} # Change to `if: ${{ always() }}` to start uploading the cache
         uses: actions/upload-artifact@v4
         with:
           name: provider-proxy-cache
