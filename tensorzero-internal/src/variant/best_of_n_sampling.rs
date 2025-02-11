@@ -603,7 +603,6 @@ impl EvaluatorConfig {
         let json_mode = inference_params
             .chat_completion
             .json_mode
-            .map(|m| m.into())
             .or(self.inner.json_mode)
             .unwrap_or(JsonMode::Strict);
         let tool_config = match json_mode {

@@ -3,6 +3,7 @@ use backon::Retryable;
 use futures::StreamExt;
 use itertools::izip;
 use serde::Deserialize;
+use serde::Serialize;
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -45,7 +46,7 @@ pub enum VariantConfig {
 /// Variants represent JSON mode in a slightly more abstract sense than ModelInferenceRequests, as
 /// we support coercing tool calls into JSON mode.
 /// This is represented as a tool config in the
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JsonMode {
     Off,
@@ -402,28 +403,29 @@ where
     let json_mode = inference_params
         .chat_completion
         .json_mode
-        .map(JsonMode::from)
         .or(base_json_mode);
 
     Ok(match function {
-        FunctionConfig::Chat(_) => ModelInferenceRequest {
-            messages,
-            system,
-            inference_id: inference_config.ids.inference_id,
-            tool_config: inference_config.tool_config.map(Cow::Borrowed),
-            temperature: inference_params.chat_completion.temperature,
-            top_p: inference_params.chat_completion.top_p,
-            max_tokens: inference_params.chat_completion.max_tokens,
-            presence_penalty: inference_params.chat_completion.presence_penalty,
-            frequency_penalty: inference_params.chat_completion.frequency_penalty,
-            seed: inference_params.chat_completion.seed,
-            stream,
-            // In chat mode, we fall back to 'JsonMode::Off' - json mode will only be enabled if
-            // explicitly requested in `chat_completion` params.
-            json_mode: json_mode.unwrap_or(JsonMode::Off).into(),
-            function_type: FunctionType::Chat,
-            output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
-        },
+        FunctionConfig::Chat(_) => {
+            ModelInferenceRequest {
+                messages,
+                system,
+                inference_id: inference_config.ids.inference_id,
+                tool_config: inference_config.tool_config.map(Cow::Borrowed),
+                temperature: inference_params.chat_completion.temperature,
+                top_p: inference_params.chat_completion.top_p,
+                max_tokens: inference_params.chat_completion.max_tokens,
+                presence_penalty: inference_params.chat_completion.presence_penalty,
+                frequency_penalty: inference_params.chat_completion.frequency_penalty,
+                seed: inference_params.chat_completion.seed,
+                stream,
+                // In chat mode, we fall back to 'JsonMode::Off' - json mode will only be enabled if
+                // explicitly requested in `chat_completion` params.
+                json_mode: json_mode.unwrap_or(JsonMode::Off).into(),
+                function_type: FunctionType::Chat,
+                output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
+            }
+        }
         FunctionConfig::Json(json_config) => {
             let tool_config = match json_mode {
                 Some(JsonMode::ImplicitTool) => match inference_config.dynamic_output_schema {

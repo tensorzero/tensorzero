@@ -31,11 +31,12 @@ use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     current_timestamp, ContentBlockChunk, ContentBlockOutput, Input, InputMessage,
-    InputMessageContent, ModelInferenceRequestJsonMode, Role, Usage,
+    InputMessageContent, Role, Usage,
 };
 use crate::tool::{
     DynamicToolParams, Tool, ToolCall, ToolCallChunk, ToolCallOutput, ToolChoice, ToolResult,
 };
+use crate::variant::JsonMode;
 
 use super::inference::{
     InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
@@ -291,12 +292,10 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
         };
         let json_mode = match openai_compatible_params.response_format {
             Some(OpenAICompatibleResponseFormat::JsonSchema { json_schema: _ }) => {
-                Some(ModelInferenceRequestJsonMode::Strict)
+                Some(JsonMode::Strict)
             }
-            Some(OpenAICompatibleResponseFormat::JsonObject) => {
-                Some(ModelInferenceRequestJsonMode::On)
-            }
-            Some(OpenAICompatibleResponseFormat::Text) => Some(ModelInferenceRequestJsonMode::Off),
+            Some(OpenAICompatibleResponseFormat::JsonObject) => Some(JsonMode::On),
+            Some(OpenAICompatibleResponseFormat::Text) => Some(JsonMode::Off),
             None => None,
         };
         let input = openai_compatible_params.messages.try_into()?;
