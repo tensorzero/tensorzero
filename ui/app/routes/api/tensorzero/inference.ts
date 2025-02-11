@@ -7,7 +7,6 @@ export async function action({
 }: ActionFunctionArgs): Promise<Response> {
   const formData = await request.formData();
   const rawData = JSON.parse(formData.get("data") as string);
-  console.log("rawData", rawData);
   const result = InferenceRequestSchema.safeParse(rawData);
   if (!result.success) {
     return Response.json({ error: result.error.issues }, { status: 400 });
