@@ -48,7 +48,7 @@ async def test_async_basic_inference_old_model_format(async_client):
     result = await async_client.chat.completions.create(
         extra_headers={"episode_id": str(uuid7())},
         messages=messages,
-        model="tensorzero::basic_test",
+        model="tensorzero::function_name::basic_test",
         temperature=0.4,
     )
     # Verify IDs are valid UUIDs
