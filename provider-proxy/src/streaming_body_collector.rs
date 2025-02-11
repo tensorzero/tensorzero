@@ -72,8 +72,7 @@ where
     }
 
     fn is_end_stream(&self) -> bool {
-        let res = self.body.is_end_stream();
-        res
+        self.body.is_end_stream()
     }
 
     fn size_hint(&self) -> SizeHint {
