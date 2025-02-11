@@ -10,7 +10,6 @@ When generating alternative instructions:
 - Preserve essential content: Ensure that the new instructions convey the same core meaning as the reference.
 - Enhance clarity and readability: Rephrase for better comprehension while keeping the language precise.
 - Maintain necessary formatting: If the reference instructions specify formatting constraints, replicate them in your response.
-- Maintain any minijinja arguments: If the reference instructions specify minijinja arguments, replicate them in your response.
 - Optimize for usability: Ensure the new instructions help the agent generalize from demonstrations effectively.
 - Be Creative: We are looking for the optimal instructions, so explore different ways to improve the instructions.
 
@@ -21,6 +20,21 @@ Below are the reference instructions:
 {{ example_instructions }}
 
 ----------------------------------------------------------------------------------------------------
+
+{% if example_schema is defined %}
+
+This is the JSON schema for the reference instructions:
+
+----------------------------------------------------------------------------------------------------
+
+{{ example_schema }}
+
+----------------------------------------------------------------------------------------------------
+
+You can optionally include any property specified in the schema using minijinja syntax.
+
+{% endif %}
+
 
 Respond only with a JSON object in the following format:
 

@@ -1,10 +1,13 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
-    "properties": {
-      "example_instructions": {
-        "type": "string"
-      }
+      "properties": {
+        "example_instructions": {
+          "type": "string"
+        },
+        "example_schema": {
+          "type": "string"
+        }
     },
     "required": ["example_instructions"],
     "additionalProperties": false

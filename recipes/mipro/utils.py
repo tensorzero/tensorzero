@@ -34,6 +34,7 @@ async def run_with_retries(
 async def get_instructions(
     client: AsyncTensorZeroGateway,
     example_instructions: str,
+    example_schema: str,
     semaphore: asyncio.Semaphore,
     variant_name: str = "baseline",
     dryrun: bool = True,
@@ -42,12 +43,20 @@ async def get_instructions(
     """
     Get instructions from the client with retries.
     """
+    input_args = {
+        "system": {
+            "example_instructions": example_instructions,
+        }
+    }
+
+    if example_schema:
+        input_args["system"]["example_schema"] = example_schema
 
     async def inference_call() -> Optional["InferenceResponse"]:
         async with semaphore:
             return await client.inference(
                 function_name="generate_instruction",
-                input={"system": {"example_instructions": example_instructions}},
+                input=input_args,
                 variant_name=variant_name,
                 dryrun=dryrun,
             )
