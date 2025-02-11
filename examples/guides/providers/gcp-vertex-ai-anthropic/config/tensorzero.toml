@@ -13,7 +13,3 @@ type = "chat"
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
 model = "claude_3_haiku_20240307"
-
-# Disable observability to keep this example minimal (not recommended in production)
-[gateway]
-disable_observability = true

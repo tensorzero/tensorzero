@@ -3,7 +3,7 @@
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [gateway]
-disable_observability = true
+observability.enabled = false
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   MODELS                                   │
@@ -27,7 +27,6 @@ type = "chat"
 
 [functions.function1.variants.variant1]
 type = "chat_completion"
-weight = 1.0
 model = "gpt-3.5-turbo"
 max_tokens = 100
 
