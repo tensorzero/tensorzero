@@ -438,7 +438,7 @@ async fn test_text_function_json_override_with_mode_strict() {
 async fn test_text_function_json_override_with_mode(json_mode: ModelInferenceRequestJsonMode) {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
-    let mode = serde_json::to_value(&json_mode).unwrap();
+    let mode = serde_json::to_value(json_mode).unwrap();
 
     // Note that we need to include 'json' somewhere in the messages, to stop OpenAI from complaining
     let payload = json!({
@@ -542,7 +542,7 @@ async fn test_text_function_json_override_with_mode(json_mode: ModelInferenceReq
     // Check that we saved the correct json mode to ClickHouse
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
-    let expected_json_mode = serde_json::to_value(&json_mode).unwrap();
+    let expected_json_mode = serde_json::to_value(json_mode).unwrap();
     let clickhouse_json_mode = inference_params
         .get("chat_completion")
         .unwrap()
