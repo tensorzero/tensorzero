@@ -160,4 +160,4 @@ jobs:
           subject-path: 'wheels-*/*'
       - name: Publish to PyPI
         run: |
-          ./scripts/ci/upload-pyo3.sh
+          ./ci/upload-pyo3.sh
