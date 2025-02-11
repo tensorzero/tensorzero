@@ -3739,7 +3739,7 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
-    if provider.model_provider_name == "gcp_vertex"
+    if provider.model_provider_name.contains("gcp_vertex")
         || provider.model_provider_name.contains("mistral")
         || provider.model_provider_name.contains("together")
     {
@@ -4072,7 +4072,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
-    if provider.model_provider_name == "gcp_vertex"
+    if provider.model_provider_name.contains("gcp_vertex")
         || provider.model_provider_name.contains("mistral")
         || provider.model_provider_name.contains("together")
     {
