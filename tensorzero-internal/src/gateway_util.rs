@@ -59,7 +59,7 @@ pub async fn setup_clickhouse(
         }
         // Observability default and no ClickHouse URL
         (None, None) => {
-            tracing::warn!("Observability not explicitly specified in config and no ClickHouse URL provided. Disabling observability.");
+            tracing::warn!("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `TENSORZERO_CLICKHOUSE_URL` is not set.");
             ClickHouseConnectionInfo::new_disabled()
         }
         // Observability default and ClickHouse URL provided

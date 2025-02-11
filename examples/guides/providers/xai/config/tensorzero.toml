@@ -11,7 +11,3 @@ type = "chat"
 [functions.my_function_name.variants.my_variant_name]
 type = "chat_completion"
 model = "grok_2_1212"
-
-# Disable observability to keep this example minimal (not recommended in production)
-[gateway]
-disable_observability = true
