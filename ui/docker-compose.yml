@@ -1,6 +1,5 @@
 services:
   ui:
-    container_name: tensorzero-ui
     image: tensorzero/ui:2025.02.2
     volumes:
       - ./config:/app/config:ro
