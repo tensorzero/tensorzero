@@ -119,7 +119,7 @@ jobs:
           path: ./ci/provider-proxy-cache/
 
       - name: Install Python for python async client tests
-        run: uv python install 3.10
+        run: uv python install 3.9
 
       - name: "Python: ruff"
         run: |
