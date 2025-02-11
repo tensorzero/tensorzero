@@ -4,20 +4,28 @@ import { Badge } from "~/components/ui/badge";
 import { Link } from "react-router";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import { useConfig } from "~/context/config";
-
+import {
+  type TryWithVariantButtonProps,
+  TryWithVariantButton,
+} from "./TryWithVariantButton";
 interface BasicInfoProps {
   inference: ParsedInferenceRow;
+  tryWithVariantProps: TryWithVariantButtonProps;
 }
 
-export default function BasicInfo({ inference }: BasicInfoProps) {
+export default function BasicInfo({
+  inference,
+  tryWithVariantProps,
+}: BasicInfoProps) {
   const config = useConfig();
   const variantType =
     config.functions[inference.function_name]?.variants[inference.variant_name]
       ?.type;
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-xl">Basic Information</CardTitle>
+        <TryWithVariantButton {...tryWithVariantProps} />
       </CardHeader>
       <CardContent>
         <dl className="grid grid-cols-2 gap-4">
