@@ -1274,7 +1274,7 @@ async def test_async_err_in_stream(async_client):
         stream=True,
     )
 
-    # anext() was added in Python 3.9, use __anext__() for older versions
+    # anext() was added in Python 3.10, use __anext__() for older versions
     await result.__anext__()
     await result.__anext__()
     await result.__anext__()
