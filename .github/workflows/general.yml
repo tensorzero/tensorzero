@@ -10,6 +10,16 @@ env:
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
 
 jobs:
+  check-docker-compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check all docker-compose.yml files
+        run: ./ci/check-all-docker-compose.sh
+
   validate:
     runs-on: namespace-profile-tensorzero-8x16
 
