@@ -62,6 +62,7 @@ async fn test_provider_proxy() {
         Args {
             cache_path: temp_dir.path().to_path_buf(),
             port: 0,
+            write: true,
         },
         server_started_tx,
     ));
