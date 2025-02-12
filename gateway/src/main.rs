@@ -1,3 +1,4 @@
+mod env_validator;
 use axum::routing::{get, post};
 use axum::Router;
 use clap::Parser;
