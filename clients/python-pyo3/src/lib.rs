@@ -401,7 +401,7 @@ impl TensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (*, config_path, clickhouse_url=None))]
+    #[pyo3(signature = (*, config_path=None, clickhouse_url=None))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
@@ -410,11 +410,11 @@ impl TensorZeroGateway {
     /// :return: A `TensorZeroGateway` instance configured to use an embedded gateway.
     fn build_embedded(
         cls: &Bound<'_, PyType>,
-        config_path: &str,
+        config_path: Option<&str>,
         clickhouse_url: Option<String>,
     ) -> PyResult<Py<TensorZeroGateway>> {
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: PathBuf::from(config_path),
+            config_path: config_path.map(PathBuf::from),
             clickhouse_url,
         })
         .build();
@@ -649,7 +649,7 @@ impl AsyncTensorZeroGateway {
     // as `AsyncTensorZeroGateway` would be completely async *except* for this one method
     // (which potentially takes a very long time due to running DB migrations).
     #[classmethod]
-    #[pyo3(signature = (*, config_path, clickhouse_url=None))]
+    #[pyo3(signature = (*, config_path=None, clickhouse_url=None))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
@@ -659,11 +659,11 @@ impl AsyncTensorZeroGateway {
     fn build_embedded<'a>(
         // This is a classmethod, so it receives the class object as a parameter.
         cls: &Bound<'a, PyType>,
-        config_path: &str,
+        config_path: Option<&str>,
         clickhouse_url: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: PathBuf::from(config_path),
+            config_path: config_path.map(PathBuf::from),
             clickhouse_url,
         })
         .build();

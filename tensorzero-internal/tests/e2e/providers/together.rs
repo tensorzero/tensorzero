@@ -27,18 +27,19 @@ async fn get_providers() -> E2ETestProviders {
         credentials,
     }];
 
-    let json_providers = vec![
-        E2ETestProvider {
-            variant_name: "together".to_string(),
-            model_name: "llama3.1-8b-instruct-together".into(),
-            model_provider_name: "together".into(),
-            credentials: HashMap::new(),
-        },
-        // TODOs (#80): see below
-        // E2ETestProvider {
-        //     variant_name: "together-implicit".to_string(),
-        // },
-    ];
+    let json_providers = vec![E2ETestProvider {
+        variant_name: "together".to_string(),
+        model_name: "llama3.1-8b-instruct-together".into(),
+        model_provider_name: "together".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let tool_providers = vec![E2ETestProvider {
+        variant_name: "together-tool".to_string(),
+        model_name: "llama3.1-405b-instruct-turbo-together".into(),
+        model_provider_name: "together".into(),
+        credentials: HashMap::new(),
+    }];
 
     #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
@@ -48,16 +49,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    // TODOs (#80):
-    // - Together seems to have a different format for tool use responses compared to OpenAI (breaking)
-    // - Together's function calling for Llama 3.1 is different from Llama 3.0 (breaking) - we should test both
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         inference_params_inference: inference_params_providers,
-        tool_use_inference: vec![],
-        tool_multi_turn_inference: vec![],
-        dynamic_tool_use_inference: vec![],
-        parallel_tool_use_inference: vec![],
+        tool_use_inference: tool_providers.clone(),
+        tool_multi_turn_inference: tool_providers.clone(),
+        dynamic_tool_use_inference: tool_providers.clone(),
+        parallel_tool_use_inference: tool_providers.clone(),
         json_mode_inference: json_providers.clone(),
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
