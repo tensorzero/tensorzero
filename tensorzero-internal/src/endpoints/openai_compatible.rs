@@ -221,41 +221,56 @@ struct OpenAICompatibleResponse {
     usage: OpenAICompatibleUsage,
 }
 
+const TENSORZERO_FUNCTION_NAME_PREFIX: &str = "tensorzero::function_name::";
+const TENSORZERO_MODEL_NAME_PREFIX: &str = "tensorzero::model_name::";
+
 impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
     type Error = Error;
     fn try_from(
         (headers, openai_compatible_params): (HeaderMap, OpenAICompatibleParams),
     ) -> Result<Self, Self::Error> {
-        let function_name = openai_compatible_params
+        let (function_name, model_name) = if let Some(function_name) = openai_compatible_params
             .model
-            .strip_prefix("tensorzero::function_name::")
-            .or_else(|| {
-                // Allow 'tensorzero::' for backwards compatibility
-                if let Some(function_name) =
-                    openai_compatible_params.model.strip_prefix("tensorzero::")
-                {
-                    tracing::warn!(
-                        function_name = function_name,
-                        "Deprecation Warning: Please set the `model` parameter to `tensorzero::function_name::your_function` instead of `tensorzero::your_function.` The latter will be removed in a future release."
-                    );
-                    Some(function_name)
-                } else {
-                    None
-                }
-            })
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: "model name must start with 'tensorzero::function_name::'".to_string(),
-                })
-            })?;
+            .strip_prefix(TENSORZERO_FUNCTION_NAME_PREFIX)
+        {
+            (Some(function_name.to_string()), None)
+        } else if let Some(model_name) = openai_compatible_params
+            .model
+            .strip_prefix(TENSORZERO_MODEL_NAME_PREFIX)
+        {
+            (None, Some(model_name.to_string()))
+        } else if let Some(function_name) =
+            openai_compatible_params.model.strip_prefix("tensorzero::")
+        {
+            tracing::warn!(
+                function_name = function_name,
+                "Deprecation Warning: Please set the `model` parameter to `tensorzero::function_name::your_function` instead of `tensorzero::your_function.` The latter will be removed in a future release."
+            );
+            (Some(function_name.to_string()), None)
+        } else {
+            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "model name must start with 'tensorzero::function_name::' or 'tensorzero::model_name::'".to_string(),
+            }));
+        };
 
-        if function_name.is_empty() {
-            return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+        if let Some(function_name) = &function_name {
+            if function_name.is_empty() {
+                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message:
                     "function_name (passed in model field after \"tensorzero::function_name::\") cannot be empty"
                         .to_string(),
             }
             .into());
+            }
+        }
+
+        if let Some(model_name) = &model_name {
+            if model_name.is_empty() {
+                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                    message: "model_name (passed in model field after \"tensorzero::model_name::\") cannot be empty".to_string(),
+                }
+                .into());
+            }
         }
 
         let episode_id = headers
@@ -346,8 +361,8 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             _ => None,
         };
         Ok(Params {
-            function_name: Some(function_name.to_string()),
-            model_name: None,
+            function_name,
+            model_name,
             episode_id,
             input,
             stream: openai_compatible_params.stream,
