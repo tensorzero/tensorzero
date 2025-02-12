@@ -988,43 +988,37 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                 for content in chunk.content {
                     match content {
                         ContentBlockChunk::Text(text) => {
-                            match text_blocks.get_mut(&text.id) {
-                                // If there is already a text block, append to it
-                                Some(ContentBlockOutput::Text(Text {
-                                    text: existing_text,
-                                })) => {
-                                    existing_text.push_str(&text.text);
-                                }
-                                // If there is no text block, create one
-                                _ => {
-                                    // We put this here and below rather than in the loop start because we
-                                    // only want to set TTFT if there is some real content
-                                    if ttft.is_none() {
-                                        ttft = Some(chunk.latency);
+                            handle_textual_content_block(
+                                &mut text_blocks,
+                                text.id,
+                                text.text,
+                                &mut ttft,
+                                chunk.latency,
+                                |text| text.into(),
+                                |block, text| {
+                                    if let ContentBlockOutput::Text(Text {
+                                        text: existing_text,
+                                    }) = block
+                                    {
+                                        existing_text.push_str(text);
                                     }
-                                    if !text.text.is_empty() {
-                                        text_blocks.insert(text.id, text.text.into());
-                                    }
-                                }
-                            }
+                                },
+                            );
                         }
                         ContentBlockChunk::Thought(thought) => {
-                            match thought_blocks.get_mut(&thought.id) {
-                                // If there is already a thought block, append to it
-                                Some(ContentBlockOutput::Thought(existing_thought)) => {
-                                    existing_thought.text.push_str(&thought.text);
-                                }
-                                // If there is no thought block, create one
-                                _ => {
-                                    if ttft.is_none() {
-                                        ttft = Some(chunk.latency);
+                            handle_textual_content_block(
+                                &mut thought_blocks,
+                                thought.id,
+                                thought.text,
+                                &mut ttft,
+                                chunk.latency,
+                                |text| ContentBlockOutput::Thought(Thought { text }),
+                                |block, text| {
+                                    if let ContentBlockOutput::Thought(thought) = block {
+                                        thought.text.push_str(text);
                                     }
-                                    thought_blocks.insert(
-                                        thought.id,
-                                        ContentBlockOutput::Thought(Thought { text: thought.text }),
-                                    );
-                                }
-                            }
+                                },
+                            );
                         }
                         ContentBlockChunk::ToolCall(tool_call) => {
                             match tool_call_blocks.get_mut(&tool_call.id) {
@@ -1222,6 +1216,38 @@ pub fn serialize_or_log<T: Serialize>(value: &T) -> String {
                 message: format!("Failed to serialize value: {}", e),
             });
             String::new()
+        }
+    }
+}
+
+/// Handles a textual content block (text or thought)
+/// It checks if there is already a block with the given id, and if so, appends the text to it.
+/// Otherwise, it creates a new block and inserts it into the map.
+/// It also updates the TTFT if it hasn't been set
+fn handle_textual_content_block<F, A>(
+    blocks: &mut HashMap<String, ContentBlockOutput>,
+    id: String,
+    text: String,
+    ttft: &mut Option<Duration>,
+    chunk_latency: Duration,
+    create_block: F,
+    append_text: A,
+) where
+    F: FnOnce(String) -> ContentBlockOutput,
+    A: FnOnce(&mut ContentBlockOutput, &str),
+{
+    match blocks.get_mut(&id) {
+        // If there is already a block, append to it
+        Some(existing_block) => append_text(existing_block, &text),
+        // If there is no block, create one
+        _ => {
+            // We only want to set TTFT if there is some real content
+            if ttft.is_none() {
+                *ttft = Some(chunk_latency);
+            }
+            if !text.is_empty() {
+                blocks.insert(id, create_block(text));
+            }
         }
     }
 }
@@ -2609,5 +2635,102 @@ mod tests {
         let result = JsonInferenceResultChunk::from(empty_chunk);
         assert_eq!(result.raw, None);
         assert_eq!(result.thought, None);
+    }
+
+    #[test]
+    fn test_handle_textual_content_block() {
+        let mut blocks: HashMap<String, ContentBlockOutput> = HashMap::new();
+        let mut ttft: Option<Duration> = None;
+        let chunk_latency = Duration::from_millis(100);
+
+        // Test case 1: Create new text block
+        handle_textual_content_block(
+            &mut blocks,
+            "1".to_string(),
+            "Hello".to_string(),
+            &mut ttft,
+            chunk_latency,
+            |text| ContentBlockOutput::Text(Text { text }),
+            |block, text| {
+                if let ContentBlockOutput::Text(Text {
+                    text: existing_text,
+                }) = block
+                {
+                    existing_text.push_str(text);
+                }
+            },
+        );
+
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(ttft, Some(chunk_latency));
+        match blocks.get("1").unwrap() {
+            ContentBlockOutput::Text(Text { text }) => assert_eq!(text, "Hello"),
+            _ => panic!("Expected text block"),
+        }
+
+        // Test case 2: Append to existing text block
+        handle_textual_content_block(
+            &mut blocks,
+            "1".to_string(),
+            " World".to_string(),
+            &mut ttft,
+            chunk_latency,
+            |text| ContentBlockOutput::Text(Text { text }),
+            |block, text| {
+                if let ContentBlockOutput::Text(Text {
+                    text: existing_text,
+                }) = block
+                {
+                    existing_text.push_str(text);
+                }
+            },
+        );
+
+        assert_eq!(blocks.len(), 1);
+        match blocks.get("1").unwrap() {
+            ContentBlockOutput::Text(Text { text }) => assert_eq!(text, "Hello World"),
+            _ => panic!("Expected text block"),
+        }
+
+        // Test case 3: Empty text should not create block
+        handle_textual_content_block(
+            &mut blocks,
+            "2".to_string(),
+            "".to_string(),
+            &mut ttft,
+            chunk_latency,
+            |text| ContentBlockOutput::Text(Text { text }),
+            |block, text| {
+                if let ContentBlockOutput::Text(Text {
+                    text: existing_text,
+                }) = block
+                {
+                    existing_text.push_str(text);
+                }
+            },
+        );
+
+        assert_eq!(blocks.len(), 1); // Should still only have the first block
+
+        // Test case 4: Create thought block
+        handle_textual_content_block(
+            &mut blocks,
+            "3".to_string(),
+            "Thinking...".to_string(),
+            &mut ttft,
+            chunk_latency,
+            |text| ContentBlockOutput::Thought(Thought { text }),
+            |block, text| {
+                if let ContentBlockOutput::Thought(thought) = block {
+                    thought.text.push_str(text);
+                }
+            },
+        );
+
+        assert_eq!(blocks.len(), 2);
+        match blocks.get("3").unwrap() {
+            ContentBlockOutput::Thought(Thought { text }) => assert_eq!(text, "Thinking..."),
+            _ => panic!("Expected thought block"),
+        }
     }
 }
