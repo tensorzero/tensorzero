@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 
+use crate::env_validator::validate_environment_variables;
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::config_parser::Config;
 use tensorzero_internal::endpoints;
@@ -18,7 +19,6 @@ use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_internal::error;
 use tensorzero_internal::gateway_util;
 use tensorzero_internal::observability;
-use crate::env_validator::validate_environment_variables;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
