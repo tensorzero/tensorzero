@@ -53,7 +53,7 @@ export default function BasicInfo({
           <div>
             <dt className="text-lg font-semibold">Episode ID</dt>
             <dd>
-              <Link to={`/observability/episode/${inference.episode_id}`}>
+              <Link to={`/observability/episodes/${inference.episode_id}`}>
                 <Code>{inference.episode_id}</Code>
               </Link>
             </dd>

@@ -29,7 +29,7 @@ export default function FunctionInferenceTable({
           <TableRow key={inference.id} id={inference.id}>
             <TableCell className="max-w-[200px]">
               <a
-                href={`/observability/inference/${inference.id}`}
+                href={`/observability/inferences/${inference.id}`}
                 className="block no-underline"
               >
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
@@ -39,7 +39,7 @@ export default function FunctionInferenceTable({
             </TableCell>
             <TableCell>
               <a
-                href={`/observability/episode/${inference.episode_id}`}
+                href={`/observability/episodes/${inference.episode_id}`}
                 className="block no-underline"
               >
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">

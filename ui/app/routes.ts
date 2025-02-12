@@ -24,8 +24,8 @@ export default [
     "routes/observability/episodes/$episode_id/route.tsx",
   ),
   route(
-    "observability/inference/:inference_id",
-    "routes/observability/inference/route.tsx",
+    "observability/inferences/:inference_id",
+    "routes/observability/inferences/$inference_id/route.tsx",
   ),
   route("observability/functions", "routes/observability/functions/route.tsx"),
   route(
