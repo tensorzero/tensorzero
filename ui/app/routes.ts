@@ -20,8 +20,8 @@ export default [
     "routes/observability/inferences/route.tsx",
   ),
   route(
-    "observability/episode/:episode_id",
-    "routes/observability/episode/route.tsx",
+    "observability/episodes/:episode_id",
+    "routes/observability/episodes/$episode_id/route.tsx",
   ),
   route(
     "observability/inference/:inference_id",
