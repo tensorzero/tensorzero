@@ -1,34 +1,8 @@
 import asyncio
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
 from minijinja import Environment
 from tensorzero import AsyncTensorZeroGateway, InferenceResponse
-
-
-async def run_with_retries(
-    coro_factory: Callable[[], Awaitable[Optional["InferenceResponse"]]],
-    max_retries: int = 3,
-    delay: float = 1.0,
-) -> Optional["InferenceResponse"]:
-    """
-    Run a coroutine produced by `coro_factory` with retries.
-
-    Args:
-        coro_factory: A callable that produces the coroutine to be executed.
-        max_retries: Maximum number of attempts.
-        delay: Delay (in seconds) between attempts.
-
-    Returns:
-        The result of the coroutine if successful; otherwise, None.
-    """
-    for attempt in range(1, max_retries + 1):
-        try:
-            return await coro_factory()
-        except Exception as e:
-            print(f"Attempt {attempt} failed with error: {type(e).__name__}: {e}")
-            if attempt < max_retries:
-                await asyncio.sleep(delay)
-    return None
 
 
 async def get_instructions(
@@ -38,7 +12,6 @@ async def get_instructions(
     semaphore: asyncio.Semaphore,
     variant_name: str = "baseline",
     dryrun: bool = True,
-    max_retries: int = 1,
 ) -> Optional["InferenceResponse"]:
     """
     Get instructions from the client with retries.
@@ -52,7 +25,7 @@ async def get_instructions(
     if example_schema:
         input_args["system"]["example_schema"] = example_schema
 
-    async def inference_call() -> Optional["InferenceResponse"]:
+    try:
         async with semaphore:
             return await client.inference(
                 function_name="generate_instruction",
@@ -60,8 +33,9 @@ async def get_instructions(
                 variant_name=variant_name,
                 dryrun=dryrun,
             )
-
-    return await run_with_retries(inference_call, max_retries=max_retries)
+    except Exception as e:
+        print(f"Error generating instructions: {e}")
+        return None
 
 
 async def generate_answer(
@@ -73,9 +47,8 @@ async def generate_answer(
     semaphore: asyncio.Semaphore,
     output_schema: Dict[str, Any] = None,
     system_args: Dict[str, Any] = None,
-    variant_name: str = "search_template",
+    variant_name: str = "gpt_4o_mini",
     dryrun: bool = True,
-    max_retries: int = 1,
 ) -> Optional["InferenceResponse"]:
     """
     Generate an answer from the client with retries.
@@ -85,7 +58,7 @@ async def generate_answer(
         env = Environment(templates={"system": instruction})
         instruction = env.render_template("system", **system_args)
 
-    async def inference_call() -> Optional["InferenceResponse"]:
+    try:
         async with semaphore:
             return await client.inference(
                 function_name=function_name,
@@ -102,11 +75,12 @@ async def generate_answer(
                     ],
                 },
                 variant_name=variant_name,
-                output_schema=output_schema,  # TODO: update on new release
+                output_schema=output_schema,
                 dryrun=dryrun,
             )
-
-    return await run_with_retries(inference_call, max_retries=max_retries)
+    except Exception as e:
+        print(f"Error generating answer: {e}")
+        return None
 
 
 async def judge_answer(
@@ -118,9 +92,8 @@ async def judge_answer(
     semaphore: asyncio.Semaphore,
     variant_name: str = "baseline",
     dryrun: bool = True,
-    max_retries: int = 1,
 ) -> Optional["InferenceResponse"]:
-    async def inference_call() -> Optional["InferenceResponse"]:
+    try:
         async with semaphore:
             return await client.inference(
                 function_name="judge_answer",
@@ -139,5 +112,6 @@ async def judge_answer(
                 variant_name=variant_name,
                 dryrun=dryrun,
             )
-
-    return await run_with_retries(inference_call, max_retries=max_retries)
+    except Exception as e:
+        print(f"Error judging answer: {e}")
+        return None

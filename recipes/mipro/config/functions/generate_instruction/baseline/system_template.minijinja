@@ -13,7 +13,7 @@ When generating alternative instructions:
 - Optimize for usability: Ensure the new instructions help the agent generalize from demonstrations effectively.
 - Be Creative: We are looking for the optimal instructions, so explore different ways to improve the instructions.
 
-Below are the reference instructions:
+Below is the reference instruction template:
 
 ----------------------------------------------------------------------------------------------------
 
@@ -23,7 +23,7 @@ Below are the reference instructions:
 
 {% if example_schema is defined %}
 
-This is the JSON schema for the reference instructions:
+Below is the JSON schema that specifies the variables available for instruction templates:
 
 ----------------------------------------------------------------------------------------------------
 
