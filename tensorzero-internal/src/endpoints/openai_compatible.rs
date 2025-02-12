@@ -249,7 +249,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             (Some(function_name.to_string()), None)
         } else {
             return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                message: "model name must start with 'tensorzero::function_name::'".to_string(),
+                message: "model name must start with 'tensorzero::function_name::' or 'tensorzero::model_name::'".to_string(),
             }));
         };
 
