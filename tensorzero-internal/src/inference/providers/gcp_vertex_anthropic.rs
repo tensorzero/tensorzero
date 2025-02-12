@@ -409,10 +409,12 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GCPVertexAnthropicMessageContent<'
                     }],
                 }))
             }
-            ContentBlock::Thought(_thought) => {
-                // For now, we don't input thoughts to Anthropic models
-                Ok(None)
-            }
+            // We don't support thought blocks being passed in from a request.
+            // These are only possible to be passed in in the scenario where the
+            // output of a chat completion is used as an input to another model inference,
+            // i.e. a judge or something.
+            // We don't think the thoughts should be passed in in this case.
+            ContentBlock::Thought(_thought) => Ok(None),
         }
     }
 }
