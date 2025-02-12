@@ -552,7 +552,7 @@ async fn test_openai_compatible_route_with_json_schema() {
         .unwrap()
         .as_str()
         .unwrap();
-    assert_eq!("on", clickhouse_json_mode);
+    assert_eq!("strict", clickhouse_json_mode);
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
