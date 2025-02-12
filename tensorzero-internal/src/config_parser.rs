@@ -1,3 +1,6 @@
+use object_store::aws::AmazonS3Builder;
+use object_store::local::LocalFileSystem;
+use object_store::{ObjectStore, RetryConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -7,6 +10,7 @@ use tracing::instrument;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
+use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable};
@@ -32,11 +36,58 @@ pub struct Config<'c> {
     pub templates: TemplateConfig<'c>,
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,
+    pub object_store_data: ObjectStoreData,
     pub debug: bool,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ObjectStoreData {
+    // TODO - should we instead make a dummy `ObjectStore` to represent an explicitly disabled store?
+    pub object_store: Option<Arc<dyn ObjectStore>>,
+    // This will be `None` if the kind is not explicitly set in the config
+    pub kind: Option<StorageKind>,
+}
+
+impl ObjectStoreData {
+    fn new(config: Option<StorageKind>) -> Result<Self, Error> {
+        let Some(config) = config else {
+            return Ok(Self {
+                object_store: None,
+                kind: None,
+            });
+        };
+
+        let object_store: Option<Arc<dyn ObjectStore>> = match &config {
+            StorageKind::Filesystem { path } => Some(Arc::new(LocalFileSystem::new_with_prefix(path).map_err(|e| Error::new(ErrorDetails::Config {
+                message: format!("Failed to create filesystem object store for path: {path}: {e}"),
+            }))?)),
+            StorageKind::S3 {
+                bucket_name,
+                region,
+            } => Some(Arc::new(
+                AmazonS3Builder::from_env()
+                    .with_region(region)
+                    .with_bucket_name(bucket_name)
+                    .with_conditional_put(object_store::aws::S3ConditionalPut::ETagMatch)
+                    .build()
+                    .map_err(|e| Error::new(ErrorDetails::Config {
+                        message: format!("Failed to create S3 object store for bucket: {bucket_name} in region: {region}: {e}"),
+                    }))?),
+            ),
+            StorageKind::Disabled => {
+                None
+            }
+        };
+
+        Ok(Self {
+            object_store,
+            kind: Some(config),
+        })
+    }
 }
 
 /// Note: This struct and the impl below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag
@@ -51,6 +102,8 @@ pub struct UninitializedGatewayConfig {
     pub observability: ObservabilityConfig,
     #[serde(default)]
     pub debug: bool,
+    #[serde(default)]
+    pub object_store: Option<StorageKind>,
 }
 
 impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
@@ -69,6 +122,7 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
             (false, Some(enabled)) => Some(enabled),
             (false, None) => None,
         };
+
         Ok(Self {
             bind_address: config.bind_address,
             observability: ObservabilityConfig {
@@ -76,6 +130,7 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
                 async_writes: config.observability.async_writes,
             },
             debug: config.debug,
+            object_store_data: ObjectStoreData::new(config.object_store)?,
         })
     }
 }

@@ -1,20 +1,23 @@
+use aws_smithy_types::base64;
 use derive_builder::Builder;
 use futures::stream::Peekable;
 use futures::Stream;
+pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::{
     borrow::Cow,
     collections::HashMap,
-    fmt,
+    fmt::{self, Display},
     pin::Pin,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use url::Url;
 use uuid::Uuid;
 
-use crate::cache::CacheData;
 use crate::cache::NonStreamingCacheData;
+use crate::{cache::CacheData, config_parser::ObjectStoreData};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
@@ -29,6 +32,8 @@ use crate::{
 use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInsert};
 
 pub mod batch;
+pub mod resolved_input;
+pub mod storage;
 
 /*
  * Data flow in TensorZero
@@ -47,6 +52,74 @@ pub struct Input {
     pub messages: Vec<InputMessage>,
 }
 
+pub struct FetchContext<'a> {
+    pub client: &'a reqwest::Client,
+    pub object_store_data: &'a ObjectStoreData,
+}
+
+impl Input {
+    /// Resolves any nested network resources in the input.
+    /// Currently, this resolves input image urls into base64-encoded images.
+    pub async fn resolve(&self, context: &FetchContext<'_>) -> Result<ResolvedInput, Error> {
+        let messages = futures::future::try_join_all(
+            self.messages.iter().map(|message| message.resolve(context)),
+        )
+        .await?;
+        Ok(ResolvedInput {
+            system: self.system.clone(),
+            messages,
+        })
+    }
+}
+
+impl InputMessage {
+    pub async fn resolve(&self, context: &FetchContext<'_>) -> Result<ResolvedInputMessage, Error> {
+        let content = futures::future::try_join_all(
+            self.content.iter().map(|content| content.resolve(context)),
+        )
+        .await?;
+        Ok(ResolvedInputMessage {
+            role: self.role,
+            content,
+        })
+    }
+}
+
+impl InputMessageContent {
+    pub async fn resolve(
+        &self,
+        context: &FetchContext<'_>,
+    ) -> Result<ResolvedInputMessageContent, Error> {
+        Ok(match self {
+            InputMessageContent::Text { value } => ResolvedInputMessageContent::Text {
+                value: value.clone(),
+            },
+            InputMessageContent::ToolCall(tool_call) => {
+                ResolvedInputMessageContent::ToolCall(tool_call.clone())
+            }
+            InputMessageContent::ToolResult(tool_result) => {
+                ResolvedInputMessageContent::ToolResult(tool_result.clone())
+            }
+            InputMessageContent::RawText { value } => ResolvedInputMessageContent::RawText {
+                value: value.clone(),
+            },
+            InputMessageContent::Image(image) => {
+                let storage_kind = context.object_store_data.kind.clone().ok_or_else(|| {
+                    Error::new(ErrorDetails::ObjectStoreUnconfigured {
+                        block_type: "image".to_string(),
+                    })
+                })?;
+                let image = image.clone().take_or_fetch(context.client).await?;
+                let path = storage_kind.image_path(&image)?;
+                ResolvedInputMessageContent::Image {
+                    image,
+                    storage_path: path,
+                }
+            }
+        })
+    }
+}
+
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -56,6 +129,115 @@ pub struct InputMessage {
     pub content: Vec<InputMessageContent>,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageEncoding {
+    Base64,
+    Url,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+pub enum ImageKind {
+    #[serde(rename = "image/jpeg")]
+    Jpeg,
+    #[serde(rename = "image/png")]
+    Png,
+    #[serde(rename = "image/webp")]
+    WebP,
+}
+
+impl Display for ImageKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ImageKind::Jpeg => write!(f, "image/jpeg"),
+            ImageKind::Png => write!(f, "image/png"),
+            ImageKind::WebP => write!(f, "image/webp"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct Base64Image {
+    // The original url we used to download the image
+    pub url: Option<Url>,
+    pub mime_type: ImageKind,
+    // TODO - should we add a wrapper type to enforce base64?
+    #[serde(skip)]
+    #[serde(default)]
+    // This is normally `Some`, unless it was deserialized from ClickHouse
+    // (with the image data stripped out).
+    pub data: Option<String>,
+}
+
+impl Base64Image {
+    pub fn data(&self) -> Result<&String, Error> {
+        self.data.as_ref().ok_or_else(|| {
+            Error::new(ErrorDetails::InternalError {
+                message: "Tried to get image data from deserialized Base64Image".to_string(),
+            })
+        })
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged, deny_unknown_fields)]
+pub enum Image {
+    Url { url: Url },
+    Base64 { mime_type: ImageKind, data: String },
+}
+
+impl Image {
+    pub async fn take_or_fetch(self, client: &reqwest::Client) -> Result<Base64Image, Error> {
+        match self {
+            Image::Url { url } => {
+                let response = client.get(url.clone()).send().await.map_err(|e| {
+                    Error::new(ErrorDetails::BadImageFetch {
+                        url: url.clone(),
+                        message: format!("Error fetching image: {e}"),
+                    })
+                })?;
+                let bytes = response.bytes().await.map_err(|e| {
+                    Error::new(ErrorDetails::BadImageFetch {
+                        url: url.clone(),
+                        message: format!("Error reading image bytes: {e}"),
+                    })
+                })?;
+                let kind = match image::guess_format(&bytes) {
+                    Ok(image::ImageFormat::Jpeg) => ImageKind::Jpeg,
+                    Ok(image::ImageFormat::Png) => ImageKind::Png,
+                    Ok(image::ImageFormat::WebP) => ImageKind::WebP,
+                    Ok(format) => {
+                        return Err(Error::new(ErrorDetails::BadImageFetch {
+                            url: url.clone(),
+                            message: format!("Unsupported image format: {format:?}"),
+                        }))
+                    }
+                    Err(e) => {
+                        return Err(Error::new(ErrorDetails::BadImageFetch {
+                            url,
+                            message: format!("Error guessing image format: {e}"),
+                        }))
+                    }
+                };
+                let data = base64::encode(bytes);
+                Ok(Base64Image {
+                    url: Some(url.clone()),
+                    mime_type: kind,
+                    data: Some(data),
+                })
+            }
+            Image::Base64 {
+                mime_type: kind,
+                data,
+            } => Ok(Base64Image {
+                url: None,
+                mime_type: kind,
+                data: Some(data),
+            }),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InputMessageContent {
@@ -63,6 +245,7 @@ pub enum InputMessageContent {
     ToolCall(ToolCall),
     ToolResult(ToolResult),
     RawText { value: String },
+    Image(Image),
     // We may extend this in the future to include other types of content
 }
 
@@ -100,6 +283,7 @@ pub enum ContentBlock {
     Text(Text),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
+    Image(Base64Image),
     Thought(Thought),
 }
 
@@ -349,13 +533,13 @@ pub enum InferenceResultChunk {
 /// For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and ModelInferenceDatabaseInserts,
 /// which are written to ClickHouse tables of the same name asynchronously.
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct ChatInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: Input,
+    pub input: ResolvedInput,
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
@@ -364,13 +548,13 @@ pub struct ChatInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct JsonInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: Input,
+    pub input: ResolvedInput,
     pub output: JsonInferenceOutput,
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u32>,
@@ -412,6 +596,15 @@ impl From<String> for InputMessageContent {
     }
 }
 
+#[cfg(test)]
+impl From<String> for ResolvedInputMessageContent {
+    fn from(text: String) -> Self {
+        ResolvedInputMessageContent::Text {
+            value: Value::String(text),
+        }
+    }
+}
+
 #[cfg(any(test, feature = "e2e_tests"))]
 impl From<String> for ContentBlockChatOutput {
     fn from(text: String) -> Self {
@@ -422,6 +615,12 @@ impl From<String> for ContentBlockChatOutput {
 impl From<Value> for InputMessageContent {
     fn from(value: Value) -> Self {
         InputMessageContent::Text { value }
+    }
+}
+
+impl From<Value> for ResolvedInputMessageContent {
+    fn from(value: Value) -> Self {
+        ResolvedInputMessageContent::Text { value }
     }
 }
 
@@ -590,6 +789,23 @@ impl ModelInferenceDatabaseInsert {
     }
 }
 
+/// Strips out image data from the raw request, replacing it with a placeholder.
+/// This is a best-effort attempt to avoid filling up ClickHouse with image data.
+fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: String) -> String {
+    let mut i = 0;
+    for message in input_messages {
+        for content in &message.content {
+            if let ContentBlock::Image(image) = content {
+                if let Some(data) = &image.data {
+                    raw_request = raw_request.replace(data, &format!("<TENSORZERO_IMAGE_{i}>"));
+                }
+                i += 1;
+            }
+        }
+    }
+    raw_request
+}
+
 impl ProviderInferenceResponse {
     pub fn new(
         output: Vec<ContentBlockOutput>,
@@ -600,13 +816,14 @@ impl ProviderInferenceResponse {
         usage: Usage,
         latency: Latency,
     ) -> Self {
+        let sanitized_raw_request = sanitize_raw_request(&input_messages, raw_request);
         Self {
             id: Uuid::now_v7(),
             created: current_timestamp(),
             output,
             system,
             input_messages,
-            raw_request,
+            raw_request: sanitized_raw_request,
             raw_response,
             usage,
             latency,
@@ -755,7 +972,7 @@ pub async fn parse_chat_output(
 impl ChatInferenceDatabaseInsert {
     pub fn new(
         chat_result: ChatInferenceResult,
-        input: Input,
+        input: ResolvedInput,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata
@@ -783,7 +1000,7 @@ impl ChatInferenceDatabaseInsert {
 impl JsonInferenceDatabaseInsert {
     pub fn new(
         json_result: JsonInferenceResult,
-        input: Input,
+        input: ResolvedInput,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata

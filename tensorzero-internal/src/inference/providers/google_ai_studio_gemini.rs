@@ -343,7 +343,10 @@ enum GeminiPart<'a> {
     Text {
         text: &'a str,
     },
-    // TODO (if needed): InlineData { inline_data: Blob },
+    InlineData {
+        #[serde(rename = "inline_data")]
+        inline_data: GeminiInlineData<'a>,
+    },
     // TODO (if needed): FileData { file_data: FileData },
     FunctionCall {
         function_call: GeminiFunctionCall<'a>,
@@ -353,6 +356,12 @@ enum GeminiPart<'a> {
     },
     // TODO (if needed): ExecutableCode [docs](https://ai.google.dev/api/caching#ExecutableCode)
     // TODO (if needed): ExecutableCodeResult [docs](https://ai.google.dev/api/caching#CodeExecutionResult)
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+struct GeminiInlineData<'a> {
+    mime_type: String,
+    data: &'a str,
 }
 
 impl<'a> TryFrom<&'a ContentBlock> for Option<GeminiPart<'a>> {
@@ -416,6 +425,13 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GeminiPart<'a>> {
                     },
                 }))
             }
+            ContentBlock::Image(image) => Ok(Some(GeminiPart::InlineData {
+                inline_data: GeminiInlineData {
+                    mime_type: image.mime_type.to_string(),
+                    data: image.data()?.as_str(),
+                },
+            })),
+
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
             // output of a chat completion is used as an input to another model inference,

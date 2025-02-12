@@ -8,6 +8,7 @@ use tokio::time::{timeout, Duration};
 
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
+use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
 };
@@ -16,7 +17,7 @@ use crate::{
     endpoints::inference::InferenceParams,
     error::{Error, ErrorDetails},
     function::FunctionConfig,
-    inference::types::{InferenceResult, InferenceResultStream, Input},
+    inference::types::{InferenceResult, InferenceResultStream},
     minijinja_util::TemplateConfig,
     variant::chat_completion::ChatCompletionConfig,
 };
@@ -51,7 +52,7 @@ pub struct FuserConfig {
 impl Variant for MixtureOfNConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -74,7 +75,7 @@ impl Variant for MixtureOfNConfig {
 
     async fn infer_stream<'request>(
         &self,
-        _input: &Input,
+        _input: &ResolvedInput,
         _models: &'request InferenceModels<'_>,
         _function: &FunctionConfig,
         _inference_config: &'request InferenceConfig<'static, 'request>,
@@ -140,7 +141,7 @@ impl Variant for MixtureOfNConfig {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _input: &[Input],
+        _input: &[ResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a, 'a>],
@@ -155,7 +156,7 @@ impl MixtureOfNConfig {
     /// Infer each candidate variant concurrently and return the results.
     async fn infer_candidates<'a, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -228,7 +229,7 @@ impl MixtureOfNConfig {
     /// we randomly select one of the candidates.
     async fn fuse_candidates<'a, 'request>(
         &'a self,
-        input: &Input,
+        input: &ResolvedInput,
         function: &'a FunctionConfig,
         models: &'a ModelTable,
         inference_config: &'request InferenceConfig<'a, 'request>,
@@ -296,7 +297,7 @@ impl MixtureOfNConfig {
 ///  * Return the output of the fuser.
 async fn inner_fuse_candidates<'a, 'request>(
     fuser: &'a FuserConfig,
-    input: &'request Input,
+    input: &'request ResolvedInput,
     models: &'a ModelTable,
     function: &'a FunctionConfig,
     inference_config: &'request InferenceConfig<'a, 'request>,
@@ -441,7 +442,7 @@ impl FuserConfig {
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
     fn prepare_request<'a, 'request>(
         &'a self,
-        input: &'request Input,
+        input: &'request ResolvedInput,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'a, 'request>,
         candidates: &[InferenceResult],
@@ -961,7 +962,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
         };
-        let input = Input {
+        let input = ResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1038,7 +1039,7 @@ mod tests {
             );
             ModelTable::try_from(map).expect("Failed to create model table")
         };
-        let input = Input {
+        let input = ResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1098,7 +1099,7 @@ mod tests {
             );
             ModelTable::try_from(map).expect("Failed to create model table")
         };
-        let input = Input {
+        let input = ResolvedInput {
             system: None,
             messages: vec![],
         };

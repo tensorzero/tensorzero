@@ -5,6 +5,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use futures::stream::Stream;
 use metrics::counter;
+use object_store::{ObjectStore, PutMode, PutOptions};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -19,17 +20,19 @@ use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::Config;
+use crate::config_parser::{Config, ObjectStoreData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
+use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
-    collect_chunks, ChatInferenceDatabaseInsert, CollectChunksArgs, ContentBlockChatOutput,
-    ContentBlockChunk, InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
-    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
-    RequestMessage, Usage,
+    collect_chunks, Base64Image, ChatInferenceDatabaseInsert, CollectChunksArgs,
+    ContentBlockChatOutput, ContentBlockChunk, FetchContext, InferenceResult, InferenceResultChunk,
+    InferenceResultStream, Input, JsonInferenceDatabaseInsert, JsonInferenceOutput,
+    ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput, ResolvedInputMessageContent,
+    Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
@@ -94,7 +97,7 @@ struct InferenceMetadata {
     pub variant_name: String,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    pub input: Input,
+    pub input: ResolvedInput,
     pub dryrun: bool,
     pub start_time: Instant,
     pub inference_params: InferenceParams,
@@ -258,6 +261,13 @@ pub async fn inference(
         models: &config.models,
         embedding_models: &config.embedding_models,
     };
+    let stripped_input = params
+        .input
+        .resolve(&FetchContext {
+            client: http_client,
+            object_store_data: &config.gateway.object_store_data,
+        })
+        .await?;
     // Keep sampling variants until one succeeds
     while !candidate_variant_names.is_empty() {
         let (variant_name, variant) = sample_variant(
@@ -273,7 +283,7 @@ pub async fn inference(
         if stream {
             let result = variant
                 .infer_stream(
-                    &params.input,
+                    &stripped_input,
                     &inference_models,
                     function.as_ref(),
                     &inference_config,
@@ -303,7 +313,7 @@ pub async fn inference(
                 variant_name: variant_name.to_string(),
                 inference_id,
                 episode_id,
-                input: params.input.clone(),
+                input: stripped_input.clone(),
                 dryrun,
                 start_time,
                 inference_params: model_used_info.inference_params,
@@ -331,7 +341,7 @@ pub async fn inference(
         } else {
             let result = variant
                 .infer(
-                    &params.input,
+                    &stripped_input,
                     &inference_models,
                     function.as_ref(),
                     &inference_config,
@@ -365,16 +375,19 @@ pub async fn inference(
                     processing_time: Some(start_time.elapsed()),
                     tags: params.tags,
                 };
+
+                let async_writes = config.gateway.observability.async_writes;
                 let write_future = async move {
                     write_inference(
                         &clickhouse_connection_info,
-                        params.input,
+                        &config.gateway.object_store_data,
+                        stripped_input,
                         result_to_write,
                         write_metadata,
                     )
                     .await;
                 };
-                if config.gateway.observability.async_writes {
+                if async_writes {
                     tokio::spawn(write_future);
                 } else {
                     write_future.await;
@@ -539,13 +552,17 @@ fn create_stream(
                         processing_time: Some(start_time.elapsed()),
                         tags,
                     };
-                    write_inference(
-                        &clickhouse_connection_info,
-                        input,
-                        inference_response,
-                        write_metadata,
-                    )
-                    .await;
+                    let object_store = config.gateway.object_store_data.clone();
+
+                        let clickhouse_connection_info = clickhouse_connection_info.clone();
+                        write_inference(
+                            &clickhouse_connection_info,
+                            &object_store,
+                            input,
+                            inference_response,
+                            write_metadata,
+                        ).await;
+
                 }
             };
             if async_write {
@@ -609,12 +626,61 @@ pub struct InferenceDatabaseInsertMetadata {
     pub tags: HashMap<String, String>,
 }
 
+async fn write_image(
+    object_store: &ObjectStoreData,
+    raw: &Base64Image,
+    storage_path: &StoragePath,
+) -> Result<(), Error> {
+    // The store might be explicitly disabled
+    if let Some(store) = object_store.object_store.as_ref() {
+        let res = store
+            .put_opts(
+                &storage_path.path,
+                raw.data()?.clone().into(),
+                PutOptions {
+                    mode: PutMode::Create,
+                    ..Default::default()
+                },
+            )
+            .await;
+        match res {
+            Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => {}
+            Err(e) => {
+                // TODO - what error should this be?
+                return Err(ErrorDetails::InternalError {
+                    message: format!("Failed to write image to object store: {e:?}"),
+                }
+                .into());
+            }
+        }
+    }
+    Ok(())
+}
+
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    input: Input,
+    object_store: &ObjectStoreData,
+    input: ResolvedInput,
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
+    let mut futures = Vec::new();
+    for message in &input.messages {
+        for content_block in &message.content {
+            if let ResolvedInputMessageContent::Image {
+                image: raw,
+                storage_path,
+            } = content_block
+            {
+                futures.push(async {
+                    if let Err(e) = write_image(object_store, raw, storage_path).await {
+                        tracing::error!("Failed to write image to object store: {e:?}");
+                    }
+                });
+            }
+        }
+    }
+    futures::future::join_all(futures).await;
     let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
     // Write the model responses to the ModelInference table
     for response in model_responses {
@@ -872,7 +938,7 @@ mod tests {
             variant_name: "test_variant".to_string(),
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            input: Input {
+            input: ResolvedInput {
                 messages: vec![],
                 system: None,
             },
@@ -923,7 +989,7 @@ mod tests {
             variant_name: "test_variant".to_string(),
             inference_id: Uuid::now_v7(),
             episode_id: Uuid::now_v7(),
-            input: Input {
+            input: ResolvedInput {
                 messages: vec![],
                 system: None,
             },

@@ -28,13 +28,13 @@ use crate::inference::types::batch::{
     BatchOutputSchemasWithSize, BatchRequestRow, BatchStatus, PollBatchInferenceResponse,
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
-use crate::inference::types::RequestMessage;
 use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
 use crate::inference::types::{
-    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput,
+    current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext,
     InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
     Latency, ModelInferenceResponseWithMetadata, Usage,
 };
+use crate::inference::types::{RequestMessage, ResolvedInput};
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{
@@ -219,6 +219,15 @@ pub async fn start_batch_inference_handler(
     let inference_params: Vec<InferenceParams> =
         BatchInferenceParamsWithSize(params.params, num_inferences).try_into()?;
 
+    let context = FetchContext {
+        client: &http_client,
+        object_store_data: &config.gateway.object_store_data,
+    };
+
+    let stripped_inputs =
+        futures::future::try_join_all(params.inputs.iter().map(|input| input.resolve(&context)))
+            .await?;
+
     // Keep sampling variants until one succeeds
     // We already guarantee there is at least one inference
     let first_episode_id = episode_ids
@@ -246,7 +255,7 @@ pub async fn start_batch_inference_handler(
 
         let result = variant
             .start_batch_inference(
-                &params.inputs,
+                &stripped_inputs,
                 &inference_models,
                 function,
                 &inference_configs,
@@ -278,7 +287,7 @@ pub async fn start_batch_inference_handler(
 
         let (batch_id, inference_ids) = write_start_batch_inference(
             &clickhouse_connection_info,
-            params.inputs,
+            stripped_inputs,
             result,
             write_metadata,
             inference_config,
@@ -533,7 +542,7 @@ async fn poll_batch_inference(
 // This is only used to help with iteration in the `write_batch_inference` function
 struct BatchInferenceRowHelper<'a> {
     inference_id: &'a Uuid,
-    input: Input,
+    input: ResolvedInput,
     input_messages: Vec<RequestMessage>,
     system: Option<&'a str>,
     tool_config: Option<ToolCallConfig>,
@@ -545,7 +554,7 @@ struct BatchInferenceRowHelper<'a> {
 
 async fn write_start_batch_inference<'a>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    inputs: Vec<Input>,
+    inputs: Vec<ResolvedInput>,
     result: StartBatchModelInferenceWithMetadata<'a>,
     metadata: BatchInferenceDatabaseInsertMetadata<'a>,
     inference_config: BatchInferenceConfig<'a>,

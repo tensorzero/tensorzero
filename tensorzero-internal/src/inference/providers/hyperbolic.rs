@@ -273,7 +273,7 @@ struct HyperbolicRequest<'a> {
 impl<'a> HyperbolicRequest<'a> {
     pub fn new(
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<HyperbolicRequest<'a>, Error> {
         let ModelInferenceRequest {
             temperature,
@@ -286,7 +286,7 @@ impl<'a> HyperbolicRequest<'a> {
             ..
         } = *request;
 
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_openai_messages(request)?;
         Ok(HyperbolicRequest {
             messages,
             model,

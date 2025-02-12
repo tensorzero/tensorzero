@@ -20,7 +20,7 @@ use crate::inference::types::{
     Latency, ModelInferenceRequestJsonMode, Role, Text,
 };
 use crate::inference::types::{
-    ContentBlockOutput, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ContentBlockOutput, ImageKind, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Usage,
 };
@@ -422,6 +422,9 @@ enum AnthropicMessageContent<'a> {
     Text {
         text: &'a str,
     },
+    Image {
+        source: AnthropicImageSource,
+    },
     ToolResult {
         tool_use_id: &'a str,
         content: Vec<AnthropicMessageContent<'a>>,
@@ -431,6 +434,20 @@ enum AnthropicMessageContent<'a> {
         name: &'a str,
         input: Value,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct AnthropicImageSource {
+    r#type: AnthropicImageType,
+    media_type: ImageKind,
+    data: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum AnthropicImageType {
+    Base64,
 }
 
 impl<'a> TryFrom<&'a ContentBlock> for Option<AnthropicMessageContent<'a>> {
@@ -475,6 +492,13 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<AnthropicMessageContent<'a>> {
                     }],
                 }))
             }
+            ContentBlock::Image(image) => Ok(Some(AnthropicMessageContent::Image {
+                source: AnthropicImageSource {
+                    r#type: AnthropicImageType::Base64,
+                    media_type: image.mime_type,
+                    data: image.data()?.clone(),
+                },
+            })),
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
             // output of a chat completion is used as an input to another model inference,

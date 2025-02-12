@@ -1,6 +1,7 @@
 #![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 
+use base64::prelude::*;
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
 #[cfg(feature = "e2e_tests")]
@@ -48,6 +49,7 @@ pub struct E2ETestProviders {
     pub dynamic_tool_use_inference: Vec<E2ETestProvider>,
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
+    pub image_inference: Vec<E2ETestProvider>,
     #[cfg(feature = "e2e_tests")]
     pub shorthand_inference: Vec<E2ETestProvider>,
     #[cfg(feature = "batch_tests")]
@@ -109,6 +111,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_inference_params_streaming_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_image_inference_with_provider;
         use $crate::providers::common::test_dynamic_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_parallel_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_parallel_tool_use_streaming_inference_request_with_provider;
@@ -400,7 +403,113 @@ macro_rules! generate_provider_tests {
                 test_json_mode_streaming_inference_request_with_provider(provider).await;
             }
         }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
+        async fn test_image_inference() {
+            let providers = $func().await.image_inference;
+            for provider in providers {
+                test_image_inference_with_provider(provider).await;
+            }
+        }
     };
+}
+
+static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
+
+pub async fn test_image_inference_with_provider(provider: E2ETestProvider) {
+    let episode_id = Uuid::now_v7();
+
+    let image_data = BASE64_STANDARD.encode(FERRIS_PNG);
+
+    // TODO - how do repeated runs work for the other tests with caching
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "value": "Describe the contents of the image"
+                        },
+                        {
+                            "type": "image",
+                            "mime_type": "image/png",
+                            "data": image_data
+                        }
+                    ]
+                }
+            ]},
+        "stream": false,
+        "cache_options": {"enabled": "write_only", "lookback_s": 10}
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    check_simple_image_inference_response(response_json, Some(episode_id), &provider, false).await;
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "value": "Describe the contents of the image"
+                        },
+                        {
+                            "type": "image",
+                            "mime_type": "image/png",
+                            "data": image_data
+                        }
+                    ]
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+        "cache_options": {"enabled": "on", "lookback_s": 10}
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    check_simple_image_inference_response(response_json, Some(episode_id), &provider, true).await;
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -474,6 +583,133 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     println!("API response: {response_json:#?}");
 
     check_simple_inference_response(response_json, Some(episode_id), &provider, false, true).await;
+}
+
+pub async fn check_simple_image_inference_response(
+    response_json: Value,
+    episode_id: Option<Uuid>,
+    provider: &E2ETestProvider,
+    should_be_cached: bool,
+) {
+    let hardcoded_function_name = "basic_test";
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    if let Some(episode_id) = episode_id {
+        assert_eq!(episode_id_response, episode_id);
+    }
+
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content.len(), 1);
+    let content_block = content.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert!(
+        content.to_lowercase().contains("cartoon") || content.to_lowercase().contains("crab"),
+        "Content should contain 'cartoon' or 'crab': {content}"
+    );
+
+    let usage = response_json.get("usage").unwrap();
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    if should_be_cached {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check if ClickHouse is ok - ChatInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ChatInference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, hardcoded_function_name);
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    if let Some(episode_id) = episode_id {
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "Dr. Mehta"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "value": "Describe the contents of the image"},
+                    {
+                        "type": "image",
+                        "image": {
+                            "url": null,
+                            "mime_type": "image/png",
+                        },
+                        "storage_path": {
+                            "kind": {
+                                "type": "filesystem",
+                                "path": "/tmp/tensorzero-test-images"
+                            },
+                            "path": "images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png.base64"
+                        },
+                    }
+                ]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(
+        raw_request.contains("<TENSORZERO_IMAGE_0>"),
+        "Unexpected raw_request: {raw_request}"
+    );
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 }
 
 pub async fn check_simple_inference_response(
