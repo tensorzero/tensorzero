@@ -674,10 +674,24 @@ impl InferenceResponse {
         }
     }
 
+    pub fn variant_name(&self) -> &str {
+        match self {
+            InferenceResponse::Chat(c) => &c.variant_name,
+            InferenceResponse::Json(j) => &j.variant_name,
+        }
+    }
+
     pub fn inference_id(&self) -> Uuid {
         match self {
             InferenceResponse::Chat(c) => c.inference_id,
             InferenceResponse::Json(j) => j.inference_id,
+        }
+    }
+
+    pub fn episode_id(&self) -> Uuid {
+        match self {
+            InferenceResponse::Chat(c) => c.episode_id,
+            InferenceResponse::Json(j) => j.episode_id,
         }
     }
 }

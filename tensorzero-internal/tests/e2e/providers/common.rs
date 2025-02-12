@@ -63,7 +63,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
     let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_path,
+        config_path: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
     })
     .build()
@@ -636,7 +636,7 @@ pub async fn check_simple_inference_response(
 #[cfg(feature = "e2e_tests")]
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -1698,7 +1698,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     provider: E2ETestProvider,
 ) {
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -1806,6 +1806,8 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -1972,6 +1974,8 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -2285,7 +2289,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     provider: E2ETestProvider,
 ) {
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -2570,8 +2574,8 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Azure doesn't support `tool_choice: "required"`
-    if provider.model_provider_name == "azure" {
+    // Azure and Together don't support `tool_choice: "required"`
+    if provider.model_provider_name == "azure" || provider.model_provider_name == "together" {
         return;
     }
 
@@ -2857,8 +2861,8 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
 pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Azure doesn't support `tool_choice: "required"`
-    if provider.model_provider_name == "azure" {
+    // Azure and Together don't support `tool_choice: "required"`
+    if provider.model_provider_name == "azure" || provider.model_provider_name == "together" {
         return;
     }
 
@@ -2870,7 +2874,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     }
 
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -3436,7 +3440,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     provider: E2ETestProvider,
 ) {
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -3729,17 +3733,19 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Mistral and GCP Vertex don't support ToolChoice::Specific.
+    // GCP Vertex AI, Mistral, and Together don't support ToolChoice::Specific.
+    // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
-    if provider.model_provider_name == "mistral"
-        || provider.model_provider_name.contains("gcp_vertex")
+    if provider.model_provider_name.contains("gcp_vertex")
+        || provider.model_provider_name == "mistral"
+        || provider.model_provider_name == "together"
     {
         return;
     }
 
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -4060,17 +4066,19 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
 pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Mistral and GCP Vertex don't support ToolChoice::Specific.
+    // GCP Vertex AI, Mistral, and Together don't support ToolChoice::Specific.
+    // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
-    if provider.model_provider_name == "mistral"
-        || provider.model_provider_name.contains("gcp_vertex")
+    if provider.model_provider_name.contains("gcp_vertex")
+        || provider.model_provider_name == "mistral"
+        || provider.model_provider_name == "together"
     {
         return;
     }
 
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -4473,7 +4481,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Call a function."
+                    "content": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
                 }
             ]},
         "tool_choice": "required",
@@ -4596,7 +4604,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo? Call a function."}]
+                    "content": [{"type": "text", "value": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
                 }
             ]
         }
@@ -4688,9 +4696,11 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo? Call a function."
-            .to_string()
-            .into()],
+        content: vec![
+            "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -4726,7 +4736,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     }
 
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -4740,7 +4750,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Call a function."
+                    "content": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
                 }
             ]},
         "tool_choice": "required",
@@ -4836,6 +4846,8 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -4880,7 +4892,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo? Call a function."}]
+                    "content": [{"type": "text", "value": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
                 }
             ]
         }
@@ -4990,6 +5002,8 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -5011,9 +5025,11 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo? Call a function."
-            .to_string()
-            .into()],
+        content: vec![
+            "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -5047,7 +5063,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     }
 
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -5334,7 +5350,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     }
 
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -5946,7 +5962,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     client: &tensorzero::Client,
 ) {
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -6067,6 +6083,8 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -6232,6 +6250,8 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -6732,6 +6752,8 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -6967,6 +6989,8 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -7498,7 +7522,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         return;
     }
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
     let episode_id = Uuid::now_v7();

@@ -2,7 +2,7 @@ from openai import OpenAI
 
 with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
     response = client.chat.completions.create(
-        model="tensorzero::mischievous_chatbot",
+        model="tensorzero::function_name::mischievous_chatbot",
         messages=[
             {
                 "role": "system",

@@ -48,7 +48,7 @@ async def test_async_basic_inference_old_model_format(async_client):
     result = await async_client.chat.completions.create(
         extra_headers={"episode_id": str(uuid7())},
         messages=messages,
-        model="tensorzero::basic_test",
+        model="tensorzero::function_name::basic_test",
         temperature=0.4,
     )
     # Verify IDs are valid UUIDs
@@ -237,7 +237,7 @@ async def test_async_inference_streaming_malformed_function(async_client):
     assert exc_info.value.status_code == 400
     assert (
         str(exc_info.value)
-        == "Error code: 400 - {'error': \"Invalid request to OpenAI-compatible endpoint: model name must start with 'tensorzero::function_name::'\"}"
+        == "Error code: 400 - {'error': \"Invalid request to OpenAI-compatible endpoint: model name must start with 'tensorzero::function_name::' or 'tensorzero::model_name::'\"}"
     )
 
 

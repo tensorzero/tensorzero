@@ -46,7 +46,7 @@ async fn main() {
 
     if args.tensorzero_toml.is_some() {
         tracing::warn!(
-            "`Specifying a positional path argument is deprecated. Use `--config-file` instead."
+            "`Specifying a positional path argument is deprecated. Use `--config-file path/to/tensorzero.toml` instead."
         );
     }
 
@@ -55,6 +55,7 @@ async fn main() {
     let config = if let Some(path) = &config_path {
         Arc::new(Config::load_from_path(Path::new(&path)).expect_pretty("Failed to load config"))
     } else {
+        tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
         Arc::new(Config::default())
     };
 

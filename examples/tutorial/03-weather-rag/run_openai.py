@@ -5,7 +5,7 @@ from tensorzero import TensorZeroGateway
 
 with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
     query_result = client.chat.completions.create(
-        model="tensorzero::generate_weather_query",
+        model="tensorzero::function_name::generate_weather_query",
         # This is the first inference request in an episode so we don't need to provide an episode_id
         messages=[
             {
@@ -32,7 +32,7 @@ with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
     temperature = "35"
 
     report_result = client.chat.completions.create(
-        model="tensorzero::generate_weather_report",
+        model="tensorzero::function_name::generate_weather_report",
         # This is the second inference request in an episode so we need to provide the episode_id
         extra_headers={"episode_id": str(query_result.episode_id)},
         messages=[

@@ -73,6 +73,9 @@ fn save_cache_body(
                 .with_context(|| format!("Failed to stringify response for path {path_str}"))?;
             file.write_all(json_str.as_bytes())
                 .with_context(|| format!("Failed to write to file for path {path_str}"))?;
+            file.write_all(b"\n").with_context(|| {
+                format!("Failed to write EOL newline to file for path {path_str}")
+            })?;
             tracing::info!(path = path_str, "Wrote response to cache");
             Ok(())
         }
