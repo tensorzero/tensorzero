@@ -84,7 +84,7 @@ Did you have something else in mind? Reach out on Slack or Discord and let us kn
 - Enable `pre-commit` in your repository: `pre-commit install`
 - Install Docker [→](https://docs.docker.com/get-docker/)
 - Install `uv` [→](https://docs.astral.sh/uv/)
-- Install Python (3.10+) (e.g. `uv python install 3.10` + )
+- Install Python (3.9+) (e.g. `uv python install 3.9` + )
 - Install Node.js (we use v22) and `npm` [→](https://nodejs.org/en)
 - Install pnpm `npm install -g pnpm` [→](https://pnpm.io/installation)
 

@@ -2,6 +2,10 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
+use tensorzero::{
+    ClientInferenceParams, InferenceOutput, InferenceResponse, Input, InputMessage,
+    InputMessageContent,
+};
 use tensorzero_internal::{
     inference::{
         providers::dummy::{
@@ -15,9 +19,12 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
-use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-    select_json_inference_clickhouse, select_model_inference_clickhouse,
+use crate::{
+    common::{
+        get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
+        select_json_inference_clickhouse, select_model_inference_clickhouse,
+    },
+    providers::common::{make_embedded_gateway, make_http_gateway},
 };
 
 #[tokio::test]
@@ -848,7 +855,9 @@ async fn e2e_test_inference_json_success() {
         input_messages[0],
         RequestMessage {
             role: Role::User,
-            content: vec!["What is the capital city of Japan?".to_string().into()],
+            content: vec!["What is the name of the capital city of Japan?"
+                .to_string()
+                .into()],
         }
     );
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -1491,6 +1500,108 @@ async fn e2e_test_tool_call_streaming() {
 }
 
 #[tokio::test]
+async fn test_raw_text_http_gateway() {
+    test_raw_text(make_http_gateway().await).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_text_embedded_gateway() {
+    test_raw_text(make_embedded_gateway().await).await;
+}
+
+pub async fn test_raw_text(client: tensorzero::Client) {
+    let episode_id = Uuid::now_v7();
+
+    let InferenceOutput::NonStreaming(res) = client
+        .inference(ClientInferenceParams {
+            episode_id: Some(episode_id),
+            function_name: Some("json_success".to_string()),
+            input: Input {
+                system: Some(serde_json::json!({
+                    "assistant_name": "Dr. Mehta"
+                })),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::RawText {
+                        value: "This is not the normal input".into(),
+                    }],
+                }],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap()
+    else {
+        panic!("Expected non-streaming response");
+    };
+
+    let inference_id = res.inference_id();
+    let episode_id_response = res.episode_id();
+    assert_eq!(episode_id_response, episode_id);
+
+    let variant_name = res.variant_name();
+    assert_eq!(variant_name, "test");
+
+    let InferenceResponse::Json(json_res) = res else {
+        panic!("Expected JSON response");
+    };
+
+    let content = json_res.output.parsed.unwrap();
+    assert_eq!(
+        content,
+        serde_json::json!({
+            "answer": "Hello"
+        })
+    );
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check if ClickHouse is ok - JsonInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "json_success");
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "test");
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "Dr. Mehta"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "raw_text", "value": "This is not the normal input"}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Value = serde_json::from_str(output).unwrap();
+    let parsed = output.get("parsed").unwrap();
+    assert_eq!(
+        parsed,
+        &serde_json::json!({
+            "answer": "Hello"
+        })
+    );
+    // It's not necessary to check ModelInference table given how many other places we do that
+}
+
+#[tokio::test]
 pub async fn e2e_test_dynamic_api_key() {
     let episode_id = Uuid::now_v7();
 
@@ -1504,7 +1615,7 @@ pub async fn e2e_test_dynamic_api_key() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "stream": false,
@@ -1532,7 +1643,7 @@ pub async fn e2e_test_dynamic_api_key() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "stream": false,
@@ -1606,7 +1717,7 @@ pub async fn e2e_test_dynamic_api_key() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -1661,7 +1772,7 @@ async fn test_inference_invalid_params() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "params": {
@@ -1726,7 +1837,7 @@ async fn test_inference_invalid_default_function_arg() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
     });
@@ -1756,7 +1867,7 @@ async fn test_inference_invalid_default_function_arg() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
     });
@@ -1784,7 +1895,7 @@ async fn test_inference_invalid_default_function_arg() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
     });
@@ -1814,7 +1925,7 @@ async fn test_inference_invalid_default_function_arg() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
     });
@@ -1842,7 +1953,7 @@ async fn test_inference_invalid_default_function_arg() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
     });
@@ -1871,7 +1982,7 @@ async fn test_inference_invalid_default_function_arg() {
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
     });

@@ -196,6 +196,7 @@ impl InferenceProvider for DummyProvider {
             }
             .into());
         }
+
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         if self.model_name == "test_key" {
             if let Some(api_key) = api_key {
@@ -393,7 +394,7 @@ impl InferenceProvider for DummyProvider {
                             })
                         }],
                         usage: None,
-                        raw_response: "".to_string(),
+                        raw_response: chunk.to_string(),
                         latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                     })
                 })

@@ -237,7 +237,8 @@ impl InferenceProvider for OpenAIProvider {
         Ok((stream, raw_request))
     }
 
-    /// Two parts to starting an OpenAI batch inference:
+    // Get a single chunk from the stream and make sure it is OK then send to client.
+    // We want to do this here so that we can tell that the request is working.
     /// 1. Upload the requests to OpenAI as a File
     /// 2. Start the batch inference
     ///    We do them in sequence here.

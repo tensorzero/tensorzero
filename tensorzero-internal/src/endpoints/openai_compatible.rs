@@ -122,7 +122,7 @@ enum OpenAICompatibleMessage {
 #[serde(rename_all = "snake_case")]
 enum OpenAICompatibleResponseFormat {
     Text,
-    JsonSchema { schema: Value },
+    JsonSchema { json_schema: Value },
     JsonObject,
 }
 
@@ -228,17 +228,31 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
     ) -> Result<Self, Self::Error> {
         let function_name = openai_compatible_params
             .model
-            .strip_prefix("tensorzero::")
+            .strip_prefix("tensorzero::function_name::")
+            .or_else(|| {
+                // Allow 'tensorzero::' for backwards compatibility
+                if let Some(function_name) =
+                    openai_compatible_params.model.strip_prefix("tensorzero::")
+                {
+                    tracing::warn!(
+                        function_name = function_name,
+                        "Deprecation Warning: Please set the `model` parameter to `tensorzero::function_name::your_function` instead of `tensorzero::your_function.` The latter will be removed in a future release."
+                    );
+                    Some(function_name)
+                } else {
+                    None
+                }
+            })
             .ok_or_else(|| {
                 Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: "model name must start with 'tensorzero::'".to_string(),
+                    message: "model name must start with 'tensorzero::function_name::'".to_string(),
                 })
             })?;
 
         if function_name.is_empty() {
             return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message:
-                    "function_name (passed in model field after \"tensorzero::\") cannot be empty"
+                    "function_name (passed in model field after \"tensorzero::function_name::\") cannot be empty"
                         .to_string(),
             }
             .into());
@@ -328,7 +342,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             parallel_tool_calls: openai_compatible_params.parallel_tool_calls,
         };
         let output_schema = match openai_compatible_params.response_format {
-            Some(OpenAICompatibleResponseFormat::JsonSchema { schema }) => Some(schema),
+            Some(OpenAICompatibleResponseFormat::JsonSchema { json_schema }) => Some(json_schema),
             _ => None,
         };
         Ok(Params {

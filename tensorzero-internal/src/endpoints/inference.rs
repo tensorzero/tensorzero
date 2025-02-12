@@ -107,6 +107,8 @@ struct InferenceMetadata {
     pub tags: HashMap<String, String>,
     pub tool_config: Option<ToolCallConfig>,
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
+    #[allow(dead_code)] // We may start exposing this in the response
+    pub cached: bool,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -313,6 +315,7 @@ pub async fn inference(
                 tags: params.tags,
                 tool_config,
                 dynamic_output_schema: output_schema,
+                cached: model_used_info.cached,
             };
 
             let stream = create_stream(
@@ -490,6 +493,7 @@ fn create_stream(
                 tags,
                 tool_config,
                 dynamic_output_schema,
+                cached,
             } = metadata;
 
             let config = config.clone();
@@ -511,6 +515,7 @@ fn create_stream(
                     dynamic_output_schema,
                     templates,
                     tool_config: tool_config.as_ref(),
+                    cached,
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;
@@ -670,10 +675,24 @@ impl InferenceResponse {
         }
     }
 
+    pub fn variant_name(&self) -> &str {
+        match self {
+            InferenceResponse::Chat(c) => &c.variant_name,
+            InferenceResponse::Json(j) => &j.variant_name,
+        }
+    }
+
     pub fn inference_id(&self) -> Uuid {
         match self {
             InferenceResponse::Chat(c) => c.inference_id,
             InferenceResponse::Json(j) => j.inference_id,
+        }
+    }
+
+    pub fn episode_id(&self) -> Uuid {
+        match self {
+            InferenceResponse::Chat(c) => c.episode_id,
+            InferenceResponse::Json(j) => j.episode_id,
         }
     }
 }
@@ -856,6 +875,7 @@ mod tests {
             tags: HashMap::new(),
             tool_config: None,
             dynamic_output_schema: None,
+            cached: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
@@ -906,6 +926,7 @@ mod tests {
             tags: HashMap::new(),
             tool_config: None,
             dynamic_output_schema: None,
+            cached: false,
         };
 
         let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();

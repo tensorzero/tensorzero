@@ -10,17 +10,20 @@ use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
 
+use crate::inference::types::{
+    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::tool::ToolChoice;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     inference::types::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
-        ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
-        ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-        ProviderInferenceResponse, ProviderInferenceResponseChunk,
+        ContentBlockChunk, ContentBlockOutput, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStreamInner, Text, TextChunk, Thought, ThoughtChunk,
     },
-    model::{build_creds_caching_default, Credential, CredentialLocation},
     tool::{ToolCall, ToolCallChunk},
 };
 
@@ -125,8 +128,6 @@ impl TogetherCredentials {
         }
     }
 }
-
-// TODO (#80): Add support for Llama 3.1 function calling as discussed [here](https://docs.together.ai/docs/llama-3-function-calling)
 
 impl InferenceProvider for TogetherProvider {
     async fn infer<'a>(
@@ -312,7 +313,18 @@ impl<'a> TogetherRequest<'a> {
             ModelInferenceRequestJsonMode::Off => None,
         };
         let messages = prepare_together_messages(request);
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
+
+        // NOTE: Together AI doesn't seem to support `tool_choice="none"`, so we simply don't include the `tools` field if that's the case
+        let tool_choice = request
+            .tool_config
+            .as_ref()
+            .map(|config| &config.tool_choice);
+
+        let (tools, tool_choice, parallel_tool_calls) = match tool_choice {
+            Some(&ToolChoice::None) => (None, None, None),
+            _ => prepare_openai_tools(request),
+        };
+
         TogetherRequest {
             messages,
             model,

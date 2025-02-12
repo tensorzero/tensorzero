@@ -155,7 +155,7 @@ from openai import OpenAI
 
 with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
     response = client.chat.completions.create(
-        model="tensorzero::your_function_name",  # defined in configuration (step 2)
+        model="tensorzero::function_name::your_function_name",  # defined in configuration (step 2)
         messages=[
             {
                 "role": "user",

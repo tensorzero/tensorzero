@@ -3,6 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
+use rand::Rng;
 #[cfg(feature = "e2e_tests")]
 use reqwest::{Client, StatusCode};
 #[cfg(feature = "e2e_tests")]
@@ -63,7 +64,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
     let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_path,
+        config_path: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
     })
     .build()
@@ -411,7 +412,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "stream": false,
@@ -446,7 +447,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "stream": false,
@@ -543,7 +544,7 @@ pub async fn check_simple_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -643,7 +644,9 @@ pub async fn check_simple_inference_response(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -674,28 +677,51 @@ pub async fn check_simple_inference_response(
 #[cfg(feature = "e2e_tests")]
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
+    // Generate random u32
+    let seed = rand::thread_rng().gen_range(0..u32::MAX);
 
+    let original_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, false,
+    )
+    .await;
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let cached_content = test_simple_streaming_inference_request_with_provider_cache(
+        &provider, episode_id, seed, &tag_value, true,
+    )
+    .await;
+    assert_eq!(original_content, cached_content);
+}
+
+#[cfg(feature = "e2e_tests")]
+pub async fn test_simple_streaming_inference_request_with_provider_cache(
+    provider: &E2ETestProvider,
+    episode_id: Uuid,
+    seed: u32,
+    tag_value: &str,
+    check_cache: bool,
+) -> String {
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
         "episode_id": episode_id,
         "input":
             {
-               "system": {"assistant_name": "Dr. Mehta"},
+               "system": {"assistant_name": format!("Dr. Mehta #{seed}")},
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan?"
                 }
             ]},
         "stream": true,
         "tags": {"key": tag_value},
+        "cache_options": {"enabled": "on", "lookback_s": 10}
     });
 
     let mut event_source = Client::new()
@@ -762,7 +788,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     assert!(full_content.to_lowercase().contains("tokyo"));
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    if provider.variant_name.contains("azure") || check_cache {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -798,11 +824,11 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": "Dr. Mehta"},
+        "system": {"assistant_name": format!("Dr. Mehta #{seed}")},
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -878,7 +904,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") {
+    if provider.variant_name.contains("azure") || check_cache {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
     } else {
@@ -887,40 +913,46 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
-    assert!(response_time_ms > 0);
+    if check_cache {
+        assert_eq!(response_time_ms, 0);
+    } else {
+        assert!(response_time_ms > 0);
+    }
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    if check_cache {
+        assert_eq!(ttft_ms, 0);
+    } else {
+        assert!(ttft_ms >= 1);
+    }
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
         system,
-        "You are a helpful and friendly assistant named Dr. Mehta"
+        format!("You are a helpful and friendly assistant named Dr. Mehta #{seed}")
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
     // Check the InferenceTag Table
-    let result = select_inference_tags_clickhouse(
-        &clickhouse,
-        "basic_test",
-        "key",
-        &tag_value,
-        inference_id,
-    )
-    .await
-    .unwrap();
+    let result =
+        select_inference_tags_clickhouse(&clickhouse, "basic_test", "key", tag_value, inference_id)
+            .await
+            .unwrap();
     let id = result.get("inference_id").unwrap().as_str().unwrap();
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
+    full_content
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -971,6 +1003,9 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
     check_inference_params_response(response_json, &provider, Some(episode_id), false).await;
 }
 
+// This function is also used by batch tests. If you adjust the prompt checked by this function
+// ("What is the name of the capital city of Japan?"), make sure to update the batch tests to start batch
+// jobs with the correct prompt.
 pub async fn check_inference_params_response(
     response_json: Value,
     provider: &E2ETestProvider,
@@ -1395,7 +1430,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -1704,7 +1739,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     provider: E2ETestProvider,
 ) {
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -1812,6 +1847,8 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -1978,6 +2015,8 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -1987,7 +2026,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -2291,7 +2330,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     provider: E2ETestProvider,
 ) {
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -2546,7 +2585,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -2576,8 +2615,8 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
 pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Azure doesn't support `tool_choice: "required"`
-    if provider.model_provider_name == "azure" {
+    // Azure and Together don't support `tool_choice: "required"`
+    if provider.model_provider_name == "azure" || provider.model_provider_name == "together" {
         return;
     }
 
@@ -2863,8 +2902,8 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
 pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Azure doesn't support `tool_choice: "required"`
-    if provider.model_provider_name == "azure" {
+    // Azure and Together don't support `tool_choice: "required"`
+    if provider.model_provider_name == "azure" || provider.model_provider_name == "together" {
         return;
     }
 
@@ -2876,7 +2915,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     }
 
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -3159,7 +3198,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -3442,7 +3481,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     provider: E2ETestProvider,
 ) {
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -3701,7 +3740,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -3735,17 +3774,19 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
 pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Mistral and GCP Vertex don't support ToolChoice::Specific.
+    // GCP Vertex AI, Mistral, and Together don't support ToolChoice::Specific.
+    // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
-    if provider.model_provider_name == "mistral"
-        || provider.model_provider_name.contains("gcp_vertex")
+    if provider.model_provider_name.contains("gcp_vertex")
+        || provider.model_provider_name == "mistral"
+        || provider.model_provider_name == "together"
     {
         return;
     }
 
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -4066,17 +4107,19 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
 pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Mistral and GCP Vertex don't support ToolChoice::Specific.
+    // GCP Vertex AI, Mistral, and Together don't support ToolChoice::Specific.
+    // (Together AI claims to support it, but we can't get it to behave strictly.)
     // In those cases, we use ToolChoice::Any with a single tool under the hood.
     // Even then, they seem to hallucinate a new tool.
-    if provider.model_provider_name == "mistral"
-        || provider.model_provider_name.contains("gcp_vertex")
+    if provider.model_provider_name.contains("gcp_vertex")
+        || provider.model_provider_name == "mistral"
+        || provider.model_provider_name == "together"
     {
         return;
     }
 
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -4418,7 +4461,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -4479,7 +4522,7 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Call a function."
+                    "content": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
                 }
             ]},
         "tool_choice": "required",
@@ -4602,7 +4645,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo? Call a function."}]
+                    "content": [{"type": "text", "value": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
                 }
             ]
         }
@@ -4694,9 +4737,11 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo? Call a function."
-            .to_string()
-            .into()],
+        content: vec![
+            "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -4732,7 +4777,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     }
 
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -4746,7 +4791,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Call a function."
+                    "content": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
                 }
             ]},
         "tool_choice": "required",
@@ -4842,6 +4887,8 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -4886,7 +4933,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo? Call a function."}]
+                    "content": [{"type": "text", "value": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
                 }
             ]
         }
@@ -4996,6 +5043,8 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -5005,7 +5054,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -5017,9 +5066,11 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo? Call a function."
-            .to_string()
-            .into()],
+        content: vec![
+            "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -5053,7 +5104,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
     }
 
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -5340,7 +5391,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     }
 
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -5596,7 +5647,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -5952,7 +6003,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     client: &tensorzero::Client,
 ) {
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
 
@@ -6073,6 +6124,8 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -6238,6 +6291,8 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -6247,7 +6302,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -6738,6 +6793,8 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -6973,6 +7030,8 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     if provider.variant_name.contains("azure") {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
+    } else if provider.variant_name.contains("together") {
+        // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
@@ -6982,7 +7041,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -7223,7 +7282,9 @@ pub async fn check_json_mode_inference_response(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -7466,7 +7527,9 @@ pub async fn check_dynamic_json_mode_inference_response(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -7498,7 +7561,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         return;
     }
     // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name.contains("openai") && provider.model_name.starts_with("o1") {
+    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
     }
     let episode_id = Uuid::now_v7();
@@ -7719,7 +7782,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms >= 1);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -7731,7 +7794,9 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();

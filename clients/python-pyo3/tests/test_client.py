@@ -68,6 +68,25 @@ async def async_client(request):
             yield client
 
 
+def test_sync_embedded_gateway_no_config():
+    with pytest.raises(TensorZeroError) as exc_info:
+        with TensorZeroGateway.build_embedded() as client:
+            client.inference(function_name="my_missing_func", input={})
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.text == '{"error":"Unknown function: my_missing_func"}'
+
+
+@pytest.mark.asyncio
+async def test_async_embedded_gateway_no_config():
+    with pytest.raises(TensorZeroError) as exc_info:
+        async with await AsyncTensorZeroGateway.build_embedded() as client:
+            await client.inference(function_name="my_missing_func", input={})
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.text == '{"error":"Unknown function: my_missing_func"}'
+
+
 @dataclass
 class CountData:
     count: int
