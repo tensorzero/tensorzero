@@ -17,6 +17,7 @@ use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_internal::error;
 use tensorzero_internal::gateway_util;
 use tensorzero_internal::observability;
+use crate::env_validator::validate_environment_variables;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -38,6 +39,8 @@ async fn main() {
     observability::setup_logs(true);
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
     let args = Args::parse();
+
+    validate_environment_variables();
 
     if args.tensorzero_toml.is_some() && args.config_file.is_some() {
         tracing::error!("Cannot specify both `--config-file` and a positional path argument");
