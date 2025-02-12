@@ -419,25 +419,25 @@ async fn test_o1_streaming_unsupported() {
 
 #[cfg(feature = "e2e_tests")]
 #[tokio::test]
-async fn test_text_function_json_override_with_mode_on() {
-    test_text_function_json_override_with_mode(ModelInferenceRequestJsonMode::On).await;
+async fn test_chat_function_json_override_with_mode_on() {
+    test_chat_function_json_override_with_mode(ModelInferenceRequestJsonMode::On).await;
 }
 
 #[cfg(feature = "e2e_tests")]
 #[tokio::test]
-async fn test_text_function_json_override_with_mode_off() {
-    test_text_function_json_override_with_mode(ModelInferenceRequestJsonMode::Off).await;
+async fn test_chat_function_json_override_with_mode_off() {
+    test_chat_function_json_override_with_mode(ModelInferenceRequestJsonMode::Off).await;
 }
 
 #[cfg(feature = "e2e_tests")]
 #[tokio::test]
-async fn test_text_function_json_override_with_mode_strict() {
-    test_text_function_json_override_with_mode(ModelInferenceRequestJsonMode::Strict).await;
+async fn test_chat_function_json_override_with_mode_strict() {
+    test_chat_function_json_override_with_mode(ModelInferenceRequestJsonMode::Strict).await;
 }
 
 #[cfg(feature = "e2e_tests")]
 #[tokio::test]
-async fn test_text_function_json_override_with_mode_implicit_tool() {
+async fn test_chat_function_json_override_with_mode_implicit_tool() {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
@@ -484,7 +484,7 @@ async fn test_text_function_json_override_with_mode_implicit_tool() {
     );
 }
 
-async fn test_text_function_json_override_with_mode(json_mode: ModelInferenceRequestJsonMode) {
+async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceRequestJsonMode) {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
     let mode = serde_json::to_value(json_mode).unwrap();
