@@ -16,7 +16,7 @@ use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
-use crate::variant::{InferenceConfig, Variant, VariantConfig};
+use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig};
 
 #[derive(Debug)]
 pub enum FunctionConfig {
@@ -70,6 +70,21 @@ impl FunctionConfig {
 }
 
 impl FunctionConfig {
+    pub fn validate_inference_params(
+        &self,
+        params: &crate::endpoints::inference::Params,
+    ) -> Result<(), Error> {
+        if let FunctionConfig::Chat(_) = self {
+            if let Some(JsonMode::ImplicitTool) = &params.params.chat_completion.json_mode {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: "JSON mode `implicit_tool` is not supported for chat functions"
+                        .to_string(),
+                }
+                .into());
+            }
+        }
+        self.validate_input(&params.input)
+    }
     /// Validate the input against the function's input schemas.
     /// The validation is done based on the function's type:
     /// - For a chat function, the input is validated against the system, user, and assistant schemas.

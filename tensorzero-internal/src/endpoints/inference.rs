@@ -36,7 +36,7 @@ use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::chat_completion::ChatCompletionConfig;
-use crate::variant::{InferenceConfig, Variant, VariantConfig};
+use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig};
 
 use super::validate_tags;
 
@@ -182,7 +182,6 @@ pub async fn inference(
 
     validate_tags(&params.tags)?;
     let (function, function_name) = find_function(&params, &config)?;
-    let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =
         function.variants().keys().map(AsRef::as_ref).collect();
@@ -196,7 +195,9 @@ pub async fn inference(
     }
 
     // Validate the input
-    function.validate_input(&params.input)?;
+    function.validate_inference_params(&params)?;
+
+    let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
 
     // If a variant is pinned, only that variant should be attempted
     if let Some(ref variant_name) = params.variant_name {
@@ -795,6 +796,8 @@ pub struct ChatCompletionInferenceParams {
     pub presence_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub json_mode: Option<JsonMode>,
 }
 
 impl ChatCompletionInferenceParams {

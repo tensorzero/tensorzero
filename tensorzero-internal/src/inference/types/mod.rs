@@ -135,7 +135,8 @@ pub enum FunctionType {
     Json,
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Default, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ModelInferenceRequestJsonMode {
     #[default]
     Off,
