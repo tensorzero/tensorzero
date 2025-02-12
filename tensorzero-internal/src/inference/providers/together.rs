@@ -414,17 +414,18 @@ fn process_think_blocks(text: &str, parse: bool) -> Result<(String, Option<Strin
             provider_type: PROVIDER_TYPE.to_string(),
         }));
     }
-    if let (Some(start), Some(end)) = (text.find(THINK_TAG), text.find(END_THINK_TAG)) {
-        let reasoning = text[start + THINK_TAG_LEN..end].to_string();
-        let cleaned = format!("{}{}", &text[..start], &text[end + END_THINK_TAG_LEN..]);
-        Ok((cleaned, Some(reasoning)))
-    } else if think_count != text.matches(END_THINK_TAG).count() {
-        return Err(Error::new(ErrorDetails::InferenceServer {
+
+    if think_count != text.matches(END_THINK_TAG).count() {
+        Err(Error::new(ErrorDetails::InferenceServer {
             message: "Mismatched thinking tags".to_string(),
             raw_request: None,
             raw_response: None,
             provider_type: PROVIDER_TYPE.to_string(),
-        }));
+        }))
+    } else if let (Some(start), Some(end)) = (text.find(THINK_TAG), text.find(END_THINK_TAG)) {
+        let reasoning = text[start + THINK_TAG_LEN..end].to_string();
+        let cleaned = format!("{}{}", &text[..start], &text[end + END_THINK_TAG_LEN..]);
+        Ok((cleaned, Some(reasoning)))
     } else {
         Ok((text.to_string(), None))
     }
@@ -1046,6 +1047,22 @@ mod tests {
         if let Err(err) = result {
             if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
                 assert_eq!(message, "Multiple thinking blocks found");
+            }
+        }
+
+        let (cleaned_text, reasoning) = process_think_blocks(text, false).unwrap();
+        assert_eq!(cleaned_text, text);
+        assert_eq!(reasoning, None);
+    }
+
+    #[test]
+    fn test_extra_closing_tag() {
+        let text = "Hello <think>Extra closing tag</think></think> world";
+        let result = process_think_blocks(text, true);
+        assert!(result.is_err());
+        if let Err(err) = result {
+            if let ErrorDetails::InferenceServer { message, .. } = err.get_owned_details() {
+                assert_eq!(message, "Mismatched thinking tags");
             }
         }
 
