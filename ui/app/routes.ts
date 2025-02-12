@@ -29,12 +29,12 @@ export default [
   ),
   route("observability/functions", "routes/observability/functions/route.tsx"),
   route(
-    "observability/function/:function_name",
-    "routes/observability/function/route.tsx",
+    "observability/functions/:function_name",
+    "routes/observability/functions/$function_name/route.tsx",
   ),
   route("observability/episodes", "routes/observability/episodes/route.tsx"),
   route(
-    "observability/function/:function_name/variant/:variant_name",
-    "routes/observability/function/variant/route.tsx",
+    "observability/functions/:function_name/variants/:variant_name",
+    "routes/observability/functions/$function_name/variant/route.tsx",
   ),
 ] satisfies RouteConfig;

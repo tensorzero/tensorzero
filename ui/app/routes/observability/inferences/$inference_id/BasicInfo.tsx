@@ -32,7 +32,7 @@ export default function BasicInfo({
           <div>
             <dt className="text-lg font-semibold">Function</dt>
             <dd>
-              <Link to={`/observability/function/${inference.function_name}`}>
+              <Link to={`/observability/functions/${inference.function_name}`}>
                 <Code>{inference.function_name}</Code>
               </Link>
             </dd>
@@ -41,7 +41,7 @@ export default function BasicInfo({
             <dt className="text-lg font-semibold">Variant</dt>
             <dd>
               <Link
-                to={`/observability/function/${inference.function_name}/variant/${inference.variant_name}`}
+                to={`/observability/functions/${inference.function_name}/variants/${inference.variant_name}`}
               >
                 <Code>{inference.variant_name}</Code>
               </Link>
