@@ -46,7 +46,7 @@ async fn main() {
             ClientBuilder::new(ClientBuilderMode::HTTPGateway { url: gateway_url })
         }
         (None, Some(config_path)) => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path,
+            config_path: Some(config_path),
             clickhouse_url: std::env::var("CLICKHOUSE_URL").ok(),
         }),
         (Some(_), Some(_)) => {

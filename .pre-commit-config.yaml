@@ -13,10 +13,7 @@ repos:
       - id: check-xml
       - id: check-yaml
       - id: detect-private-key
-        exclude: |
-          (?x)
-          gateway/src/inference/providers/gcp_vertex_gemini\.rs|
-          CONTRIBUTING\.md
+        exclude: ^tensorzero-internal/src/inference/providers/gcp_vertex_gemini\.rs$
       - id: end-of-file-fixer
         exclude: \.minijinja$
       - id: trailing-whitespace
