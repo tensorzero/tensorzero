@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -7,6 +8,7 @@ use axum::{debug_handler, Json};
 use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tokio::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -27,6 +29,10 @@ use super::validate_tags;
 /// This is the amount of time we want to wait after the target was supposed to have been written
 /// before we decide that the target was actually not written because we can't find it in the database.
 const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
+/// Since we can't be sure that an inference actually completed when the ID says it was
+/// (the ID is generated at the start of the inference), we wait a minimum amount of time
+/// before we decide that the target was actually not written because we can't find it in the database.
+const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1200);
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Serialize, Deserialize)]
@@ -359,32 +365,35 @@ async fn write_boolean(
 /// This is to avoid a race condition where the id was created (e.g. an inference was made)
 /// but the feedback is received before the id is written to the database.
 ///
-/// The current behavior is to immediately check and return the result if the id was created
-/// more than FEEDBACK_COOLDOWN_PERIOD ago.
-///
-/// Otherwise, it will poll the database every second until the cooldown period has passed.
-/// Then, if the id has still not been created, it will return an error.
+/// We compute an amount of time to wait by max(FEEDBACK_COOLDOWN_PERIOD - elapsed_from_target_id, FEEDBACK_MINIMUM_WAIT_TIME)
+/// We then poll every 500ms until that time has passed.
+/// If the time has passed and the id is still not found, we return an error.
 async fn throttled_get_function_name(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
 ) -> Result<String, Error> {
-    let mut elapsed = uuid_elapsed(target_id)?;
-    if elapsed > FEEDBACK_COOLDOWN_PERIOD {
-        return get_function_name(connection_info, metric_config_level, target_id).await;
-    }
+    // Compute how long ago the target_id was created.
+    let elapsed = uuid_elapsed(target_id)?;
 
+    // Calculate the remaining cooldown (which may be zero) and ensure we wait at least FEEDBACK_MINIMUM_WAIT_TIME.
+    let wait_time = max(
+        FEEDBACK_COOLDOWN_PERIOD.saturating_sub(elapsed),
+        FEEDBACK_MINIMUM_WAIT_TIME,
+    );
+    let deadline = Instant::now() + wait_time;
+
+    // Poll every 500ms until the deadline is reached.
     loop {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        elapsed = uuid_elapsed(target_id)?;
         match get_function_name(connection_info, metric_config_level, target_id).await {
             Ok(identifier) => return Ok(identifier),
-            Err(e) => {
-                if elapsed > FEEDBACK_COOLDOWN_PERIOD {
-                    return Err(e);
+            Err(err) => {
+                if Instant::now() >= deadline {
+                    return Err(err);
                 }
             }
         }
+        tokio::time::sleep(Duration::from_millis(500)).await;
     }
 }
 
@@ -789,10 +798,8 @@ mod tests {
             }
         );
     }
-
     #[tokio::test]
-    async fn test_feedback_handler() {
-        // Test a Comment Feedback
+    async fn test_feedback_handler_comment() {
         let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
@@ -823,11 +830,26 @@ mod tests {
                 message: format!("Episode ID: {episode_id} does not exist"),
             }
         );
+    }
 
-        // Test a Demonstration Feedback
+    #[tokio::test]
+    async fn test_feedback_handler_demonstration() {
+        let config = Arc::new(Config {
+            gateway: GatewayConfig::default(),
+            models: ModelTable::default(),
+            embedding_models: EmbeddingModelTable::default(),
+            metrics: HashMap::new(),
+            functions: HashMap::new(),
+            tools: HashMap::new(),
+            templates: TemplateConfig::new(),
+        });
+        let app_state_data = get_unit_test_app_state_data(config, true);
+        let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
+        let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test demonstration");
+
+        // Test with episode_id (should fail)
         let params = Params {
-            // Demonstrations shouldn't work with episode id
             episode_id: Some(episode_id),
             inference_id: None,
             metric_name: "demonstration".to_string(),
@@ -847,6 +869,7 @@ mod tests {
             }
         );
 
+        // Test with inference_id (should fail with non-existent ID)
         let inference_id = Uuid::new_v7(timestamp);
         let params = Params {
             episode_id: None,
@@ -865,8 +888,10 @@ mod tests {
                 message: format!("Inference ID: {inference_id} does not exist"),
             }
         );
+    }
 
-        // Test a Float Feedback (episode level)
+    #[tokio::test]
+    async fn test_feedback_handler_float_episode_level() {
         let mut metrics = HashMap::new();
         metrics.insert(
             "test_float".to_string(),
@@ -887,8 +912,11 @@ mod tests {
         });
         let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(4.5);
+        let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
         let episode_id = Uuid::new_v7(timestamp);
+
+        // Test with inference_id (should fail)
         let params = Params {
             episode_id: None,
             inference_id: Some(inference_id),
@@ -908,6 +936,7 @@ mod tests {
             }
         );
 
+        // Test with episode_id (should fail with non-existent ID)
         let params = Params {
             episode_id: Some(episode_id),
             inference_id: None,
@@ -925,8 +954,10 @@ mod tests {
                 message: format!("Episode ID: {episode_id} does not exist"),
             }
         );
+    }
 
-        // Test Boolean feedback with invalid inference-level.
+    #[tokio::test]
+    async fn test_feedback_handler_boolean_inference_level() {
         let mut metrics = HashMap::new();
         metrics.insert(
             "test_boolean".to_string(),
@@ -947,6 +978,7 @@ mod tests {
         });
         let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(true);
+        let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
         let params = Params {
             episode_id: None,
