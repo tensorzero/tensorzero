@@ -292,7 +292,7 @@ impl BaseTensorZeroGateway {
         let tool_choice = if let Some(tool_choice) = tool_choice {
             if tool_choice.is_instance_of::<PyString>() {
                 Some(
-                    serde_json::from_value(tool_choice.str()?.to_str()?.into()).map_err(|e| {
+                    serde_json::from_value(tool_choice.str()?.to_cow()?.into()).map_err(|e| {
                         PyValueError::new_err(format!(
                             "Failed to parse tool_choice as valid JSON: {e:?}"
                         ))
@@ -354,7 +354,7 @@ impl TensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (gateway_url, *, timeout=None))]
+    #[pyo3(signature = (*, gateway_url, timeout=None))]
     /// Initialize the TensorZero client, using the HTTP gateway.
     /// :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
@@ -593,7 +593,7 @@ impl AsyncTensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (gateway_url, *, timeout=None))]
+    #[pyo3(signature = (*, gateway_url, timeout=None))]
     fn build_http<'a>(
         cls: &Bound<'a, PyType>,
         gateway_url: &str,

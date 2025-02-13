@@ -18,6 +18,7 @@ uv run pytest
 ```
 """
 
+import json
 import os
 import threading
 import time
@@ -57,7 +58,7 @@ class ClientType(Enum):
 async def async_client(request):
     if request.param == ClientType.HttpGateway:
         async with await AsyncTensorZeroGateway.build_http(
-            "http://localhost:3000"
+            gateway_url="http://localhost:3000"
         ) as client:
             yield client
     else:
@@ -212,6 +213,37 @@ async def test_async_default_function_inference(async_client):
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
         "messages": [{"role": "user", "content": [RawText(value="Hello")]}],
+    }
+    input_copy = deepcopy(input)
+    result = await async_client.inference(
+        model_name="dummy::test",
+        input=input,
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
+        tags={"key": "value"},
+    )
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::test"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
+@pytest.mark.asyncio
+async def test_async_default_function_inference_plain_dict(async_client):
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [
+            {"role": "user", "content": [{"type": "raw_text", "value": "Hello"}]}
+        ],
     }
     input_copy = deepcopy(input)
     result = await async_client.inference(
@@ -645,7 +677,9 @@ async def test_async_error():
 @pytest.fixture(params=[ClientType.HttpGateway, ClientType.EmbeddedGateway])
 def sync_client(request):
     if request.param == ClientType.HttpGateway:
-        with TensorZeroGateway.build_http("http://localhost:3000") as client:
+        with TensorZeroGateway.build_http(
+            gateway_url="http://localhost:3000"
+        ) as client:
             yield client
     else:
         with TensorZeroGateway.build_embedded(
@@ -1106,6 +1140,47 @@ def test_sync_basic_inference_with_content_block(sync_client):
                             result="success",
                             id="1",
                         ),
+                    ],
+                }
+            ],
+        },
+    )
+    assert result.variant_name == "test"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
+def test_sync_basic_inference_with_content_block_plain_dict(sync_client):
+    result = sync_client.inference(
+        function_name="basic_test",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "value": "Hello"},
+                        {
+                            "type": "tool_call",
+                            "id": "1",
+                            "name": "test",
+                            "arguments": json.dumps({"arg": "value"}),
+                        },
+                        {
+                            "type": "tool_result",
+                            "name": "test",
+                            "result": "success",
+                            "id": "1",
+                        },
                     ],
                 }
             ],

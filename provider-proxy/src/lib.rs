@@ -10,11 +10,12 @@ mod tls;
 use std::io::Write;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::{fs::OpenOptions, future::Future};
 
 use anyhow::Context as _;
 use bytes::{Bytes, BytesMut};
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use http::HeaderValue;
 use http_body_util::{combinators::BoxBody, BodyExt, Full};
 use hyper::service::service_fn;
@@ -64,7 +65,9 @@ fn save_cache_body(
     tracing::info!(path = path_str, "Finished processing request");
     match OpenOptions::new().write(true).create_new(true).open(&path) {
         Ok(mut file) => {
-            let mut reconstructed = hyper::Response::from_parts(parts, body);
+            let body_str = String::from_utf8(body.to_vec())
+                .with_context(|| format!("Failed to convert body to string for path {path_str}"))?;
+            let mut reconstructed = hyper::Response::from_parts(parts, body_str);
             reconstructed.extensions_mut().clear();
             let json_response =
                 http_serde_ext::response::serialize(&reconstructed, serde_json::value::Serializer)
@@ -102,12 +105,24 @@ async fn check_cache<
     T: Future<Output = Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error>>,
     F: FnOnce() -> T,
 >(
-    cache_path: PathBuf,
+    args: &Args,
     request: &hyper::Request<Bytes>,
     missing: F,
 ) -> Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error> {
     let mut request = request.clone();
     request.extensions_mut().clear();
+    let mut sanitized_header = false;
+    if args.sanitize_bearer_auth {
+        if let Some(auth_header) = request.headers().get("Authorization") {
+            if auth_header.to_str().unwrap().starts_with("Bearer ") {
+                request.headers_mut().insert(
+                    "Authorization",
+                    HeaderValue::from_static("Bearer TENSORZERO_PROVIDER_PROXY_TOKEN"),
+                );
+                sanitized_header = true;
+            }
+        }
+    }
     let json_request = http_serde_ext::request::serialize(&request, serde_json::value::Serializer)
         .with_context(|| "Failed to serialize request")?;
     let hash = hash_value(&json_request)?;
@@ -117,10 +132,10 @@ async fn check_cache<
         hash
     );
 
-    let path = cache_path.join(filename);
+    let path = args.cache_path.join(filename);
     let path_str = path.to_string_lossy().into_owned();
     let (mut resp, cache_hit) = if path.exists() {
-        tracing::info!("Cache hit: {}", path_str);
+        tracing::info!(sanitized_header, "Cache hit: {}", path_str);
         let path_str_clone = path_str.clone();
         let resp = tokio::task::spawn_blocking(move || {
             let file = std::fs::read_to_string(path)
@@ -159,21 +174,27 @@ async fn check_cache<
             // We need to clear the extensions in order to be able to serialize the response
             hyper_response.extensions_mut().clear();
 
+            let write = args.write;
+
             // Start streaming the response to the client, running the provided callback once the whole body has been received
             // This lets us forward streaming responses without needing to wait for the entire response, while
             // still caching the entire response to disk.
+            // Note that we make a `StreamingBodyCollector` even when `write` is false, so that
+            // the HTTP behavior is consistent regardless of whether `write` is enabled.
             let body_collector = hyper_response.map(|b| {
                 StreamingBodyCollector::new(
                     b,
                     Box::new(move |body| {
-                        tokio::task::spawn_blocking(move || {
-                            if let Err(e) = save_cache_body(path, parts, body) {
-                                tracing::error!(
-                                    err = e.as_ref() as &dyn std::error::Error,
-                                    "Failed to save cache body"
-                                );
-                            }
-                        });
+                        if write {
+                            tokio::task::spawn_blocking(move || {
+                                if let Err(e) = save_cache_body(path, parts, body) {
+                                    tracing::error!(
+                                        err = e.as_ref() as &dyn std::error::Error,
+                                        "Failed to save cache body"
+                                    );
+                                }
+                            });
+                        }
                     }),
                 )
             });
@@ -199,6 +220,14 @@ pub struct Args {
     /// Port to listen on
     #[arg(long, default_value = "3003")]
     pub port: u16,
+    /// If `true`, replaces `Authorization: Bearer <token>` with `Authorization: Bearer TENSORZERO_PROVIDER_PROXY_TOKEN`
+    /// when constructing a cache key.
+    #[arg(long, default_value = "true")]
+    pub sanitize_bearer_auth: bool,
+    /// Whether to write to the cache when a cache miss occurs.
+    /// If false, the proxy will still read existing entries from the cache, but not write new ones.
+    #[arg(long, action = ArgAction::Set, default_value_t = true, num_args = 1)]
+    pub write: bool,
 }
 
 pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>) {
@@ -212,6 +241,8 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
         )
         .try_init()
         .unwrap();
+
+    let args = Arc::new(args);
 
     std::fs::create_dir_all(&args.cache_path).expect("Failed to create cache directory");
 
@@ -228,12 +259,13 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
     );
 
     let client = reqwest::Client::new();
+    let args_clone = args.clone();
     let (server_addr, server) = proxy
         .bind(
             ("127.0.0.1", args.port),
             service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
                 let client = client.clone();
-                let cache_path = args.cache_path.clone();
+                let args = args_clone.clone();
                 async move {
                     let (parts, body) = req.into_parts();
                     let body_bytes = body
@@ -242,7 +274,7 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
                         .with_context(|| "Failed to collect body")?
                         .to_bytes();
                     let bytes_request = hyper::Request::from_parts(parts, body_bytes);
-                    let response = check_cache(cache_path, &bytes_request, || async {
+                    let response = check_cache(&args, &bytes_request, || async {
                         let request: reqwest::Request =
                             bytes_request.clone().try_into().with_context(|| {
                                 "Failed to convert Request from `hyper` to `reqwest`"
@@ -258,7 +290,7 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
         .await
         .unwrap();
 
-    tracing::info!("HTTP Proxy is listening on http://{server_addr}");
+    tracing::info!(?args, "HTTP Proxy is listening on http://{server_addr}");
     server_started
         .send(server_addr)
         .expect("Failed to send server started signal");
