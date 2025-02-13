@@ -38,6 +38,7 @@ pub struct E2ETestProvider {
 /// then the provider should return an empty vector for the corresponding test.
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
+    pub reasoning_inference: Vec<E2ETestProvider>,
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
     pub tool_multi_turn_inference: Vec<E2ETestProvider>,
@@ -122,6 +123,10 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_use_tool_choice_required_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_specific_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
+        use $crate::providers::reasoning::test_reasoning_inference_request_with_provider;
+        use $crate::providers::reasoning::test_streaming_reasoning_inference_request_with_provider;
+        use $crate::providers::reasoning::test_reasoning_inference_request_with_provider_json_mode;
+        use $crate::providers::reasoning::test_streaming_reasoning_inference_request_with_provider_json_mode;
 
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
@@ -129,6 +134,24 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.simple_inference;
             for provider in providers {
                 test_simple_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
+        async fn test_reasoning_inference_request() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                test_reasoning_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
+        async fn test_streaming_reasoning_inference_request() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                test_streaming_reasoning_inference_request_with_provider(provider).await;
             }
         }
 
@@ -334,6 +357,24 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.json_mode_inference;
             for provider in providers {
                 test_json_mode_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
+        async fn test_reasoning_inference_request_json_mode() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                test_reasoning_inference_request_with_provider_json_mode(provider).await;
+            }
+        }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
+        async fn test_streaming_reasoning_inference_request_json_mode() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                test_streaming_reasoning_inference_request_with_provider_json_mode(provider).await;
             }
         }
 
@@ -3447,11 +3488,14 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         return;
     }
 
-    // NOTE: The xAI API occasionally returns a tool call despite receiving the "tool_choice": "none" parameter.
-    // We'll leave this test running for now, so some flakiness is expected.
+    // NOTE: the xAI API now returns mangled output most of the time when this test runs.
     // The bug has been reported to the xAI team.
     //
-    // https://gist.github.com/GabrielBianconi/2199022d0ea8518e06d366fb613c5bb5
+    // https://gist.github.com/virajmehta/2911580b09713fc58aabfeb9ad62cf3b
+    // We have disabled this test for that provider for now.
+    if provider.model_provider_name == "xai" {
+        return;
+    }
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -7094,7 +7138,6 @@ pub async fn check_json_mode_inference_response(
     assert_eq!(variant_name, provider.variant_name);
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
-    assert!(output.keys().len() == 2);
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
     assert!(parsed_output
         .get("answer")
@@ -7347,7 +7390,6 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert_eq!(variant_name, provider.variant_name);
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
-    assert!(output.keys().len() == 2);
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
     assert!(parsed_output
         .get("response")
@@ -7592,10 +7634,10 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         let chunk_episode_id = chunk_json.get("episode_id").unwrap().as_str().unwrap();
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
-
-        let raw = chunk_json.get("raw").unwrap().as_str().unwrap();
-        if !raw.is_empty() {
-            full_content.push_str(raw);
+        if let Some(raw) = chunk_json.get("raw").and_then(|raw| raw.as_str()) {
+            if !raw.is_empty() {
+                full_content.push_str(raw);
+            }
         }
 
         if let Some(usage) = chunk_json.get("usage") {

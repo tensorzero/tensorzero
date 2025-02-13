@@ -4,7 +4,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
-    inference::types::{ContentBlockOutput, JsonInferenceOutput, Role, Text},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text},
 };
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
@@ -244,7 +244,7 @@ async fn e2e_test_demonstration_feedback() {
     let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
     assert_eq!(retrieved_inference_id_uuid, inference_id);
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
-    let expected_value = serde_json::to_string(&json!(vec![ContentBlockOutput::Text(Text {
+    let expected_value = serde_json::to_string(&json!(vec![ContentBlockChatOutput::Text(Text {
         text: "do this!".to_string()
     })]))
     .unwrap();
@@ -365,11 +365,11 @@ async fn e2e_test_demonstration_feedback_json() {
     let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
     assert_eq!(retrieved_inference_id_uuid, inference_id);
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
-    let expected_value = serde_json::to_string(&JsonInferenceOutput {
+    let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
+    let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo"})),
         raw: "{\"answer\":\"Tokyo\"}".to_string(),
-    })
-    .unwrap();
+    };
     assert_eq!(retrieved_value, expected_value);
 
     // Try it for an episode (should 400)

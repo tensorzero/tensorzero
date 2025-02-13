@@ -45,6 +45,7 @@ async fn get_providers() -> E2ETestProviders {
     // TODOs (#169): Implement a solution for vLLM tool use
     E2ETestProviders {
         simple_inference: providers.clone(),
+        reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
         tool_use_inference: vec![],
         tool_multi_turn_inference: vec![],

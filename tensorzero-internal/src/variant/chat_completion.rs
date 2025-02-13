@@ -395,7 +395,7 @@ mod tests {
     use crate::inference::providers::common::get_temperature_tool_config;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::inference::types::{
-        ContentBlockOutput, InferenceResultChunk, ModelInferenceRequestJsonMode, Usage,
+        ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode, Usage,
     };
     use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
     use crate::minijinja_util::tests::get_test_template_config;
@@ -1041,7 +1041,7 @@ mod tests {
                 assert_eq!(chat_response.content.len(), 1);
                 let tool_call = &chat_response.content[0];
                 match tool_call {
-                    ContentBlockOutput::ToolCall(tool_call) => {
+                    ContentBlockChatOutput::ToolCall(tool_call) => {
                         assert_eq!(tool_call.raw_name, "get_temperature");
                         assert_eq!(
                             tool_call.raw_arguments,
