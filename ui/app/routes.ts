@@ -35,6 +35,6 @@ export default [
   route("observability/episodes", "routes/observability/episodes/route.tsx"),
   route(
     "observability/functions/:function_name/variants/:variant_name",
-    "routes/observability/functions/$function_name/variant/route.tsx",
+    "routes/observability/functions/$function_name/variants/route.tsx",
   ),
 ] satisfies RouteConfig;
