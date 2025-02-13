@@ -47,23 +47,24 @@ uv run python
 The TensorZero client comes in both synchronous (`TensorZeroGateway`) and asynchronous (`AsyncTensorZeroGateway`) variants.
 Each of these classes can be constructed in one of two ways:
 
-- HTTP gateway mode. This constructs a client that makes requests to the specified TensorZero HTTP gateway:
+- HTTP gateway mode. This constructs a client that makes requests to the specified TensorZero HTTP gateway.
+  Note that `AsyncTensorZeroGateway.build_http` returns a `Future`, which you must `await` to get the client.
 
 ```python
 from tensorzero import TensorZeroGateway, AsyncTensorZeroGateway
 
-client = TensorZeroGateway(base_url="http://localhost:3000")
-async_client = AsyncTensorZeroGateway(base_url="http://localhost:3000")
+client = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
+async_client = await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000")
 ```
 
 - Embedded gateway mode. This starts an in-memory TensorZero gateway using the provided config file and Clickhouse url
-  Note that `AsyncTensorZeroGateway.create_embedded_gateway` returns a `Future`, which you must `await` to get the client.
+  Note that `AsyncTensorZeroGateway.build_embedded` returns a `Future`, which you must `await` to get the client.
 
 ```python
 from tensorzero import TensorZeroGateway, AsyncTensorZeroGateway
 
-client = TensorZeroGateway.create_embedded_gateway(config_path="/path/to/tensorzero.toml", clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e")
-async_client = await AsyncTensorZeroGateway.create_embedded_gateway(config_path="/path/to/tensorzero.toml", clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e")
+client = TensorZeroGateway.build_embedded(config_path="/path/to/tensorzero.toml", clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e")
+async_client = await AsyncTensorZeroGateway.build_embedded(config_path="/path/to/tensorzero.toml", clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e")
 ```
 
 ### Non-Streaming Inference
@@ -75,7 +76,7 @@ from tensorzero import AsyncTensorZeroGateway
 
 
 async def run(topic):
-    async with AsyncTensorZeroGateway("http://localhost:3000") as client:
+    async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
         result = await client.inference(
             function_name="generate_haiku",
             input={
@@ -101,7 +102,7 @@ from tensorzero import AsyncTensorZeroGateway
 
 
 async def run(topic):
-    async with AsyncTensorZeroGateway("http://localhost:3000") as client:
+    async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
         stream = await client.inference(
             function_name="generate_haiku",
             input={
@@ -130,7 +131,7 @@ from tensorzero import AsyncTensorZeroGateway
 
 
 async def run(inference_id):
-    async with AsyncTensorZeroGateway("http://localhost:3000") as client:
+    async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
         result = await client.feedback(
             metric_name="thumbs_up",
             inference_id=inference_id,
