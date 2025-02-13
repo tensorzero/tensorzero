@@ -41,7 +41,7 @@ export default function FunctionsTable({
     return {
       function_name,
       count: countInfo ? countInfo.count : 0,
-      max_timestamp: countInfo ? countInfo.max_timestamp : "unused",
+      max_timestamp: countInfo ? countInfo.max_timestamp : "Never",
       type,
     };
   });
@@ -76,8 +76,8 @@ export default function FunctionsTable({
                 </TableCell>
                 <TableCell>{count}</TableCell>
                 <TableCell>
-                  {max_timestamp === "unused"
-                    ? "unused"
+                  {max_timestamp === "Never"
+                    ? "Never"
                     : formatDate(new Date(max_timestamp))}
                 </TableCell>
               </TableRow>
