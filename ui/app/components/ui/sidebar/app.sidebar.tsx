@@ -65,7 +65,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <img
                     src="https://www.tensorzero.com/favicon.svg"
                     alt="TensorZero logo"
-                    className="size-full"
+                    className="size-full flex items-center justify-center"
                   />
                 </div>
                 <span className="font-semibold">TensorZero</span>
