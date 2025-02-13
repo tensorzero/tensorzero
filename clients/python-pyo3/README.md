@@ -132,6 +132,8 @@ async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost
 
 #### Streaming
 
+##### Synchronous
+
 ```python
 with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
     stream = client.inference(
