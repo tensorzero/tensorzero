@@ -21,7 +21,6 @@ export async function loadConfig(config_path?: string): Promise<Config> {
       throw new Error(`Configuration file not found at ${config_path}`);
     }
   } else {
-    console.warn("TENSORZERO_UI_CONFIG_PATH is not set.");
     // If the env var is not set, try the default location.
     try {
       await fs.access(DEFAULT_CONFIG_PATH);
@@ -29,7 +28,7 @@ export async function loadConfig(config_path?: string): Promise<Config> {
       console.info(`Found default config at ${DEFAULT_CONFIG_PATH}`);
     } catch {
       console.warn(
-        `Default config file not found at ${DEFAULT_CONFIG_PATH}. Using blank config.`,
+        `Config file not found at ${DEFAULT_CONFIG_PATH}. Using blank config.`,
       );
       // Return a blank config if no file is available.
       return {
