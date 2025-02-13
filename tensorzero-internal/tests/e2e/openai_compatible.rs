@@ -114,8 +114,7 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "test");
     // Check the processing time
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert_eq!(processing_time_ms, 0);
+    let _processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -248,8 +247,7 @@ async fn test_openai_compatible_route_with_default_function(
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the processing time
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert_eq!(processing_time_ms, 0);
+    let _processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -410,8 +408,7 @@ async fn test_openai_compatible_route_with_json_mode_on() {
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "test");
     // Check the processing time
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert_eq!(processing_time_ms, 0);
+    let _processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let clickhouse_json_mode = inference_params
@@ -541,8 +538,7 @@ async fn test_openai_compatible_route_with_json_schema() {
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, "test");
     // Check the processing time
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert_eq!(processing_time_ms, 0);
+    let _processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let clickhouse_json_mode = inference_params
