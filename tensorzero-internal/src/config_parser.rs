@@ -63,7 +63,7 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
                 }));
             }
             (true, None) => {
-                tracing::warn!("Deprecation Warning: The configuration flag `gateway.disable_observability.enabled` is deprecated in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.");
+                tracing::warn!("Deprecation Warning: The configuration flag `gateway.disable_observability` is deprecated in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.");
                 Some(false)
             }
             (false, Some(enabled)) => Some(enabled),
@@ -71,7 +71,10 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
         };
         Ok(Self {
             bind_address: config.bind_address,
-            observability: ObservabilityConfig { enabled },
+            observability: ObservabilityConfig {
+                enabled,
+                r#async: config.observability.r#async,
+            },
             debug: config.debug,
         })
     }
@@ -82,6 +85,8 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
 pub struct ObservabilityConfig {
     #[serde(default)]
     pub enabled: Option<bool>,
+    #[serde(default)]
+    pub r#async: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -660,6 +665,8 @@ mod tests {
             }
             _ => panic!("Expected a chat function"),
         }
+        // Check that the async flag is set to false by default
+        assert!(!config.gateway.observability.r#async);
 
         // To test that variant default weights work correctly,
         // We check `functions.templates_with_variables_json.variants.variant_with_variables.weight`
