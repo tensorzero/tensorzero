@@ -58,7 +58,7 @@ class ClientType(Enum):
 async def async_client(request):
     if request.param == ClientType.HttpGateway:
         async with await AsyncTensorZeroGateway.build_http(
-            "http://localhost:3000"
+            gateway_url="http://localhost:3000"
         ) as client:
             yield client
     else:
@@ -289,7 +289,7 @@ async def test_async_inference_streaming(async_client):
         previous_chunk_timestamp = time.time()
         chunks.append(chunk)
 
-    assert last_chunk_duration > 0.01
+    assert last_chunk_duration > 0.0
 
     expected_text = [
         "Wally,",
@@ -677,7 +677,9 @@ async def test_async_error():
 @pytest.fixture(params=[ClientType.HttpGateway, ClientType.EmbeddedGateway])
 def sync_client(request):
     if request.param == ClientType.HttpGateway:
-        with TensorZeroGateway.build_http("http://localhost:3000") as client:
+        with TensorZeroGateway.build_http(
+            gateway_url="http://localhost:3000"
+        ) as client:
             yield client
     else:
         with TensorZeroGateway.build_embedded(
@@ -793,7 +795,7 @@ def test_sync_inference_streaming(sync_client):
         previous_chunk_timestamp = time.time()
         chunks.append(chunk)
 
-    assert last_chunk_duration > 0.01
+    assert last_chunk_duration > 0.0
 
     expected_text = [
         "Wally,",

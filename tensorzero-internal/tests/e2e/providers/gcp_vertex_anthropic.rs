@@ -28,6 +28,12 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "gcp_vertex_anthropic".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            variant_name: "gcp-vertex-haiku-default".to_string(),
+            model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
+            model_provider_name: "gcp_vertex_anthropic".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     E2ETestProviders {

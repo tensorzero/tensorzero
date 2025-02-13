@@ -27,12 +27,20 @@ async fn get_providers() -> E2ETestProviders {
         credentials,
     }];
 
-    let json_providers = vec![E2ETestProvider {
-        variant_name: "together".to_string(),
-        model_name: "llama3.1-8b-instruct-together".into(),
-        model_provider_name: "together".into(),
-        credentials: HashMap::new(),
-    }];
+    let json_providers = vec![
+        E2ETestProvider {
+            variant_name: "together".to_string(),
+            model_name: "llama3.1-8b-instruct-together".into(),
+            model_provider_name: "together".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            variant_name: "together-default".to_string(),
+            model_name: "llama3.1-8b-instruct-together".into(),
+            model_provider_name: "together".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let tool_providers = vec![E2ETestProvider {
         variant_name: "together-tool".to_string(),

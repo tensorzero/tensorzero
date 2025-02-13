@@ -811,28 +811,29 @@ fn prepare_tools<'a>(
     }
 }
 
-fn process_output_schema(output_schema: &Value) -> Result<Value, Error> {
+pub(crate) fn process_output_schema(output_schema: &Value) -> Result<Value, Error> {
     let mut schema = output_schema.clone();
 
-    /// Recursively remove all instances of "additionalProperties"
-    fn remove_additional_properties(value: &mut Value) {
+    /// Recursively remove all instances of "additionalProperties" and "$schema"
+    fn remove_properties(value: &mut Value) {
         match value {
             Value::Object(obj) => {
                 obj.remove("additionalProperties");
+                obj.remove("$schema");
                 for (_, v) in obj.iter_mut() {
-                    remove_additional_properties(v);
+                    remove_properties(v);
                 }
             }
             Value::Array(arr) => {
                 for v in arr.iter_mut() {
-                    remove_additional_properties(v);
+                    remove_properties(v);
                 }
             }
             _ => {}
         }
     }
 
-    remove_additional_properties(&mut schema);
+    remove_properties(&mut schema);
     Ok(schema)
 }
 
@@ -1939,6 +1940,7 @@ mod tests {
             processed_schema_no_additional,
             output_schema_without_additional
         );
+
         // Test with a schema that includes recursive additionalProperties
         let output_schema_recursive = json!({
             "type": "object",
@@ -1980,6 +1982,49 @@ mod tests {
         });
         let processed_schema_recursive = process_output_schema(&output_schema_recursive).unwrap();
         assert_eq!(processed_schema_recursive, expected_processed_schema);
+
+        // Test with schema containing $schema at top level and in child objects
+        let output_schema_with_schema_fields = json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "nested": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "value": {"type": "string"}
+                    }
+                },
+                "array": {
+                    "type": "array",
+                    "items": {
+                        "$schema": "http://json-schema.org/draft-07/schema#",
+                        "type": "string"
+                    }
+                }
+            }
+        });
+        let expected_schema_without_schema_fields = json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "nested": {
+                    "type": "object",
+                    "properties": {
+                        "value": {"type": "string"}
+                    }
+                },
+                "array": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        });
+        let processed_schema = process_output_schema(&output_schema_with_schema_fields).unwrap();
+        assert_eq!(processed_schema, expected_schema_without_schema_fields);
     }
 
     #[test]

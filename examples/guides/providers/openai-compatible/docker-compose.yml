@@ -7,6 +7,8 @@ services:
     volumes:
       - ./config:/app/config:ro
     # environment:
-      # - OLLAMA_API_KEY=${OLLAMA_API_KEY:?Environment variable OLLAMA_API_KEY must be set.}
+    #   - OLLAMA_API_KEY=${OLLAMA_API_KEY:?Environment variable OLLAMA_API_KEY must be set.}
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

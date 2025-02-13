@@ -354,7 +354,7 @@ impl TensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (gateway_url, *, timeout=None))]
+    #[pyo3(signature = (*, gateway_url, timeout=None))]
     /// Initialize the TensorZero client, using the HTTP gateway.
     /// :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
@@ -593,7 +593,7 @@ impl AsyncTensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (gateway_url, *, timeout=None))]
+    #[pyo3(signature = (*, gateway_url, timeout=None))]
     fn build_http<'a>(
         cls: &Bound<'a, PyType>,
         gateway_url: &str,

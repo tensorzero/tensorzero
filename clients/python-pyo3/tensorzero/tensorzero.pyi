@@ -32,7 +32,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
     @classmethod
     def build_http(
-        cls, gateway_url: str, *, timeout: Optional[float] = None
+        cls, *, gateway_url: str, timeout: Optional[float] = None
     ) -> "TensorZeroGateway":
         """
         Build a TensorZeroGateway instance.
@@ -155,7 +155,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
     @classmethod
     async def build_http(
-        cls, gateway_url: str, *, timeout: Optional[float] = None
+        cls, *, gateway_url: str, timeout: Optional[float] = None
     ) -> "AsyncTensorZeroGateway":
         """
         Build an AsyncTensorZeroGateway instance.

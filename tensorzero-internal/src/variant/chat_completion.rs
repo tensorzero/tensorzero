@@ -1240,6 +1240,7 @@ mod tests {
                 top_p: Some(0.9),
                 presence_penalty: Some(0.1),
                 frequency_penalty: Some(0.2),
+                json_mode: None,
             },
         };
         // Will dynamically set "answer" instead of "response"
@@ -1402,6 +1403,7 @@ mod tests {
                         top_p: Some(0.9),
                         presence_penalty: Some(0.1),
                         frequency_penalty: Some(0.2),
+                        json_mode: None,
                     },
                 };
                 assert_eq!(json_result.inference_params, expected_inference_params);
@@ -1669,6 +1671,7 @@ mod tests {
                 top_p: Some(0.9),
                 presence_penalty: Some(0.1),
                 frequency_penalty: Some(0.2),
+                json_mode: None,
             },
         };
         let model_request = chat_completion_config
