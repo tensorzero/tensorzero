@@ -2,6 +2,7 @@ import * as React from "react";
 import { ChevronRight, ChevronLeft, FileText, ChartSpline, Layers, SquareFunction, View } from "lucide-react";
 import { useSidebar } from "~/components/ui/sidebar";
 import { cn } from "~/utils/common";
+import { useActivePath } from "~/hooks/use-active-path";
 
 import {
   Sidebar,
@@ -53,13 +54,14 @@ const navigation = [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { state } = useSidebar();
+  const isActivePath = useActivePath();
   
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
+            <SidebarMenuButton size="lg" asChild isActive={isActivePath("/")}>
               <a href="/" className="flex items-center gap-2">
                 <div className="flex aspect-square size-8 items-center justify-center">
                   <img
@@ -92,6 +94,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <SidebarMenuButton 
                     asChild
                     tooltip={state === "collapsed" ? item.title : undefined}
+                    isActive={isActivePath(item.url)}
                   >
                     <a
                       href={item.url}

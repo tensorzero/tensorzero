@@ -57,13 +57,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+
+
 export default function App() {
   const config = useLoaderData<typeof loader>();
-  const [open, setOpen] = useState(true);
   
   return (
     <ConfigProvider value={config}>
-      <SidebarProvider defaultOpen={true} open={open} onOpenChange={setOpen}>
+      <SidebarProvider defaultOpen={true}>
         <div className="flex min-h-screen w-full">
           <AppSidebar />
           <main className="flex-1 overflow-y-auto px-12 max-md:px-4">
