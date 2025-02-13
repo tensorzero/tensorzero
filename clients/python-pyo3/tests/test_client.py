@@ -58,7 +58,7 @@ class ClientType(Enum):
 async def async_client(request):
     if request.param == ClientType.HttpGateway:
         async with await AsyncTensorZeroGateway.build_http(
-            "http://localhost:3000"
+            gateway_url="http://localhost:3000"
         ) as client:
             yield client
     else:
@@ -677,7 +677,9 @@ async def test_async_error():
 @pytest.fixture(params=[ClientType.HttpGateway, ClientType.EmbeddedGateway])
 def sync_client(request):
     if request.param == ClientType.HttpGateway:
-        with TensorZeroGateway.build_http("http://localhost:3000") as client:
+        with TensorZeroGateway.build_http(
+            gateway_url="http://localhost:3000"
+        ) as client:
             yield client
     else:
         with TensorZeroGateway.build_embedded(
