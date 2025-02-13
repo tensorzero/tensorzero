@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
 use reqwest::Client;
-#[cfg(feature = "e2e_tests")]
 use reqwest::StatusCode;
-#[cfg(feature = "e2e_tests")]
 use serde_json::json;
 use serde_json::Value;
 use tensorzero_internal::{
@@ -11,10 +9,8 @@ use tensorzero_internal::{
     endpoints::inference::InferenceCredentials,
     inference::types::{Latency, ModelInferenceRequestJsonMode},
 };
-#[cfg(feature = "e2e_tests")]
 use uuid::Uuid;
 
-#[cfg(feature = "e2e_tests")]
 use crate::common::{
     get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
     select_model_inference_clickhouse,
@@ -490,6 +486,7 @@ async fn test_chat_function_json_override_with_mode_implicit_tool() {
     );
 }
 
+#[cfg_attr(feature = "batch_tests", allow(unused))]
 async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceRequestJsonMode) {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
