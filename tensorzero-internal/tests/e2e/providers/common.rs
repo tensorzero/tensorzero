@@ -3196,11 +3196,14 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // NOTE: The xAI API occasionally returns a tool call despite receiving the "tool_choice": "none" parameter.
-    // We'll leave this test running for now, so some flakiness is expected.
+    // NOTE: The xAI API occasionally returns mangled output most of the time when this test runs.
     // The bug has been reported to the xAI team.
     //
-    // https://gist.github.com/GabrielBianconi/2199022d0ea8518e06d366fb613c5bb5
+    // https://gist.github.com/virajmehta/2911580b09713fc58aabfeb9ad62cf3b
+    // We have disabled this test for that provider for now.
+    if provider.model_provider_name == "xai" {
+        return;
+    }
 
     let episode_id = Uuid::now_v7();
 
@@ -5384,7 +5387,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                             "type": "tool_result",
                             "id": "123456789",
                             "name": "get_temperature",
-                            "result": "70"
+                            "result": "30"
                         }
                     ]
                 }
@@ -5517,7 +5520,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                         "type": "tool_result",
                         "id": "123456789",
                         "name": "get_temperature",
-                        "result": "70"
+                        "result": "30"
                     }
                 ]
             }
@@ -5638,7 +5641,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
             content: vec![ContentBlock::ToolResult(ToolResult {
                 id: "123456789".to_string(),
                 name: "get_temperature".to_string(),
-                result: "70".to_string(),
+                result: "30".to_string(),
             })],
         },
     ];
