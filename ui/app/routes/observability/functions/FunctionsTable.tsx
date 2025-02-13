@@ -31,11 +31,11 @@ export default function FunctionsTable({
     const function_config = functions[function_name] || null;
 
     // Special handling: if the function name is 'tensorzero::default', type is 'chat'
-    let type: "chat" | "json" | "???";
+    let type: "chat" | "json" | "?";
     if (function_config) {
       type = function_config.type;
     } else {
-      type = "???";
+      type = "?";
     }
 
     return {
