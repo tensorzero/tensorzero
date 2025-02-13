@@ -374,7 +374,7 @@ pub async fn inference(
                     )
                     .await;
                 };
-                if config.gateway.observability.r#async {
+                if config.gateway.observability.async_writes {
                     tokio::spawn(write_future);
                 } else {
                     write_future.await;
@@ -500,7 +500,7 @@ fn create_stream(
             } = metadata;
 
             let config = config.clone();
-            let async_write = config.gateway.observability.r#async;
+            let async_write = config.gateway.observability.async_writes;
             let write_future = async move {
                 let templates = &config.templates;
                 let collect_chunks_args = CollectChunksArgs {

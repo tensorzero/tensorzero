@@ -159,7 +159,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(false),
-                r#async: false,
+                async_writes: false,
             },
             bind_address: None,
             debug: false,
@@ -183,7 +183,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: None,
-                r#async: false,
+                async_writes: false,
             },
             ..Default::default()
         };
@@ -207,7 +207,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
-                r#async: false,
+                async_writes: false,
             },
             bind_address: None,
             debug: false,
@@ -227,7 +227,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
-                r#async: false,
+                async_writes: false,
             },
             bind_address: None,
             debug: false,
@@ -249,7 +249,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
-                r#async: false,
+                async_writes: false,
             },
             bind_address: None,
             debug: false,

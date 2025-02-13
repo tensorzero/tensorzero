@@ -73,7 +73,7 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
             bind_address: config.bind_address,
             observability: ObservabilityConfig {
                 enabled,
-                r#async: config.observability.r#async,
+                async_writes: config.observability.async_writes,
             },
             debug: config.debug,
         })
@@ -86,7 +86,7 @@ pub struct ObservabilityConfig {
     #[serde(default)]
     pub enabled: Option<bool>,
     #[serde(default)]
-    pub r#async: bool,
+    pub async_writes: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -666,7 +666,7 @@ mod tests {
             _ => panic!("Expected a chat function"),
         }
         // Check that the async flag is set to false by default
-        assert!(!config.gateway.observability.r#async);
+        assert!(!config.gateway.observability.async_writes);
 
         // To test that variant default weights work correctly,
         // We check `functions.templates_with_variables_json.variants.variant_with_variables.weight`
