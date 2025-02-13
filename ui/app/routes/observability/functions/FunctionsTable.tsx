@@ -18,6 +18,21 @@ export default function FunctionsTable({
   functions: Record<string, FunctionConfig>;
   countsInfo: FunctionCountInfo[];
 }) {
+  // Merge the functions and countsInfo data. For functions not present in countsInfo,
+  // we default the count to 0 and max_timestamp to "unused".
+  // NOTE: We do not include functions that are not in the functions config.
+  const mergedFunctions = Object.keys(functions).map((function_name) => {
+    const countInfo = countsInfo.find(
+      (info) => info.function_name === function_name,
+    );
+    return {
+      function_name,
+      count: countInfo ? countInfo.count : 0,
+      max_timestamp: countInfo ? countInfo.max_timestamp : "Never",
+      function_config: functions[function_name],
+    };
+  });
+
   return (
     <div>
       <Table>
@@ -30,39 +45,31 @@ export default function FunctionsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {countsInfo.map((countInfo) => {
-            const function_config = functions[countInfo.function_name];
-            if (!function_config) {
-              console.warn(
-                `No function config found for ${countInfo.function_name}`,
-              );
-              return null;
-            }
-            return (
-              <TableRow
-                key={countInfo.function_name}
-                id={countInfo.function_name}
-              >
+          {mergedFunctions.map(
+            ({ function_name, count, max_timestamp, function_config }) => (
+              <TableRow key={function_name} id={function_name}>
                 <TableCell className="max-w-[200px] lg:max-w-none">
                   <a
-                    href={`/observability/function/${countInfo.function_name}`}
+                    href={`/observability/function/${function_name}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {countInfo.function_name}
+                      {function_name}
                     </code>
                   </a>
                 </TableCell>
                 <TableCell>
                   <Code>{function_config.type}</Code>
                 </TableCell>
-                <TableCell>{countInfo.count}</TableCell>
+                <TableCell>{count}</TableCell>
                 <TableCell>
-                  {formatDate(new Date(countInfo.max_timestamp))}
+                  {max_timestamp === "Never"
+                    ? "Never"
+                    : formatDate(new Date(max_timestamp))}
                 </TableCell>
               </TableRow>
-            );
-          })}
+            ),
+          )}
         </TableBody>
       </Table>
     </div>

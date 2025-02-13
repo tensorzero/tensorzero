@@ -119,6 +119,13 @@ system_template = "functions/answer_question/baseline/system_template.minijinja"
 # for honesty
 temperature = 0.5
 
+[functions.unleash_kraken]
+type = "chat"
+
+[functions.unleash_kraken.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
