@@ -18,18 +18,31 @@ export default function FunctionsTable({
   functions: Record<string, FunctionConfig>;
   countsInfo: FunctionCountInfo[];
 }) {
-  // Merge the functions and countsInfo data. For functions not present in countsInfo,
-  // we default the count to 0 and max_timestamp to "unused".
-  // NOTE: We do not include functions that are not in the functions config.
-  const mergedFunctions = Object.keys(functions).map((function_name) => {
+  // Create a union of all function names from both data sources.
+  const functionNamesSet = new Set<string>([
+    ...Object.keys(functions),
+    ...countsInfo.map((info) => info.function_name),
+  ]);
+
+  const mergedFunctions = Array.from(functionNamesSet).map((function_name) => {
     const countInfo = countsInfo.find(
       (info) => info.function_name === function_name,
     );
+    const function_config = functions[function_name] || null;
+
+    // Special handling: if the function name is 'tensorzero::default', type is 'chat'
+    let type: "chat" | "json" | "???";
+    if (function_config) {
+      type = function_config.type;
+    } else {
+      type = "???";
+    }
+
     return {
       function_name,
       count: countInfo ? countInfo.count : 0,
-      max_timestamp: countInfo ? countInfo.max_timestamp : "Never",
-      function_config: functions[function_name],
+      max_timestamp: countInfo ? countInfo.max_timestamp : "unused",
+      type,
     };
   });
 
@@ -46,7 +59,7 @@ export default function FunctionsTable({
         </TableHeader>
         <TableBody>
           {mergedFunctions.map(
-            ({ function_name, count, max_timestamp, function_config }) => (
+            ({ function_name, count, max_timestamp, type }) => (
               <TableRow key={function_name} id={function_name}>
                 <TableCell className="max-w-[200px] lg:max-w-none">
                   <a
@@ -59,12 +72,12 @@ export default function FunctionsTable({
                   </a>
                 </TableCell>
                 <TableCell>
-                  <Code>{function_config.type}</Code>
+                  <Code>{type}</Code>
                 </TableCell>
                 <TableCell>{count}</TableCell>
                 <TableCell>
-                  {max_timestamp === "Never"
-                    ? "Never"
+                  {max_timestamp === "unused"
+                    ? "unused"
                     : formatDate(new Date(max_timestamp))}
                 </TableCell>
               </TableRow>
