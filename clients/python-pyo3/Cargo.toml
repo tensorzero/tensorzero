@@ -1,9 +1,9 @@
 [package]
 # This is the name of the Rust crate (which shows up in the cargo output)
-# It's named 'tensorzero_python' to avoid confusion with the Rust client
+# It's named 'tensorzero-python' to avoid confusion with the Rust client
 # (which has a crate name of 'tensorzero')
-name = "tensorzero_python"
-version = "0.2.0"
+name = "tensorzero-python"
+version = "0.3.1"
 edition = "2021"
 license = "Apache-2.0"
 

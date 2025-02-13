@@ -632,7 +632,18 @@ impl InferenceResult {
             .iter()
             .map(|r| {
                 let model_inference = ModelInferenceDatabaseInsert::new(r.clone(), inference_id);
-                serde_json::to_value(model_inference).unwrap_or_default()
+                match serde_json::to_value(model_inference) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        ErrorDetails::Serialization {
+                            message: format!(
+                                "Failed to serialize ModelInferenceDatabaseInsert: {e:?}"
+                            ),
+                        }
+                        .log();
+                        Default::default()
+                    }
+                }
             })
             .collect()
     }

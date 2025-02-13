@@ -327,10 +327,7 @@ impl<'a> DeepSeekRequest<'a> {
         };
 
         if request.json_mode == ModelInferenceRequestJsonMode::Strict {
-            return Err(ErrorDetails::InvalidRequest {
-                message: "DeepSeek model does not support strict JSON mode.".to_string(),
-            }
-            .into());
+            tracing::warn!("DeepSeek provider does not support strict JSON mode. Downgrading to normal JSON mode.");
         }
 
         let response_format = Some(DeepSeekResponseFormat::new(&request.json_mode));
@@ -841,7 +838,12 @@ mod tests {
         };
 
         let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools);
-        assert!(deepseek_request.is_err());
+        let deepseek_request = deepseek_request.unwrap();
+        // We should downgrade the strict JSON mode to normal JSON mode for deepseek
+        assert_eq!(
+            deepseek_request.response_format,
+            Some(DeepSeekResponseFormat::JsonObject)
+        );
     }
 
     #[test]

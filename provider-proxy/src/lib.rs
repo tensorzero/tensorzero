@@ -65,7 +65,9 @@ fn save_cache_body(
     tracing::info!(path = path_str, "Finished processing request");
     match OpenOptions::new().write(true).create_new(true).open(&path) {
         Ok(mut file) => {
-            let mut reconstructed = hyper::Response::from_parts(parts, body);
+            let body_str = String::from_utf8(body.to_vec())
+                .with_context(|| format!("Failed to convert body to string for path {path_str}"))?;
+            let mut reconstructed = hyper::Response::from_parts(parts, body_str);
             reconstructed.extensions_mut().clear();
             let json_response =
                 http_serde_ext::response::serialize(&reconstructed, serde_json::value::Serializer)
@@ -109,6 +111,18 @@ async fn check_cache<
 ) -> Result<hyper::Response<BoxBody<Bytes, E>>, anyhow::Error> {
     let mut request = request.clone();
     request.extensions_mut().clear();
+    let mut sanitized_header = false;
+    if args.sanitize_bearer_auth {
+        if let Some(auth_header) = request.headers().get("Authorization") {
+            if auth_header.to_str().unwrap().starts_with("Bearer ") {
+                request.headers_mut().insert(
+                    "Authorization",
+                    HeaderValue::from_static("Bearer TENSORZERO_PROVIDER_PROXY_TOKEN"),
+                );
+                sanitized_header = true;
+            }
+        }
+    }
     let json_request = http_serde_ext::request::serialize(&request, serde_json::value::Serializer)
         .with_context(|| "Failed to serialize request")?;
     let hash = hash_value(&json_request)?;
@@ -121,7 +135,7 @@ async fn check_cache<
     let path = args.cache_path.join(filename);
     let path_str = path.to_string_lossy().into_owned();
     let (mut resp, cache_hit) = if path.exists() {
-        tracing::info!("Cache hit: {}", path_str);
+        tracing::info!(sanitized_header, "Cache hit: {}", path_str);
         let path_str_clone = path_str.clone();
         let resp = tokio::task::spawn_blocking(move || {
             let file = std::fs::read_to_string(path)
@@ -206,6 +220,10 @@ pub struct Args {
     /// Port to listen on
     #[arg(long, default_value = "3003")]
     pub port: u16,
+    /// If `true`, replaces `Authorization: Bearer <token>` with `Authorization: Bearer TENSORZERO_PROVIDER_PROXY_TOKEN`
+    /// when constructing a cache key.
+    #[arg(long, default_value = "true")]
+    pub sanitize_bearer_auth: bool,
     /// Whether to write to the cache when a cache miss occurs.
     /// If false, the proxy will still read existing entries from the cache, but not write new ones.
     #[arg(long, action = ArgAction::Set, default_value_t = true, num_args = 1)]

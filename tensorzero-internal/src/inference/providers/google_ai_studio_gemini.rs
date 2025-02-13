@@ -27,6 +27,8 @@ use crate::inference::types::{
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
+use super::gcp_vertex_gemini::process_output_schema;
+
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
 const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
@@ -649,31 +651,6 @@ fn prepare_tools<'a>(
         }
         None => (None, None),
     }
-}
-
-fn process_output_schema(output_schema: &Value) -> Result<Value, Error> {
-    let mut schema = output_schema.clone();
-
-    /// Recursively remove all instances of "additionalProperties"
-    fn remove_additional_properties(value: &mut Value) {
-        match value {
-            Value::Object(obj) => {
-                obj.remove("additionalProperties");
-                for (_, v) in obj.iter_mut() {
-                    remove_additional_properties(v);
-                }
-            }
-            Value::Array(arr) => {
-                for v in arr.iter_mut() {
-                    remove_additional_properties(v);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    remove_additional_properties(&mut schema);
-    Ok(schema)
 }
 
 #[derive(Debug, Deserialize, Serialize)]

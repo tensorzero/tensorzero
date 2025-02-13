@@ -1,13 +1,29 @@
+use std::path::PathBuf;
+
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text},
 };
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use crate::common::{clickhouse_flush_async_insert, get_clickhouse, get_gateway_endpoint};
+use crate::common::{
+    clickhouse_flush_async_insert, get_clickhouse, get_gateway_endpoint, CLICKHOUSE_URL,
+};
+
+async fn make_embedded_gateway() -> tensorzero::Client {
+    let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    config_path.push("tests/e2e/tensorzero.toml");
+    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+        config_path: Some(config_path),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+    })
+    .build()
+    .await
+    .unwrap()
+}
 
 #[tokio::test]
 async fn e2e_test_comment_feedback() {
@@ -946,4 +962,70 @@ async fn select_feedback_tags_clickhouse(
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_fast_inference_then_feedback() {
+    use serde_json::json;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    // Create the client and wrap it in an Arc for shared ownership.
+    let client = make_embedded_gateway().await;
+    let client = Arc::new(client);
+
+    // Create a collection of tasks, each making an inference then a feedback call.
+    let tasks: Vec<_> = (0..20)
+        .map(|_| {
+            let client = Arc::clone(&client);
+            tokio::spawn(async move {
+                let inference_payload = tensorzero::ClientInferenceParams {
+                    function_name: Some("basic_test".to_string()),
+                    model_name: None,
+                    variant_name: None,
+                    episode_id: None,
+                    input: tensorzero::Input {
+                        system: Some(json!({"assistant_name": "Alfred Pennyworth"})),
+                        messages: vec![tensorzero::InputMessage {
+                            role: Role::User,
+                            content: vec![tensorzero::InputMessageContent::Text {
+                                value: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
+                                    .to_string()
+                                    .into(),
+                            }],
+                        }],
+                    },
+                    stream: Some(false),
+                    ..Default::default()
+                };
+
+                // Send the inference request.
+                let response = client.inference(inference_payload).await.unwrap();
+                let response = if let tensorzero::InferenceOutput::NonStreaming(response) = response {
+                    response
+                } else {
+                    panic!("Expected non-streaming response");
+                };
+                let response = if let tensorzero::InferenceResponse::Chat(response) = response {
+                    response
+                } else {
+                    panic!("Expected chat response");
+                };
+                let inference_id = response.inference_id;
+
+                // Prepare and send the feedback request.
+                let feedback_payload = tensorzero::FeedbackParams {
+                    inference_id: Some(inference_id),
+                    episode_id: None,
+                    metric_name: "task_success".to_string(),
+                    value: json!(true),
+                    tags: HashMap::new(),
+                    dryrun: None,
+                };
+                client.feedback(feedback_payload).await.unwrap();
+            })
+        })
+        .collect();
+
+    // Wait for all tasks to finish.
+    futures::future::join_all(tasks).await;
 }
