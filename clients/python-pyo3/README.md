@@ -155,6 +155,7 @@ async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost
         input={
             "messages": [{"role": "user", "content": "What is the capital of Japan?"}],
         },
+        stream=True,
     )
 
     async for chunk in stream:
