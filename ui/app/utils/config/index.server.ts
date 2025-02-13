@@ -8,7 +8,7 @@ import { EmbeddingModelConfigSchema, ModelConfigSchema } from "./models";
 import { ToolConfigSchema } from "./tool";
 import type { FunctionConfig } from "./function";
 
-const DEFAULT_CONFIG_PATH = "/app/config/tensorzero.toml";
+const DEFAULT_CONFIG_PATH = "config/tensorzero.toml";
 const ENV_CONFIG_PATH = process.env.TENSORZERO_UI_CONFIG_PATH;
 
 export async function loadConfig(config_path?: string): Promise<Config> {
@@ -28,7 +28,7 @@ export async function loadConfig(config_path?: string): Promise<Config> {
       console.info(`Found default config at ${DEFAULT_CONFIG_PATH}`);
     } catch {
       console.warn(
-        `Config file not found at ${DEFAULT_CONFIG_PATH}. Using blank config.`,
+        `Config file not found at ${DEFAULT_CONFIG_PATH}. Using blank config. Tip: Set the \`TENSORZERO_UI_CONFIG_PATH\` environment variable to use a different path.`,
       );
       // Return a blank config if no file is available.
       return {
