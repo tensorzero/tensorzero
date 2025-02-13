@@ -130,7 +130,7 @@ async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost
     print(response)
 ```
 
-##### Streaming
+#### Streaming
 
 ```python
 with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
