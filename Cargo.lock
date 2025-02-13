@@ -3313,7 +3313,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tensorzero_python"
+name = "tensorzero-python"
 version = "0.1.0"
 dependencies = [
  "futures",
