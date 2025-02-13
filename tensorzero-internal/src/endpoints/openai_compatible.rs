@@ -36,6 +36,7 @@ use crate::inference::types::{
 use crate::tool::{
     DynamicToolParams, Tool, ToolCall, ToolCallChunk, ToolCallOutput, ToolChoice, ToolResult,
 };
+use crate::variant::JsonMode;
 
 use super::inference::{
     InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
@@ -221,41 +222,56 @@ struct OpenAICompatibleResponse {
     usage: OpenAICompatibleUsage,
 }
 
+const TENSORZERO_FUNCTION_NAME_PREFIX: &str = "tensorzero::function_name::";
+const TENSORZERO_MODEL_NAME_PREFIX: &str = "tensorzero::model_name::";
+
 impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
     type Error = Error;
     fn try_from(
         (headers, openai_compatible_params): (HeaderMap, OpenAICompatibleParams),
     ) -> Result<Self, Self::Error> {
-        let function_name = openai_compatible_params
+        let (function_name, model_name) = if let Some(function_name) = openai_compatible_params
             .model
-            .strip_prefix("tensorzero::function_name::")
-            .or_else(|| {
-                // Allow 'tensorzero::' for backwards compatibility
-                if let Some(function_name) =
-                    openai_compatible_params.model.strip_prefix("tensorzero::")
-                {
-                    tracing::warn!(
-                        function_name = function_name,
-                        "Deprecation Warning: Please set the `model` parameter to `tensorzero::function_name::your_function` instead of `tensorzero::your_function.` The latter will be removed in a future release."
-                    );
-                    Some(function_name)
-                } else {
-                    None
-                }
-            })
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: "model name must start with 'tensorzero::function_name::'".to_string(),
-                })
-            })?;
+            .strip_prefix(TENSORZERO_FUNCTION_NAME_PREFIX)
+        {
+            (Some(function_name.to_string()), None)
+        } else if let Some(model_name) = openai_compatible_params
+            .model
+            .strip_prefix(TENSORZERO_MODEL_NAME_PREFIX)
+        {
+            (None, Some(model_name.to_string()))
+        } else if let Some(function_name) =
+            openai_compatible_params.model.strip_prefix("tensorzero::")
+        {
+            tracing::warn!(
+                function_name = function_name,
+                "Deprecation Warning: Please set the `model` parameter to `tensorzero::function_name::your_function` instead of `tensorzero::your_function.` The latter will be removed in a future release."
+            );
+            (Some(function_name.to_string()), None)
+        } else {
+            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "model name must start with 'tensorzero::function_name::' or 'tensorzero::model_name::'".to_string(),
+            }));
+        };
 
-        if function_name.is_empty() {
-            return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+        if let Some(function_name) = &function_name {
+            if function_name.is_empty() {
+                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message:
                     "function_name (passed in model field after \"tensorzero::function_name::\") cannot be empty"
                         .to_string(),
             }
             .into());
+            }
+        }
+
+        if let Some(model_name) = &model_name {
+            if model_name.is_empty() {
+                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                    message: "model_name (passed in model field after \"tensorzero::model_name::\") cannot be empty".to_string(),
+                }
+                .into());
+            }
         }
 
         let episode_id = headers
@@ -289,6 +305,14 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             (None, Some(max_completion_tokens)) => Some(max_completion_tokens),
             (None, None) => None,
         };
+        let json_mode = match openai_compatible_params.response_format {
+            Some(OpenAICompatibleResponseFormat::JsonSchema { json_schema: _ }) => {
+                Some(JsonMode::Strict)
+            }
+            Some(OpenAICompatibleResponseFormat::JsonObject) => Some(JsonMode::On),
+            Some(OpenAICompatibleResponseFormat::Text) => Some(JsonMode::Off),
+            None => None,
+        };
         let input = openai_compatible_params.messages.try_into()?;
         let chat_completion_inference_params = ChatCompletionInferenceParams {
             temperature: openai_compatible_params.temperature,
@@ -297,6 +321,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             top_p: openai_compatible_params.top_p,
             presence_penalty: openai_compatible_params.presence_penalty,
             frequency_penalty: openai_compatible_params.frequency_penalty,
+            json_mode,
         };
         let inference_params = InferenceParams {
             chat_completion: chat_completion_inference_params,
@@ -346,8 +371,8 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             _ => None,
         };
         Ok(Params {
-            function_name: Some(function_name.to_string()),
-            model_name: None,
+            function_name,
+            model_name,
             episode_id,
             input,
             stream: openai_compatible_params.stream,

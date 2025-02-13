@@ -292,7 +292,7 @@ impl BaseTensorZeroGateway {
         let tool_choice = if let Some(tool_choice) = tool_choice {
             if tool_choice.is_instance_of::<PyString>() {
                 Some(
-                    serde_json::from_value(tool_choice.str()?.to_str()?.into()).map_err(|e| {
+                    serde_json::from_value(tool_choice.str()?.to_cow()?.into()).map_err(|e| {
                         PyValueError::new_err(format!(
                             "Failed to parse tool_choice as valid JSON: {e:?}"
                         ))

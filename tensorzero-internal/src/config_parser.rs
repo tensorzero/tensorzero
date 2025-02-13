@@ -453,6 +453,18 @@ impl UninitializedFunctionConfig {
                     .into_iter()
                     .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
+                for (name, variant) in variants.iter() {
+                    if let VariantConfig::ChatCompletion(chat_config) = variant {
+                        if chat_config.json_mode.is_some() {
+                            return Err(ErrorDetails::Config {
+                                message: format!(
+                                    "JSON mode is not supported for variant `{name}` (parent function is a chat function)",
+                                ),
+                            }
+                            .into());
+                        }
+                    }
+                }
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
                     system_schema,
@@ -1450,6 +1462,27 @@ mod tests {
                 message: "Tool name cannot start with 'tensorzero::': tensorzero::bad_tool"
                     .to_string()
             })
+        );
+    }
+
+    #[test]
+    fn test_config_validate_chat_function_json_mode() {
+        let mut config = get_sample_valid_config();
+
+        // Insert `json_mode = "on"` into a variant config for a chat function.
+        config["functions"]["generate_draft"]["variants"]["openai_promptA"]
+            .as_table_mut()
+            .unwrap()
+            .insert("json_mode".to_string(), "on".into());
+
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+
+        // Check that the config is rejected, since `generate_draft` is not a json function
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("JSON mode is not supported for variant `openai_promptA` (parent function is a chat function)"),
+            "Unexpected error message: {err_msg}"
         );
     }
 
