@@ -365,8 +365,7 @@ pub async fn inference(
                     processing_time: Some(start_time.elapsed()),
                     tags: params.tags,
                 };
-
-                tokio::spawn(async move {
+                let write_future = async move {
                     write_inference(
                         &clickhouse_connection_info,
                         params.input,
@@ -374,7 +373,12 @@ pub async fn inference(
                         write_metadata,
                     )
                     .await;
-                });
+                };
+                if config.gateway.observability.r#async {
+                    tokio::spawn(write_future);
+                } else {
+                    write_future.await;
+                }
             }
 
             let response = InferenceResponse::new(result, episode_id, variant_name.to_string());
@@ -496,7 +500,8 @@ fn create_stream(
             } = metadata;
 
             let config = config.clone();
-            tokio::spawn(async move {
+            let async_write = config.gateway.observability.r#async;
+            let write_future = async move {
                 let templates = &config.templates;
                 let collect_chunks_args = CollectChunksArgs {
                     value: buffer,
@@ -540,7 +545,12 @@ fn create_stream(
                     )
                     .await;
                 }
-            });
+            };
+            if async_write {
+                tokio::spawn(write_future);
+            } else {
+                write_future.await;
+            }
         }
     }
 }
