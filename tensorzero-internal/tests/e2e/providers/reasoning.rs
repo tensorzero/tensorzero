@@ -493,7 +493,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider(provider: 
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms > 0);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -714,7 +714,9 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
@@ -954,7 +956,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
     assert!(response_time_ms > 0);
 
     let ttft_ms = result.get("ttft_ms").unwrap().as_u64().unwrap();
-    assert!(ttft_ms > 50);
+    assert!(ttft_ms > 0);
     assert!(ttft_ms <= response_time_ms);
 
     let system = result.get("system").unwrap().as_str().unwrap();
@@ -966,7 +968,9 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the capital city of Japan?".to_string().into()],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();

@@ -3488,11 +3488,14 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         return;
     }
 
-    // NOTE: The xAI API occasionally returns a tool call despite receiving the "tool_choice": "none" parameter.
-    // We'll leave this test running for now, so some flakiness is expected.
+    // NOTE: the xAI API now returns mangled output most of the time when this test runs.
     // The bug has been reported to the xAI team.
     //
-    // https://gist.github.com/GabrielBianconi/2199022d0ea8518e06d366fb613c5bb5
+    // https://gist.github.com/virajmehta/2911580b09713fc58aabfeb9ad62cf3b
+    // We have disabled this test for that provider for now.
+    if provider.model_provider_name == "xai" {
+        return;
+    }
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
