@@ -250,7 +250,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             (Some(function_name.to_string()), None)
         } else {
             return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                message: "`model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini` for the OpenAI GPT-4o Mini model.".to_string(),
+                message: "`model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.".to_string(),
             }));
         };
 
