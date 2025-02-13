@@ -7,6 +7,7 @@ import {
   ScrollRestoration,
   useLoaderData,
 } from "react-router";
+import { useState, useEffect } from "react";
 
 import { ConfigProvider } from "./context/config";
 import type { Route } from "./+types/root";
@@ -58,12 +59,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const config = useLoaderData<typeof loader>();
+  const [open, setOpen] = useState(true);
+  
   return (
     <ConfigProvider value={config}>
-      <SidebarProvider>
+      <SidebarProvider defaultOpen={true} open={open} onOpenChange={setOpen}>
         <div className="flex min-h-screen w-full">
           <AppSidebar />
-          <main className="flex-1 overflow-y-auto">
+          <main className="flex-1 overflow-y-auto px-12 max-md:px-4">
             <Outlet />
           </main>
         </div>

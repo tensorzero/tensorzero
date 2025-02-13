@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronRight, ChevronLeft, FileText } from "lucide-react";
+import { ChevronRight, ChevronLeft, FileText, ChartSpline, Layers, SquareFunction, View } from "lucide-react";
 import { useSidebar } from "~/components/ui/sidebar";
 import { cn } from "~/utils/common";
 
@@ -10,12 +10,12 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarRail,
   SidebarTrigger,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
 } from "~/components/ui/sidebar";
 
 const navigation = [
@@ -25,14 +25,17 @@ const navigation = [
       {
         title: "Inferences",
         url: "/observability/inferences",
+        icon: ChartSpline,
       },
       {
         title: "Episodes",
         url: "/observability/episodes",
+        icon: Layers,
       },
       {
         title: "Functions",
         url: "/observability/functions",
+        icon: SquareFunction,
       },
     ],
   },
@@ -42,6 +45,7 @@ const navigation = [
       {
         title: "Supervised Fine-Tuning",
         url: "/optimization/supervised-fine-tuning",
+        icon: View,
       },
     ],
   },
@@ -49,14 +53,14 @@ const navigation = [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { state } = useSidebar();
-
+  
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="/" className="flex items-center gap-3">
+              <a href="/" className="flex items-center gap-2">
                 <div className="flex aspect-square size-8 items-center justify-center">
                   <img
                     src="https://www.tensorzero.com/favicon.svg"
@@ -75,60 +79,65 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           "!overflow-y-auto !overflow-x-hidden transition-[width] duration-200",
         )}
       >
-        {state === "expanded" &&
-          navigation.map((section) => (
-            <SidebarMenu key={section.title}>
-              <SidebarMenuItem>
-                <span className="block w-full px-2 py-1.5 text-sm font-medium text-sidebar-foreground">
-                  {section.title}
-                </span>
-                {section.items?.length ? (
-                  <SidebarMenuSub>
-                    {section.items.map((item) => (
-                      <SidebarMenuSubItem key={item.title}>
-                        <SidebarMenuSubButton asChild>
-                          <a href={item.url}>{item.title}</a>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                ) : null}
-              </SidebarMenuItem>
-            </SidebarMenu>
-          ))}
+        {navigation.map((section) => (
+          <SidebarGroup key={section.title}>
+            {state === "expanded" && (
+              <SidebarGroupLabel>
+                {section.title}
+              </SidebarGroupLabel>
+            )}
+            <SidebarGroupContent>
+              {section.items?.map((item) => (
+                <SidebarMenuItem key={item.title} className="list-none">
+                  <SidebarMenuButton 
+                    asChild
+                    tooltip={state === "collapsed" ? item.title : undefined}
+                  >
+                    <a
+                      href={item.url}
+                      className="flex items-center gap-3 px-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <item.icon className="h-4 w-4" />
+                      {state === "expanded" && <span>{item.title}</span>}
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
       <SidebarFooter className="relative">
-        <div
-          className={cn(
-            "flex items-center py-2",
-            state === "collapsed" ? "justify-center" : "justify-between px-2",
+        <SidebarTrigger className="flex justify-left">
+          {state === "expanded" ? (
+            <ChevronLeft className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
           )}
-        >
-          {state === "expanded" && (
-            <a
-              href="https://www.tensorzero.com/docs"
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Open documentation in new tab"
+          <span className="sr-only">
+            {state === "expanded" ? "Collapse" : "Expand"} sidebar
+          </span>
+        </SidebarTrigger>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton 
+              asChild
+              tooltip={state === "collapsed" ? "Documentation" : undefined}
             >
-              <FileText className="h-4 w-4" />
-              Documentation
-            </a>
-          )}
-          <SidebarTrigger>
-            <button className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-              {state === "expanded" ? (
-                <ChevronLeft className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-              <span className="sr-only">
-                {state === "expanded" ? "Collapse" : "Expand"} sidebar
-              </span>
-            </button>
-          </SidebarTrigger>
-        </div>
+              <a
+                href="https://www.tensorzero.com/docs"
+                className="flex items-center gap-3 px-2"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <FileText className="h-4 w-4" />
+                {state === "expanded" && <span>Documentation</span>}
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
