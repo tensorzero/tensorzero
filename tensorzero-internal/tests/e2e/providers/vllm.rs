@@ -20,6 +20,21 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let json_providers = vec![
+        E2ETestProvider {
+            variant_name: "vllm-default".to_string(),
+            model_name: "microsoft/Phi-3.5-mini-instruct".into(),
+            model_provider_name: "vllm".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            variant_name: "vllm-default".to_string(),
+            model_name: "microsoft/Phi-3.5-mini-instruct".into(),
+            model_provider_name: "vllm".into(),
+            credentials: HashMap::new(),
+        },
+    ];
+
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "vllm-dynamic".to_string(),
         model_name: "microsoft/Phi-3.5-mini-instruct-dynamic".into(),
@@ -35,7 +50,7 @@ async fn get_providers() -> E2ETestProviders {
         tool_multi_turn_inference: vec![],
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
-        json_mode_inference: providers.clone(),
+        json_mode_inference: json_providers.clone(),
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: vec![],
         #[cfg(feature = "batch_tests")]

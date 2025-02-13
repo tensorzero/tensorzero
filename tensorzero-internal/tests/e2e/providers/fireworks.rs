@@ -47,6 +47,12 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "fireworks".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            variant_name: "fireworks-default".to_string(),
+            model_name: "llama3.3-70b-instruct-fireworks".into(),
+            model_provider_name: "fireworks".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     #[cfg(feature = "e2e_tests")]

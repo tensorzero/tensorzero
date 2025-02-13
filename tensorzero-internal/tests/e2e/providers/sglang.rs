@@ -14,6 +14,20 @@ async fn get_providers() -> E2ETestProviders {
         model_provider_name: "sglang".to_string(),
         credentials: HashMap::new(),
     }];
+    let json_providers = vec![
+        E2ETestProvider {
+            variant_name: "sglang".to_string(),
+            model_name: "HuggingFaceTB/SmolLM-1.7B-Instruct".to_string(),
+            model_provider_name: "sglang".to_string(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            variant_name: "sglang-default".to_string(),
+            model_name: "HuggingFaceTB/SmolLM-1.7B-Instruct".to_string(),
+            model_provider_name: "sglang".to_string(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
@@ -23,7 +37,7 @@ async fn get_providers() -> E2ETestProviders {
         tool_multi_turn_inference: vec![],
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
-        json_mode_inference: standard_providers.clone(),
+        json_mode_inference: json_providers.clone(),
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: vec![],
         #[cfg(feature = "batch_tests")]
