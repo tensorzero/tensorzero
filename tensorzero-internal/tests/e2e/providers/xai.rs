@@ -20,6 +20,26 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let json_providers = vec![
+        E2ETestProvider {
+            variant_name: "xai".to_string(),
+            model_name: "grok_2_1212".into(),
+            model_provider_name: "xai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            variant_name: "xai-default".to_string(),
+            model_name: "grok_2_1212".into(),
+            model_provider_name: "xai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            variant_name: "xai-strict".to_string(),
+            model_name: "grok_2_1212".into(),
+            model_provider_name: "xai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "xai".to_string(),
         model_name: "grok_2_1212".into(),
@@ -42,7 +62,7 @@ async fn get_providers() -> E2ETestProviders {
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: vec![],
-        json_mode_inference: vec![],
+        json_mode_inference: json_providers,
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
         #[cfg(feature = "batch_tests")]

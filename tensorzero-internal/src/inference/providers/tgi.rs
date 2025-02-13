@@ -354,7 +354,7 @@ impl<'a> TGIRequest<'a> {
         // So we log a warning and ignore the JSON mode
         // You can get JSON mode through `implicit_tool` instead.
         if request.json_mode != ModelInferenceRequestJsonMode::Off {
-            tracing::warn!("TGI does not support JSON mode. Ignoring JSON mode.");
+            tracing::warn!("TGI does not support JSON mode. Ignoring JSON mode. Consider using `json_mode = \"implicit_tool\"` instead.");
         }
 
         let stream_options = match request.stream {
