@@ -96,9 +96,7 @@ if __name__ == "__main__":
 
 ### Inference
 
-#### Non-Streaming
-
-##### Synchronous
+#### Non-Streaming Inference with Synchronous Client
 
 ```python
 with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
@@ -114,7 +112,7 @@ with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client
     print(response)
 ```
 
-##### Asynchronous
+#### Non-Streaming Inference with Asynchronous Client
 
 ```python
 async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
@@ -130,9 +128,7 @@ async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost
     print(response)
 ```
 
-#### Streaming
-
-##### Synchronous
+#### Streaming Inference with Synchronous Client
 
 ```python
 with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
@@ -150,7 +146,7 @@ with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client
         print(chunk)
 ```
 
-##### Asynchronous
+#### Streaming Inference with Asynchronous Client
 
 ```python
 async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
