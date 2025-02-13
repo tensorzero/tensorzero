@@ -5,6 +5,7 @@ use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
+use serde_json::{json, Value};
 use tokio::time::Instant;
 use url::Url;
 
@@ -272,6 +273,8 @@ struct XAIRequest<'a> {
     presence_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<XAIResponseFormat>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
@@ -304,12 +307,10 @@ impl<'a> XAIRequest<'a> {
             false => None,
         };
 
-        if request.json_mode == ModelInferenceRequestJsonMode::Strict {
-            return Err(ErrorDetails::InvalidRequest {
-                message: "The xAI models don't support strict JSON mode.".to_string(),
-            }
-            .into());
-        }
+        let response_format = Some(XAIResponseFormat::new(
+            &request.json_mode,
+            request.output_schema,
+        ));
 
         let messages = prepare_openai_messages(request);
 
@@ -321,6 +322,7 @@ impl<'a> XAIRequest<'a> {
             max_tokens,
             seed,
             top_p,
+            response_format,
             presence_penalty,
             frequency_penalty,
             stream,
@@ -328,6 +330,34 @@ impl<'a> XAIRequest<'a> {
             tools,
             tool_choice,
         })
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
+enum XAIResponseFormat {
+    #[default]
+    Text,
+    JsonObject,
+    JsonSchema {
+        json_schema: Value,
+    },
+}
+
+impl XAIResponseFormat {
+    fn new(json_mode: &ModelInferenceRequestJsonMode, output_schema: Option<&Value>) -> Self {
+        match json_mode {
+            ModelInferenceRequestJsonMode::On => XAIResponseFormat::JsonObject,
+            ModelInferenceRequestJsonMode::Off => XAIResponseFormat::Text,
+            ModelInferenceRequestJsonMode::Strict => match output_schema {
+                Some(schema) => {
+                    let json_schema = json!({"name": "response", "strict": true, "schema": schema});
+                    XAIResponseFormat::JsonSchema { json_schema }
+                }
+                None => XAIResponseFormat::JsonObject,
+            },
+        }
     }
 }
 
@@ -513,15 +543,6 @@ mod tests {
                 }
             }))
         );
-
-        let request_with_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            json_mode: ModelInferenceRequestJsonMode::Strict,
-            ..request_with_tools
-        };
-
-        let xai_request = XAIRequest::new("grok-beta", &request_with_tools);
-        assert!(xai_request.is_err());
     }
 
     #[test]

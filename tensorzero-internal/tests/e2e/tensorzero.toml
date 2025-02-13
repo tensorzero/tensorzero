@@ -1082,6 +1082,22 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "on"
 max_tokens = 100
 
+[functions.json_success.variants.xai]
+type = "chat_completion"
+model = "grok_2_1212"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.json_success.variants.xai-strict]
+type = "chat_completion"
+model = "grok_2_1212"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "strict"
+max_tokens = 100
+
 [functions.dynamic_json]
 type = "json"
 system_schema = "../../fixtures/config/functions/dynamic_json/system_schema.json"
@@ -1342,6 +1358,22 @@ model = "deepseek-chat"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
+max_tokens = 100
+
+[functions.dynamic_json.variants.xai]
+type = "chat_completion"
+model = "grok_2_1212"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.dynamic_json.variants.xai-strict]
+type = "chat_completion"
+model = "grok_2_1212"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "strict"
 max_tokens = 100
 
 [functions.variant_failover]
