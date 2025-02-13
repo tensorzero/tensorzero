@@ -26,8 +26,8 @@ use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    collect_chunks, ChatInferenceDatabaseInsert, CollectChunksArgs, ContentBlockChunk,
-    ContentBlockOutput, InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
+    collect_chunks, ChatInferenceDatabaseInsert, CollectChunksArgs, ContentBlockChatOutput,
+    ContentBlockChunk, InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
     JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
     RequestMessage, Usage,
 };
@@ -36,7 +36,7 @@ use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::chat_completion::ChatCompletionConfig;
-use crate::variant::{InferenceConfig, Variant, VariantConfig};
+use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig};
 
 use super::validate_tags;
 
@@ -182,7 +182,6 @@ pub async fn inference(
 
     validate_tags(&params.tags)?;
     let (function, function_name) = find_function(&params, &config)?;
-    let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =
         function.variants().keys().map(AsRef::as_ref).collect();
@@ -196,7 +195,9 @@ pub async fn inference(
     }
 
     // Validate the input
-    function.validate_input(&params.input)?;
+    function.validate_inference_params(&params)?;
+
+    let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
 
     // If a variant is pinned, only that variant should be attempted
     if let Some(ref variant_name) = params.variant_name {
@@ -364,8 +365,7 @@ pub async fn inference(
                     processing_time: Some(start_time.elapsed()),
                     tags: params.tags,
                 };
-
-                tokio::spawn(async move {
+                let write_future = async move {
                     write_inference(
                         &clickhouse_connection_info,
                         params.input,
@@ -373,7 +373,12 @@ pub async fn inference(
                         write_metadata,
                     )
                     .await;
-                });
+                };
+                if config.gateway.observability.async_writes {
+                    tokio::spawn(write_future);
+                } else {
+                    write_future.await;
+                }
             }
 
             let response = InferenceResponse::new(result, episode_id, variant_name.to_string());
@@ -460,7 +465,9 @@ fn create_stream(
             match chunk {
                 Ok(chunk) => {
                     buffer.push(chunk.clone());
-                    yield Ok(prepare_response_chunk(&metadata, chunk));
+                    if let Some(chunk) = prepare_response_chunk(&metadata, chunk) {
+                        yield Ok(chunk);
+                    }
                 }
                 Err(e) => yield Err(e),
             }
@@ -495,7 +502,8 @@ fn create_stream(
             } = metadata;
 
             let config = config.clone();
-            tokio::spawn(async move {
+            let async_write = config.gateway.observability.async_writes;
+            let write_future = async move {
                 let templates = &config.templates;
                 let collect_chunks_args = CollectChunksArgs {
                     value: buffer,
@@ -539,7 +547,12 @@ fn create_stream(
                     )
                     .await;
                 }
-            });
+            };
+            if async_write {
+                tokio::spawn(write_future);
+            } else {
+                write_future.await;
+            }
         }
     }
 }
@@ -547,7 +560,7 @@ fn create_stream(
 fn prepare_response_chunk(
     metadata: &InferenceMetadata,
     chunk: InferenceResultChunk,
-) -> InferenceResponseChunk {
+) -> Option<InferenceResponseChunk> {
     InferenceResponseChunk::new(
         chunk,
         metadata.inference_id,
@@ -640,7 +653,7 @@ pub struct ChatInferenceResponse {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
     pub variant_name: String,
-    pub content: Vec<ContentBlockOutput>,
+    pub content: Vec<ContentBlockChatOutput>,
     pub usage: Usage,
 }
 
@@ -728,8 +741,8 @@ impl InferenceResponseChunk {
         inference_id: Uuid,
         episode_id: Uuid,
         variant_name: String,
-    ) -> Self {
-        match inference_result {
+    ) -> Option<Self> {
+        Some(match inference_result {
             InferenceResultChunk::Chat(result) => {
                 InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
                     inference_id,
@@ -740,15 +753,18 @@ impl InferenceResponseChunk {
                 })
             }
             InferenceResultChunk::Json(result) => {
+                if result.raw.is_none() && result.usage.is_none() {
+                    return None;
+                }
                 InferenceResponseChunk::Json(JsonInferenceResponseChunk {
                     inference_id,
                     episode_id,
                     variant_name,
-                    raw: result.raw,
+                    raw: result.raw.unwrap_or_default(),
                     usage: result.usage,
                 })
             }
-        }
+        })
     }
 }
 
@@ -790,6 +806,8 @@ pub struct ChatCompletionInferenceParams {
     pub presence_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub json_mode: Option<JsonMode>,
 }
 
 impl ChatCompletionInferenceParams {
@@ -873,7 +891,7 @@ mod tests {
             cached: false,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk);
+        let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
         match result {
             InferenceResponseChunk::Chat(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);
@@ -893,7 +911,8 @@ mod tests {
 
         // Test case 2: Valid JSON ProviderInferenceResponseChunk
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
-            raw: "Test content".to_string(),
+            raw: Some("Test content".to_string()),
+            thought: Some("Thought 1".to_string()),
             created: 0,
             usage: None,
             raw_response: "".to_string(),
@@ -923,13 +942,13 @@ mod tests {
             cached: false,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk);
+        let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
         match result {
             InferenceResponseChunk::Json(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);
                 assert_eq!(c.episode_id, inference_metadata.episode_id);
                 assert_eq!(c.variant_name, inference_metadata.variant_name);
-                assert_eq!(c.raw, "Test content");
+                assert_eq!(c.raw, "Test content".to_string());
                 assert!(c.usage.is_none());
             }
             InferenceResponseChunk::Chat(_) => {

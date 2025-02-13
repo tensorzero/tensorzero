@@ -22,7 +22,7 @@ use crate::inference::types::{
     ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode,
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
 use crate::model::{build_creds_caching_default_with_fn, Credential, CredentialLocation};
@@ -481,12 +481,14 @@ enum GCPVertexGeminiContentPart<'a> {
     // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
 }
 
-impl<'a> TryFrom<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
+impl<'a> TryFrom<&'a ContentBlock> for Option<GCPVertexGeminiContentPart<'a>> {
     type Error = Error;
 
     fn try_from(block: &'a ContentBlock) -> Result<Self, Error> {
         match block {
-            ContentBlock::Text(Text { text }) => Ok(GCPVertexGeminiContentPart::Text { text }),
+            ContentBlock::Text(Text { text }) => {
+                Ok(Some(GCPVertexGeminiContentPart::Text { text }))
+            }
             ContentBlock::ToolResult(tool_result) => {
                 // Convert the tool result from String to JSON Value (GCP expects an object)
                 let response: Value = serde_json::from_str(&tool_result.result).map_err(|e| {
@@ -505,12 +507,12 @@ impl<'a> TryFrom<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
                     "content": response,
                 });
 
-                Ok(GCPVertexGeminiContentPart::FunctionResponse {
+                Ok(Some(GCPVertexGeminiContentPart::FunctionResponse {
                     function_response: GCPVertexGeminiFunctionResponse {
                         name: &tool_result.name,
                         response,
                     },
-                })
+                }))
             }
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value (GCP expects an object)
@@ -535,13 +537,19 @@ impl<'a> TryFrom<&'a ContentBlock> for GCPVertexGeminiContentPart<'a> {
                     .into());
                 };
 
-                Ok(GCPVertexGeminiContentPart::FunctionCall {
+                Ok(Some(GCPVertexGeminiContentPart::FunctionCall {
                     function_call: GCPVertexGeminiFunctionCall {
                         name: &tool_call.name,
                         args,
                     },
-                })
+                }))
             }
+            // We don't support thought blocks being passed in from a request.
+            // These are only possible to be passed in in the scenario where the
+            // output of a chat completion is used as an input to another model inference,
+            // i.e. a judge or something.
+            // We don't think the thoughts should be passed in in this case.
+            ContentBlock::Thought(_thought) => Ok(None),
         }
     }
 }
@@ -561,7 +569,10 @@ impl<'a> TryFrom<&'a RequestMessage> for GCPVertexGeminiContent<'a> {
             .content
             .iter()
             .map(|block| block.try_into())
-            .collect::<Result<_, _>>()?;
+            .collect::<Result<Vec<Option<GCPVertexGeminiContentPart>>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
 
         Ok(GCPVertexGeminiContent { role, parts })
     }
@@ -811,28 +822,29 @@ fn prepare_tools<'a>(
     }
 }
 
-fn process_output_schema(output_schema: &Value) -> Result<Value, Error> {
+pub(crate) fn process_output_schema(output_schema: &Value) -> Result<Value, Error> {
     let mut schema = output_schema.clone();
 
-    /// Recursively remove all instances of "additionalProperties"
-    fn remove_additional_properties(value: &mut Value) {
+    /// Recursively remove all instances of "additionalProperties" and "$schema"
+    fn remove_properties(value: &mut Value) {
         match value {
             Value::Object(obj) => {
                 obj.remove("additionalProperties");
+                obj.remove("$schema");
                 for (_, v) in obj.iter_mut() {
-                    remove_additional_properties(v);
+                    remove_properties(v);
                 }
             }
             Value::Array(arr) => {
                 for v in arr.iter_mut() {
-                    remove_additional_properties(v);
+                    remove_properties(v);
                 }
             }
             _ => {}
         }
     }
 
-    remove_additional_properties(&mut schema);
+    remove_properties(&mut schema);
     Ok(schema)
 }
 
@@ -875,13 +887,13 @@ impl From<GCPVertexGeminiResponseContentPart> for ContentBlockChunk {
     }
 }
 
-impl TryFrom<GCPVertexGeminiResponseContentPart> for ContentBlock {
+impl TryFrom<GCPVertexGeminiResponseContentPart> for ContentBlockOutput {
     type Error = Error;
     fn try_from(part: GCPVertexGeminiResponseContentPart) -> Result<Self, Self::Error> {
         match part {
             GCPVertexGeminiResponseContentPart::Text(text) => Ok(text.into()),
             GCPVertexGeminiResponseContentPart::FunctionCall(function_call) => {
-                Ok(ContentBlock::ToolCall(ToolCall {
+                Ok(ContentBlockOutput::ToolCall(ToolCall {
                     name: function_call.name,
                     arguments: serde_json::to_string(&function_call.args).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
@@ -966,12 +978,12 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
         })?;
 
         // GCP sometimes doesn't return content in the response (e.g. safety settings blocked the generation).
-        let content: Vec<ContentBlock> = match first_candidate.content {
+        let content: Vec<ContentBlockOutput> = match first_candidate.content {
             Some(content) => content
                 .parts
                 .into_iter()
                 .map(|part| part.try_into())
-                .collect::<Result<Vec<ContentBlock>, Error>>()?,
+                .collect::<Result<Vec<ContentBlockOutput>, Error>>()?,
             None => vec![],
         };
 
@@ -1670,7 +1682,7 @@ mod tests {
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
 
-        if let [ContentBlock::Text(Text { text }), ContentBlock::ToolCall(tool_call)] =
+        if let [ContentBlockOutput::Text(Text { text }), ContentBlockOutput::ToolCall(tool_call)] =
             &model_inference_response.output[..]
         {
             assert_eq!(text, "Here's the weather information:");
@@ -1757,7 +1769,7 @@ mod tests {
             response_with_latency.try_into().unwrap();
         assert_eq!(model_inference_response.raw_request, raw_request);
 
-        if let [ContentBlock::Text(Text { text: text1 }), ContentBlock::ToolCall(tool_call1), ContentBlock::Text(Text { text: text2 }), ContentBlock::ToolCall(tool_call2)] =
+        if let [ContentBlockOutput::Text(Text { text: text1 }), ContentBlockOutput::ToolCall(tool_call1), ContentBlockOutput::Text(Text { text: text2 }), ContentBlockOutput::ToolCall(tool_call2)] =
             &model_inference_response.output[..]
         {
             assert_eq!(text1, "Here's the weather information:");
@@ -1939,6 +1951,7 @@ mod tests {
             processed_schema_no_additional,
             output_schema_without_additional
         );
+
         // Test with a schema that includes recursive additionalProperties
         let output_schema_recursive = json!({
             "type": "object",
@@ -1980,6 +1993,49 @@ mod tests {
         });
         let processed_schema_recursive = process_output_schema(&output_schema_recursive).unwrap();
         assert_eq!(processed_schema_recursive, expected_processed_schema);
+
+        // Test with schema containing $schema at top level and in child objects
+        let output_schema_with_schema_fields = json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "nested": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "value": {"type": "string"}
+                    }
+                },
+                "array": {
+                    "type": "array",
+                    "items": {
+                        "$schema": "http://json-schema.org/draft-07/schema#",
+                        "type": "string"
+                    }
+                }
+            }
+        });
+        let expected_schema_without_schema_fields = json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "nested": {
+                    "type": "object",
+                    "properties": {
+                        "value": {"type": "string"}
+                    }
+                },
+                "array": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        });
+        let processed_schema = process_output_schema(&output_schema_with_schema_fields).unwrap();
+        assert_eq!(processed_schema, expected_schema_without_schema_fields);
     }
 
     #[test]

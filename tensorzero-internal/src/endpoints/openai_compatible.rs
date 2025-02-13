@@ -30,12 +30,13 @@ use crate::endpoints::inference::{
 use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    current_timestamp, ContentBlockChunk, ContentBlockOutput, Input, InputMessage,
+    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, Input, InputMessage,
     InputMessageContent, Role, Usage,
 };
 use crate::tool::{
     DynamicToolParams, Tool, ToolCall, ToolCallChunk, ToolCallOutput, ToolChoice, ToolResult,
 };
+use crate::variant::JsonMode;
 
 use super::inference::{
     InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
@@ -221,41 +222,56 @@ struct OpenAICompatibleResponse {
     usage: OpenAICompatibleUsage,
 }
 
+const TENSORZERO_FUNCTION_NAME_PREFIX: &str = "tensorzero::function_name::";
+const TENSORZERO_MODEL_NAME_PREFIX: &str = "tensorzero::model_name::";
+
 impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
     type Error = Error;
     fn try_from(
         (headers, openai_compatible_params): (HeaderMap, OpenAICompatibleParams),
     ) -> Result<Self, Self::Error> {
-        let function_name = openai_compatible_params
+        let (function_name, model_name) = if let Some(function_name) = openai_compatible_params
             .model
-            .strip_prefix("tensorzero::function_name::")
-            .or_else(|| {
-                // Allow 'tensorzero::' for backwards compatibility
-                if let Some(function_name) =
-                    openai_compatible_params.model.strip_prefix("tensorzero::")
-                {
-                    tracing::warn!(
-                        function_name = function_name,
-                        "Deprecation Warning: Please set the `model` parameter to `tensorzero::function_name::your_function` instead of `tensorzero::your_function.` The latter will be removed in a future release."
-                    );
-                    Some(function_name)
-                } else {
-                    None
-                }
-            })
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: "model name must start with 'tensorzero::function_name::'".to_string(),
-                })
-            })?;
+            .strip_prefix(TENSORZERO_FUNCTION_NAME_PREFIX)
+        {
+            (Some(function_name.to_string()), None)
+        } else if let Some(model_name) = openai_compatible_params
+            .model
+            .strip_prefix(TENSORZERO_MODEL_NAME_PREFIX)
+        {
+            (None, Some(model_name.to_string()))
+        } else if let Some(function_name) =
+            openai_compatible_params.model.strip_prefix("tensorzero::")
+        {
+            tracing::warn!(
+                function_name = function_name,
+                "Deprecation Warning: Please set the `model` parameter to `tensorzero::function_name::your_function` instead of `tensorzero::your_function.` The latter will be removed in a future release."
+            );
+            (Some(function_name.to_string()), None)
+        } else {
+            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "model name must start with 'tensorzero::function_name::' or 'tensorzero::model_name::'".to_string(),
+            }));
+        };
 
-        if function_name.is_empty() {
-            return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+        if let Some(function_name) = &function_name {
+            if function_name.is_empty() {
+                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message:
                     "function_name (passed in model field after \"tensorzero::function_name::\") cannot be empty"
                         .to_string(),
             }
             .into());
+            }
+        }
+
+        if let Some(model_name) = &model_name {
+            if model_name.is_empty() {
+                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                    message: "model_name (passed in model field after \"tensorzero::model_name::\") cannot be empty".to_string(),
+                }
+                .into());
+            }
         }
 
         let episode_id = headers
@@ -289,6 +305,14 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             (None, Some(max_completion_tokens)) => Some(max_completion_tokens),
             (None, None) => None,
         };
+        let json_mode = match openai_compatible_params.response_format {
+            Some(OpenAICompatibleResponseFormat::JsonSchema { json_schema: _ }) => {
+                Some(JsonMode::Strict)
+            }
+            Some(OpenAICompatibleResponseFormat::JsonObject) => Some(JsonMode::On),
+            Some(OpenAICompatibleResponseFormat::Text) => Some(JsonMode::Off),
+            None => None,
+        };
         let input = openai_compatible_params.messages.try_into()?;
         let chat_completion_inference_params = ChatCompletionInferenceParams {
             temperature: openai_compatible_params.temperature,
@@ -297,6 +321,7 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             top_p: openai_compatible_params.top_p,
             presence_penalty: openai_compatible_params.presence_penalty,
             frequency_penalty: openai_compatible_params.frequency_penalty,
+            json_mode,
         };
         let inference_params = InferenceParams {
             chat_completion: chat_completion_inference_params,
@@ -346,8 +371,8 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             _ => None,
         };
         Ok(Params {
-            function_name: Some(function_name.to_string()),
-            model_name: None,
+            function_name,
+            model_name,
             episode_id,
             input,
             stream: openai_compatible_params.stream,
@@ -554,18 +579,22 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
 // Takes a vector of ContentBlockOutput and returns a tuple of (Option<String>, Vec<OpenAICompatibleToolCall>).
 // This is useful since the OpenAI format separates text and tool calls in the response fields.
 fn process_chat_content(
-    content: Vec<ContentBlockOutput>,
+    content: Vec<ContentBlockChatOutput>,
 ) -> (Option<String>, Vec<OpenAICompatibleToolCall>) {
     let mut content_str: Option<String> = None;
     let mut tool_calls = Vec::new();
     for block in content {
         match block {
-            ContentBlockOutput::Text(text) => match content_str {
+            ContentBlockChatOutput::Text(text) => match content_str {
                 Some(ref mut content) => content.push_str(&text.text),
                 None => content_str = Some(text.text),
             },
-            ContentBlockOutput::ToolCall(tool_call) => {
+            ContentBlockChatOutput::ToolCall(tool_call) => {
                 tool_calls.push(tool_call.into());
+            }
+            ContentBlockChatOutput::Thought(_thought) => {
+                // OpenAI compatible endpoint does not support thought blocks
+                // Users of this endpoint will need to check observability to see them
             }
         }
     }
@@ -678,6 +707,10 @@ fn process_chat_content_chunk(
             },
             ContentBlockChunk::ToolCall(tool_call) => {
                 tool_calls.push(tool_call.into());
+            }
+            ContentBlockChunk::Thought(_thought) => {
+                // OpenAI compatible endpoint does not support thought blocks
+                // Users of this endpoint will need to check observability to see them
             }
         }
     }
@@ -980,17 +1013,17 @@ mod tests {
     #[test]
     fn test_process_chat_content() {
         let content = vec![
-            ContentBlockOutput::Text(Text {
+            ContentBlockChatOutput::Text(Text {
                 text: "Hello".to_string(),
             }),
-            ContentBlockOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(ToolCallOutput {
                 arguments: None,
                 name: Some("test_tool".to_string()),
                 id: "1".to_string(),
                 raw_name: "test_tool".to_string(),
                 raw_arguments: "{}".to_string(),
             }),
-            ContentBlockOutput::Text(Text {
+            ContentBlockChatOutput::Text(Text {
                 text: ", world!".to_string(),
             }),
         ];
@@ -1000,29 +1033,29 @@ mod tests {
         assert_eq!(tool_calls[0].id, "1");
         assert_eq!(tool_calls[0].function.name, "test_tool");
         assert_eq!(tool_calls[0].function.arguments, "{}");
-        let content: Vec<ContentBlockOutput> = vec![];
+        let content: Vec<ContentBlockChatOutput> = vec![];
         let (content_str, tool_calls) = process_chat_content(content);
         assert_eq!(content_str, None);
         assert!(tool_calls.is_empty());
 
         let content = vec![
-            ContentBlockOutput::Text(Text {
+            ContentBlockChatOutput::Text(Text {
                 text: "First part".to_string(),
             }),
-            ContentBlockOutput::Text(Text {
+            ContentBlockChatOutput::Text(Text {
                 text: " second part".to_string(),
             }),
-            ContentBlockOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(ToolCallOutput {
                 arguments: None,
                 name: Some("middle_tool".to_string()),
                 id: "123".to_string(),
                 raw_name: "middle_tool".to_string(),
                 raw_arguments: "{\"key\": \"value\"}".to_string(),
             }),
-            ContentBlockOutput::Text(Text {
+            ContentBlockChatOutput::Text(Text {
                 text: " third part".to_string(),
             }),
-            ContentBlockOutput::Text(Text {
+            ContentBlockChatOutput::Text(Text {
                 text: " fourth part".to_string(),
             }),
         ];

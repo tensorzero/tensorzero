@@ -75,6 +75,12 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            variant_name: "google-ai-studio-gemini-flash-8b-default".to_string(),
+            model_name: "gemini-1.5-flash-8b".into(),
+            model_provider_name: "google_ai_studio_gemini".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     #[cfg(feature = "e2e_tests")]
@@ -87,6 +93,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
         tool_use_inference: tool_providers.clone(),
         tool_multi_turn_inference: tool_providers.clone(),

@@ -67,6 +67,14 @@ class ToolCall(ContentBlock):
 
 
 @dataclass
+class Thought(ContentBlock):
+    text: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(type="thought", value=self.text)
+
+
+@dataclass
 class ToolResult:
     # This class does not subclass ContentBlock since it cannot be output by the API.
     name: str
@@ -149,6 +157,8 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
             raw_name=block["raw_name"],
             type=block_type,
         )
+    elif block_type == "thought":
+        return Thought(text=block["text"], type=block_type)
     else:
         raise ValueError(f"Unknown content block type: {block}")
 
@@ -176,6 +186,12 @@ class ToolCallChunk(ContentBlockChunk):
     # `raw_arguments` will come as partial JSON
     raw_arguments: str
     raw_name: str
+
+
+@dataclass
+class ThoughtChunk(ContentBlockChunk):
+    text: str
+    id: str
 
 
 @dataclass
@@ -231,6 +247,8 @@ def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
             raw_name=block["raw_name"],
             type=block_type,
         )
+    elif block_type == "thought":
+        return ThoughtChunk(id=block["id"], text=block["text"], type=block_type)
     else:
         raise ValueError(f"Unknown content block type: {block}")
 

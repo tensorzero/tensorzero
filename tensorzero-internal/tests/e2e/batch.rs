@@ -24,7 +24,7 @@ use tensorzero_internal::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
 use tensorzero_internal::inference::types::{
-    ContentBlockOutput, Input, JsonInferenceOutput, Usage,
+    ContentBlockChatOutput, Input, JsonInferenceOutput, Usage,
 };
 use tensorzero_internal::jsonschema_util::JSONSchemaFromPath;
 use tokio::time::{sleep, Duration};
@@ -380,7 +380,9 @@ async fn test_write_read_completed_batch_inference_chat() {
         InferenceResponse::Chat(chat_inference_response) => {
             assert_eq!(chat_inference_response.inference_id, inference_id1);
             match &chat_inference_response.content[0] {
-                ContentBlockOutput::Text(text_block) => assert_eq!(text_block.text, "hello world"),
+                ContentBlockChatOutput::Text(text_block) => {
+                    assert_eq!(text_block.text, "hello world")
+                }
                 _ => panic!("Unexpected content block type"),
             }
             assert_eq!(chat_inference_response.usage.input_tokens, 10);
@@ -393,7 +395,7 @@ async fn test_write_read_completed_batch_inference_chat() {
         InferenceResponse::Chat(chat_inference_response) => {
             assert_eq!(chat_inference_response.inference_id, inference_id2);
             match &chat_inference_response.content[0] {
-                ContentBlockOutput::Text(text_block) => {
+                ContentBlockChatOutput::Text(text_block) => {
                     assert_eq!(text_block.text, "goodbye world")
                 }
                 _ => panic!("Unexpected content block type"),

@@ -292,7 +292,7 @@ impl BaseTensorZeroGateway {
         let tool_choice = if let Some(tool_choice) = tool_choice {
             if tool_choice.is_instance_of::<PyString>() {
                 Some(
-                    serde_json::from_value(tool_choice.str()?.to_str()?.into()).map_err(|e| {
+                    serde_json::from_value(tool_choice.str()?.to_cow()?.into()).map_err(|e| {
                         PyValueError::new_err(format!(
                             "Failed to parse tool_choice as valid JSON: {e:?}"
                         ))
@@ -354,7 +354,7 @@ impl TensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (gateway_url, *, timeout=None))]
+    #[pyo3(signature = (*, gateway_url, timeout=None))]
     /// Initialize the TensorZero client, using the HTTP gateway.
     /// :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
@@ -401,7 +401,7 @@ impl TensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (*, config_path, clickhouse_url=None))]
+    #[pyo3(signature = (*, config_path=None, clickhouse_url=None))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
@@ -410,11 +410,11 @@ impl TensorZeroGateway {
     /// :return: A `TensorZeroGateway` instance configured to use an embedded gateway.
     fn build_embedded(
         cls: &Bound<'_, PyType>,
-        config_path: &str,
+        config_path: Option<&str>,
         clickhouse_url: Option<String>,
     ) -> PyResult<Py<TensorZeroGateway>> {
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: PathBuf::from(config_path),
+            config_path: config_path.map(PathBuf::from),
             clickhouse_url,
         })
         .build();
@@ -593,7 +593,7 @@ impl AsyncTensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (gateway_url, *, timeout=None))]
+    #[pyo3(signature = (*, gateway_url, timeout=None))]
     fn build_http<'a>(
         cls: &Bound<'a, PyType>,
         gateway_url: &str,
@@ -649,7 +649,7 @@ impl AsyncTensorZeroGateway {
     // as `AsyncTensorZeroGateway` would be completely async *except* for this one method
     // (which potentially takes a very long time due to running DB migrations).
     #[classmethod]
-    #[pyo3(signature = (*, config_path, clickhouse_url=None))]
+    #[pyo3(signature = (*, config_path=None, clickhouse_url=None))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
@@ -659,11 +659,11 @@ impl AsyncTensorZeroGateway {
     fn build_embedded<'a>(
         // This is a classmethod, so it receives the class object as a parameter.
         cls: &Bound<'a, PyType>,
-        config_path: &str,
+        config_path: Option<&str>,
         clickhouse_url: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: PathBuf::from(config_path),
+            config_path: config_path.map(PathBuf::from),
             clickhouse_url,
         })
         .build();

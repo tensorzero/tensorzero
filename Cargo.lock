@@ -3287,7 +3287,6 @@ dependencies = [
  "lazy_static",
  "metrics",
  "metrics-exporter-prometheus",
- "mimalloc",
  "minijinja",
  "paste",
  "rand 0.8.5",
@@ -3313,8 +3312,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "tensorzero_python"
-version = "0.1.0"
+name = "tensorzero-python"
+version = "0.3.1"
 dependencies = [
  "futures",
  "pyo3",

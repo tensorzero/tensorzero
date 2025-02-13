@@ -84,7 +84,7 @@ jobs:
 
       - name: Launch the provider-proxy cache for E2E tests
         run: |
-          ./ci/run-provider-proxy.sh detach
+          ./ci/run-provider-proxy.sh ci
 
       - name: Launch the gateway for E2E tests
         run: |
@@ -119,7 +119,7 @@ jobs:
           path: ./ci/provider-proxy-cache/
 
       - name: Install Python for python async client tests
-        run: uv python install 3.10
+        run: uv python install 3.9
 
       - name: "Python: ruff"
         run: |
@@ -154,6 +154,11 @@ jobs:
         run: |
           uv pip install pyright
           uv run pyright
+
+      - name: "Python: PyO3 Client: stubtest"
+        working-directory: clients/python-pyo3
+        run: |
+          uv run stubtest tensorzero.tensorzero
 
       - name: "Python: PyO3 Client: pytest"
         working-directory: clients/python-pyo3

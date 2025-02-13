@@ -34,6 +34,8 @@ services:
       - ${ENV_FILE:-../.env}
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -52,7 +54,6 @@ services:
       timeout: 1s
 
   fixtures:
-    # NOTE: This is expected to quickly terminate with status code 0
     image: clickhouse/clickhouse-server:24.12-alpine
     volumes:
       - .:/fixtures:ro
@@ -64,4 +65,5 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
-    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
+    # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
+    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh && sleep infinity"]

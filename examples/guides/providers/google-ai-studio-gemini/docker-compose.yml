@@ -10,3 +10,5 @@ services:
       - GOOGLE_AI_STUDIO_API_KEY=${GOOGLE_AI_STUDIO_API_KEY:?Environment variable GOOGLE_AI_STUDIO_API_KEY must be set.}
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

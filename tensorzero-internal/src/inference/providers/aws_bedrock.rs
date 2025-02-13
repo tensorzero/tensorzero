@@ -23,12 +23,12 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
-    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, RequestMessage, Role, Text, TextChunk, Usage,
+    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
+    ContentBlockOutput, FunctionType, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -494,12 +494,12 @@ fn prefill_json_message(messages: &mut Vec<Message>) -> Result<(), Error> {
     Ok(())
 }
 
-impl TryFrom<&ContentBlock> for BedrockContentBlock {
+impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
     type Error = Error;
 
     fn try_from(block: &ContentBlock) -> Result<Self, Self::Error> {
         match block {
-            ContentBlock::Text(Text { text }) => Ok(BedrockContentBlock::Text(text.clone())),
+            ContentBlock::Text(Text { text }) => Ok(Some(BedrockContentBlock::Text(text.clone()))),
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value...
                 let input = serde_json::from_str(&tool_call.arguments).map_err(|e| {
@@ -539,7 +539,7 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
                         })
                     })?;
 
-                Ok(BedrockContentBlock::ToolUse(tool_use_block))
+                Ok(Some(BedrockContentBlock::ToolUse(tool_use_block)))
             }
             ContentBlock::ToolResult(tool_result) => {
                 let tool_result_block = ToolResultBlock::builder()
@@ -557,13 +557,19 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
                         })
                     })?;
 
-                Ok(BedrockContentBlock::ToolResult(tool_result_block))
+                Ok(Some(BedrockContentBlock::ToolResult(tool_result_block)))
             }
+            // We don't support thought blocks being passed in from a request.
+            // These are only possible to be passed in in the scenario where the
+            // output of a chat completion is used as an input to another model inference,
+            // i.e. a judge or something.
+            // We don't think the thoughts should be passed in in this case.
+            ContentBlock::Thought(_thought) => Ok(None),
         }
     }
 }
 
-impl TryFrom<BedrockContentBlock> for ContentBlock {
+impl TryFrom<BedrockContentBlock> for ContentBlockOutput {
     type Error = Error;
 
     fn try_from(block: BedrockContentBlock) -> Result<Self, Self::Error> {
@@ -579,7 +585,7 @@ impl TryFrom<BedrockContentBlock> for ContentBlock {
                     })
                 })?;
 
-                Ok(ContentBlock::ToolCall(ToolCall {
+                Ok(ContentBlockOutput::ToolCall(ToolCall {
                     name: tool_use.name,
                     arguments,
                     id: tool_use.tool_use_id,
@@ -600,13 +606,16 @@ impl TryFrom<&RequestMessage> for Message {
 
     fn try_from(inference_message: &RequestMessage) -> Result<Message, Error> {
         let role: ConversationRole = inference_message.role.into();
-        let blocks: Vec<BedrockContentBlock> = inference_message
+        let content: Vec<BedrockContentBlock> = inference_message
             .content
             .iter()
             .map(|block| block.try_into())
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<Option<BedrockContentBlock>>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
         let mut message_builder = Message::builder().role(role);
-        for block in blocks {
+        for block in content {
             message_builder = message_builder.content(block);
         }
         let message = message_builder.build().map_err(|e| {
@@ -661,7 +670,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             }
         };
 
-        let mut content: Vec<ContentBlock> = message
+        let mut content: Vec<ContentBlockOutput> = message
             .ok_or_else(|| {
                 Error::new(ErrorDetails::InferenceServer {
                     raw_request: None,
@@ -673,7 +682,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             .content
             .into_iter()
             .map(|block| block.try_into())
-            .collect::<Result<Vec<ContentBlock>, _>>()?;
+            .collect::<Result<Vec<ContentBlockOutput>, _>>()?;
 
         if model_id.contains("claude")
             && *function_type == FunctionType::Json

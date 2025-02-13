@@ -19,8 +19,9 @@ use crate::inference::types::{
     Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
 };
 use crate::inference::types::{
-    ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,
+    ContentBlockOutput, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
 use crate::model::{build_creds_caching_default_with_fn, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -363,13 +364,13 @@ enum GCPVertexAnthropicMessageContent<'a> {
     },
 }
 
-impl<'a> TryFrom<&'a ContentBlock> for GCPVertexAnthropicMessageContent<'a> {
+impl<'a> TryFrom<&'a ContentBlock> for Option<GCPVertexAnthropicMessageContent<'a>> {
     type Error = Error;
 
     fn try_from(block: &'a ContentBlock) -> Result<Self, Self::Error> {
         match block {
             ContentBlock::Text(Text { text }) => {
-                Ok(GCPVertexAnthropicMessageContent::Text { text })
+                Ok(Some(GCPVertexAnthropicMessageContent::Text { text }))
             }
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value (Anthropic expects an object)
@@ -394,20 +395,26 @@ impl<'a> TryFrom<&'a ContentBlock> for GCPVertexAnthropicMessageContent<'a> {
                     .into());
                 }
 
-                Ok(GCPVertexAnthropicMessageContent::ToolUse {
+                Ok(Some(GCPVertexAnthropicMessageContent::ToolUse {
                     id: &tool_call.id,
                     name: &tool_call.name,
                     input,
-                })
+                }))
             }
             ContentBlock::ToolResult(tool_result) => {
-                Ok(GCPVertexAnthropicMessageContent::ToolResult {
+                Ok(Some(GCPVertexAnthropicMessageContent::ToolResult {
                     tool_use_id: &tool_result.id,
                     content: vec![GCPVertexAnthropicMessageContent::Text {
                         text: &tool_result.result,
                     }],
-                })
+                }))
             }
+            // We don't support thought blocks being passed in from a request.
+            // These are only possible to be passed in in the scenario where the
+            // output of a chat completion is used as an input to another model inference,
+            // i.e. a judge or something.
+            // We don't think the thoughts should be passed in in this case.
+            ContentBlock::Thought(_thought) => Ok(None),
         }
     }
 }
@@ -428,7 +435,10 @@ impl<'a> TryFrom<&'a RequestMessage> for GCPVertexAnthropicMessage<'a> {
             .content
             .iter()
             .map(|block| block.try_into())
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<Option<GCPVertexAnthropicMessageContent>>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
 
         Ok(GCPVertexAnthropicMessage {
             role: inference_message.role.into(),
@@ -618,13 +628,13 @@ pub enum GCPVertexAnthropicContentBlock {
     },
 }
 
-impl TryFrom<GCPVertexAnthropicContentBlock> for ContentBlock {
+impl TryFrom<GCPVertexAnthropicContentBlock> for ContentBlockOutput {
     type Error = Error;
     fn try_from(block: GCPVertexAnthropicContentBlock) -> Result<Self, Self::Error> {
         match block {
             GCPVertexAnthropicContentBlock::Text { text } => Ok(text.into()),
             GCPVertexAnthropicContentBlock::ToolUse { id, name, input } => {
-                Ok(ContentBlock::ToolCall(ToolCall {
+                Ok(ContentBlockOutput::ToolCall(ToolCall {
                     id,
                     name,
                     arguments: serde_json::to_string(&input).map_err(|e| {
@@ -691,7 +701,7 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
             generic_request,
         } = value;
 
-        let content: Vec<ContentBlock> = response
+        let content: Vec<ContentBlockOutput> = response
             .content
             .into_iter()
             .map(|block| block.try_into())
@@ -1037,7 +1047,9 @@ mod tests {
     fn test_try_from_content_block() {
         let text_content_block = "test".to_string().into();
         let anthropic_content_block =
-            GCPVertexAnthropicMessageContent::try_from(&text_content_block).unwrap();
+            Option::<GCPVertexAnthropicMessageContent>::try_from(&text_content_block)
+                .unwrap()
+                .unwrap();
         assert_eq!(
             anthropic_content_block,
             GCPVertexAnthropicMessageContent::Text { text: "test" }
@@ -1049,7 +1061,9 @@ mod tests {
             arguments: serde_json::to_string(&json!({"type": "string"})).unwrap(),
         });
         let anthropic_content_block =
-            GCPVertexAnthropicMessageContent::try_from(&tool_call_content_block).unwrap();
+            Option::<GCPVertexAnthropicMessageContent>::try_from(&tool_call_content_block)
+                .unwrap()
+                .unwrap();
         assert_eq!(
             anthropic_content_block,
             GCPVertexAnthropicMessageContent::ToolUse {
@@ -1768,7 +1782,7 @@ mod tests {
         assert!(inference_response.output.len() == 1);
         assert_eq!(
             inference_response.output[0],
-            ContentBlock::ToolCall(ToolCall {
+            ContentBlockOutput::ToolCall(ToolCall {
                 id: "tool_call_1".to_string(),
                 name: "get_temperature".to_string(),
                 arguments: r#"{"location":"New York"}"#.to_string(),
@@ -1859,7 +1873,7 @@ mod tests {
         assert!(inference_response.output.len() == 2);
         assert_eq!(
             inference_response.output[1],
-            ContentBlock::ToolCall(ToolCall {
+            ContentBlockOutput::ToolCall(ToolCall {
                 id: "tool_call_2".to_string(),
                 name: "get_temperature".to_string(),
                 arguments: r#"{"location":"London"}"#.to_string(),

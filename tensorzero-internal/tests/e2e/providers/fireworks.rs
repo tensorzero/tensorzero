@@ -47,6 +47,12 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "fireworks".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            variant_name: "fireworks-default".to_string(),
+            model_name: "llama3.3-70b-instruct-fireworks".into(),
+            model_provider_name: "fireworks".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     #[cfg(feature = "e2e_tests")]
@@ -59,6 +65,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: providers,
+        reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
         tool_use_inference: tool_providers.clone(),
         tool_multi_turn_inference: tool_providers.clone(),
