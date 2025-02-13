@@ -159,6 +159,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(false),
+                async_writes: false,
             },
             bind_address: None,
             debug: false,
@@ -180,7 +181,10 @@ mod tests {
 
         // Default observability and no ClickHouse URL
         let gateway_config = GatewayConfig {
-            observability: ObservabilityConfig { enabled: None },
+            observability: ObservabilityConfig {
+                enabled: None,
+                async_writes: false,
+            },
             ..Default::default()
         };
         let config = Box::leak(Box::new(Config {
@@ -203,6 +207,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
+                async_writes: false,
             },
             bind_address: None,
             debug: false,
@@ -222,6 +227,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
+                async_writes: false,
             },
             bind_address: None,
             debug: false,
@@ -243,6 +249,7 @@ mod tests {
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
                 enabled: Some(true),
+                async_writes: false,
             },
             bind_address: None,
             debug: false,
