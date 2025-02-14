@@ -104,7 +104,7 @@ function BaseFields({
       <BaseField
         title="Function"
         content={function_name}
-        href={`/observability/function/${function_name}`}
+        href={`/observability/functions/${function_name}`}
       />
       <BaseField title="Weight" content={weight} />
       <BaseField title="Model" content={model} />
@@ -209,7 +209,7 @@ export default function BasicVariantInfo({
                         <>
                           {i > 0 && ", "}
                           <a
-                            href={`/observability/function/${function_name}/variant/${candidate}`}
+                            href={`/observability/functions/${function_name}/variants/${candidate}`}
                           >
                             <Code>{candidate}</Code>
                           </a>
@@ -288,7 +288,7 @@ export default function BasicVariantInfo({
                         <>
                           {i > 0 && ", "}
                           <a
-                            href={`/observability/function/${function_name}/variant/${candidate}`}
+                            href={`/observability/functions/${function_name}/variants/${candidate}`}
                           >
                             <Code>{candidate}</Code>
                           </a>
