@@ -3,12 +3,10 @@ import { Card } from "~/components/ui/card";
 import {
   BookOpenText,
   SquareFunction,
-  GraduationCap,
   Slack,
   MessageSquare,
   Newspaper,
   Globe,
-  Twitter,
   Github,
   GalleryVerticalEnd,
   ChartSpline,
@@ -133,14 +131,17 @@ export default function Home() {
             <div>
               <h3 className="mb-4 text-sm text-gray-400">Learn more</h3>
               <div className="flex flex-col gap-3">
-                <FooterLink source="/docs/quickstart" icon={BookOpenText}>
+                <FooterLink
+                  source="https://www.tensorzero.com/docs"
+                  icon={BookOpenText}
+                >
                   Documentation
                 </FooterLink>
-                <FooterLink source="/docs/tutorials" icon={Github}>
+                <FooterLink
+                  source="https://github.com/tensorzero/tensorzero"
+                  icon={Github}
+                >
                   GitHub
-                </FooterLink>
-                <FooterLink source="/docs/concepts" icon={GraduationCap}>
-                  Tutorials
                 </FooterLink>
               </div>
             </div>
@@ -148,10 +149,16 @@ export default function Home() {
             <div>
               <h3 className="mb-4 text-sm text-gray-400">Ask a question</h3>
               <div className="flex flex-col gap-3">
-                <FooterLink source="/docs/api/rest" icon={Slack}>
+                <FooterLink
+                  source="https://www.tensorzero.com/slack"
+                  icon={Slack}
+                >
                   Slack
                 </FooterLink>
-                <FooterLink source="/docs/api/sdk" icon={MessageSquare}>
+                <FooterLink
+                  source="https://www.tensorzero.com/discord"
+                  icon={MessageSquare}
+                >
                   Discord
                 </FooterLink>
               </div>
@@ -160,14 +167,14 @@ export default function Home() {
             <div>
               <h3 className="mb-4 text-sm text-gray-400">Explore TensorZero</h3>
               <div className="flex flex-col gap-3">
-                <FooterLink source="/docs/guides" icon={Newspaper}>
-                  Blog
-                </FooterLink>
-                <FooterLink source="/docs/examples" icon={Globe}>
+                <FooterLink source="https://www.tensorzero.com/" icon={Globe}>
                   Website
                 </FooterLink>
-                <FooterLink source="/docs/troubleshooting" icon={Twitter}>
-                  X
+                <FooterLink
+                  source="https://www.tensorzero.com/blog"
+                  icon={Newspaper}
+                >
+                  Blog
                 </FooterLink>
               </div>
             </div>
