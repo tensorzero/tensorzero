@@ -14,6 +14,9 @@ import {
   ChartSpline,
   View,
 } from "lucide-react";
+import { countInferencesByFunction, countEpisodes } from "~/utils/clickhouse/inference";
+import { getConfig } from "~/utils/config/index.server";
+import { useLoaderData } from "react-router";
 
 interface FeatureCardProps {
   source: string;
@@ -53,7 +56,23 @@ function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
   );
 }
 
+export async function loader() {
+  const countsInfo = await countInferencesByFunction();
+  const config = await getConfig();
+  const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
+  const numFunctions = Object.keys(config.functions).length;
+  const numEpisodes = await countEpisodes();
+  
+  return { 
+    totalInferences,
+    numFunctions,
+    numEpisodes
+  };
+}
+
 export default function Home() {
+  const { totalInferences, numFunctions, numEpisodes } = useLoaderData<typeof loader>();
+
   return (
     <div className="flex min-h-screen flex-col">
       <div className="container my-16 mx-auto max-w-[960px]">
@@ -65,19 +84,19 @@ export default function Home() {
               source="/observability/inferences"
               icon={ChartSpline}
               title="Inferences"
-              description="Placeholder text"
+              description={`${totalInferences.toLocaleString()} total inferences`}
             />
             <FeatureCard
               source="/observability/episodes"
               icon={GalleryVerticalEnd}
               title="Episodes"
-              description="Placeholder text"
+              description={`${numEpisodes.toLocaleString()} episodes`}
             />
             <FeatureCard
               source="/observability/functions"
               icon={SquareFunction}
               title="Functions"
-              description="Placeholder text"
+              description={`${numFunctions} functions`}
             />
           </div>
         </div>
@@ -90,7 +109,7 @@ export default function Home() {
               source="/optimization/supervised-fine-tuning"
               icon={View}
               title="Supervised Fine-tuning"
-              description="Placeholder text"
+              description={`${numFunctions} functions available`}
             />
           </div>
         </div>
