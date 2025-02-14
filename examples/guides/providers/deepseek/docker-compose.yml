@@ -10,3 +10,5 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:?Environment variable DEEPSEEK_API_KEY must be set.}
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

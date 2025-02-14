@@ -21,11 +21,13 @@ use crate::inference::types::{
     ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequestJsonMode,
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+
+use super::gcp_vertex_gemini::process_output_schema;
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
 const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
@@ -353,12 +355,12 @@ enum GeminiPart<'a> {
     // TODO (if needed): ExecutableCodeResult [docs](https://ai.google.dev/api/caching#CodeExecutionResult)
 }
 
-impl<'a> TryFrom<&'a ContentBlock> for GeminiPart<'a> {
+impl<'a> TryFrom<&'a ContentBlock> for Option<GeminiPart<'a>> {
     type Error = Error;
 
     fn try_from(block: &'a ContentBlock) -> Result<Self, Error> {
         match block {
-            ContentBlock::Text(Text { text }) => Ok(GeminiPart::Text { text }),
+            ContentBlock::Text(Text { text }) => Ok(Some(GeminiPart::Text { text })),
             ContentBlock::ToolResult(tool_result) => {
                 // Convert the tool result from String to JSON Value (Gemini expects an object)
                 let response: Value = serde_json::from_str(&tool_result.result).map_err(|e| {
@@ -377,12 +379,12 @@ impl<'a> TryFrom<&'a ContentBlock> for GeminiPart<'a> {
                     "content": response,
                 });
 
-                Ok(GeminiPart::FunctionResponse {
+                Ok(Some(GeminiPart::FunctionResponse {
                     function_response: GeminiFunctionResponse {
                         name: &tool_result.name,
                         response,
                     },
-                })
+                }))
             }
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value (Gemini expects an object)
@@ -407,13 +409,19 @@ impl<'a> TryFrom<&'a ContentBlock> for GeminiPart<'a> {
                     .into());
                 }
 
-                Ok(GeminiPart::FunctionCall {
+                Ok(Some(GeminiPart::FunctionCall {
                     function_call: GeminiFunctionCall {
                         name: &tool_call.name,
                         args,
                     },
-                })
+                }))
             }
+            // We don't support thought blocks being passed in from a request.
+            // These are only possible to be passed in in the scenario where the
+            // output of a chat completion is used as an input to another model inference,
+            // i.e. a judge or something.
+            // We don't think the thoughts should be passed in in this case.
+            ContentBlock::Thought(_thought) => Ok(None),
         }
     }
 }
@@ -433,7 +441,10 @@ impl<'a> TryFrom<&'a RequestMessage> for GeminiContent<'a> {
             .content
             .iter()
             .map(|block| block.try_into())
-            .collect::<Result<_, _>>()?;
+            .collect::<Result<Vec<Option<GeminiPart>>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
 
         Ok(GeminiContent { role, parts })
     }
@@ -642,31 +653,6 @@ fn prepare_tools<'a>(
     }
 }
 
-fn process_output_schema(output_schema: &Value) -> Result<Value, Error> {
-    let mut schema = output_schema.clone();
-
-    /// Recursively remove all instances of "additionalProperties"
-    fn remove_additional_properties(value: &mut Value) {
-        match value {
-            Value::Object(obj) => {
-                obj.remove("additionalProperties");
-                for (_, v) in obj.iter_mut() {
-                    remove_additional_properties(v);
-                }
-            }
-            Value::Array(arr) => {
-                for v in arr.iter_mut() {
-                    remove_additional_properties(v);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    remove_additional_properties(&mut schema);
-    Ok(schema)
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 struct GeminiResponseFunctionCall {
     name: String,
@@ -706,13 +692,13 @@ impl From<GeminiResponseContentPart> for ContentBlockChunk {
     }
 }
 
-impl TryFrom<GeminiResponseContentPart> for ContentBlock {
+impl TryFrom<GeminiResponseContentPart> for ContentBlockOutput {
     type Error = Error;
     fn try_from(part: GeminiResponseContentPart) -> Result<Self, Self::Error> {
         match part {
             GeminiResponseContentPart::Text(text) => Ok(text.into()),
             GeminiResponseContentPart::FunctionCall(function_call) => {
-                Ok(ContentBlock::ToolCall(ToolCall {
+                Ok(ContentBlockOutput::ToolCall(ToolCall {
                     name: function_call.name,
                     arguments: serde_json::to_string(&function_call.args).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
@@ -797,12 +783,12 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
         })?;
 
         // Gemini sometimes doesn't return content in the response (e.g. safety settings blocked the generation).
-        let content: Vec<ContentBlock> = match first_candidate.content {
+        let content: Vec<ContentBlockOutput> = match first_candidate.content {
             Some(content) => content
                 .parts
                 .into_iter()
                 .map(|part| part.try_into())
-                .collect::<Result<Vec<ContentBlock>, Error>>()?,
+                .collect::<Result<Vec<ContentBlockOutput>, Error>>()?,
             None => vec![],
         };
 
@@ -1391,7 +1377,7 @@ mod tests {
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
 
-        if let [ContentBlock::Text(Text { text }), ContentBlock::ToolCall(tool_call)] =
+        if let [ContentBlockOutput::Text(Text { text }), ContentBlockOutput::ToolCall(tool_call)] =
             &model_inference_response.output[..]
         {
             assert_eq!(text, "Here's the weather information:");
@@ -1478,8 +1464,9 @@ mod tests {
         let model_inference_response: ProviderInferenceResponse =
             response_with_latency.try_into().unwrap();
         assert_eq!(model_inference_response.raw_request, raw_request);
+
         assert_eq!(model_inference_response.raw_response, raw_response);
-        if let [ContentBlock::Text(Text { text: text1 }), ContentBlock::ToolCall(tool_call1), ContentBlock::Text(Text { text: text2 }), ContentBlock::ToolCall(tool_call2)] =
+        if let [ContentBlockOutput::Text(Text { text: text1 }), ContentBlockOutput::ToolCall(tool_call1), ContentBlockOutput::Text(Text { text: text2 }), ContentBlockOutput::ToolCall(tool_call2)] =
             &model_inference_response.output[..]
         {
             assert_eq!(text1, "Here's the weather information:");

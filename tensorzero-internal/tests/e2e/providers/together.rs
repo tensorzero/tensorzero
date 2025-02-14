@@ -27,17 +27,32 @@ async fn get_providers() -> E2ETestProviders {
         credentials,
     }];
 
-    let json_providers = vec![E2ETestProvider {
-        variant_name: "together".to_string(),
-        model_name: "llama3.1-8b-instruct-together".into(),
-        model_provider_name: "together".into(),
-        credentials: HashMap::new(),
-    }];
+    let json_providers = vec![
+        E2ETestProvider {
+            variant_name: "together".to_string(),
+            model_name: "llama3.1-8b-instruct-together".into(),
+            model_provider_name: "together".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            variant_name: "together-default".to_string(),
+            model_name: "llama3.1-8b-instruct-together".into(),
+            model_provider_name: "together".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let tool_providers = vec![E2ETestProvider {
         variant_name: "together-tool".to_string(),
         model_name: "llama3.1-405b-instruct-turbo-together".into(),
         model_provider_name: "together".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let reasoning_providers = vec![E2ETestProvider {
+        variant_name: "together-deepseek-r1".to_string(),
+        model_name: "together-deepseek-r1".to_string(),
+        model_provider_name: "together".to_string(),
         credentials: HashMap::new(),
     }];
 
@@ -51,6 +66,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        reasoning_inference: reasoning_providers.clone(),
         inference_params_inference: inference_params_providers,
         tool_use_inference: tool_providers.clone(),
         tool_multi_turn_inference: tool_providers.clone(),

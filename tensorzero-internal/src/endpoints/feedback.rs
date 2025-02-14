@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -7,6 +8,7 @@ use axum::{debug_handler, Json};
 use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tokio::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -15,7 +17,9 @@ use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
-use crate::inference::types::{parse_chat_output, ContentBlock, ContentBlockOutput, Text};
+use crate::inference::types::{
+    parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
+};
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCall, ToolCallConfig};
 use crate::uuid_util::uuid_elapsed;
 
@@ -27,6 +31,10 @@ use super::validate_tags;
 /// This is the amount of time we want to wait after the target was supposed to have been written
 /// before we decide that the target was actually not written because we can't find it in the database.
 const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
+/// Since we can't be sure that an inference actually completed when the ID says it was
+/// (the ID is generated at the start of the inference), we wait a minimum amount of time
+/// before we decide that the target was actually not written because we can't find it in the database.
+const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1200);
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Serialize, Deserialize)]
@@ -359,32 +367,35 @@ async fn write_boolean(
 /// This is to avoid a race condition where the id was created (e.g. an inference was made)
 /// but the feedback is received before the id is written to the database.
 ///
-/// The current behavior is to immediately check and return the result if the id was created
-/// more than FEEDBACK_COOLDOWN_PERIOD ago.
-///
-/// Otherwise, it will poll the database every second until the cooldown period has passed.
-/// Then, if the id has still not been created, it will return an error.
+/// We compute an amount of time to wait by max(FEEDBACK_COOLDOWN_PERIOD - elapsed_from_target_id, FEEDBACK_MINIMUM_WAIT_TIME)
+/// We then poll every 500ms until that time has passed.
+/// If the time has passed and the id is still not found, we return an error.
 async fn throttled_get_function_name(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
 ) -> Result<String, Error> {
-    let mut elapsed = uuid_elapsed(target_id)?;
-    if elapsed > FEEDBACK_COOLDOWN_PERIOD {
-        return get_function_name(connection_info, metric_config_level, target_id).await;
-    }
+    // Compute how long ago the target_id was created.
+    let elapsed = uuid_elapsed(target_id)?;
 
+    // Calculate the remaining cooldown (which may be zero) and ensure we wait at least FEEDBACK_MINIMUM_WAIT_TIME.
+    let wait_time = max(
+        FEEDBACK_COOLDOWN_PERIOD.saturating_sub(elapsed),
+        FEEDBACK_MINIMUM_WAIT_TIME,
+    );
+    let deadline = Instant::now() + wait_time;
+
+    // Poll every 500ms until the deadline is reached.
     loop {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        elapsed = uuid_elapsed(target_id)?;
         match get_function_name(connection_info, metric_config_level, target_id).await {
             Ok(identifier) => return Ok(identifier),
-            Err(e) => {
-                if elapsed > FEEDBACK_COOLDOWN_PERIOD {
-                    return Err(e);
+            Err(err) => {
+                if Instant::now() >= deadline {
+                    return Err(err);
                 }
             }
         }
+        tokio::time::sleep(Duration::from_millis(500)).await;
     }
 }
 
@@ -416,11 +427,11 @@ async fn get_function_name(
         MetricConfigLevel::Episode => "Episode",
     };
     let identifier_key = match metric_config_level {
-        MetricConfigLevel::Inference => "id",
-        MetricConfigLevel::Episode => "episode_id",
+        MetricConfigLevel::Inference => "id_uint",
+        MetricConfigLevel::Episode => "episode_id_uint",
     };
     let query = format!(
-        "SELECT function_name FROM {} WHERE {} = '{}'",
+        "SELECT function_name FROM {} WHERE {} = toUInt128(toUUID('{}'))",
         table_name, identifier_key, target_id
     );
     let function_name = connection_info
@@ -467,13 +478,13 @@ enum DemonstrationContentBlock {
     ToolCall(DemonstrationToolCall),
 }
 
-impl TryFrom<DemonstrationContentBlock> for ContentBlock {
+impl TryFrom<DemonstrationContentBlock> for ContentBlockOutput {
     type Error = Error;
     fn try_from(value: DemonstrationContentBlock) -> Result<Self, Self::Error> {
         match value {
-            DemonstrationContentBlock::Text(text) => Ok(ContentBlock::Text(text)),
+            DemonstrationContentBlock::Text(text) => Ok(ContentBlockOutput::Text(text)),
             DemonstrationContentBlock::ToolCall(tool_call) => {
-                Ok(ContentBlock::ToolCall(tool_call.try_into()?))
+                Ok(ContentBlockOutput::ToolCall(tool_call.try_into()?))
             }
         }
     }
@@ -530,13 +541,13 @@ async fn validate_parse_demonstration(
                     parallel_tool_calls: None,
                 },
             )?;
-            let content_blocks: Vec<ContentBlock> = content_blocks
+            let content_blocks: Vec<ContentBlockOutput> = content_blocks
                 .into_iter()
                 .map(|block| block.try_into())
-                .collect::<Result<Vec<ContentBlock>, Error>>()?;
+                .collect::<Result<Vec<ContentBlockOutput>, Error>>()?;
             let parsed_value = parse_chat_output(content_blocks, tool_config.as_ref()).await;
             for block in &parsed_value {
-                if let ContentBlockOutput::ToolCall(tool_call) = block {
+                if let ContentBlockChatOutput::ToolCall(tool_call) = block {
                     if tool_call.name.is_none() {
                         return Err(ErrorDetails::InvalidRequest {
                             message: "Demonstration contains invalid tool name".to_string(),
@@ -789,10 +800,8 @@ mod tests {
             }
         );
     }
-
     #[tokio::test]
-    async fn test_feedback_handler() {
-        // Test a Comment Feedback
+    async fn test_feedback_handler_comment() {
         let config = Arc::new(Config {
             gateway: GatewayConfig::default(),
             models: ModelTable::default(),
@@ -823,11 +832,26 @@ mod tests {
                 message: format!("Episode ID: {episode_id} does not exist"),
             }
         );
+    }
 
-        // Test a Demonstration Feedback
+    #[tokio::test]
+    async fn test_feedback_handler_demonstration() {
+        let config = Arc::new(Config {
+            gateway: GatewayConfig::default(),
+            models: ModelTable::default(),
+            embedding_models: EmbeddingModelTable::default(),
+            metrics: HashMap::new(),
+            functions: HashMap::new(),
+            tools: HashMap::new(),
+            templates: TemplateConfig::new(),
+        });
+        let app_state_data = get_unit_test_app_state_data(config, true);
+        let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
+        let episode_id = Uuid::new_v7(timestamp);
         let value = json!("test demonstration");
+
+        // Test with episode_id (should fail)
         let params = Params {
-            // Demonstrations shouldn't work with episode id
             episode_id: Some(episode_id),
             inference_id: None,
             metric_name: "demonstration".to_string(),
@@ -847,6 +871,7 @@ mod tests {
             }
         );
 
+        // Test with inference_id (should fail with non-existent ID)
         let inference_id = Uuid::new_v7(timestamp);
         let params = Params {
             episode_id: None,
@@ -865,8 +890,10 @@ mod tests {
                 message: format!("Inference ID: {inference_id} does not exist"),
             }
         );
+    }
 
-        // Test a Float Feedback (episode level)
+    #[tokio::test]
+    async fn test_feedback_handler_float_episode_level() {
         let mut metrics = HashMap::new();
         metrics.insert(
             "test_float".to_string(),
@@ -887,8 +914,11 @@ mod tests {
         });
         let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(4.5);
+        let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
         let episode_id = Uuid::new_v7(timestamp);
+
+        // Test with inference_id (should fail)
         let params = Params {
             episode_id: None,
             inference_id: Some(inference_id),
@@ -908,6 +938,7 @@ mod tests {
             }
         );
 
+        // Test with episode_id (should fail with non-existent ID)
         let params = Params {
             episode_id: Some(episode_id),
             inference_id: None,
@@ -925,8 +956,10 @@ mod tests {
                 message: format!("Episode ID: {episode_id} does not exist"),
             }
         );
+    }
 
-        // Test Boolean feedback with invalid inference-level.
+    #[tokio::test]
+    async fn test_feedback_handler_boolean_inference_level() {
         let mut metrics = HashMap::new();
         metrics.insert(
             "test_boolean".to_string(),
@@ -947,6 +980,7 @@ mod tests {
         });
         let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(true);
+        let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
         let inference_id = Uuid::new_v7(timestamp);
         let params = Params {
             episode_id: None,
@@ -1003,7 +1037,7 @@ mod tests {
         let parsed_value = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
             .await
             .unwrap();
-        let expected_parsed_value = serde_json::to_string(&vec![ContentBlock::Text(Text {
+        let expected_parsed_value = serde_json::to_string(&vec![ContentBlockOutput::Text(Text {
             text: "Hello, world!".to_string(),
         })])
         .unwrap();
@@ -1016,7 +1050,7 @@ mod tests {
             .await
             .unwrap();
         let expected_parsed_value =
-            serde_json::to_string(&vec![ContentBlockOutput::ToolCall(ToolCallOutput {
+            serde_json::to_string(&vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
                 id: "".to_string(),
                 name: Some("get_temperature".to_string()),
                 raw_name: "get_temperature".to_string(),

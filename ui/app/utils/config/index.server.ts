@@ -7,13 +7,42 @@ import { z } from "zod";
 import { EmbeddingModelConfigSchema, ModelConfigSchema } from "./models";
 import { ToolConfigSchema } from "./tool";
 import type { FunctionConfig } from "./function";
-import path from "path";
 
-const CONFIG_PATH =
-  process.env.TENSORZERO_UI_CONFIG_PATH ||
-  path.join("config", "tensorzero.toml");
+const DEFAULT_CONFIG_PATH = "config/tensorzero.toml";
+const ENV_CONFIG_PATH = process.env.TENSORZERO_UI_CONFIG_PATH;
 
-export async function loadConfig(config_path: string): Promise<Config> {
+export async function loadConfig(config_path?: string): Promise<Config> {
+  // If the config_path was provided (via the env var)
+  if (config_path) {
+    try {
+      // Check if the file exists
+      await fs.access(config_path);
+    } catch {
+      throw new Error(`Configuration file not found at ${config_path}`);
+    }
+  } else {
+    // If the env var is not set, try the default location.
+    try {
+      await fs.access(DEFAULT_CONFIG_PATH);
+      config_path = DEFAULT_CONFIG_PATH;
+      console.info(`Found default config at ${DEFAULT_CONFIG_PATH}`);
+    } catch {
+      console.warn(
+        `Config file not found at ${DEFAULT_CONFIG_PATH}. Using blank config. Tip: Set the \`TENSORZERO_UI_CONFIG_PATH\` environment variable to use a different path.`,
+      );
+      // Return a blank config if no file is available.
+      return {
+        gateway: { disable_observability: false },
+        models: {},
+        embedding_models: {},
+        functions: {},
+        metrics: {},
+        tools: {},
+      };
+    }
+  }
+
+  // At this point, config_path is guaranteed to point to an existing file.
   const tomlContent = await fs.readFile(config_path, "utf-8");
   const parsedConfig = parse(tomlContent);
   const validatedConfig = RawConfig.parse(parsedConfig);
@@ -37,7 +66,8 @@ let configPromise: ReturnType<typeof loadConfig>;
 
 export function getConfig() {
   if (!configPromise) {
-    configPromise = loadConfig(CONFIG_PATH);
+    // Pass in ENV_CONFIG_PATH; if not set, loadConfig() will try the default path.
+    configPromise = loadConfig(ENV_CONFIG_PATH);
   }
   return configPromise;
 }
