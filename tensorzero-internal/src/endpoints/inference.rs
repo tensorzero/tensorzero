@@ -26,8 +26,8 @@ use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    collect_chunks, ChatInferenceDatabaseInsert, CollectChunksArgs, ContentBlockChunk,
-    ContentBlockOutput, InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
+    collect_chunks, ChatInferenceDatabaseInsert, CollectChunksArgs, ContentBlockChatOutput,
+    ContentBlockChunk, InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
     JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
     RequestMessage, Usage,
 };
@@ -465,7 +465,9 @@ fn create_stream(
             match chunk {
                 Ok(chunk) => {
                     buffer.push(chunk.clone());
-                    yield Ok(prepare_response_chunk(&metadata, chunk));
+                    if let Some(chunk) = prepare_response_chunk(&metadata, chunk) {
+                        yield Ok(chunk);
+                    }
                 }
                 Err(e) => yield Err(e),
             }
@@ -558,7 +560,7 @@ fn create_stream(
 fn prepare_response_chunk(
     metadata: &InferenceMetadata,
     chunk: InferenceResultChunk,
-) -> InferenceResponseChunk {
+) -> Option<InferenceResponseChunk> {
     InferenceResponseChunk::new(
         chunk,
         metadata.inference_id,
@@ -651,7 +653,7 @@ pub struct ChatInferenceResponse {
     pub inference_id: Uuid,
     pub episode_id: Uuid,
     pub variant_name: String,
-    pub content: Vec<ContentBlockOutput>,
+    pub content: Vec<ContentBlockChatOutput>,
     pub usage: Usage,
 }
 
@@ -739,8 +741,8 @@ impl InferenceResponseChunk {
         inference_id: Uuid,
         episode_id: Uuid,
         variant_name: String,
-    ) -> Self {
-        match inference_result {
+    ) -> Option<Self> {
+        Some(match inference_result {
             InferenceResultChunk::Chat(result) => {
                 InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
                     inference_id,
@@ -751,15 +753,18 @@ impl InferenceResponseChunk {
                 })
             }
             InferenceResultChunk::Json(result) => {
+                if result.raw.is_none() && result.usage.is_none() {
+                    return None;
+                }
                 InferenceResponseChunk::Json(JsonInferenceResponseChunk {
                     inference_id,
                     episode_id,
                     variant_name,
-                    raw: result.raw,
+                    raw: result.raw.unwrap_or_default(),
                     usage: result.usage,
                 })
             }
-        }
+        })
     }
 }
 
@@ -886,7 +891,7 @@ mod tests {
             cached: false,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk);
+        let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
         match result {
             InferenceResponseChunk::Chat(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);
@@ -906,7 +911,8 @@ mod tests {
 
         // Test case 2: Valid JSON ProviderInferenceResponseChunk
         let chunk = InferenceResultChunk::Json(JsonInferenceResultChunk {
-            raw: "Test content".to_string(),
+            raw: Some("Test content".to_string()),
+            thought: Some("Thought 1".to_string()),
             created: 0,
             usage: None,
             raw_response: "".to_string(),
@@ -936,13 +942,13 @@ mod tests {
             cached: false,
         };
 
-        let result = prepare_response_chunk(&inference_metadata, chunk);
+        let result = prepare_response_chunk(&inference_metadata, chunk).unwrap();
         match result {
             InferenceResponseChunk::Json(c) => {
                 assert_eq!(c.inference_id, inference_metadata.inference_id);
                 assert_eq!(c.episode_id, inference_metadata.episode_id);
                 assert_eq!(c.variant_name, inference_metadata.variant_name);
-                assert_eq!(c.raw, "Test content");
+                assert_eq!(c.raw, "Test content".to_string());
                 assert!(c.usage.is_none());
             }
             InferenceResponseChunk::Chat(_) => {

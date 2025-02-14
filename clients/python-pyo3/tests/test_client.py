@@ -209,6 +209,33 @@ async def test_async_basic_inference(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_reasoning_inference(async_client):
+    result = await async_client.inference(
+        function_name="basic_test",
+        variant_name="reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        tags={"key": "value"},
+    )
+    assert result.variant_name == "reasoner"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 2
+    assert content[0].type == "thought"
+    assert content[0].text == "hmmm"
+    assert content[1].type == "text"
+    assert (
+        content[1].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
+@pytest.mark.asyncio
 async def test_async_default_function_inference(async_client):
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
@@ -328,6 +355,76 @@ async def test_async_inference_streaming(async_client):
             assert len(chunk.content) == 0
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 16
+
+
+@pytest.mark.asyncio
+async def test_async_reasoning_inference_streaming(async_client):
+    stream = await async_client.inference(
+        function_name="basic_test",
+        variant_name="reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        tags={"key": "value"},
+        stream=True,
+    )
+
+    chunks = []
+    previous_chunk_timestamp = None
+    last_chunk_duration = None
+    async for chunk in stream:
+        if previous_chunk_timestamp is not None:
+            last_chunk_duration = time.time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time.time()
+        chunks.append(chunk)
+
+    assert last_chunk_duration > 0.01
+    expected_thinking = [
+        "hmmm",
+        "hmmm",
+    ]
+    expected_text = [
+        "Wally,",
+        " the",
+        " golden",
+        " retriever,",
+        " wagged",
+        " his",
+        " tail",
+        " excitedly",
+        " as",
+        " he",
+        " devoured",
+        " a",
+        " slice",
+        " of",
+        " cheese",
+        " pizza.",
+    ]
+    previous_inference_id = None
+    previous_episode_id = None
+    for i, chunk in enumerate(chunks):
+        if previous_inference_id is not None:
+            assert chunk.inference_id == previous_inference_id
+        if previous_episode_id is not None:
+            assert chunk.episode_id == previous_episode_id
+        previous_inference_id = chunk.inference_id
+        previous_episode_id = chunk.episode_id
+        variant_name = chunk.variant_name
+        assert variant_name == "reasoner"
+        if i < len(expected_thinking):
+            assert len(chunk.content) == 1
+            assert chunk.content[0].type == "thought"
+            assert chunk.content[0].text == expected_thinking[i]
+        elif i < len(expected_thinking) + len(expected_text):
+            assert len(chunk.content) == 1
+            assert chunk.content[0].type == "text"
+            assert chunk.content[0].text == expected_text[i - len(expected_thinking)]
+        else:
+            assert len(chunk.content) == 0
+            assert chunk.usage.input_tokens == 10
+            assert chunk.usage.output_tokens == 10
 
 
 @pytest.mark.asyncio
@@ -536,6 +633,44 @@ async def test_async_json_streaming(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_json_streaming_reasoning(async_client):
+    stream = await async_client.inference(
+        function_name="json_success",
+        variant_name="json_reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+        },
+        stream=True,
+    )
+    chunks = [chunk async for chunk in stream]
+    expected_text = [
+        '{"name"',
+        ':"John"',
+        ',"age"',
+        ":30",
+        "}",
+    ]
+    previous_inference_id = None
+    previous_episode_id = None
+    for i, chunk in enumerate(chunks):
+        if previous_inference_id is not None:
+            assert chunk.inference_id == previous_inference_id
+        if previous_episode_id is not None:
+            assert chunk.episode_id == previous_episode_id
+        previous_inference_id = chunk.inference_id
+        previous_episode_id = chunk.episode_id
+        variant_name = chunk.variant_name
+        assert variant_name == "json_reasoner"
+        if i < len(expected_text):
+            assert chunk.raw == expected_text[i]
+        else:
+            assert chunk.raw == ""
+            assert chunk.usage.input_tokens == 10
+            assert chunk.usage.output_tokens == 10
+
+
+@pytest.mark.asyncio
 async def test_async_json_success(async_client):
     result = await async_client.inference(
         function_name="json_success",
@@ -547,6 +682,25 @@ async def test_async_json_success(async_client):
         stream=False,
     )
     assert result.variant_name == "test"
+    assert isinstance(result, JsonInferenceResponse)
+    assert result.output.raw == '{"answer":"Hello"}'
+    assert result.output.parsed == {"answer": "Hello"}
+    assert result.usage.input_tokens == 10
+    assert result.usage.output_tokens == 10
+
+
+@pytest.mark.asyncio
+async def test_async_json_reasoning(async_client):
+    result = await async_client.inference(
+        function_name="json_success",
+        variant_name="json_reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+        },
+        stream=False,
+    )
+    assert result.variant_name == "json_reasoner"
     assert isinstance(result, JsonInferenceResponse)
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
@@ -904,6 +1058,32 @@ def test_sync_tool_call_inference(sync_client):
     assert usage.output_tokens == 10
 
 
+def test_sync_reasoning_inference(sync_client):
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        tags={"key": "value"},
+    )
+    assert result.variant_name == "reasoner"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 2
+    assert content[0].type == "thought"
+    assert content[0].text == "hmmm"
+    assert content[1].type == "text"
+    assert (
+        content[1].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
 def test_sync_malformed_tool_call_inference(sync_client):
     result = sync_client.inference(
         function_name="weather_helper",
@@ -978,6 +1158,75 @@ def test_sync_tool_call_streaming(sync_client):
             assert chunk.usage.output_tokens == 5
 
 
+def test_sync_reasoning_inference_streaming(sync_client):
+    stream = sync_client.inference(
+        function_name="basic_test",
+        variant_name="reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        tags={"key": "value"},
+        stream=True,
+    )
+
+    chunks = []
+    previous_chunk_timestamp = None
+    last_chunk_duration = None
+    for chunk in stream:
+        if previous_chunk_timestamp is not None:
+            last_chunk_duration = time.time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time.time()
+        chunks.append(chunk)
+
+    assert last_chunk_duration > 0.01
+    expected_thinking = [
+        "hmmm",
+        "hmmm",
+    ]
+    expected_text = [
+        "Wally,",
+        " the",
+        " golden",
+        " retriever,",
+        " wagged",
+        " his",
+        " tail",
+        " excitedly",
+        " as",
+        " he",
+        " devoured",
+        " a",
+        " slice",
+        " of",
+        " cheese",
+        " pizza.",
+    ]
+    previous_inference_id = None
+    previous_episode_id = None
+    for i, chunk in enumerate(chunks):
+        if previous_inference_id is not None:
+            assert chunk.inference_id == previous_inference_id
+        if previous_episode_id is not None:
+            assert chunk.episode_id == previous_episode_id
+        previous_inference_id = chunk.inference_id
+        previous_episode_id = chunk.episode_id
+        variant_name = chunk.variant_name
+        assert variant_name == "reasoner"
+        if i < len(expected_thinking):
+            assert len(chunk.content) == 1
+            assert chunk.content[0].type == "thought"
+            assert chunk.content[0].text == expected_thinking[i]
+        elif i < len(expected_thinking) + len(expected_text):
+            assert len(chunk.content) == 1
+            assert chunk.content[0].type == "text"
+            assert chunk.content[0].text == expected_text[i - len(expected_thinking)]
+        else:
+            assert len(chunk.content) == 0
+            assert chunk.usage.input_tokens == 10
+            assert chunk.usage.output_tokens == 10
+
+
 def test_sync_json_streaming(sync_client):
     # We don't actually have a streaming JSON function implemented in `dummy.rs` but it doesn't matter for this test since
     # TensorZero doesn't parse the JSON output of the function for streaming calls.
@@ -1026,6 +1275,43 @@ def test_sync_json_streaming(sync_client):
             assert chunk.usage.output_tokens == 16
 
 
+def test_sync_json_streaming_reasoning(sync_client):
+    stream = sync_client.inference(
+        function_name="json_success",
+        variant_name="json_reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+        },
+        stream=True,
+    )
+    chunks = list(stream)
+    expected_text = [
+        '{"name"',
+        ':"John"',
+        ',"age"',
+        ":30",
+        "}",
+    ]
+    previous_inference_id = None
+    previous_episode_id = None
+    for i, chunk in enumerate(chunks):
+        if previous_inference_id is not None:
+            assert chunk.inference_id == previous_inference_id
+        if previous_episode_id is not None:
+            assert chunk.episode_id == previous_episode_id
+        previous_inference_id = chunk.inference_id
+        previous_episode_id = chunk.episode_id
+        variant_name = chunk.variant_name
+        assert variant_name == "json_reasoner"
+        if i < len(expected_text):
+            assert chunk.raw == expected_text[i]
+        else:
+            assert chunk.raw == ""
+            assert chunk.usage.input_tokens == 10
+            assert chunk.usage.output_tokens == 10
+
+
 def test_sync_json_success(sync_client):
     result = sync_client.inference(
         function_name="json_success",
@@ -1037,6 +1323,24 @@ def test_sync_json_success(sync_client):
         stream=False,
     )
     assert result.variant_name == "test"
+    assert isinstance(result, JsonInferenceResponse)
+    assert result.output.raw == '{"answer":"Hello"}'
+    assert result.output.parsed == {"answer": "Hello"}
+    assert result.usage.input_tokens == 10
+    assert result.usage.output_tokens == 10
+
+
+def test_sync_json_reasoning(sync_client):
+    result = sync_client.inference(
+        function_name="json_success",
+        variant_name="json_reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+        },
+        stream=False,
+    )
+    assert result.variant_name == "json_reasoner"
     assert isinstance(result, JsonInferenceResponse)
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}

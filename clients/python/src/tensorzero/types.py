@@ -59,6 +59,13 @@ class ToolCall(ContentBlock):
 
 
 @dataclass
+class Thought(ContentBlock):
+    text: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(type="thought", value=self.text)
+
+
 @dataclass
 class ToolResult:
     # This class does not subclass ContentBlock since it cannot be output by the API.
@@ -132,6 +139,8 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
             raw_name=block["raw_name"],
             type=block_type,
         )
+    elif block_type == "thought":
+        return Thought(text=block["text"], type=block_type)
     else:
         raise ValueError(f"Unknown content block type: {block}")
 
@@ -140,7 +149,7 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
 
 
 @dataclass
-class ContentBlockChunk:
+class ContentBlockChunk(ABC):
     type: str
 
 
@@ -162,6 +171,11 @@ class ToolCallChunk(ContentBlockChunk):
 
 
 @dataclass
+class ThoughtChunk(ContentBlockChunk):
+    text: str
+
+
+@dataclass
 class ChatChunk:
     inference_id: UUID
     episode_id: UUID
@@ -175,7 +189,7 @@ class JsonChunk:
     inference_id: UUID
     episode_id: UUID
     variant_name: str
-    raw: str
+    raw: Optional[str]
     usage: Optional[Usage]
 
 
@@ -196,7 +210,7 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             inference_id=UUID(chunk["inference_id"]),
             episode_id=UUID(chunk["episode_id"]),
             variant_name=chunk["variant_name"],
-            raw=chunk["raw"],
+            raw=chunk.get("raw"),
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
         )
     else:
@@ -214,6 +228,8 @@ def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
             raw_name=block["raw_name"],
             type=block_type,
         )
+    elif block_type == "thought":
+        return ThoughtChunk(text=block["text"], type=block_type)
     else:
         raise ValueError(f"Unknown content block type: {block}")
 

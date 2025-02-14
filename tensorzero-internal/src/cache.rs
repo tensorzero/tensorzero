@@ -5,7 +5,7 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ModelInferenceRequest, ModelInferenceResponse,
+    ContentBlockChunk, ContentBlockOutput, ModelInferenceRequest, ModelInferenceResponse,
     ProviderInferenceResponseChunk,
 };
 use crate::model::StreamResponse;
@@ -160,7 +160,7 @@ impl CacheOutput for NonStreamingCacheData {}
 #[serde(transparent)]
 pub struct NonStreamingCacheData {
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub blocks: Vec<ContentBlock>,
+    pub blocks: Vec<ContentBlockOutput>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -174,7 +174,7 @@ pub struct StreamingCacheData {
 pub fn start_cache_write(
     clickhouse_client: &ClickHouseConnectionInfo,
     request: ModelProviderRequest<'_>,
-    output: &[ContentBlock],
+    output: &[ContentBlockOutput],
     raw_request: &str,
     raw_response: &str,
 ) -> Result<(), Error> {
