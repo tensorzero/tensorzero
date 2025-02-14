@@ -9,11 +9,45 @@ import { ToolConfigSchema } from "./tool";
 import type { FunctionConfig } from "./function";
 import path from "path";
 
+
+function checkQuotedEnvVar(key: string, value: string | undefined): void {
+  if (!value) return;
+  
+  const isQuoted = (value.startsWith('"') && value.endsWith('"')) || 
+                   (value.startsWith("'") && value.endsWith("'"));
+  
+  if (isQuoted) {
+    console.warn(
+      `Warning: Environment variable ${key} contains quotes. ` +
+      `This may cause issues. Remove the quotes from the value in your .env file.`
+    );
+  }
+}
+
+function validateEnvironmentVariables(requiredVars: string[]): void {
+  for (const varName of requiredVars) {
+    const value = process.env[varName];
+    checkQuotedEnvVar(varName, value);
+  }
+}
+
+
 const CONFIG_PATH =
   process.env.TENSORZERO_UI_CONFIG_PATH ||
   path.join("config", "tensorzero.toml");
 
 export async function loadConfig(config_path: string): Promise<Config> {
+
+  
+    validateEnvironmentVariables([
+    'TENSORZERO_UI_CONFIG_PATH',
+    'TENSORZERO_GATEWAY_URL',
+    'TENSORZERO_CLICKHOUSE_URL',
+    'OPENAI_API_KEY',
+    'FIREWORKS_API_KEY',
+    'FIREWORKS_ACCOUNT_ID'
+  ]);
+
   const tomlContent = await fs.readFile(config_path, "utf-8");
   const parsedConfig = parse(tomlContent);
   const validatedConfig = RawConfig.parse(parsedConfig);

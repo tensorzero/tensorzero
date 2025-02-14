@@ -1,3 +1,4 @@
+mod env_validator;
 use axum::routing::{get, post};
 use axum::Router;
 use clap::Parser;
@@ -10,6 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal;
 
+use crate::env_validator::validate_environment_variables;
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::config_parser::Config;
 use tensorzero_internal::endpoints;
@@ -38,6 +40,8 @@ async fn main() {
     observability::setup_logs(true);
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
     let args = Args::parse();
+
+    validate_environment_variables();
 
     if args.tensorzero_toml.is_some() && args.config_file.is_some() {
         tracing::error!("Cannot specify both `--config-file` and a positional path argument");
