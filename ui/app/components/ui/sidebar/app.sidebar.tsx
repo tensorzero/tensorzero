@@ -88,7 +88,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 {section.title}
               </SidebarGroupLabel>
             )}
-            <SidebarGroupContent>
+            <SidebarGroupContent className="flex flex-col gap-1">
               {section.items?.map((item) => (
                 <SidebarMenuItem key={item.title} className="list-none">
                   <SidebarMenuButton 
