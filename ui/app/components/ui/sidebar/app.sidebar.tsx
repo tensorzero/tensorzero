@@ -61,7 +61,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild isActive={isActivePath("/")}>
+            <SidebarMenuButton size="lg" asChild>
               <a href="/" className="flex items-center gap-2">
                 <div className="flex aspect-square size-8 items-center justify-center">
                   <img
