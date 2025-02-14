@@ -64,7 +64,7 @@ export default function App() {
   
   return (
     <ConfigProvider value={config}>
-      <SidebarProvider defaultOpen={true}>
+      <SidebarProvider>
         <div className="flex min-h-screen w-full">
           <AppSidebar />
           <main className="flex-1 overflow-y-auto px-12 max-md:px-4">

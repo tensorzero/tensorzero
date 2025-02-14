@@ -1,8 +1,9 @@
 import * as React from "react";
-import { ChevronRight, ChevronLeft, FileText, ChartSpline, Layers, SquareFunction, View } from "lucide-react";
+import { ChevronRight, ChevronLeft, FileText, ChartSpline, GalleryVerticalEnd, SquareFunction, View, Home } from "lucide-react";
 import { useSidebar } from "~/components/ui/sidebar";
 import { cn } from "~/utils/common";
 import { useActivePath } from "~/hooks/use-active-path";
+import { TensorZeroLogo } from "~/components/icons/Icons";
 
 import {
   Sidebar,
@@ -31,7 +32,7 @@ const navigation = [
       {
         title: "Episodes",
         url: "/observability/episodes",
-        icon: Layers,
+        icon: GalleryVerticalEnd,
       },
       {
         title: "Functions",
@@ -58,19 +59,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
+      <SidebarHeader className="pb-4">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
+            <SidebarMenuButton 
+              asChild 
+              className="text-black hover:bg-transparent active:bg-transparent focus-visible:bg-transparent"
+            >
               <a href="/" className="flex items-center gap-2">
-                <div className="flex aspect-square size-8 items-center justify-center">
-                  <img
-                    src="https://www.tensorzero.com/favicon.svg"
-                    alt="TensorZero logo"
-                    className="size-full flex items-center justify-center"
-                  />
-                </div>
-                <span className="font-semibold">TensorZero</span>
+                <TensorZeroLogo size={16} />
+                {state === "expanded" && <span className="font-semibold">TensorZero</span>}
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -81,6 +79,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           "!overflow-y-auto !overflow-x-hidden transition-[width] duration-200",
         )}
       >
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenuItem className="list-none">
+              <SidebarMenuButton 
+                asChild
+              tooltip={state === "collapsed" ? "Dashboard" : undefined}
+              isActive={isActivePath("/")}
+            >
+              <a href="/" className="flex items-center gap-2">
+                <Home className="h-4 w-4" />
+                {state === "expanded" && <span>Dashboard</span>}
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          </SidebarGroupContent>
+        </SidebarGroup>
         {navigation.map((section) => (
           <SidebarGroup key={section.title}>
             {state === "expanded" && (
