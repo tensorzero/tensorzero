@@ -10,12 +10,13 @@ pub mod migration_0003;
 pub mod migration_0004;
 pub mod migration_0005;
 pub mod migration_0006;
-pub mod migration_0007;
+// pub mod migration_0007;
 pub mod migration_0008;
 pub mod migration_0009;
-pub mod migration_0010;
+// pub mod migration_0010;
 pub mod migration_0011;
 pub mod migration_0012;
+pub mod migration_0013;
 
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails

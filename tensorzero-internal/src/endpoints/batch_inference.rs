@@ -994,7 +994,7 @@ pub async fn get_completed_batch_inference_response(
                     "WITH inf_lookup AS (
                         SELECT episode_id
                         FROM InferenceById
-                        WHERE id = '{}'
+                        WHERE id_uint = toUInt128(toUUID('{}'))
                     )
                     SELECT
                         ci.id as inference_id,
@@ -1087,7 +1087,7 @@ pub async fn get_completed_batch_inference_response(
                     "WITH inf_lookup AS (
                         SELECT episode_id
                         FROM InferenceById
-                        WHERE id = '{}'
+                        WHERE id_uint = toUInt128(toUUID('{}'))
                     )
                     SELECT
                         ji.id as inference_id,
