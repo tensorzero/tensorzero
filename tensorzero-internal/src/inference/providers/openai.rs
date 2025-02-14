@@ -798,7 +798,30 @@ pub(super) struct OpenAISystemRequestMessage<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIUserRequestMessage<'a> {
-    pub(super) content: Cow<'a, str>, // NOTE: this could be an array including images and stuff according to API spec (not supported yet)
+    #[serde(serialize_with = "serialize_user_content")]
+    pub(super) content: Vec<OpenAIUserContent<'a>>,
+}
+
+fn serialize_user_content<S>(
+    content: &Vec<OpenAIUserContent<'_>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    // If we have a single text block, serialize it as a string
+    // to stay compatible with older providers which may not support content blocks
+    if let [OpenAIUserContent::Text { text }] = &content.as_slice() {
+        text.serialize(serializer)
+    } else {
+        content.serialize(serializer)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIUserContent<'a> {
+    Text { text: Cow<'a, str> },
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -852,12 +875,17 @@ pub(super) enum OpenAIRequestMessage<'a> {
 }
 
 impl OpenAIRequestMessage<'_> {
-    pub fn content(&self) -> Option<&str> {
+    pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
         match self {
-            OpenAIRequestMessage::System(msg) => Some(&msg.content),
-            OpenAIRequestMessage::User(msg) => Some(&msg.content),
-            OpenAIRequestMessage::Assistant(msg) => msg.content.as_deref(),
-            OpenAIRequestMessage::Tool(msg) => Some(msg.content),
+            OpenAIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
+            OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
+                OpenAIUserContent::Text { text } => text.to_lowercase().contains(value),
+            }),
+            OpenAIRequestMessage::Assistant(msg) => msg
+                .content
+                .as_ref()
+                .is_some_and(|c| c.to_lowercase().contains(value)),
+            OpenAIRequestMessage::Tool(msg) => msg.content.to_lowercase().contains(value),
         }
     }
 }
@@ -924,11 +952,10 @@ pub(super) fn tensorzero_to_openai_system_message<'a>(
         Some(system) => {
             match json_mode {
                 ModelInferenceRequestJsonMode::On => {
-                    if messages.iter().any(|msg| {
-                        msg.content()
-                            .map(|c| c.to_lowercase().contains("json"))
-                            .unwrap_or(false)
-                    }) || system.to_lowercase().contains("json")
+                    if messages
+                        .iter()
+                        .any(|msg| msg.content_contains_case_insensitive("json"))
+                        || system.to_lowercase().contains("json")
                     {
                         OpenAIRequestMessage::System(OpenAISystemRequestMessage {
                             content: Cow::Borrowed(system),
@@ -969,7 +996,9 @@ pub(super) fn tensorzero_to_openai_messages(
             ContentBlock::Text(Text { text }) => match message.role {
                 Role::User => {
                     messages.push(OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                        content: Cow::Borrowed(text),
+                        content: vec![OpenAIUserContent::Text {
+                            text: Cow::Borrowed(text),
+                        }],
                     }));
                 }
                 Role::Assistant => {
@@ -1244,7 +1273,9 @@ impl<'a> OpenAIRequest<'a> {
             if let Some(OpenAIRequestMessage::System(_)) = messages.first() {
                 if let OpenAIRequestMessage::System(system_msg) = messages.remove(0) {
                     let user_msg = OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                        content: system_msg.content,
+                        content: vec![OpenAIUserContent::Text {
+                            text: system_msg.content,
+                        }],
                     });
                     messages.insert(0, user_msg);
                 }
@@ -2185,7 +2216,7 @@ mod tests {
         assert!(
             matches!(
                 openai_request_with_system.messages[0],
-                OpenAIRequestMessage::User(ref msg) if msg.content == "This is the system message"
+                OpenAIRequestMessage::User(ref msg) if msg.content == [OpenAIUserContent::Text { text: "This is the system message".into() }]
             ),
             "Unexpected messages: {:?}",
             openai_request_with_system.messages
@@ -2563,7 +2594,12 @@ mod tests {
         assert_eq!(openai_messages.len(), 1);
         match &openai_messages[0] {
             OpenAIRequestMessage::User(content) => {
-                assert_eq!(content.content, "Hello");
+                assert_eq!(
+                    content.content,
+                    &[OpenAIUserContent::Text {
+                        text: "Hello".into()
+                    }]
+                );
             }
             _ => panic!("Expected a user message"),
         }
@@ -2580,13 +2616,23 @@ mod tests {
         assert_eq!(openai_messages.len(), 2);
         match &openai_messages[0] {
             OpenAIRequestMessage::User(content) => {
-                assert_eq!(content.content, "Hello");
+                assert_eq!(
+                    content.content,
+                    &[OpenAIUserContent::Text {
+                        text: "Hello".into()
+                    }]
+                );
             }
             _ => panic!("Expected a user message"),
         }
         match &openai_messages[1] {
             OpenAIRequestMessage::User(content) => {
-                assert_eq!(content.content, "How are you?");
+                assert_eq!(
+                    content.content,
+                    &[OpenAIUserContent::Text {
+                        text: "How are you?".into()
+                    }]
+                );
             }
             _ => panic!("Expected a user message"),
         }
@@ -2607,7 +2653,12 @@ mod tests {
         assert_eq!(openai_messages.len(), 2);
         match &openai_messages[0] {
             OpenAIRequestMessage::User(content) => {
-                assert_eq!(content.content, "Hello");
+                assert_eq!(
+                    content.content,
+                    &[OpenAIUserContent::Text {
+                        text: "Hello".into()
+                    }]
+                );
             }
             _ => panic!("Expected a user message"),
         }
@@ -2854,7 +2905,9 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: Cow::Borrowed("Please respond in JSON format."),
+                content: vec![OpenAIUserContent::Text {
+                    text: "Please respond in JSON format.".into(),
+                }],
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                 content: Some(Cow::Borrowed("Sure, here is the data.")),
@@ -2872,7 +2925,9 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: Cow::Borrowed("Hello, how are you?"),
+                content: vec![OpenAIUserContent::Text {
+                    text: "Hello, how are you?".into(),
+                }],
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                 content: Some(Cow::Borrowed("I am fine, thank you!")),
@@ -2891,7 +2946,9 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: Cow::Borrowed("Hello, how are you?"),
+                content: vec![OpenAIUserContent::Text {
+                    text: "Hello, how are you?".into(),
+                }],
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                 content: Some(Cow::Borrowed("I am fine, thank you!")),
@@ -2909,7 +2966,9 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: Cow::Borrowed("Hello, how are you?"),
+                content: vec![OpenAIUserContent::Text {
+                    text: "Hello, how are you?".into(),
+                }],
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                 content: Some(Cow::Borrowed("I am fine, thank you!")),
@@ -2926,7 +2985,9 @@ mod tests {
         let system = Some("Respond using JSON.\n\nSystem instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-            content: Cow::Borrowed("Hello, how are you?"),
+            content: vec![OpenAIUserContent::Text {
+                text: "Hello, how are you?".into(),
+            }],
         })];
         let expected = Some(OpenAIRequestMessage::System(OpenAISystemRequestMessage {
             content: Cow::Borrowed("Respond using JSON.\n\nSystem instructions"),
@@ -2939,7 +3000,9 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: Cow::Borrowed("Tell me a joke."),
+                content: vec![OpenAIUserContent::Text {
+                    text: "Tell me a joke.".into(),
+                }],
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                 content: Some(Cow::Borrowed("Sure, here's one for you.")),
@@ -2957,7 +3020,9 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: Cow::Borrowed("Provide a summary of the news."),
+                content: vec![OpenAIUserContent::Text {
+                    text: "Provide a summary of the news.".into(),
+                }],
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                 content: Some(Cow::Borrowed("Here's the summary.")),
@@ -2982,7 +3047,9 @@ mod tests {
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-            content: Cow::Borrowed("Please include JSON in your response."),
+            content: vec![OpenAIUserContent::Text {
+                text: "Please include JSON in your response.".into(),
+            }],
         })];
         let expected = None;
         let result = tensorzero_to_openai_system_message(system, &json_mode, &messages);
