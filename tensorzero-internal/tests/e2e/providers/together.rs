@@ -49,6 +49,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let reasoning_providers = vec![E2ETestProvider {
+        variant_name: "together-deepseek-r1".to_string(),
+        model_name: "together-deepseek-r1".to_string(),
+        model_provider_name: "together".to_string(),
+        credentials: HashMap::new(),
+    }];
+
     #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "together-shorthand".to_string(),
@@ -59,6 +66,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        reasoning_inference: reasoning_providers.clone(),
         inference_params_inference: inference_params_providers,
         tool_use_inference: tool_providers.clone(),
         tool_multi_turn_inference: tool_providers.clone(),

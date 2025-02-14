@@ -29,7 +29,7 @@ export default function InferenceSearchBar() {
   });
 
   const onSubmit = (data: FormValues) => {
-    navigate(`/observability/inference/${data.inferenceId}`);
+    navigate(`/observability/inferences/${data.inferenceId}`);
     form.reset();
   };
 

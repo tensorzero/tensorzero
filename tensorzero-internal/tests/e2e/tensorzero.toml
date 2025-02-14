@@ -317,6 +317,14 @@ routing = ["deepseek"]
 type = "deepseek"
 model_name = "deepseek-chat"
 
+[models."together-deepseek-r1"]
+routing = ["together"]
+
+[models."together-deepseek-r1".providers.together]
+type = "together"
+model_name = "deepseek-ai/DeepSeek-R1"
+
+
 [models.slow]
 routing = ["slow"]
 
@@ -433,6 +441,20 @@ routing = ["dummy"]
 [models.json_beatles_2.providers.dummy]
 type = "dummy"
 model_name = "json_beatles_2"
+
+[models.json_reasoner]
+routing = ["dummy"]
+
+[models.json_reasoner.providers.dummy]
+type = "dummy"
+model_name = "json_reasoner"
+
+[models.reasoner]
+routing = ["dummy"]
+
+[models.reasoner.providers.dummy]
+type = "dummy"
+model_name = "reasoner"
 
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
@@ -740,7 +762,19 @@ max_tokens = 100
 type = "chat_completion"
 model = "deepseek-reasoner"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
+max_tokens = 800
+
+[functions.basic_test.variants.together-deepseek-r1]
+type = "chat_completion"
+model = "together-deepseek-r1"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
+[functions.basic_test.variants.reasoner]
+type = "chat_completion"
+model = "reasoner"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
 
 [functions.basic_test.variants.deepseek-dynamic]
 type = "chat_completion"
@@ -917,6 +951,21 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "implicit_tool"
 max_tokens = 100
 
+[functions.json_success.variants.deepseek-reasoner]
+type = "chat_completion"
+model = "deepseek-reasoner"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "off"
+max_tokens = 800
+
+[functions.json_success.variants.together-deepseek-r1]
+type = "chat_completion"
+model = "together-deepseek-r1"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "off"
+max_tokens = 800
 [functions.json_success.variants.fireworks-default]
 type = "chat_completion"
 model = "llama3.3-70b-instruct-fireworks"
@@ -1026,6 +1075,12 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "implicit_tool"
 max_tokens = 100
 
+[functions.json_success.variants.json_reasoner]
+type = "chat_completion"
+model = "json_reasoner"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+max_tokens = 100
 
 [functions.json_success.variants.mistral]
 type = "chat_completion"

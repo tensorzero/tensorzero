@@ -29,7 +29,7 @@ export default function EpisodeInferenceTable({
           <TableRow key={inference.id} id={inference.id}>
             <TableCell className="max-w-[200px]">
               <a
-                href={`/observability/inference/${inference.id}`}
+                href={`/observability/inferences/${inference.id}`}
                 className="block no-underline"
               >
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
@@ -39,7 +39,7 @@ export default function EpisodeInferenceTable({
             </TableCell>
             <TableCell>
               <a
-                href={`/observability/function/${inference.function_name}`}
+                href={`/observability/functions/${inference.function_name}`}
                 className="block no-underline"
               >
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
@@ -49,7 +49,7 @@ export default function EpisodeInferenceTable({
             </TableCell>
             <TableCell>
               <a
-                href={`/observability/function/${inference.function_name}/variant/${inference.variant_name}`}
+                href={`/observability/functions/${inference.function_name}/variant/${inference.variant_name}`}
                 className="block no-underline"
               >
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">

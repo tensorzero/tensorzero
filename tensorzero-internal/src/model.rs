@@ -416,6 +416,8 @@ pub(super) enum ProviderConfigHelper {
     Together {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
+        #[serde(default = "crate::inference::providers::together::default_parse_think_blocks")]
+        parse_think_blocks: bool,
     },
     #[allow(clippy::upper_case_acronyms)]
     VLLM {
@@ -554,8 +556,9 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             ProviderConfigHelper::Together {
                 model_name,
                 api_key_location,
+                parse_think_blocks,
             } => ProviderConfig::Together(
-                TogetherProvider::new(model_name, api_key_location)
+                TogetherProvider::new(model_name, api_key_location, parse_think_blocks)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
             ProviderConfigHelper::VLLM {
@@ -1132,7 +1135,11 @@ impl ShorthandModelConfig for ModelConfig {
             "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
             "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
             "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
-            "together" => ProviderConfig::Together(TogetherProvider::new(model_name, None)?),
+            "together" => ProviderConfig::Together(TogetherProvider::new(
+                model_name,
+                None,
+                crate::inference::providers::together::default_parse_think_blocks(),
+            )?),
             "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),

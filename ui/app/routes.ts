@@ -20,21 +20,21 @@ export default [
     "routes/observability/inferences/route.tsx",
   ),
   route(
-    "observability/episode/:episode_id",
-    "routes/observability/episode/route.tsx",
+    "observability/episodes/:episode_id",
+    "routes/observability/episodes/$episode_id/route.tsx",
   ),
   route(
-    "observability/inference/:inference_id",
-    "routes/observability/inference/route.tsx",
+    "observability/inferences/:inference_id",
+    "routes/observability/inferences/$inference_id/route.tsx",
   ),
   route("observability/functions", "routes/observability/functions/route.tsx"),
   route(
-    "observability/function/:function_name",
-    "routes/observability/function/route.tsx",
+    "observability/functions/:function_name",
+    "routes/observability/functions/$function_name/route.tsx",
   ),
   route("observability/episodes", "routes/observability/episodes/route.tsx"),
   route(
-    "observability/function/:function_name/variant/:variant_name",
-    "routes/observability/function/variant/route.tsx",
+    "observability/functions/:function_name/variants/:variant_name",
+    "routes/observability/functions/$function_name/variants/route.tsx",
   ),
 ] satisfies RouteConfig;
