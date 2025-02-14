@@ -28,7 +28,7 @@ interface FeatureCardProps {
 function FeatureCard({ source, icon: Icon, title, description }: FeatureCardProps) {
   return (
     <Link to={source} className="block">
-      <Card className="h-full border border-gray-300 rounded-2xl hover:border-gray-900 transition-colors group">
+      <Card className="h-full border-[1px] border-gray-200 rounded-xl hover:border-gray-500 transition-colors group">
         <div className="p-6">
           <Icon className="h-5 w-5 mb-8 text-gray-500 group-hover:text-gray-900 transition-colors" />
           <h3 className="text-lg font-medium">{title}</h3>
@@ -74,7 +74,7 @@ export default function Home() {
   const { totalInferences, numFunctions, numEpisodes } = useLoaderData<typeof loader>();
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex flex-col">
       <div className="container my-16 mx-auto max-w-[960px]">
         <div id="observability" className="mb-16">
           <h2 className="mb-1 text-2xl font-medium">Observability</h2>

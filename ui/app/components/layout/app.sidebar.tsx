@@ -127,16 +127,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         ))}
       </SidebarContent>
       <SidebarFooter className="relative">
-        <SidebarTrigger className="flex justify-left">
-          {state === "expanded" ? (
-            <ChevronLeft className="h-4 w-4" />
-          ) : (
+        {state === "collapsed" && (
+          <SidebarTrigger className="flex justify-left">
             <ChevronRight className="h-4 w-4" />
-          )}
-          <span className="sr-only">
-            {state === "expanded" ? "Collapse" : "Expand"} sidebar
-          </span>
-        </SidebarTrigger>
+            <span className="sr-only">Expand sidebar</span>
+          </SidebarTrigger>
+        )}
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton 
