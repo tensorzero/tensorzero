@@ -40,6 +40,7 @@ pub struct E2ETestProvider {
 /// then the provider should return an empty vector for the corresponding test.
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
+    #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub reasoning_inference: Vec<E2ETestProvider>,
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
