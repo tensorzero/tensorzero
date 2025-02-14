@@ -41,7 +41,7 @@ export default function FunctionVariantTable({
           >
             <TableCell className="max-w-[200px]">
               <a
-                href={`/observability/function/${function_name}/variant/${variant_count.variant_name}`}
+                href={`/observability/functions/${function_name}/variants/${variant_count.variant_name}`}
                 className="block no-underline"
               >
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">

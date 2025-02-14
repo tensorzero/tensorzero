@@ -45,7 +45,7 @@ export default function FunctionsTable({
               >
                 <TableCell className="max-w-[200px] lg:max-w-none">
                   <a
-                    href={`/observability/function/${countInfo.function_name}`}
+                    href={`/observability/functions/${countInfo.function_name}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
