@@ -11,7 +11,7 @@ use super::check_table_exists;
 ///
 /// As ClickHouse stores UUIDs big-endian which for UUIDv7 gives a sorting order that
 /// ignores the embedded timestamps. To rectify this we should sort by
-/// toUUIDv7(id), which correctly handles the timestamp.
+/// id_uint (the id converted to a UInt128), which correctly handles the timestamp.
 ///
 /// This migration also installs a user-defined function `uint_to_uuid` which converts a UInt128 to a UUID
 /// assuming the UInt128 was created from toUInt128(uuid).
