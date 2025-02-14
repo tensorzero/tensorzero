@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { Card, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card } from "~/components/ui/card";
 import {
   BookOpenText,
   SquareFunction,
@@ -14,7 +14,10 @@ import {
   ChartSpline,
   View,
 } from "lucide-react";
-import { countInferencesByFunction, countEpisodes } from "~/utils/clickhouse/inference";
+import {
+  countInferencesByFunction,
+  countEpisodes,
+} from "~/utils/clickhouse/inference";
 import { getConfig } from "~/utils/config/index.server";
 import { useLoaderData } from "react-router";
 
@@ -25,12 +28,17 @@ interface FeatureCardProps {
   description: string;
 }
 
-function FeatureCard({ source, icon: Icon, title, description }: FeatureCardProps) {
+function FeatureCard({
+  source,
+  icon: Icon,
+  title,
+  description,
+}: FeatureCardProps) {
   return (
     <Link to={source} className="block">
-      <Card className="h-full border-[1px] border-gray-200 rounded-xl hover:border-gray-500 transition-colors group">
+      <Card className="group h-full rounded-xl border-[1px] border-gray-200 transition-colors hover:border-gray-500">
         <div className="p-6">
-          <Icon className="h-5 w-5 mb-8 text-gray-500 group-hover:text-gray-900 transition-colors" />
+          <Icon className="mb-8 h-5 w-5 text-gray-500 transition-colors group-hover:text-gray-900" />
           <h3 className="text-lg font-medium">{title}</h3>
           <p className="text-xs text-gray-500">{description}</p>
         </div>
@@ -47,9 +55,9 @@ interface FooterLinkProps {
 
 function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
   return (
-    <Link to={source} className="flex items-center w-fit group">
-      <Icon className="mr-2 h-4 w-4 text-gray-500 group-hover:text-gray-900 transition-colors" />
-      <span className="text-gray-700 group-hover:text-gray-900 transition-colors">
+    <Link to={source} className="group flex w-fit items-center">
+      <Icon className="mr-2 h-4 w-4 text-gray-500 transition-colors group-hover:text-gray-900" />
+      <span className="text-gray-700 transition-colors group-hover:text-gray-900">
         {children}
       </span>
     </Link>
@@ -62,23 +70,27 @@ export async function loader() {
   const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
   const numFunctions = Object.keys(config.functions).length;
   const numEpisodes = await countEpisodes();
-  
-  return { 
+
+  return {
     totalInferences,
     numFunctions,
-    numEpisodes
+    numEpisodes,
   };
 }
 
 export default function Home() {
-  const { totalInferences, numFunctions, numEpisodes } = useLoaderData<typeof loader>();
+  const { totalInferences, numFunctions, numEpisodes } =
+    useLoaderData<typeof loader>();
 
   return (
     <div className="flex flex-col">
-      <div className="container my-16 mx-auto max-w-[960px]">
+      <div className="container mx-auto my-16 max-w-[960px]">
         <div id="observability" className="mb-16">
           <h2 className="mb-1 text-2xl font-medium">Observability</h2>
-          <p className="mb-6 text-sm text-gray-500 max-w-[640px]">Monitor metrics across models and prompts and debug individual API calls.</p>
+          <p className="mb-6 max-w-[640px] text-sm text-gray-500">
+            Monitor metrics across models and prompts and debug individual API
+            calls.
+          </p>
           <div className="grid gap-6 md:grid-cols-3">
             <FeatureCard
               source="/observability/inferences"
@@ -103,7 +115,9 @@ export default function Home() {
 
         <div id="optimization" className="mb-12">
           <h2 className="mb-1 text-2xl font-medium">Optimization</h2>
-          <p className="mb-6 text-sm text-gray-500 max-w-[640px]">Optimize your prompts, models, and inference strategies.</p>
+          <p className="mb-6 max-w-[640px] text-sm text-gray-500">
+            Optimize your prompts, models, and inference strategies.
+          </p>
           <div className="grid gap-6 md:grid-cols-3">
             <FeatureCard
               source="/optimization/supervised-fine-tuning"
@@ -114,31 +128,47 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-16 pt-16 border-t border-gray-200">
+        <div className="mt-16 border-t border-gray-200 pt-16">
           <div className="grid gap-8 md:grid-cols-3">
             <div>
               <h3 className="mb-4 text-sm text-gray-400">Learn more</h3>
               <div className="flex flex-col gap-3">
-                <FooterLink source="/docs/quickstart" icon={BookOpenText}>Documentation</FooterLink>
-                <FooterLink source="/docs/tutorials" icon={Github}>GitHub</FooterLink>
-                <FooterLink source="/docs/concepts" icon={GraduationCap}>Tutorials</FooterLink>
+                <FooterLink source="/docs/quickstart" icon={BookOpenText}>
+                  Documentation
+                </FooterLink>
+                <FooterLink source="/docs/tutorials" icon={Github}>
+                  GitHub
+                </FooterLink>
+                <FooterLink source="/docs/concepts" icon={GraduationCap}>
+                  Tutorials
+                </FooterLink>
               </div>
             </div>
 
             <div>
               <h3 className="mb-4 text-sm text-gray-400">Ask a question</h3>
               <div className="flex flex-col gap-3">
-                <FooterLink source="/docs/api/rest" icon={Slack}>Slack</FooterLink>
-                <FooterLink source="/docs/api/sdk" icon={MessageSquare}>Discord</FooterLink>
+                <FooterLink source="/docs/api/rest" icon={Slack}>
+                  Slack
+                </FooterLink>
+                <FooterLink source="/docs/api/sdk" icon={MessageSquare}>
+                  Discord
+                </FooterLink>
               </div>
             </div>
 
             <div>
               <h3 className="mb-4 text-sm text-gray-400">Explore TensorZero</h3>
               <div className="flex flex-col gap-3">
-                <FooterLink source="/docs/guides" icon={Newspaper}>Blog</FooterLink>
-                <FooterLink source="/docs/examples" icon={Globe}>Website</FooterLink>
-                <FooterLink source="/docs/troubleshooting" icon={Twitter}>X</FooterLink>
+                <FooterLink source="/docs/guides" icon={Newspaper}>
+                  Blog
+                </FooterLink>
+                <FooterLink source="/docs/examples" icon={Globe}>
+                  Website
+                </FooterLink>
+                <FooterLink source="/docs/troubleshooting" icon={Twitter}>
+                  X
+                </FooterLink>
               </div>
             </div>
           </div>
