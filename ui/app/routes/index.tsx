@@ -1,85 +1,130 @@
 import { Link } from "react-router";
-import { Button } from "~/components/ui/button";
 import { Card, CardHeader, CardTitle } from "~/components/ui/card";
 import {
-  BarChart2,
-  GitBranch,
-  Zap,
-  BookOpen,
+  BookOpenText,
   SquareFunction,
+  GraduationCap,
+  Slack,
+  MessageSquare,
+  Newspaper,
+  Globe,
+  Twitter,
+  Github,
+  GalleryVerticalEnd,
+  ChartSpline,
+  View,
 } from "lucide-react";
+
+interface FeatureCardProps {
+  source: string;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+}
+
+function FeatureCard({ source, icon: Icon, title, description }: FeatureCardProps) {
+  return (
+    <Link to={source} className="block">
+      <Card className="h-full border border-gray-300 rounded-2xl hover:border-gray-900 transition-colors group">
+        <div className="p-6">
+          <Icon className="h-5 w-5 mb-8 text-gray-500 group-hover:text-gray-900 transition-colors" />
+          <h3 className="text-lg font-medium">{title}</h3>
+          <p className="text-xs text-gray-500">{description}</p>
+        </div>
+      </Card>
+    </Link>
+  );
+}
+
+interface FooterLinkProps {
+  source: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}
+
+function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
+  return (
+    <Link to={source} className="flex items-center w-fit group">
+      <Icon className="mr-2 h-4 w-4 text-gray-500 group-hover:text-gray-900 transition-colors" />
+      <span className="text-gray-700 group-hover:text-gray-900 transition-colors">
+        {children}
+      </span>
+    </Link>
+  );
+}
 
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col">
-      <main className="flex-grow py-12">
-        <div className="container mx-auto max-w-5xl px-4 md:px-6">
-          <div id="observability" className="mb-12">
-            <h2 className="mb-6 text-3xl font-bold">Observability</h2>
-            <div className="grid gap-6 md:grid-cols-2">
-              <Link to="/observability/inferences" className="block">
-                <Card className="h-full transition-shadow hover:shadow-md">
-                  <CardHeader>
-                    <div className="flex items-center space-x-2">
-                      <BarChart2 className="h-6 w-6 text-primary" />
-                      <CardTitle>Inferences</CardTitle>
-                    </div>
-                  </CardHeader>
-                </Card>
-              </Link>
-              <Link to="/observability/episodes" className="block">
-                <Card className="h-full transition-shadow hover:shadow-md">
-                  <CardHeader>
-                    <div className="flex items-center space-x-2">
-                      <GitBranch className="h-6 w-6 text-primary" />
-                      <CardTitle>Episodes</CardTitle>
-                    </div>
-                  </CardHeader>
-                </Card>
-              </Link>
-              <Link to="/observability/functions" className="block">
-                <Card className="h-full transition-shadow hover:shadow-md">
-                  <CardHeader>
-                    <div className="flex items-center space-x-2">
-                      <SquareFunction className="h-6 w-6 text-primary" />
-                      <CardTitle>Functions</CardTitle>
-                    </div>
-                  </CardHeader>
-                </Card>
-              </Link>
-            </div>
+      <div className="container my-16 mx-auto max-w-[960px]">
+        <div id="observability" className="mb-16">
+          <h2 className="mb-1 text-2xl font-medium">Observability</h2>
+          <p className="mb-6 text-sm text-gray-500 max-w-[640px]">Monitor metrics across models and prompts and debug individual API calls.</p>
+          <div className="grid gap-6 md:grid-cols-3">
+            <FeatureCard
+              source="/observability/inferences"
+              icon={ChartSpline}
+              title="Inferences"
+              description="Placeholder text"
+            />
+            <FeatureCard
+              source="/observability/episodes"
+              icon={GalleryVerticalEnd}
+              title="Episodes"
+              description="Placeholder text"
+            />
+            <FeatureCard
+              source="/observability/functions"
+              icon={SquareFunction}
+              title="Functions"
+              description="Placeholder text"
+            />
           </div>
+        </div>
 
-          <div id="optimization" className="mb-12">
-            <h2 className="mb-6 text-3xl font-bold">Optimization</h2>
-            <div className="grid gap-6 md:grid-cols-2">
-              <Link to="/optimization/supervised-fine-tuning" className="block">
-                <Card className="h-full transition-shadow hover:shadow-md">
-                  <CardHeader>
-                    <div className="flex items-center space-x-2">
-                      <Zap className="h-6 w-6 text-primary" />
-                      <CardTitle>Supervised Fine-tuning</CardTitle>
-                    </div>
-                  </CardHeader>
-                </Card>
-              </Link>
+        <div id="optimization" className="mb-12">
+          <h2 className="mb-1 text-2xl font-medium">Optimization</h2>
+          <p className="mb-6 text-sm text-gray-500 max-w-[640px]">Optimize your prompts, models, and inference strategies.</p>
+          <div className="grid gap-6 md:grid-cols-3">
+            <FeatureCard
+              source="/optimization/supervised-fine-tuning"
+              icon={View}
+              title="Supervised Fine-tuning"
+              description="Placeholder text"
+            />
+          </div>
+        </div>
+
+        <div className="mt-16 pt-16 border-t border-gray-200">
+          <div className="grid gap-8 md:grid-cols-3">
+            <div>
+              <h3 className="mb-4 text-sm text-gray-400">Learn more</h3>
+              <div className="flex flex-col gap-3">
+                <FooterLink source="/docs/quickstart" icon={BookOpenText}>Documentation</FooterLink>
+                <FooterLink source="/docs/tutorials" icon={Github}>GitHub</FooterLink>
+                <FooterLink source="/docs/concepts" icon={GraduationCap}>Tutorials</FooterLink>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="mb-4 text-sm text-gray-400">Ask a question</h3>
+              <div className="flex flex-col gap-3">
+                <FooterLink source="/docs/api/rest" icon={Slack}>Slack</FooterLink>
+                <FooterLink source="/docs/api/sdk" icon={MessageSquare}>Discord</FooterLink>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="mb-4 text-sm text-gray-400">Explore TensorZero</h3>
+              <div className="flex flex-col gap-3">
+                <FooterLink source="/docs/guides" icon={Newspaper}>Blog</FooterLink>
+                <FooterLink source="/docs/examples" icon={Globe}>Website</FooterLink>
+                <FooterLink source="/docs/troubleshooting" icon={Twitter}>X</FooterLink>
+              </div>
             </div>
           </div>
         </div>
-      </main>
-
-      <footer className="bg-muted py-10">
-        <div className="container mx-auto px-4 text-center md:px-6">
-          <p className="mb-6 text-lg text-muted-foreground">
-            Explore our documentation to get the most out of TensorZero.
-          </p>
-          <Button size="default" variant="default" asChild>
-            <Link to="https://www.tensorzero.com/docs" target="_blank">
-              View Documentation <BookOpen className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
-        </div>
-      </footer>
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useSidebar } from "~/components/ui/sidebar";
 import { cn } from "~/utils/common";
 import { useActivePath } from "~/hooks/use-active-path";
 import { TensorZeroLogo } from "~/components/icons/Icons";
+import { Link } from "react-router";
 
 import {
   Sidebar,
@@ -66,10 +67,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               asChild 
               className="text-black hover:bg-transparent active:bg-transparent focus-visible:bg-transparent"
             >
-              <a href="/" className="flex items-center gap-2">
-                <TensorZeroLogo size={16} />
+              <Link to="/" className="flex items-center gap-2">
+                  <TensorZeroLogo size={16} />
                 {state === "expanded" && <span className="font-semibold">TensorZero</span>}
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -87,10 +88,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               tooltip={state === "collapsed" ? "Dashboard" : undefined}
               isActive={isActivePath("/")}
             >
-              <a href="/" className="flex items-center gap-2">
+              <Link to="/" className="flex items-center gap-2">
                 <Home className="h-4 w-4" />
                 {state === "expanded" && <span>Dashboard</span>}
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
           </SidebarGroupContent>
@@ -110,14 +111,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     tooltip={state === "collapsed" ? item.title : undefined}
                     isActive={isActivePath(item.url)}
                   >
-                    <a
-                      href={item.url}
+                    <Link
+                      to={item.url}
                       className="flex items-center gap-3 px-2"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <item.icon className="h-4 w-4" />
                       {state === "expanded" && <span>{item.title}</span>}
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -142,8 +143,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               asChild
               tooltip={state === "collapsed" ? "Documentation" : undefined}
             >
-              <a
-                href="https://www.tensorzero.com/docs"
+              <Link
+                to="https://www.tensorzero.com/docs"
                 className="flex items-center gap-3 px-2"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -151,7 +152,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               >
                 <FileText className="h-4 w-4" />
                 {state === "expanded" && <span>Documentation</span>}
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
