@@ -1,0 +1,63 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    ports:
+      - "8123:8123"   # HTTP interface (for SQL queries)
+      - "9000:9000"   # Native TCP interface
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: tensorzero_gateway
+    depends_on:
+      - clickhouse
+    environment:
+      # Set the ClickHouse connection URL so the gateway can log metrics and feedback.
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      # Additional environment variables for fine tuning and optimization can be added here.
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount any custom configuration if needed.
+      - ./gateway/config:/app/config
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: tensorzero_ui
+    depends_on:
+      - gateway
+    environment:
+      # Point the UI to the gateway’s API.
+      - API_URL=http://gateway:3000
+    ports:
+      - "8080:80"  # Adjust the container port if your UI listens on a different port.
+    volumes:
+      - ./ui/config:/app/config
+    restart: unless-stopped
+
+  # Optional: A Jupyter Notebook service to run fine-tuning experiments (e.g. DPO workflows)
+  notebook:
+    image: jupyter/datascience-notebook:latest
+    container_name: tensorzero_notebook
+    ports:
+      - "8888:8888"
+    volumes:
+      # Mount your examples or notebooks directory.
+      - ./examples:/home/jovyan/work
+    environment:
+      # Set a token or password as needed.
+      - JUPYTER_TOKEN=changeme
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+volumes:
+  clickhouse-data:
