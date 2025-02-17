@@ -186,4 +186,42 @@ describe("countRowsForDataset", () => {
     const chatRows = await countRowsForDataset(chatDatasetParams);
     expect(chatRows).toBe(493);
   });
+
+  test("returns correct count for rows with both metric filter and demonstration join", async () => {
+    // Chat dataset: We filter on a float metric "haiku_rating" and join demonstration feedback.
+    // In our fixtures, we expect that the intersection of rows having a "haiku_rating" above 0.8
+    // and with demonstration feedback is 67.
+    const chatParams = DatasetQueryParamsSchema.parse({
+      inferenceType: "chat",
+      function_name: "write_haiku",
+      metric_filter: {
+        metric: "haiku_rating",
+        metric_type: "float",
+        operator: ">",
+        threshold: 0.8,
+        join_on: "inference_id",
+      },
+      join_demonstrations: true,
+    });
+    const chatCount = await countRowsForDataset(chatParams);
+    expect(chatCount).toBe(67);
+
+    // JSON dataset: Similarly, we filter on a float metric "jaccard_similarity" and join demonstration feedback.
+    // According to our fixtures, the expected intersection count is 0 as no elements have both a
+    // "jaccard_similarity" above 0.8 and demonstration feedback.
+    const jsonParams = DatasetQueryParamsSchema.parse({
+      inferenceType: "json",
+      function_name: "extract_entities",
+      metric_filter: {
+        metric: "jaccard_similarity",
+        metric_type: "float",
+        operator: ">",
+        threshold: 0.8,
+        join_on: "inference_id",
+      },
+      join_demonstrations: true,
+    });
+    const jsonCount = await countRowsForDataset(jsonParams);
+    expect(jsonCount).toBe(0);
+  });
 });
