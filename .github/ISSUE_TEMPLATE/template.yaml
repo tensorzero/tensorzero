@@ -8,15 +8,12 @@ body:
         > [!IMPORTANT]
         >
         > Please use GitHub discussions to **[submit a feature request](https://github.com/tensorzero/tensorzero/discussions/new?category=feature-requests)**, **[report a bug](https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports)**, or **[ask for help](https://github.com/tensorzero/tensorzero/discussions/new?category=help)**.
-  # - type: textarea
-  #   id: what-happened
-  #   attributes:
-  #     label: What happened?
-  #     description: Also tell us, what did you expect to happen?
-  #     placeholder: Tell us what you see!
-  #     value: "A bug happened!"
-  #   validations:
-  #     required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Add a description
+    validations:
+      required: true
   # - type: dropdown
   #   id: version
   #   attributes:
