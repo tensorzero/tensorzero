@@ -77,20 +77,21 @@ export const DatasetQueryParamsSchema = z.object({
   inferenceType: z.enum(["chat", "json"]),
   function_name: z.string().optional(),
   variant_name: z.string().optional(), // We will 400 if there's a variant_name but no function_name
-  extra_where: z.string().array(), // Extra WHERE clauses, e.g. ["episode_id = {episode_id:UUID}", "variant_name = {variant:String}"]
+  extra_where: z.string().array().default([]), // Extra WHERE clauses, e.g. ["episode_id = {episode_id:UUID}", "variant_name = {variant:String}"]
   extra_params: z
     .record(z.string(), z.union([z.string(), z.number()]))
-    .optional(), // Extra query parameters, mapping placeholders (like "episode_id") => actual values
-  rewardFilter: z
+    .default({}), // Extra query parameters, mapping placeholders (like "episode_id") => actual values
+  metric_filter: z
     .object({
       metric: z.string(),
+      metric_type: z.enum(["boolean", "float"]),
       operator: z.enum([">", "<"]),
       threshold: z.number(),
-      joinOn: z.enum(["inference_id", "episode_id"]).optional(),
+      join_on: z.enum(["inference_id", "episode_id"]),
     })
     .optional(),
-  joinDemonstrations: z.boolean().optional(),
-  includeOutput: z.boolean().optional(), // Whether to include the output from the original inference in the response
+  join_demonstrations: z.boolean().optional(),
+  include_output: z.boolean().optional(), // Whether to include the output from the original inference in the response
   limit: z.number().optional(),
   offset: z.number().optional(),
 });
@@ -115,9 +116,9 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
     variant_name,
     extra_where,
     extra_params,
-    rewardFilter,
-    joinDemonstrations,
-    includeOutput,
+    metric_filter,
+    join_demonstrations: joinDemonstrations,
+    include_output: includeOutput,
     limit,
     offset,
   } = params;
@@ -131,13 +132,12 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
 
   // Choose the correct table name based on the inference type.
   const tableName =
-    inferenceType === "chat" ? "ChatInferenceDataset" : "JsonInferenceDataset";
+    inferenceType === "chat" ? "ChatInference" : "JsonInference";
 
   // Build the list of fields to select.
   let selectFields: string[];
   if (inferenceType === "chat") {
     selectFields = [
-      "dataset_name",
       "function_name",
       "id",
       "episode_id",
@@ -145,13 +145,9 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
       "output",
       "tool_params",
       "tags",
-      "auxiliary",
-      "is_deleted",
-      "created_at",
     ];
   } else {
     selectFields = [
-      "dataset_name",
       "function_name",
       "id",
       "episode_id",
@@ -159,9 +155,6 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
       "output",
       "output_schema",
       "tags",
-      "auxiliary",
-      "is_deleted",
-      "created_at",
     ];
   }
 
@@ -172,12 +165,8 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
     );
   }
 
-  // If joinDemonstrations is not true, force the auxiliary field to be empty.
-  if (!joinDemonstrations) {
-    selectFields = selectFields.map((field) =>
-      field === "auxiliary" ? "'' AS auxiliary" : field,
-    );
-  }
+  // For now, the auxiliary field is always an empty string.
+  selectFields.push("'' AS auxiliary");
 
   // Start constructing the query.
   let query = `SELECT ${selectFields.join(", ")} FROM ${tableName}`;
@@ -196,20 +185,31 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
     queryParams.function_name = function_name;
   }
 
-  // Note: Although variant_name is provided, our dataset tables do not include a variant_name column.
-  // If you need to filter by variant_name, you might need to join with the source inference table.
-  // For now, we'll add the clause only if it exists in extra_where.
   if (variant_name) {
     whereClauses.push("variant_name = {variant_name:String}");
     queryParams.variant_name = variant_name;
   }
 
-  // If a reward filter is provided, assume that the reward metric is stored in tags.
-  if (rewardFilter) {
-    whereClauses.push(
-      `toFloat32(tags['${rewardFilter.metric}']) ${rewardFilter.operator} {rewardThreshold:Float32}`,
-    );
-    queryParams.rewardThreshold = rewardFilter.threshold;
+  // Metric filter join logic
+  if (metric_filter) {
+    // Determine the join key
+    const join_column = getFeedbackJoinColumn(metric_filter.join_on);
+    // Choose the correct feedback table.
+    const feedback_table = getFeedbackTable(metric_filter.metric_type);
+    const reward_condition = `AND value ${metric_filter.operator} {metric_threshold:Float}`;
+    // Add the join clause.
+    query += ` JOIN (
+      SELECT
+        target_id,
+        value,
+        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+        FROM ${feedback_table}
+        WHERE metric_name = {metric_name:String}
+        ${reward_condition}
+    ) AS feedback ON ${tableName}.${join_column} = feedback.target_id AND feedback.rn = 1`;
+    // Set the query parameters for feedback filtering.
+    queryParams.metric_name = metric_filter.metric;
+    queryParams.metric_threshold = metric_filter.threshold;
   }
 
   // Append any extra WHERE clauses.
@@ -260,12 +260,22 @@ export async function countRowsForDataset(
   }
 
   const { query, query_params } = buildDatasetSelectQuery(params);
-  let count_query = `SELECT count() FROM (${query})`;
+  const count_query = `SELECT toUInt32(count()) as count FROM (${query})`;
   const resultSet = await clickhouseClient.query({
     query: count_query,
     format: "JSONEachRow",
     query_params,
   });
-  const rows = await resultSet.text();
-  return parseInt(rows);
+  const rows = await resultSet.json<{ count: number }>();
+  return rows[0].count;
+}
+
+function getFeedbackJoinColumn(join_on: "inference_id" | "episode_id") {
+  return join_on === "inference_id" ? "id" : "episode_id";
+}
+
+function getFeedbackTable(metric_type: "boolean" | "float") {
+  return metric_type === "boolean"
+    ? "BooleanMetricFeedback"
+    : "FloatMetricFeedback";
 }
