@@ -751,3 +751,17 @@ export async function countInferencesByFunction(): Promise<
   const validatedRows = z.array(functionCountInfoSchema).parse(rows);
   return validatedRows;
 }
+
+export async function countEpisodes(): Promise<number> {
+  const query = `SELECT COUNT(DISTINCT episode_id) as count FROM (
+    SELECT episode_id FROM ChatInference
+    UNION ALL
+    SELECT episode_id FROM JsonInference
+  )`;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+  });
+  const rows = await resultSet.json<{ count: number }>();
+  return rows[0].count;
+}
