@@ -48,10 +48,17 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "gcp_vertex_gemini".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            variant_name: "gcp-vertex-gemini-flash-default".to_string(),
+            model_name: "gemini-1.5-flash-001".into(),
+            model_provider_name: "gcp_vertex_gemini".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        reasoning_inference: vec![],
         inference_params_inference: standard_providers.clone(),
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),

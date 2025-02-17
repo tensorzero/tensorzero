@@ -9,7 +9,7 @@ use crate::{
     uuid_util::validate_episode_id,
 };
 
-use super::{ContentBlock, Input, ModelInferenceRequest, RequestMessage, Usage};
+use super::{ContentBlockOutput, Input, ModelInferenceRequest, RequestMessage, Usage};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
@@ -182,7 +182,7 @@ where
 #[derive(Debug)]
 pub struct ProviderBatchInferenceOutput {
     pub id: Uuid,
-    pub output: Vec<ContentBlock>,
+    pub output: Vec<ContentBlockOutput>,
     pub raw_response: String,
     pub usage: Usage,
 }
@@ -485,6 +485,7 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
                 top_p: top_p_iter.next().unwrap_or(None),
                 presence_penalty: presence_penalty_iter.next().unwrap_or(None),
                 frequency_penalty: frequency_penalty_iter.next().unwrap_or(None),
+                json_mode: None,
             });
         }
         Ok(all_inference_params)

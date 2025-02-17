@@ -27,9 +27,10 @@ use crate::inference::types::batch::{
 use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, RequestMessage, Role, Text, TextChunk, Usage,
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
+    TextChunk, Usage,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -797,20 +798,20 @@ pub(super) struct OpenAISystemRequestMessage<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIUserRequestMessage<'a> {
-    content: Cow<'a, str>, // NOTE: this could be an array including images and stuff according to API spec (not supported yet)
+    pub(super) content: Cow<'a, str>, // NOTE: this could be an array including images and stuff according to API spec (not supported yet)
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct OpenAIRequestFunctionCall<'a> {
-    name: &'a str,
-    arguments: &'a str,
+pub struct OpenAIRequestFunctionCall<'a> {
+    pub name: &'a str,
+    pub arguments: &'a str,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct OpenAIRequestToolCall<'a> {
-    id: &'a str,
-    r#type: OpenAIToolType,
-    function: OpenAIRequestFunctionCall<'a>,
+pub struct OpenAIRequestToolCall<'a> {
+    pub id: &'a str,
+    pub r#type: OpenAIToolType,
+    pub function: OpenAIRequestFunctionCall<'a>,
 }
 
 impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
@@ -829,15 +830,15 @@ impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIAssistantRequestMessage<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    content: Option<&'a str>,
+    pub content: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
+    pub tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIToolRequestMessage<'a> {
-    content: &'a str,
-    tool_call_id: &'a str,
+    pub content: &'a str,
+    pub tool_call_id: &'a str,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -855,7 +856,7 @@ impl OpenAIRequestMessage<'_> {
         match self {
             OpenAIRequestMessage::System(msg) => Some(&msg.content),
             OpenAIRequestMessage::User(msg) => Some(&msg.content),
-            OpenAIRequestMessage::Assistant(msg) => msg.content,
+            OpenAIRequestMessage::Assistant(msg) => msg.content.as_deref(),
             OpenAIRequestMessage::Tool(msg) => Some(msg.content),
         }
     }
@@ -914,7 +915,7 @@ pub(super) fn prepare_openai_tools<'a>(
 /// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
 /// the request will return an error.
 /// So, we need to format the instructions to include "Respond using JSON." if it doesn't already.
-fn tensorzero_to_openai_system_message<'a>(
+pub(super) fn tensorzero_to_openai_system_message<'a>(
     system: Option<&'a str>,
     json_mode: &ModelInferenceRequestJsonMode,
     messages: &[OpenAIRequestMessage<'a>],
@@ -974,7 +975,7 @@ pub(super) fn tensorzero_to_openai_messages(
                 Role::Assistant => {
                     messages.push(OpenAIRequestMessage::Assistant(
                         OpenAIAssistantRequestMessage {
-                            content: Some(text),
+                            content: Some(Cow::Borrowed(text)),
                             tool_calls: None,
                         },
                     ));
@@ -1003,6 +1004,13 @@ pub(super) fn tensorzero_to_openai_messages(
                     tool_call_id: &tool_result.id,
                 });
                 messages.push(message);
+            }
+            ContentBlock::Thought(_thought) => {
+                // We don't support thought blocks being passed in from a request.
+                // These are only possible to be passed in in the scenario where the
+                // output of a chat completion is used as an input to another model inference,
+                // i.e. a judge or something.
+                // We don't think the thoughts should be passed in in this case.
             }
         }
     }
@@ -1048,7 +1056,7 @@ impl OpenAIResponseFormat {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub(super) enum OpenAIToolType {
+pub enum OpenAIToolType {
     Function,
 }
 
@@ -1406,13 +1414,13 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
@@ -1742,13 +1750,13 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
             .message;
 
         // Convert message content to ContentBlocks
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
 
@@ -2358,7 +2366,7 @@ mod tests {
         let inference_response = result.unwrap();
         assert_eq!(
             inference_response.output,
-            vec![ContentBlock::ToolCall(ToolCall {
+            vec![ContentBlockOutput::ToolCall(ToolCall {
                 id: "call1".to_string(),
                 name: "test_function".to_string(),
                 arguments: "{}".to_string(),
@@ -2849,7 +2857,7 @@ mod tests {
                 content: Cow::Borrowed("Please respond in JSON format."),
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some("Sure, here is the data."),
+                content: Some(Cow::Borrowed("Sure, here is the data.")),
                 tool_calls: None,
             }),
         ];
@@ -2867,7 +2875,7 @@ mod tests {
                 content: Cow::Borrowed("Hello, how are you?"),
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some("I am fine, thank you!"),
+                content: Some(Cow::Borrowed("I am fine, thank you!")),
                 tool_calls: None,
             }),
         ];
@@ -2886,7 +2894,7 @@ mod tests {
                 content: Cow::Borrowed("Hello, how are you?"),
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some("I am fine, thank you!"),
+                content: Some(Cow::Borrowed("I am fine, thank you!")),
                 tool_calls: None,
             }),
         ];
@@ -2904,7 +2912,7 @@ mod tests {
                 content: Cow::Borrowed("Hello, how are you?"),
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some("I am fine, thank you!"),
+                content: Some(Cow::Borrowed("I am fine, thank you!")),
                 tool_calls: None,
             }),
         ];
@@ -2934,7 +2942,7 @@ mod tests {
                 content: Cow::Borrowed("Tell me a joke."),
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some("Sure, here's one for you."),
+                content: Some(Cow::Borrowed("Sure, here's one for you.")),
                 tool_calls: None,
             }),
         ];
@@ -2952,7 +2960,7 @@ mod tests {
                 content: Cow::Borrowed("Provide a summary of the news."),
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some("Here's the summary."),
+                content: Some(Cow::Borrowed("Here's the summary.")),
                 tool_calls: None,
             }),
         ];

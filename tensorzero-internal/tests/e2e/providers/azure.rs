@@ -46,10 +46,17 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "azure".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            variant_name: "azure-default".to_string(),
+            model_name: "gpt-4o-mini-azure".into(),
+            model_provider_name: "azure".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),

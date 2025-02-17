@@ -1,8 +1,10 @@
 use futures::StreamExt;
 use lazy_static::lazy_static;
-use reqwest_eventsource::RequestBuilderExt;
+use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
+use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 
@@ -10,17 +12,25 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::PeekableProviderInferenceResponseStream;
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
+    batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ProviderInferenceResponse,
 };
+use crate::inference::types::{
+    ContentBlockChunk, ContentBlockOutput, ProviderInferenceResponseStreamInner, TextChunk,
+    Thought, ThoughtChunk,
+};
+use crate::inference::types::{
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
+};
 use crate::model::{Credential, CredentialLocation};
+use crate::tool::ToolCallChunk;
 
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-    stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,
-    StreamOptions,
+    get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
+    tensorzero_to_openai_system_message, OpenAIAssistantRequestMessage, OpenAIRequestMessage,
+    OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIUsage,
+    OpenAIUserRequestMessage, StreamOptions,
 };
 
 lazy_static! {
@@ -217,7 +227,7 @@ impl InferenceProvider for DeepSeekProvider {
                 })
             })?;
 
-        let stream = stream_openai(event_source, start_time).peekable();
+        let stream = stream_deepseek(event_source, start_time).peekable();
         Ok((stream, raw_request))
     }
 
@@ -317,10 +327,7 @@ impl<'a> DeepSeekRequest<'a> {
         };
 
         if request.json_mode == ModelInferenceRequestJsonMode::Strict {
-            return Err(ErrorDetails::InvalidRequest {
-                message: "DeepSeek model does not support strict JSON mode.".to_string(),
-            }
-            .into());
+            tracing::warn!("DeepSeek provider does not support strict JSON mode. Downgrading to normal JSON mode.");
         }
 
         let response_format = Some(DeepSeekResponseFormat::new(&request.json_mode));
@@ -328,7 +335,7 @@ impl<'a> DeepSeekRequest<'a> {
         // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
         // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check
         // if a model is an R1 model and if so, remove the system prompt from the request and instead put it in the first user message.
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_deepseek_messages(request, model);
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
 
@@ -350,8 +357,245 @@ impl<'a> DeepSeekRequest<'a> {
     }
 }
 
+fn stream_deepseek(
+    mut event_source: EventSource,
+    start_time: Instant,
+) -> ProviderInferenceResponseStreamInner {
+    let mut tool_call_ids = Vec::new();
+    let mut tool_call_names = Vec::new();
+    Box::pin(async_stream::stream! {
+        while let Some(ev) = event_source.next().await {
+            match ev {
+                Err(e) => {
+                    yield Err(ErrorDetails::InferenceServer {
+                        message: e.to_string(),
+                        raw_request: None,
+                        raw_response: None,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    }.into());
+                }
+                Ok(event) => match event {
+                    Event::Open => continue,
+                    Event::Message(message) => {
+                        if message.data == "[DONE]" {
+                            break;
+                        }
+                        let data: Result<DeepSeekChatChunk, Error> =
+                            serde_json::from_str(&message.data).map_err(|e| Error::new(ErrorDetails::InferenceServer {
+                                message: format!(
+                                    "Error parsing chunk. Error: {}",
+                                    e,
+                                ),
+                                raw_request: None,
+                                raw_response: Some(message.data.clone()),
+                                provider_type: PROVIDER_TYPE.to_string(),
+                            }));
+
+                        let latency = start_time.elapsed();
+                        let stream_message = data.and_then(|d| {
+                            deepseek_to_tensorzero_chunk(d, latency, &mut tool_call_ids, &mut tool_call_names)
+                        });
+                        yield stream_message;
+                    }
+                },
+            }
+        }
+
+        event_source.close();
+    })
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct DeepSeekFunctionCallChunk {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    arguments: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct DeepSeekToolCallChunk {
+    index: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    // NOTE: these are externally tagged enums, for now we're gonna just keep this hardcoded as there's only one option
+    // If we were to do this better, we would need to check the `type` field
+    function: DeepSeekFunctionCallChunk,
+}
+
+// This doesn't include role
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct DeepSeekDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<DeepSeekToolCallChunk>>,
+}
+
+// This doesn't include logprobs, finish_reason, and index
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct DeepSeekChatChunkChoice {
+    delta: DeepSeekDelta,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct DeepSeekChatChunk {
+    choices: Vec<DeepSeekChatChunkChoice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    usage: Option<OpenAIUsage>,
+}
+
+/// Maps a DeepSeek chunk to a TensorZero chunk for streaming inferences
+fn deepseek_to_tensorzero_chunk(
+    mut chunk: DeepSeekChatChunk,
+    latency: Duration,
+    tool_call_ids: &mut Vec<String>,
+    tool_names: &mut Vec<String>,
+) -> Result<ProviderInferenceResponseChunk, Error> {
+    let raw_message = serde_json::to_string(&chunk).map_err(|e| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: format!("Error parsing response from DeepSeek: {e}"),
+            raw_request: None,
+            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })?;
+    if chunk.choices.len() > 1 {
+        return Err(ErrorDetails::InferenceServer {
+            message: "Response has invalid number of choices: {}. Expected 1.".to_string(),
+            raw_request: None,
+            raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        }
+        .into());
+    }
+    let usage = chunk.usage.map(|u| u.into());
+    let mut content = vec![];
+    if let Some(choice) = chunk.choices.pop() {
+        if let Some(text) = choice.delta.content {
+            content.push(ContentBlockChunk::Text(TextChunk {
+                text,
+                id: "0".to_string(),
+            }));
+        }
+        if let Some(reasoning) = choice.delta.reasoning_content {
+            content.push(ContentBlockChunk::Thought(ThoughtChunk {
+                text: reasoning,
+                id: "0".to_string(),
+            }));
+        }
+        if let Some(tool_calls) = choice.delta.tool_calls {
+            for tool_call in tool_calls {
+                let index = tool_call.index;
+                let id = match tool_call.id {
+                    Some(id) => {
+                        tool_call_ids.push(id.clone());
+                        id
+                    }
+                    None => {
+                        tool_call_ids
+                            .get(index as usize)
+                            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
+                                message: "Tool call index out of bounds (meaning we haven't seen this many ids in the stream)".to_string(),
+                                raw_request: None,
+                                raw_response: None,
+                                provider_type: PROVIDER_TYPE.to_string(),
+                            }))?
+                            .clone()
+                    }
+                };
+                let name = match tool_call.function.name {
+                    Some(name) => {
+                        tool_names.push(name.clone());
+                        name
+                    }
+                    None => {
+                        tool_names
+                            .get(index as usize)
+                            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
+                                message: "Tool call index out of bounds (meaning we haven't seen this many names in the stream)".to_string(),
+                                raw_request: None,
+                                raw_response: None,
+                                provider_type: PROVIDER_TYPE.to_string(),
+                            }))?
+                            .clone()
+                    }
+                };
+                content.push(ContentBlockChunk::ToolCall(ToolCallChunk {
+                    id,
+                    raw_name: name,
+                    raw_arguments: tool_call.function.arguments.unwrap_or_default(),
+                }));
+            }
+        }
+    }
+
+    Ok(ProviderInferenceResponseChunk::new(
+        content,
+        usage,
+        raw_message,
+        latency,
+    ))
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct DeepSeekResponseMessage {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<OpenAIResponseToolCall>>,
+}
+
+// Leaving out logprobs and finish_reason for now
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+struct DeepSeekResponseChoice {
+    index: u8,
+    message: DeepSeekResponseMessage,
+}
+
+// Leaving out id, created, model, service_tier, system_fingerprint, object for now
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+struct DeepSeekResponse {
+    choices: Vec<DeepSeekResponseChoice>,
+    usage: OpenAIUsage,
+}
+
+pub(super) fn prepare_deepseek_messages<'a>(
+    request: &'a ModelInferenceRequest,
+    model_name: &'a str,
+) -> Vec<OpenAIRequestMessage<'a>> {
+    let mut messages: Vec<OpenAIRequestMessage> = request
+        .messages
+        .iter()
+        .flat_map(tensorzero_to_openai_messages)
+        .collect();
+    // If this is an R1 model, prepend the system message as the first user message instead of using it as a system message
+    if model_name.to_lowercase().contains("reasoner") {
+        if let Some(system) = request.system.as_deref() {
+            messages.insert(
+                0,
+                OpenAIRequestMessage::User(OpenAIUserRequestMessage {
+                    content: Cow::Borrowed(system),
+                }),
+            );
+        }
+    } else if let Some(system_msg) = tensorzero_to_openai_system_message(
+        request.system.as_deref(),
+        &request.json_mode,
+        &messages,
+    ) {
+        messages.insert(0, system_msg);
+    }
+    messages = coalesce_consecutive_messages(messages);
+    messages
+}
+
 struct DeepSeekResponseWithMetadata<'a> {
-    response: OpenAIResponse,
+    response: DeepSeekResponse,
     raw_response: String,
     latency: Latency,
     request: DeepSeekRequest<'a>,
@@ -393,13 +637,16 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
+        if let Some(reasoning) = message.reasoning_content {
+            content.push(ContentBlockOutput::Thought(Thought { text: reasoning }));
+        }
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
@@ -422,6 +669,59 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
     }
 }
 
+/// If a message is a system, user, or assistant message and the next message is the same type, coalesce them into a single message
+/// Required for DeepSeek reasoner type models
+fn coalesce_consecutive_messages(messages: Vec<OpenAIRequestMessage>) -> Vec<OpenAIRequestMessage> {
+    let mut result = messages;
+    let mut i = 0;
+    while i < result.len().saturating_sub(1) {
+        let current = &result[i];
+        let next = &result[i + 1];
+
+        match (current, next) {
+            (OpenAIRequestMessage::System(curr), OpenAIRequestMessage::System(next)) => {
+                let combined = format!("{}\n\n{}", curr.content, next.content);
+                result[i] = OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+                    content: Cow::Owned(combined),
+                });
+                result.remove(i + 1);
+            }
+            (OpenAIRequestMessage::User(curr), OpenAIRequestMessage::User(next)) => {
+                let combined = format!("{}\n\n{}", curr.content, next.content);
+                result[i] = OpenAIRequestMessage::User(OpenAIUserRequestMessage {
+                    content: Cow::Owned(combined),
+                });
+                result.remove(i + 1);
+            }
+            (OpenAIRequestMessage::Assistant(curr), OpenAIRequestMessage::Assistant(next)) => {
+                let combined_content = match (curr.content.as_ref(), next.content.as_ref()) {
+                    (Some(c1), Some(c2)) => Some(format!("{}\n\n{}", c1, c2)),
+                    (Some(c), None) | (None, Some(c)) => Some(c.to_string()),
+                    (None, None) => None,
+                };
+
+                let combined_tool_calls = match (&curr.tool_calls, &next.tool_calls) {
+                    (Some(t1), Some(t2)) => {
+                        let mut combined = t1.clone();
+                        combined.extend(t2.iter().cloned());
+                        Some(combined)
+                    }
+                    (Some(t), None) | (None, Some(t)) => Some(t.clone()),
+                    (None, None) => None,
+                };
+
+                result[i] = OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
+                    content: combined_content.map(Cow::Owned),
+                    tool_calls: combined_tool_calls,
+                });
+                result.remove(i + 1);
+            }
+            _ => i += 1,
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,8 +731,8 @@ mod tests {
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::providers::openai::{
-        OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType, OpenAIUsage,
-        SpecificToolChoice, SpecificToolFunction,
+        OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
+        OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
     };
     use crate::inference::types::{
         FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
@@ -538,7 +838,12 @@ mod tests {
         };
 
         let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools);
-        assert!(deepseek_request.is_err());
+        let deepseek_request = deepseek_request.unwrap();
+        // We should downgrade the strict JSON mode to normal JSON mode for deepseek
+        assert_eq!(
+            deepseek_request.response_format,
+            Some(DeepSeekResponseFormat::JsonObject)
+        );
     }
 
     #[test]
@@ -580,11 +885,12 @@ mod tests {
     }
     #[test]
     fn test_deepseek_response_with_metadata_try_into() {
-        let valid_response = OpenAIResponse {
-            choices: vec![OpenAIResponseChoice {
+        let valid_response = DeepSeekResponse {
+            choices: vec![DeepSeekResponseChoice {
                 index: 0,
-                message: OpenAIResponseMessage {
+                message: DeepSeekResponseMessage {
                     content: Some("Hello, world!".to_string()),
+                    reasoning_content: Some("I'm thinking about the weather".to_string()),
                     tool_calls: None,
                 },
             }],
@@ -625,9 +931,16 @@ mod tests {
         let inference_response: ProviderInferenceResponse =
             deepseek_response_with_metadata.try_into().unwrap();
 
-        assert_eq!(inference_response.output.len(), 1);
+        assert_eq!(inference_response.output.len(), 2);
         assert_eq!(
             inference_response.output[0],
+            ContentBlockOutput::Thought(Thought {
+                text: "I'm thinking about the weather".to_string()
+            })
+        );
+
+        assert_eq!(
+            inference_response.output[1],
             "Hello, world!".to_string().into()
         );
         assert_eq!(inference_response.raw_response, "test_response");
@@ -639,5 +952,256 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+    }
+
+    #[test]
+    fn test_prepare_deepseek_messages() {
+        // Test case 1: Regular model with system message
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["Hello".to_string().into()],
+            }],
+            system: Some("System prompt".to_string()),
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            stream: false,
+            seed: None,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+
+        let messages = prepare_deepseek_messages(&request, "deepseek-chat");
+        assert_eq!(messages.len(), 2);
+        assert!(matches!(messages[0], OpenAIRequestMessage::System(_)));
+        assert!(matches!(messages[1], OpenAIRequestMessage::User(_)));
+
+        // Test case 2: Reasoner model with system message
+        let messages = prepare_deepseek_messages(&request, "deepseek-reasoner");
+        assert_eq!(messages.len(), 1);
+        match &messages[0] {
+            OpenAIRequestMessage::User(user_msg) => {
+                assert_eq!(user_msg.content, "System prompt\n\nHello");
+            }
+            _ => panic!("Expected a user message"),
+        }
+
+        // Test case 3: Regular model without system message
+        let request_no_system = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["Hello".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            stream: false,
+            seed: None,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+
+        let messages = prepare_deepseek_messages(&request_no_system, "deepseek-chat");
+        assert_eq!(messages.len(), 1);
+        assert!(matches!(messages[0], OpenAIRequestMessage::User(_)));
+
+        // Test case 4: Multiple messages with different roles
+        let request_multiple = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![
+                RequestMessage {
+                    role: Role::User,
+                    content: vec!["Hello".to_string().into()],
+                },
+                RequestMessage {
+                    role: Role::Assistant,
+                    content: vec!["Hi there!".to_string().into()],
+                },
+                RequestMessage {
+                    role: Role::User,
+                    content: vec!["How are you?".to_string().into()],
+                },
+            ],
+            system: Some("Be helpful".to_string()),
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            stream: false,
+            seed: None,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+        };
+
+        let messages = prepare_deepseek_messages(&request_multiple, "deepseek-chat");
+        assert_eq!(messages.len(), 4);
+        assert!(matches!(messages[0], OpenAIRequestMessage::System(_)));
+        assert!(matches!(messages[1], OpenAIRequestMessage::User(_)));
+        assert!(matches!(messages[2], OpenAIRequestMessage::Assistant(_)));
+        assert!(matches!(messages[3], OpenAIRequestMessage::User(_)));
+    }
+
+    // Helper constructors for test messages.
+    fn system_message(content: &str) -> OpenAIRequestMessage {
+        OpenAIRequestMessage::System(OpenAISystemRequestMessage {
+            content: Cow::Borrowed(content),
+        })
+    }
+    fn user_message(content: &str) -> OpenAIRequestMessage {
+        OpenAIRequestMessage::User(OpenAIUserRequestMessage {
+            content: Cow::Borrowed(content),
+        })
+    }
+    fn assistant_message<'a>(
+        content: Option<&'a str>,
+        tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
+    ) -> OpenAIRequestMessage<'a> {
+        OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
+            content: content.map(Cow::Borrowed),
+            tool_calls,
+        })
+    }
+    fn tool_message<'a>(content: &'a str, tool_call_id: &'a str) -> OpenAIRequestMessage<'a> {
+        OpenAIRequestMessage::Tool(OpenAIToolRequestMessage {
+            content,
+            tool_call_id,
+        })
+    }
+
+    #[test]
+    fn test_coalesce_consecutive_messages() {
+        // Create dummy tool calls to test assistant message merging.
+        let tool_call1 = OpenAIRequestToolCall {
+            id: "tc1",
+            r#type: OpenAIToolType::Function,
+            function: OpenAIRequestFunctionCall {
+                name: "func1",
+                arguments: "args1",
+            },
+        };
+        let tool_call2 = OpenAIRequestToolCall {
+            id: "tc2",
+            r#type: OpenAIToolType::Function,
+            function: OpenAIRequestFunctionCall {
+                name: "func2",
+                arguments: "args2",
+            },
+        };
+
+        // Test 1: Empty input.
+        let input: Vec<OpenAIRequestMessage> = vec![];
+        let output = coalesce_consecutive_messages(input);
+        assert!(output.is_empty());
+
+        // Test 2: Single message (system) remains unchanged.
+        let input = vec![system_message("Only system message")];
+        let output = coalesce_consecutive_messages(input);
+        assert_eq!(output, vec![system_message("Only system message")]);
+
+        // Test 3: Consecutive system messages are merged.
+        let input = vec![
+            system_message("Sys1"),
+            system_message("Sys2"),
+            system_message("Sys3"),
+        ];
+        let output = coalesce_consecutive_messages(input);
+        let expected = vec![system_message("Sys1\n\nSys2\n\nSys3")];
+        assert_eq!(output, expected);
+
+        // Test 4: Consecutive user messages are merged.
+        let input = vec![user_message("User1"), user_message("User2")];
+        let output = coalesce_consecutive_messages(input);
+        let expected = vec![user_message("User1\n\nUser2")];
+        assert_eq!(output, expected);
+
+        // Test 5: Consecutive assistant messages with both content and tool_calls.
+        let input = vec![
+            assistant_message(Some("Ass1"), Some(vec![tool_call1.clone()])),
+            assistant_message(Some("Ass2"), Some(vec![tool_call2.clone()])),
+        ];
+        let output = coalesce_consecutive_messages(input);
+        let expected = vec![assistant_message(
+            Some("Ass1\n\nAss2"),
+            Some(vec![tool_call1.clone(), tool_call2.clone()]),
+        )];
+        assert_eq!(output, expected);
+
+        // Test 6: Consecutive assistant messages where one message lacks content/tool_calls.
+        let input = vec![
+            assistant_message(Some("Ass3"), None),
+            assistant_message(None, Some(vec![tool_call1.clone()])),
+        ];
+        let output = coalesce_consecutive_messages(input);
+        // Merging: (Some("Ass3"), None) gives Some("Ass3"), and (None, Some(...)) gives the available tool_calls.
+        let expected = vec![assistant_message(
+            Some("Ass3"),
+            Some(vec![tool_call1.clone()]),
+        )];
+        assert_eq!(output, expected);
+
+        // Test 7: Assistant messages with both None contents but with tool_calls.
+        let input = vec![
+            assistant_message(None, Some(vec![tool_call1.clone()])),
+            assistant_message(None, Some(vec![tool_call2.clone()])),
+        ];
+        let output = coalesce_consecutive_messages(input);
+        let expected = vec![assistant_message(
+            None,
+            Some(vec![tool_call1.clone(), tool_call2.clone()]),
+        )];
+        assert_eq!(output, expected);
+
+        // Test 8: Mixed message types should not merge across types.
+        let input = vec![
+            system_message("Sys1"),
+            user_message("User1"),
+            system_message("Sys2"),
+            assistant_message(Some("Ass1"), None),
+            tool_message("Tool1", "id1"),
+            tool_message("Tool2", "id2"),
+            assistant_message(Some("Ass2"), None),
+            assistant_message(Some("Ass3"), None),
+        ];
+        let output = coalesce_consecutive_messages(input);
+        // Only the two assistant messages at the end should merge.
+        let expected = vec![
+            system_message("Sys1"),
+            user_message("User1"),
+            system_message("Sys2"),
+            assistant_message(Some("Ass1"), None),
+            tool_message("Tool1", "id1"),
+            tool_message("Tool2", "id2"),
+            assistant_message(Some("Ass2\n\nAss3"), None),
+        ];
+        assert_eq!(output, expected);
+
+        // Test 9: More than two consecutive assistant messages.
+        let input = vec![
+            assistant_message(Some("A1"), Some(vec![tool_call1.clone()])),
+            assistant_message(None, None),
+            assistant_message(Some("A3"), None),
+        ];
+        let output = coalesce_consecutive_messages(input);
+        // First merge: ("A1", None) => "A1" with tool_calls preserved; then ("A1", "A3") => "A1\n\nA3".
+        let expected = vec![assistant_message(
+            Some("A1\n\nA3"),
+            Some(vec![tool_call1.clone()]),
+        )];
+        assert_eq!(output, expected);
     }
 }

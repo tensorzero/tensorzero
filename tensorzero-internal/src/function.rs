@@ -9,14 +9,14 @@ use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
-    ChatInferenceResult, ContentBlock, InferenceResult, Input, InputMessageContent,
+    ChatInferenceResult, ContentBlockOutput, InferenceResult, Input, InputMessageContent,
     JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, Usage,
 };
 use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
-use crate::variant::{InferenceConfig, Variant, VariantConfig};
+use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig};
 
 #[derive(Debug)]
 pub enum FunctionConfig {
@@ -70,6 +70,21 @@ impl FunctionConfig {
 }
 
 impl FunctionConfig {
+    pub fn validate_inference_params(
+        &self,
+        params: &crate::endpoints::inference::Params,
+    ) -> Result<(), Error> {
+        if let FunctionConfig::Chat(_) = self {
+            if let Some(JsonMode::ImplicitTool) = &params.params.chat_completion.json_mode {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: "JSON mode `implicit_tool` is not supported for chat functions"
+                        .to_string(),
+                }
+                .into());
+            }
+        }
+        self.validate_input(&params.input)
+    }
     /// Validate the input against the function's input schemas.
     /// The validation is done based on the function's type:
     /// - For a chat function, the input is validated against the system, user, and assistant schemas.
@@ -149,7 +164,7 @@ impl FunctionConfig {
     pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
-        content_blocks: Vec<ContentBlock>,
+        content_blocks: Vec<ContentBlockOutput>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         inference_config: &'request InferenceConfig<'a, 'request>,
@@ -172,11 +187,11 @@ impl FunctionConfig {
                 // We assume here that the last content block that's text or a tool call is the JSON object.
                 // (this is because we could have used an implicit tool call and there is no other reason for a tool call in a JSON function).
                 let raw = content_blocks
-                    .into_iter()
+                    .iter()
                     .rev()
                     .find_map(|content_block| match content_block {
-                        ContentBlock::Text(text) => Some(text.text),
-                        ContentBlock::ToolCall(tool_call) => Some(tool_call.arguments),
+                        ContentBlockOutput::Text(text) => Some(&text.text),
+                        ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
                         _ => None,
                     })
                     .ok_or_else(|| {
@@ -185,14 +200,14 @@ impl FunctionConfig {
                                 .to_string(),
                         })
                     })?;
-                let parsed_output = serde_json::from_str::<Value>(&raw)
+                let parsed_output = serde_json::from_str::<Value>(raw)
                     .map_err(|e| {
                         Error::new(ErrorDetails::OutputParsing {
                             message: format!(
                                 "Failed to parse output from JSON function response {}",
                                 e
                             ),
-                            raw_output: raw.clone(),
+                            raw_output: raw.to_string(),
                         })
                     })
                     .ok();
@@ -211,7 +226,7 @@ impl FunctionConfig {
                 };
                 Ok(InferenceResult::Json(JsonInferenceResult::new(
                     inference_id,
-                    raw,
+                    raw.to_string(),
                     parsed_output,
                     usage,
                     model_inference_results,
@@ -1594,7 +1609,7 @@ mod tests {
             name: "tool_call_name".to_string(),
             arguments: "tool_call_arguments".to_string(),
         };
-        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 10,
@@ -1645,7 +1660,7 @@ mod tests {
             name: "tool_call_name".to_string(),
             arguments: r#"{"name": "Jerry", "age": 30}"#.to_string(),
         };
-        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 10,
@@ -1852,7 +1867,7 @@ mod tests {
             name: "tool_call_name".to_string(),
             arguments: "tool_call_arguments".to_string(),
         };
-        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 10,
@@ -1903,7 +1918,7 @@ mod tests {
             name: "tool_call_name".to_string(),
             arguments: r#"{"answer": "42"}"#.to_string(),
         };
-        let content_blocks = vec![ContentBlock::ToolCall(tool_call)];
+        let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
             input_tokens: 10,
             output_tokens: 10,

@@ -12,8 +12,9 @@ use tokio::time::{timeout, Duration};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
+use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, ContentBlock, FunctionType, ModelInferenceRequest,
+    batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -391,8 +392,8 @@ async fn inner_select_best_candidate<'a, 'request>(
         .output
         .iter()
         .find_map(|block| match block {
-            ContentBlock::Text(text) => Some(&text.text),
-            ContentBlock::ToolCall(tool_call) => Some(&tool_call.arguments),
+            ContentBlockOutput::Text(text) => Some(&text.text),
+            ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
             _ => None,
         }) {
         Some(text) => text,
@@ -600,8 +601,13 @@ impl EvaluatorConfig {
                 self.inner.presence_penalty,
                 self.inner.frequency_penalty,
             );
-        let tool_config = match self.inner.json_mode {
-            Some(JsonMode::ImplicitTool) => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
+        let json_mode = inference_params
+            .chat_completion
+            .json_mode
+            .or(self.inner.json_mode)
+            .unwrap_or(JsonMode::Strict);
+        let tool_config = match json_mode {
+            JsonMode::ImplicitTool => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
             _ => None,
         };
         Ok((
@@ -617,7 +623,7 @@ impl EvaluatorConfig {
                 presence_penalty: inference_params.chat_completion.presence_penalty,
                 frequency_penalty: inference_params.chat_completion.frequency_penalty,
                 stream: false,
-                json_mode: self.inner.json_mode.unwrap_or(JsonMode::Strict).into(),
+                json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
             },

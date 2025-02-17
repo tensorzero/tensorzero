@@ -38,6 +38,7 @@ pub struct E2ETestProvider {
 /// then the provider should return an empty vector for the corresponding test.
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
+    pub reasoning_inference: Vec<E2ETestProvider>,
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
     pub tool_multi_turn_inference: Vec<E2ETestProvider>,
@@ -122,6 +123,10 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_use_tool_choice_required_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_specific_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
+        use $crate::providers::reasoning::test_reasoning_inference_request_with_provider;
+        use $crate::providers::reasoning::test_streaming_reasoning_inference_request_with_provider;
+        use $crate::providers::reasoning::test_reasoning_inference_request_with_provider_json_mode;
+        use $crate::providers::reasoning::test_streaming_reasoning_inference_request_with_provider_json_mode;
 
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
@@ -129,6 +134,24 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.simple_inference;
             for provider in providers {
                 test_simple_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
+        async fn test_reasoning_inference_request() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                test_reasoning_inference_request_with_provider(provider).await;
+            }
+        }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
+        async fn test_streaming_reasoning_inference_request() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                test_streaming_reasoning_inference_request_with_provider(provider).await;
             }
         }
 
@@ -339,6 +362,24 @@ macro_rules! generate_provider_tests {
 
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
+        async fn test_reasoning_inference_request_json_mode() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                test_reasoning_inference_request_with_provider_json_mode(provider).await;
+            }
+        }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
+        async fn test_streaming_reasoning_inference_request_json_mode() {
+            let providers = $func().await.reasoning_inference;
+            for provider in providers {
+                test_streaming_reasoning_inference_request_with_provider_json_mode(provider).await;
+            }
+        }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
         async fn test_dynamic_json_mode_inference_request() {
             let providers = $func().await.json_mode_inference;
             for provider in providers {
@@ -392,7 +433,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     println!("API response: {response_json:#?}");
 
     check_simple_inference_response(response_json, Some(episode_id), &provider, false, false).await;
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     let episode_id = Uuid::now_v7();
 
@@ -470,7 +511,7 @@ pub async fn check_simple_inference_response(
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -635,11 +676,6 @@ pub async fn check_simple_inference_response(
 
 #[cfg(feature = "e2e_tests")]
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     // Generate random u32
@@ -649,7 +685,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
         &provider, episode_id, seed, &tag_value, false,
     )
     .await;
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     let cached_content = test_simple_streaming_inference_request_with_provider_cache(
         &provider, episode_id, seed, &tag_value, true,
     )
@@ -756,7 +792,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -810,13 +846,18 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        expected_max_tokens
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -999,7 +1040,7 @@ pub async fn check_inference_params_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -1256,7 +1297,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -1517,7 +1558,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -1818,7 +1859,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     assert!(serde_json::from_str::<Value>(&arguments).is_ok());
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -2110,7 +2151,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -2391,7 +2432,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     assert!(full_text.to_lowercase().contains("mehta"));
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -2690,7 +2731,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -2993,7 +3034,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     assert!(serde_json::from_str::<Value>(&arguments).is_ok());
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -3196,11 +3237,14 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // NOTE: The xAI API occasionally returns a tool call despite receiving the "tool_choice": "none" parameter.
-    // We'll leave this test running for now, so some flakiness is expected.
+    // NOTE: The xAI API occasionally returns mangled output most of the time when this test runs.
     // The bug has been reported to the xAI team.
     //
-    // https://gist.github.com/GabrielBianconi/2199022d0ea8518e06d366fb613c5bb5
+    // https://gist.github.com/virajmehta/2911580b09713fc58aabfeb9ad62cf3b
+    // We have disabled this test for that provider for now.
+    if provider.model_provider_name == "xai" {
+        return;
+    }
 
     let episode_id = Uuid::now_v7();
 
@@ -3276,7 +3320,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -3444,11 +3488,14 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         return;
     }
 
-    // NOTE: The xAI API occasionally returns a tool call despite receiving the "tool_choice": "none" parameter.
-    // We'll leave this test running for now, so some flakiness is expected.
+    // NOTE: the xAI API now returns mangled output most of the time when this test runs.
     // The bug has been reported to the xAI team.
     //
-    // https://gist.github.com/GabrielBianconi/2199022d0ea8518e06d366fb613c5bb5
+    // https://gist.github.com/virajmehta/2911580b09713fc58aabfeb9ad62cf3b
+    // We have disabled this test for that provider for now.
+    if provider.model_provider_name == "xai" {
+        return;
+    }
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -3547,7 +3594,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     let inference_id = inference_id.unwrap();
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -3862,7 +3909,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -4220,7 +4267,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     );
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -4568,7 +4615,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -4858,7 +4905,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     assert!(serde_json::from_str::<Value>(&arguments).is_ok());
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -5155,7 +5202,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -5384,7 +5431,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                             "type": "tool_result",
                             "id": "123456789",
                             "name": "get_temperature",
-                            "result": "70"
+                            "result": "30"
                         }
                     ]
                 }
@@ -5466,7 +5513,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -5517,7 +5564,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
                         "type": "tool_result",
                         "id": "123456789",
                         "name": "get_temperature",
-                        "result": "70"
+                        "result": "30"
                     }
                 ]
             }
@@ -5638,7 +5685,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
             content: vec![ContentBlock::ToolResult(ToolResult {
                 id: "123456789".to_string(),
                 name: "get_temperature".to_string(),
-                result: "70".to_string(),
+                result: "30".to_string(),
             })],
         },
     ];
@@ -5789,7 +5836,7 @@ pub async fn check_dynamic_tool_use_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -6095,7 +6142,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert!(serde_json::from_str::<Value>(&arguments).is_ok());
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse - ChatInference Table
     let clickhouse = get_clickhouse().await;
@@ -6429,7 +6476,7 @@ pub async fn check_parallel_tool_use_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check if ClickHouse is correct - ChatInference table
     let clickhouse = get_clickhouse().await;
@@ -6766,7 +6813,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert!(serde_json::from_str::<Value>(&get_humidity_arguments).is_ok());
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse - Inference Table
     let clickhouse = get_clickhouse().await;
@@ -7091,7 +7138,6 @@ pub async fn check_json_mode_inference_response(
     assert_eq!(variant_name, provider.variant_name);
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
-    assert!(output.keys().len() == 2);
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
     assert!(parsed_output
         .get("answer")
@@ -7111,7 +7157,7 @@ pub async fn check_json_mode_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check if ClickHouse is ok - JsonInference Table
     let clickhouse = get_clickhouse().await;
@@ -7344,7 +7390,6 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert_eq!(variant_name, provider.variant_name);
 
     let output = response_json.get("output").unwrap().as_object().unwrap();
-    assert!(output.keys().len() == 2);
     let parsed_output = output.get("parsed").unwrap().as_object().unwrap();
     assert!(parsed_output
         .get("response")
@@ -7364,7 +7409,7 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert!(output_tokens > 0);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check if ClickHouse is ok - JsonInference Table
     let clickhouse = get_clickhouse().await;
@@ -7589,10 +7634,10 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         let chunk_episode_id = chunk_json.get("episode_id").unwrap().as_str().unwrap();
         let chunk_episode_id = Uuid::parse_str(chunk_episode_id).unwrap();
         assert_eq!(chunk_episode_id, episode_id);
-
-        let raw = chunk_json.get("raw").unwrap().as_str().unwrap();
-        if !raw.is_empty() {
-            full_content.push_str(raw);
+        if let Some(raw) = chunk_json.get("raw").and_then(|raw| raw.as_str()) {
+            if !raw.is_empty() {
+                full_content.push_str(raw);
+            }
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -7614,7 +7659,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Check ClickHouse - JsonInference Table
     let clickhouse = get_clickhouse().await;

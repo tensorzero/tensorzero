@@ -45,7 +45,7 @@ export default function EpisodesTable({
             <TableRow key={episode.episode_id} id={episode.episode_id}>
               <TableCell className="max-w-[200px] lg:max-w-none">
                 <a
-                  href={`/observability/episode/${episode.episode_id}`}
+                  href={`/observability/episodes/${episode.episode_id}`}
                   className="block no-underline"
                 >
                   <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">

@@ -395,7 +395,7 @@ mod tests {
     use crate::inference::providers::common::get_temperature_tool_config;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::inference::types::{
-        ContentBlockOutput, InferenceResultChunk, ModelInferenceRequestJsonMode, Usage,
+        ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode, Usage,
     };
     use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
     use crate::minijinja_util::tests::get_test_template_config;
@@ -1041,7 +1041,7 @@ mod tests {
                 assert_eq!(chat_response.content.len(), 1);
                 let tool_call = &chat_response.content[0];
                 match tool_call {
-                    ContentBlockOutput::ToolCall(tool_call) => {
+                    ContentBlockChatOutput::ToolCall(tool_call) => {
                         assert_eq!(tool_call.raw_name, "get_temperature");
                         assert_eq!(
                             tool_call.raw_arguments,
@@ -1240,6 +1240,7 @@ mod tests {
                 top_p: Some(0.9),
                 presence_penalty: Some(0.1),
                 frequency_penalty: Some(0.2),
+                json_mode: None,
             },
         };
         // Will dynamically set "answer" instead of "response"
@@ -1402,6 +1403,7 @@ mod tests {
                         top_p: Some(0.9),
                         presence_penalty: Some(0.1),
                         frequency_penalty: Some(0.2),
+                        json_mode: None,
                     },
                 };
                 assert_eq!(json_result.inference_params, expected_inference_params);
@@ -1669,6 +1671,7 @@ mod tests {
                 top_p: Some(0.9),
                 presence_penalty: Some(0.1),
                 frequency_penalty: Some(0.2),
+                json_mode: None,
             },
         };
         let model_request = chat_completion_config

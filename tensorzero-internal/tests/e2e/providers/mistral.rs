@@ -19,6 +19,20 @@ async fn get_providers() -> E2ETestProviders {
         model_provider_name: "mistral".into(),
         credentials: HashMap::new(),
     }];
+    let json_providers = vec![
+        E2ETestProvider {
+            variant_name: "mistral".to_string(),
+            model_name: "open-mistral-nemo-2407".into(),
+            model_provider_name: "mistral".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            variant_name: "mistral-default".to_string(),
+            model_name: "open-mistral-nemo-2407".into(),
+            model_provider_name: "mistral".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "mistral-dynamic".to_string(),
@@ -37,12 +51,13 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: providers.clone(),
+        reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
         tool_use_inference: providers.clone(),
         tool_multi_turn_inference: providers.clone(),
         dynamic_tool_use_inference: providers.clone(),
         parallel_tool_use_inference: vec![],
-        json_mode_inference: providers.clone(),
+        json_mode_inference: json_providers.clone(),
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
         #[cfg(feature = "batch_tests")]
