@@ -1,0 +1,16 @@
+name: For maintainers only
+description: Please select one of the options below to submit a feature request, report a bug, or ask for help.
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > [!IMPORTANT]
+        >
+        > Please use GitHub discussions to **[submit a feature request](https://github.com/tensorzero/tensorzero/discussions/new?category=feature-requests)**, **[report a bug](https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports)**, or **[ask for help](https://github.com/tensorzero/tensorzero/discussions/new?category=help)**.
+  - type: textarea
+    id: description
+    attributes:
+      label: Add a description
+    validations:
+      required: true
