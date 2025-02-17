@@ -14,7 +14,7 @@ import "./tailwind.css";
 import { getConfig } from "./utils/config/index.server";
 import { AppSidebar } from "./components/layout/app.sidebar";
 import { SidebarProvider } from "./components/ui/sidebar";
-import { LayoutProvider } from "./components/layout/LayoutProvider";
+import { ContentLayout } from "./components/layout/ContentLayout";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -65,9 +65,9 @@ export default function App() {
       <SidebarProvider>
         <div className="fixed inset-0 flex bg-neutral-50">
           <AppSidebar />
-          <LayoutProvider>
+          <ContentLayout>
             <Outlet />
-          </LayoutProvider>
+          </ContentLayout>
         </div>
       </SidebarProvider>
     </ConfigProvider>

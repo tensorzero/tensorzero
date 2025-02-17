@@ -8,6 +8,7 @@ import {
   SquareFunction,
   View,
   Home,
+  type LucideIcon,
 } from "lucide-react";
 import { useSidebar } from "~/components/ui/sidebar";
 import { cn } from "~/utils/common";
@@ -30,7 +31,18 @@ import {
   SidebarGroupContent,
 } from "~/components/ui/sidebar";
 
-const navigation = [
+interface NavigationItem {
+  title: string;
+  url: string;
+  icon: LucideIcon;
+}
+
+interface NavigationSection {
+  title: string;
+  items: NavigationItem[];
+}
+
+const navigation: NavigationSection[] = [
   {
     title: "Observability",
     items: [

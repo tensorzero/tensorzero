@@ -6,7 +6,7 @@ interface LayoutProviderProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
 }
 
-export function LayoutProvider({
+export function ContentLayout({
   children,
   className,
   ...props
