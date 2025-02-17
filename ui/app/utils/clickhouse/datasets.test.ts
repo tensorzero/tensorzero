@@ -168,4 +168,22 @@ describe("countRowsForDataset", () => {
     const chatRows = await countRowsForDataset(chatDatasetParams);
     expect(chatRows).toBe(11);
   });
+
+  test("returns correct count for demonstration metrics", async () => {
+    const jsonDatasetParams = DatasetQueryParamsSchema.parse({
+      inferenceType: "json",
+      function_name: "extract_entities",
+      join_demonstrations: true,
+    });
+    const jsonRows = await countRowsForDataset(jsonDatasetParams);
+    expect(jsonRows).toBe(100);
+
+    const chatDatasetParams = DatasetQueryParamsSchema.parse({
+      inferenceType: "chat",
+      function_name: "write_haiku",
+      join_demonstrations: true,
+    });
+    const chatRows = await countRowsForDataset(chatDatasetParams);
+    expect(chatRows).toBe(493);
+  });
 });
