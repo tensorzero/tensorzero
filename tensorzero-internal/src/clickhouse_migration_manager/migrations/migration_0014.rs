@@ -35,9 +35,9 @@ impl Migration for Migration0014<'_> {
     /// OR if they exist and either `output` column is not Nullable(String)
     async fn should_apply(&self) -> Result<bool, Error> {
         let chat_inference_dataset_table_exists =
-            check_table_exists(self.clickhouse, "ChatInferenceDataset", "0012").await?;
+            check_table_exists(self.clickhouse, "ChatInferenceDataset", "0014").await?;
         let json_inference_dataset_table_exists =
-            check_table_exists(self.clickhouse, "JsonInferenceDataset", "0012").await?;
+            check_table_exists(self.clickhouse, "JsonInferenceDataset", "0014").await?;
         if !chat_inference_dataset_table_exists || !json_inference_dataset_table_exists {
             return Ok(true);
         }
