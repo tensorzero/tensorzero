@@ -6,12 +6,20 @@ import {
   type DatasetBuilderFormValues,
 } from "./types";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
+import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { useConfig } from "~/context/config";
+import { useEffect, useState } from "react";
+import { useFetcher } from "react-router";
 
 export function DatasetBuilderForm({
   dataset_counts,
 }: {
   dataset_counts: DatasetCountInfo[];
 }) {
+  const config = useConfig();
+  const countFetcher = useFetcher();
+  const [inferenceCount, setInferenceCount] = useState<number | null>(null);
+
   const form = useForm<DatasetBuilderFormValues>({
     defaultValues: {
       dataset_name: "",
@@ -25,6 +33,25 @@ export function DatasetBuilderForm({
     mode: "onChange",
   });
 
+  // Watch for function name changes to update inference count
+  const functionName = form.watch("function_name");
+  useEffect(() => {
+    if (functionName) {
+      const params = new URLSearchParams();
+      params.set("function", functionName);
+      countFetcher.load(`/api/curated_inferences/count?${params}`);
+    } else {
+      setInferenceCount(null);
+    }
+  }, [functionName]);
+
+  // Update inference count when data is loaded
+  useEffect(() => {
+    if (countFetcher.data) {
+      setInferenceCount(countFetcher.data.inferenceCount);
+    }
+  }, [countFetcher.data]);
+
   return (
     <Form {...form}>
       <form className="space-y-6">
@@ -32,6 +59,12 @@ export function DatasetBuilderForm({
           <DatasetSelector
             control={form.control}
             dataset_counts={dataset_counts}
+          />
+          <FunctionSelector<DatasetBuilderFormValues>
+            control={form.control}
+            name="function_name"
+            inferenceCount={inferenceCount}
+            config={config}
           />
         </div>
       </form>
