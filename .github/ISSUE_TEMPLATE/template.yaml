@@ -10,7 +10,5 @@ body:
         > Please use GitHub discussions to **[submit a feature request](https://github.com/tensorzero/tensorzero/discussions/new?category=feature-requests)**, **[report a bug](https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports)**, or **[ask for help](https://github.com/tensorzero/tensorzero/discussions/new?category=help)**.
   - type: textarea
     id: description
-    attributes:
-      label: Add a description
     validations:
       required: true
