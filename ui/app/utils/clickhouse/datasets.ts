@@ -358,3 +358,43 @@ function getFeedbackTable(metric_type: "boolean" | "float") {
     ? "BooleanMetricFeedback"
     : "FloatMetricFeedback";
 }
+
+const DatasetCountInfoSchema = z.object({
+  dataset_name: z.string(),
+  type: z.enum(["chat", "json"]),
+  count: z.number(),
+  last_updated: z.string().datetime(),
+});
+export type DatasetCountInfo = z.infer<typeof DatasetCountInfoSchema>;
+
+/*
+Get name, type, and count for all datasets.
+*/
+export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
+  const resultSet = await clickhouseClient.query({
+    query: `
+      SELECT dataset_name, type, count, last_updated FROM (
+        SELECT
+          dataset_name,
+          'chat' as type,
+          count() as count,
+          formatDateTime(max(created_at), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
+        FROM ChatInferenceDataset
+        WHERE is_deleted = false
+        GROUP BY dataset_name
+        UNION ALL
+        SELECT
+          dataset_name,
+          'json' as type,
+          count() as count,
+          formatDateTime(max(created_at), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
+        FROM JsonInferenceDataset
+        WHERE is_deleted = false
+        GROUP BY dataset_name
+      )
+    `,
+    format: "JSONEachRow",
+  });
+  const rows = await resultSet.json<DatasetCountInfo[]>();
+  return z.array(DatasetCountInfoSchema).parse(rows);
+}
