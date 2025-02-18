@@ -110,6 +110,7 @@ jobs:
       - name: Check built wheel
         run: |
           ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
+        shell: bash
 
   macos:
     runs-on: ${{ matrix.platform.runner }}
