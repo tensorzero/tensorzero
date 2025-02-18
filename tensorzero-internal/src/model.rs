@@ -1107,6 +1107,7 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
 
 const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "anthropic::",
+    "deepseek::",
     "fireworks::",
     "google_ai_studio_gemini::",
     "hyperbolic::",
@@ -1114,7 +1115,6 @@ const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "openai::",
     "together::",
     "xai::",
-    "deepseek::",
     "dummy::",
 ];
 

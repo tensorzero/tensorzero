@@ -10,6 +10,5 @@ services:
     #   - VLLM_API_KEY=${VLLM_API_KEY:?Environment variable VLLM_API_KEY must be set.}
     ports:
       - "3000:3000"
-    # The following entry is needed if vLLM runs on the host machine. If it runs on a separate server, you can remove it.
     extra_hosts:
       - "host.docker.internal:host-gateway"
