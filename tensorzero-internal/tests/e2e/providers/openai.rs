@@ -382,46 +382,6 @@ async fn test_default_function_invalid_model_name() {
 
 #[cfg(feature = "e2e_tests")]
 #[tokio::test]
-async fn test_o1_streaming_unsupported() {
-    use reqwest::StatusCode;
-
-    let client = Client::new();
-    let episode_id = Uuid::now_v7();
-
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": "openai-o1",
-        "episode_id": episode_id,
-        "input":
-            {"system": {"assistant_name": "AskJeeves"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the capital of Japan?"
-                }
-            ]},
-        "stream": true,
-    });
-
-    let response = client
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
-    let text = response.text().await.unwrap();
-    // This check will cause our CI to start failing when OpenAI enables streaming support for o1
-    // When this happens, we should delete this test, and remove all of the "o1" cjecks from
-    // our streaming tests (e.g. `test_tool_multi_turn_inference_request_with_provider`)
-    assert!(
-        text.contains("'stream' does not support true with this model"),
-        "Unexpected error: {text}"
-    );
-}
-
-#[cfg(feature = "e2e_tests")]
-#[tokio::test]
 async fn test_chat_function_json_override_with_mode_on() {
     test_chat_function_json_override_with_mode(ModelInferenceRequestJsonMode::On).await;
 }

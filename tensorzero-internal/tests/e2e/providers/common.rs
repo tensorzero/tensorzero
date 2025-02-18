@@ -681,11 +681,6 @@ pub async fn check_simple_inference_response(
 
 #[cfg(feature = "e2e_tests")]
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     // Generate random u32
@@ -856,13 +851,18 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        expected_max_tokens
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();

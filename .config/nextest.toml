@@ -15,6 +15,10 @@ default-filter = "not test(no_aws_credentials)"
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 default-filter = "all()"
 
+[[profile.ci.overrides]]
+filter = 'binary(e2e) and test(providers::aws_bedrock::)'
+retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
+
 # Note: use the following commands to debug test groups:
 # cargo nextest show-config test-groups
 # cargo nextest show-config test-groups --features e2e_tests
