@@ -15,7 +15,7 @@ export const DatasetBuilderFormValuesSchema = z.object({
     }),
   metric_config: MetricConfigSchema.optional(),
   threshold: z.number().optional(),
-  join_demonstrations: z.boolean().default(false),
+  output_source: z.enum(["none", "inference", "demonstration"]),
 });
 
 export type DatasetBuilderFormValues = z.infer<

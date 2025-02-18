@@ -13,6 +13,7 @@ import { useCountFetcher } from "./route";
 import { useFetcher } from "react-router";
 import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
+import OutputSourceSelector from "./OutputSourceSelector";
 
 export function DatasetBuilderForm({
   dataset_counts,
@@ -34,7 +35,7 @@ export function DatasetBuilderForm({
       metric_name: null,
       metric_config: undefined,
       threshold: 0.5,
-      join_demonstrations: false,
+      output_source: "none",
     },
     resolver: DatasetBuilderFormValuesResolver,
     mode: "onChange",
@@ -105,7 +106,7 @@ export function DatasetBuilderForm({
           ? `Inserted ${insertedCount.toLocaleString()} Rows`
           : "Dataset Created";
       default:
-        return "Create Dataset";
+        return "Insert Into Dataset";
     }
   }
 
@@ -136,6 +137,7 @@ export function DatasetBuilderForm({
             curatedInferenceCount={counts.curatedInferenceCount}
             config={config}
           />
+          <OutputSourceSelector control={form.control} />
         </div>
 
         <Button
