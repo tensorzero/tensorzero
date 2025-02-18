@@ -147,11 +147,14 @@ impl ClientBuilder {
                 } else {
                     Arc::new(Config::default())
                 };
-                let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url.clone())
-                    .await
-                    .map_err(|e| {
-                        ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
-                    })?;
+                let clickhouse_connection_info =
+                    setup_clickhouse(&config, clickhouse_url.clone(), true)
+                        .await
+                        .map_err(|e| {
+                            ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                                source: e.into(),
+                            })
+                        })?;
                 let http_client = if let Some(http_client) = self.http_client {
                     http_client
                 } else {
@@ -431,6 +434,7 @@ pub use tensorzero_internal::observability;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tracing_test::traced_test;
 
     #[tokio::test]
     #[ignore] // TODO - set an environment variable, or create a new config with dummy credentials
@@ -450,5 +454,24 @@ mod tests {
             err.to_string().contains("Missing ClickHouse URL"),
             "Bad error message: {err_msg}"
         );
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_log_no_clickhouse() {
+        // Default observability and no ClickHouse URL
+        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_path: Some(PathBuf::from(
+                "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
+            )),
+            clickhouse_url: None,
+        })
+        .build()
+        .await
+        .expect("Failed to build client");
+        assert!(!logs_contain(
+            "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
+        ));
+        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."));
     }
 }

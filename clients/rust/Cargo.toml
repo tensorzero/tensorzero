@@ -25,6 +25,7 @@ clap = "4.5.27"
 tokio = { workspace = true }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
+tracing-test = { workspace = true }
 
 [features]
 # Forward these features to 'tensorzero-internal', so that our embedded
