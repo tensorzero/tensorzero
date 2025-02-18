@@ -1,4 +1,4 @@
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { Form } from "~/components/ui/form";
 import { DatasetSelector } from "./DatasetSelector";
 import {
@@ -8,8 +8,8 @@ import {
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { useConfig } from "~/context/config";
-import { useEffect, useState } from "react";
-import { useFetcher } from "react-router";
+import { MetricSelector } from "~/components/metric/MetricSelector";
+import { useCountFetcher } from "./route";
 
 export function DatasetBuilderForm({
   dataset_counts,
@@ -17,8 +17,6 @@ export function DatasetBuilderForm({
   dataset_counts: DatasetCountInfo[];
 }) {
   const config = useConfig();
-  const countFetcher = useFetcher();
-  const [inferenceCount, setInferenceCount] = useState<number | null>(null);
 
   const form = useForm<DatasetBuilderFormValues>({
     defaultValues: {
@@ -27,30 +25,24 @@ export function DatasetBuilderForm({
       function_name: undefined,
       variant_name: undefined,
       metric_name: undefined,
+      threshold: 0.5,
       join_demonstrations: false,
     },
     resolver: DatasetBuilderFormValuesResolver,
     mode: "onChange",
   });
 
-  // Watch for function name changes to update inference count
-  const functionName = form.watch("function_name");
-  useEffect(() => {
-    if (functionName) {
-      const params = new URLSearchParams();
-      params.set("function", functionName);
-      countFetcher.load(`/api/curated_inferences/count?${params}`);
-    } else {
-      setInferenceCount(null);
-    }
-  }, [functionName]);
+  const watchedFields = useWatch({
+    control: form.control,
+    name: ["function_name", "metric_name", "threshold"] as const,
+  });
 
-  // Update inference count when data is loaded
-  useEffect(() => {
-    if (countFetcher.data) {
-      setInferenceCount(countFetcher.data.inferenceCount);
-    }
-  }, [countFetcher.data]);
+  const [functionName, metricName, threshold] = watchedFields;
+  const counts = useCountFetcher({
+    functionName: functionName ?? undefined,
+    metricName: metricName ?? undefined,
+    threshold: threshold ?? undefined,
+  });
 
   return (
     <Form {...form}>
@@ -63,7 +55,15 @@ export function DatasetBuilderForm({
           <FunctionSelector<DatasetBuilderFormValues>
             control={form.control}
             name="function_name"
-            inferenceCount={inferenceCount}
+            inferenceCount={counts.inferenceCount}
+            config={config}
+          />
+          <MetricSelector<DatasetBuilderFormValues>
+            control={form.control}
+            name="metric_name"
+            functionFieldName="function_name"
+            feedbackCount={counts.feedbackCount}
+            curatedInferenceCount={counts.curatedInferenceCount}
             config={config}
           />
         </div>
