@@ -393,6 +393,7 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
         WHERE is_deleted = false
         GROUP BY dataset_name
       )
+      ORDER BY last_updated DESC
     `,
     format: "JSONEachRow",
   });
