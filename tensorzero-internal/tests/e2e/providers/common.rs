@@ -1,8 +1,9 @@
 #![allow(clippy::print_stdout)]
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
+#[cfg(feature = "e2e_tests")]
 use rand::Rng;
 #[cfg(feature = "e2e_tests")]
 use reqwest::{Client, StatusCode};
@@ -15,10 +16,11 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
+#[cfg(feature = "e2e_tests")]
 use crate::common::get_gateway_endpoint;
 use crate::common::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
-    select_json_inference_clickhouse, select_model_inference_clickhouse, CLICKHOUSE_URL,
+    select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 
 #[derive(Clone, Debug)]
@@ -38,6 +40,7 @@ pub struct E2ETestProvider {
 /// then the provider should return an empty vector for the corresponding test.
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
+    #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub reasoning_inference: Vec<E2ETestProvider>,
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
@@ -51,6 +54,7 @@ pub struct E2ETestProviders {
     pub supports_batch_inference: bool,
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn make_http_gateway() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
         url: get_gateway_endpoint("/"),
@@ -60,12 +64,13 @@ pub async fn make_http_gateway() -> tensorzero::Client {
     .unwrap()
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn make_embedded_gateway() -> tensorzero::Client {
-    let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_path: Some(config_path),
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
     })
     .build()
     .await

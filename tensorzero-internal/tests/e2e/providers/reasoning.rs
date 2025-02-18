@@ -19,7 +19,7 @@ use tensorzero::Role;
 use tensorzero_internal::inference::types::{ContentBlock, RequestMessage};
 use uuid::Uuid;
 
-#[cfg(feature = "e2e_tests")]
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_reasoning_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -249,7 +249,7 @@ pub async fn test_reasoning_inference_request_with_provider(provider: E2ETestPro
     assert_eq!(id, inference_id);
 }
 
-#[cfg(feature = "e2e_tests")]
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_streaming_reasoning_inference_request_with_provider(provider: E2ETestProvider) {
     use reqwest_eventsource::{Event, RequestBuilderExt};
     use serde_json::Value;
@@ -526,7 +526,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider(provider: 
     assert_eq!(id, inference_id);
 }
 
-#[cfg(feature = "e2e_tests")]
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -724,7 +724,7 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     assert_eq!(output.len(), 2);
 }
 
-#[cfg(feature = "e2e_tests")]
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
     provider: E2ETestProvider,
 ) {
