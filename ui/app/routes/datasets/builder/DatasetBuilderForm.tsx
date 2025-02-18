@@ -26,6 +26,7 @@ export function DatasetBuilderForm({
     "idle" | "submitting" | "complete"
   >("idle");
   const [countToInsert, setCountToInsert] = useState<number | null>(null);
+  const [isNewDataset, setIsNewDataset] = useState<boolean | null>(null);
 
   const form = useForm<DatasetBuilderFormValues>({
     defaultValues: {
@@ -97,14 +98,18 @@ export function DatasetBuilderForm({
     }
   };
 
-  function getButtonText() {
+  function getButtonText(isNewDataset: boolean | null) {
     switch (submissionPhase) {
       case "submitting":
         return "Creating Dataset...";
       case "complete":
         return "Success";
       default:
-        return "Insert Into Dataset";
+        if (isNewDataset) {
+          return "Create Dataset";
+        } else {
+          return "Insert Into Dataset";
+        }
     }
   }
 
@@ -120,6 +125,7 @@ export function DatasetBuilderForm({
           <DatasetSelector
             control={form.control}
             dataset_counts={dataset_counts}
+            setIsNewDataset={setIsNewDataset}
           />
           <FunctionSelector<DatasetBuilderFormValues>
             control={form.control}
@@ -155,7 +161,7 @@ export function DatasetBuilderForm({
             }
           }}
         >
-          {getButtonText()}
+          {getButtonText(isNewDataset)}
         </Button>
         {form.formState.errors.root && (
           <p className="mt-2 text-sm text-red-500">

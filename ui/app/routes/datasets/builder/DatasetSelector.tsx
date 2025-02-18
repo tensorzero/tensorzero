@@ -24,9 +24,11 @@ import type { DatasetBuilderFormValues } from "./types";
 export function DatasetSelector({
   control,
   dataset_counts,
+  setIsNewDataset,
 }: {
   control: Control<DatasetBuilderFormValues>;
   dataset_counts: DatasetCountInfo[];
+  setIsNewDataset: (isNewDataset: boolean | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -121,6 +123,7 @@ export function DatasetSelector({
                             field.onChange(inputValue.trim());
                             setInputValue("");
                             setOpen(false);
+                            setIsNewDataset(true);
                           }}
                           className="flex items-center justify-between"
                         >
@@ -145,6 +148,7 @@ export function DatasetSelector({
                               field.onChange(dataset.dataset_name);
                               setInputValue("");
                               setOpen(false);
+                              setIsNewDataset(false);
                             }}
                             className="flex items-center justify-between"
                           >
