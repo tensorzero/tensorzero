@@ -378,7 +378,7 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
         SELECT
           dataset_name,
           'chat' as type,
-          count() as count,
+          toUInt32(count()) as count,
           formatDateTime(max(created_at), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
         FROM ChatInferenceDataset
         WHERE is_deleted = false
@@ -387,7 +387,7 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
         SELECT
           dataset_name,
           'json' as type,
-          count() as count,
+          toUInt32(count()) as count,
           formatDateTime(max(created_at), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
         FROM JsonInferenceDataset
         WHERE is_deleted = false
@@ -416,7 +416,6 @@ export async function insertRowsForDataset(
   params: DatasetQueryParams,
 ): Promise<void> {
   const validatedParams = DatasetQueryParamsSchema.safeParse(params);
-  // Validate that dataset name is provided in addition to the safe parse of the schema
   if (!validatedParams.success) {
     throw new Error(
       `Invalid dataset query params: ${validatedParams.error.message}`,
@@ -426,21 +425,31 @@ export async function insertRowsForDataset(
     throw new Error("dataset_name is required for dataset insertion");
   }
 
-  // Determine the destination dataset table based on inferenceType
   const destinationTable =
     validatedParams.data.inferenceType === "chat"
       ? "ChatInferenceDataset"
       : "JsonInferenceDataset";
 
-  // Build the SELECT query from the source table, passing original params without dataset_name
-  const { query, query_params } = buildDatasetSelectQuery(params);
+  // Build the SELECT query from the source table
+  const { query: sourceQuery, query_params } = buildDatasetSelectQuery(params);
 
-  // Wrap the select query in a subquery that prepends the dataset_name
+  // Wrap the select query to include all required columns with their defaults
   const wrappedQuery = `
     INSERT INTO ${destinationTable}
-    SELECT '${validatedParams.data.dataset_name}' as dataset_name, t.*
+    SELECT
+      '${validatedParams.data.dataset_name}' as dataset_name,
+      function_name,
+      id,
+      episode_id,
+      input,
+      output,
+      ${validatedParams.data.inferenceType === "chat" ? "tool_params" : "output_schema"},
+      tags,
+      auxiliary,
+      false as is_deleted,
+      now() as created_at
     FROM (
-      ${query}
+      ${sourceQuery}
     ) AS t
   `;
 

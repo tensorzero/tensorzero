@@ -61,7 +61,9 @@ export function DatasetBuilderForm({
       "metric_type",
       type === "boolean" || type === "float" ? type : undefined,
     );
-  }, [metricName, config.metrics, form]);
+    const functionType = config.functions[functionName ?? ""]?.type;
+    form.setValue("type", functionType);
+  }, [metricName, functionName, config, form]);
 
   // Handle form submission response
   useEffect(() => {

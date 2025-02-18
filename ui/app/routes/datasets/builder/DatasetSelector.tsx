@@ -8,7 +8,7 @@ import {
 } from "~/components/ui/popover";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -64,23 +64,44 @@ export function DatasetSelector({
                     className="w-full justify-between font-normal"
                   >
                     <div>
-                      {field.value || "Select a dataset..."}
-                      {field.value && (
-                        <span className="ml-2">
-                          <Badge variant="outline">
-                            {
-                              dataset_counts.find(
-                                (d) => d.dataset_name === field.value,
-                              )?.type
-                            }
-                          </Badge>
-                          <Badge variant="secondary" className="ml-2">
-                            {dataset_counts
-                              .find((d) => d.dataset_name === field.value)
-                              ?.count.toLocaleString()}{" "}
-                            rows
-                          </Badge>
-                        </span>
+                      {field.value ? (
+                        <div className="flex items-center">
+                          {dataset_counts.find(
+                            (d) => d.dataset_name === field.value,
+                          ) ? (
+                            <>
+                              {field.value}
+                              <span className="ml-2">
+                                <Badge variant="outline">
+                                  {
+                                    dataset_counts.find(
+                                      (d) => d.dataset_name === field.value,
+                                    )?.type
+                                  }
+                                </Badge>
+                                <Badge variant="secondary" className="ml-2">
+                                  {dataset_counts
+                                    .find((d) => d.dataset_name === field.value)
+                                    ?.count.toLocaleString()}{" "}
+                                  rows
+                                </Badge>
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="mr-2 h-4 w-4 text-blue-500" />
+                              {field.value}
+                              <Badge
+                                variant="outline"
+                                className="ml-2 bg-blue-50 text-blue-500"
+                              >
+                                New Dataset
+                              </Badge>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        "Select a dataset..."
                       )}
                     </div>
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -99,8 +120,29 @@ export function DatasetSelector({
                     />
                     <CommandList>
                       <CommandEmpty className="px-4 py-2 text-sm">
-                        Press enter to create "{inputValue}"
+                        No datasets found.
                       </CommandEmpty>
+                      {filteredDatasets.length === 0 && inputValue && (
+                        <CommandItem
+                          onSelect={() => {
+                            field.onChange(inputValue);
+                            setInputValue("");
+                            setOpen(false);
+                          }}
+                          className="flex items-center justify-between"
+                        >
+                          <div className="flex items-center">
+                            <Plus className="mr-2 h-4 w-4 text-blue-500" />
+                            <span>{inputValue}</span>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className="bg-blue-50 text-blue-500"
+                          >
+                            Create New Dataset
+                          </Badge>
+                        </CommandItem>
+                      )}
                       <CommandGroup>
                         {filteredDatasets.map((dataset) => (
                           <CommandItem

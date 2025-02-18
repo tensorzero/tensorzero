@@ -43,6 +43,7 @@ export async function action({ request }: ActionFunctionArgs) {
       inferenceType: parsedData.type,
       function_name: parsedData.function,
       variant_name: parsedData.variant,
+      dataset_name: parsedData.dataset,
       join_demonstrations: parsedData.join_demonstrations,
       extra_where: [],
       extra_params: {},
