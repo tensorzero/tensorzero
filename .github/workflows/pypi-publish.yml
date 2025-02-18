@@ -40,6 +40,9 @@ jobs:
       - name: Check built wheel
         run: |
           ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
+      - name: Setup tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
