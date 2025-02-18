@@ -6,6 +6,7 @@ describe("countRowsForDataset", () => {
     const dataset_params = DatasetQueryParamsSchema.parse({
       inferenceType: "chat",
       function_name: "write_haiku",
+      output_source: "none",
     });
     const rows = await countRowsForDataset(dataset_params);
     expect(rows).toBe(494);
@@ -16,6 +17,7 @@ describe("countRowsForDataset", () => {
       inferenceType: "json",
       function_name: "extract_entities",
       variant_name: "llama_8b_initial_prompt",
+      output_source: "none",
     });
     const rows = await countRowsForDataset(dataset_params);
     expect(rows).toBe(110);
@@ -26,6 +28,7 @@ describe("countRowsForDataset", () => {
       const dataset_params = DatasetQueryParamsSchema.parse({
         inferenceType: "chat",
         variant_name: "test",
+        output_source: "none",
       });
       await countRowsForDataset(dataset_params);
     }).rejects.toThrow(
@@ -42,8 +45,9 @@ describe("countRowsForDataset", () => {
         metric_type: "float",
         operator: ">",
         threshold: 0.8,
-        join_on: "inference_id",
+        join_on: "id",
       },
+      output_source: "none",
     });
     const rows = await countRowsForDataset(dataset_params);
     expect(rows).toBe(67);
@@ -58,8 +62,9 @@ describe("countRowsForDataset", () => {
         metric_type: "boolean",
         operator: ">",
         threshold: 0,
-        join_on: "inference_id",
+        join_on: "id",
       },
+      output_source: "inference",
     });
     const jsonRows = await countRowsForDataset(jsonDatasetParams);
     expect(jsonRows).toBe(41);
@@ -72,8 +77,9 @@ describe("countRowsForDataset", () => {
         metric_type: "boolean",
         operator: ">",
         threshold: 0,
-        join_on: "inference_id",
+        join_on: "id",
       },
+      output_source: "none",
     });
     const chatRows = await countRowsForDataset(chatDatasetParams);
     expect(chatRows).toBe(80);
@@ -90,6 +96,7 @@ describe("countRowsForDataset", () => {
         threshold: 0,
         join_on: "episode_id",
       },
+      output_source: "inference",
     });
     const jsonRows = await countRowsForDataset(jsonDatasetParams);
     expect(jsonRows).toBe(29);
@@ -104,6 +111,7 @@ describe("countRowsForDataset", () => {
         threshold: 0,
         join_on: "episode_id",
       },
+      output_source: "none",
     });
     const chatRows = await countRowsForDataset(chatDatasetParams);
     expect(chatRows).toBe(9);
@@ -118,8 +126,9 @@ describe("countRowsForDataset", () => {
         metric_type: "float",
         operator: ">",
         threshold: 0.8,
-        join_on: "inference_id",
+        join_on: "id",
       },
+      output_source: "none",
     });
     const jsonRows = await countRowsForDataset(jsonDatasetParams);
     expect(jsonRows).toBe(54);
@@ -132,8 +141,9 @@ describe("countRowsForDataset", () => {
         metric_type: "float",
         operator: ">",
         threshold: 0.8,
-        join_on: "inference_id",
+        join_on: "id",
       },
+      output_source: "none",
     });
     const chatRows = await countRowsForDataset(chatDatasetParams);
     expect(chatRows).toBe(67);
@@ -150,6 +160,7 @@ describe("countRowsForDataset", () => {
         threshold: 0.8,
         join_on: "episode_id",
       },
+      output_source: "none",
     });
     const jsonRows = await countRowsForDataset(jsonDatasetParams);
     expect(jsonRows).toBe(35);
@@ -164,6 +175,7 @@ describe("countRowsForDataset", () => {
         threshold: 0.8,
         join_on: "episode_id",
       },
+      output_source: "none",
     });
     const chatRows = await countRowsForDataset(chatDatasetParams);
     expect(chatRows).toBe(11);
@@ -173,7 +185,7 @@ describe("countRowsForDataset", () => {
     const jsonDatasetParams = DatasetQueryParamsSchema.parse({
       inferenceType: "json",
       function_name: "extract_entities",
-      join_demonstrations: true,
+      output_source: "demonstration",
     });
     const jsonRows = await countRowsForDataset(jsonDatasetParams);
     expect(jsonRows).toBe(100);
@@ -181,7 +193,7 @@ describe("countRowsForDataset", () => {
     const chatDatasetParams = DatasetQueryParamsSchema.parse({
       inferenceType: "chat",
       function_name: "write_haiku",
-      join_demonstrations: true,
+      output_source: "demonstration",
     });
     const chatRows = await countRowsForDataset(chatDatasetParams);
     expect(chatRows).toBe(493);
@@ -199,9 +211,9 @@ describe("countRowsForDataset", () => {
         metric_type: "float",
         operator: ">",
         threshold: 0.8,
-        join_on: "inference_id",
+        join_on: "id",
       },
-      join_demonstrations: true,
+      output_source: "demonstration",
     });
     const chatCount = await countRowsForDataset(chatParams);
     expect(chatCount).toBe(67);
@@ -217,9 +229,9 @@ describe("countRowsForDataset", () => {
         metric_type: "float",
         operator: ">",
         threshold: 0.8,
-        join_on: "inference_id",
+        join_on: "id",
       },
-      join_demonstrations: true,
+      output_source: "demonstration",
     });
     const jsonCount = await countRowsForDataset(jsonParams);
     expect(jsonCount).toBe(0);

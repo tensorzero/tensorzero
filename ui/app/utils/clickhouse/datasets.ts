@@ -110,8 +110,7 @@ export const DatasetQueryParamsSchema = z.object({
       join_on: z.enum(["id", "episode_id"]),
     })
     .optional(), // Optional filter based on metric feedback
-  join_demonstrations: z.boolean().optional(), // Flag to join demonstration feedback
-  include_output: z.boolean().optional(), // Whether to include the original output field in the result
+  output_source: z.enum(["none", "inference", "demonstration"]),
   limit: z.number().optional(),
   offset: z.number().optional(),
 });
@@ -143,8 +142,7 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
     extra_where,
     extra_params,
     metric_filter,
-    join_demonstrations,
-    include_output,
+    output_source,
     limit,
     offset,
   } = params;
@@ -187,11 +185,11 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
   // Adjust the output field based on flags:
   // - If join_demonstrations is true, use the demonstration's value as output.
   // - Otherwise, if include_output is false, replace output with NULL.
-  if (join_demonstrations) {
+  if (output_source === "demonstration") {
     selectFields = selectFields.map((field) =>
       field === "output" ? "demo.value as output" : field,
     );
-  } else if (include_output === false) {
+  } else if (output_source === "none") {
     selectFields = selectFields.map((field) =>
       field === "output" ? "NULL AS output" : field,
     );
@@ -256,7 +254,7 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
   // If join_demonstrations is true, join the DemonstrationFeedback table.
   // This join selects the latest demonstration feedback and uses its value as the output.
   // -------------------------------------------------------------------
-  if (join_demonstrations) {
+  if (output_source === "demonstration") {
     query += ` JOIN (
       SELECT
         inference_id,
