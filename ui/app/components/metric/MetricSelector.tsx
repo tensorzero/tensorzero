@@ -1,5 +1,10 @@
-import { useWatch, useFormContext, type Control } from "react-hook-form";
-import type { SFTFormValues } from "./types";
+import {
+  useFormContext,
+  useWatch,
+  type Control,
+  type Path,
+  type PathValue,
+} from "react-hook-form";
 import { Config } from "~/utils/config";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
@@ -17,29 +22,33 @@ import { useFetcher } from "react-router";
 import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
 import { Badge } from "~/components/ui/badge";
 
-type MetricSelectorProps = {
-  control?: Control<SFTFormValues>;
+type MetricSelectorProps<T extends Record<string, unknown>> = {
+  control: Control<T>;
+  name: Path<T>;
+  functionFieldName: Path<T>;
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
   config: Config;
 };
 
-export function MetricSelector({
+export function MetricSelector<T extends Record<string, unknown>>({
   control,
+  name,
+  functionFieldName,
   feedbackCount,
   curatedInferenceCount,
   config,
-}: MetricSelectorProps) {
+}: MetricSelectorProps<T>) {
   const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
-  const { getValues, setValue } = useFormContext<SFTFormValues>();
+  const { getValues, setValue } = useFormContext<T>();
 
   const functionValue = useWatch({
     control,
-    name: "function",
+    name: functionFieldName,
   });
 
   useEffect(() => {
-    if (functionValue) {
+    if (functionValue && typeof functionValue === "string") {
       metricsFetcher.load(
         `/api/function/${encodeURIComponent(functionValue)}/feedback_counts`,
       );
@@ -55,16 +64,22 @@ export function MetricSelector({
 
   // Reset metric value if the selected function does not have the previously selected metric
   useEffect(() => {
-    const metricValue = getValues("metric");
-    if (functionValue && metricValue && !validMetrics.has(metricValue)) {
-      setValue("metric", null);
+    const metricValue = getValues(name);
+    if (
+      functionValue &&
+      metricValue &&
+      typeof metricValue === "string" &&
+      !validMetrics.has(metricValue)
+    ) {
+      // TODO: Figure out how to generalize the generic for this function so that it accepts a null value
+      setValue(name, null as PathValue<T, Path<T>>);
     }
   }, [functionValue, validMetrics, getValues, setValue]);
 
   return (
     <FormField
       control={control}
-      name="metric"
+      name={name}
       render={({ field }) => (
         <FormItem className="flex flex-col justify-center">
           <FormLabel>Metric</FormLabel>
@@ -75,7 +90,7 @@ export function MetricSelector({
                   const metricValue = value === "none" ? null : value;
                   field.onChange(metricValue);
                 }}
-                value={field.value ?? "none"}
+                value={(field.value ?? "none") as string}
                 disabled={!functionValue || isLoading}
               >
                 <SelectTrigger>
@@ -120,7 +135,7 @@ export function MetricSelector({
               {field.value && config.metrics[field.value]?.type === "float" && (
                 <FormField
                   control={control}
-                  name="threshold"
+                  name={"threshold" as Path<T>}
                   render={({ field: thresholdField }) => (
                     <div className="rounded-lg bg-gray-100 p-4">
                       <FormLabel>Threshold</FormLabel>
@@ -128,6 +143,7 @@ export function MetricSelector({
                         type="number"
                         step="0.01"
                         {...thresholdField}
+                        value={thresholdField.value?.toString() ?? ""}
                         className="border-none bg-transparent focus:ring-0"
                         onChange={(e) => {
                           thresholdField.onChange(Number(e.target.value));
