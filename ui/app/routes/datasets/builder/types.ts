@@ -12,6 +12,7 @@ export const DatasetBuilderFormValuesSchema = z.object({
     .refine((val) => val === null || val !== "", {
       message: "Please select a metric or 'None'",
     }),
+  metric_type: z.enum(["boolean", "float"]).optional(),
   threshold: z.number().optional(),
   join_demonstrations: z.boolean().default(false),
 });

@@ -2,10 +2,15 @@ import { data } from "react-router";
 import { useLoaderData } from "react-router";
 import { DatasetBuilderForm } from "./DatasetBuilderForm";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
-import { getDatasetCounts } from "~/utils/clickhouse/datasets";
+import {
+  getDatasetCounts,
+  countRowsForDataset,
+  DatasetQueryParamsSchema,
+} from "~/utils/clickhouse/datasets";
 import type { CountsData } from "~/routes/api/curated_inferences/count.route";
 import { useFetcher } from "react-router";
 import { useEffect } from "react";
+import type { ActionFunctionArgs } from "react-router";
 
 export const meta = () => {
   return [
@@ -22,10 +27,53 @@ export async function loader() {
   return data({ dataset_counts });
 }
 
-// TODO: Implement action to handle dataset creation/updates
-export async function action() {
-  // TODO: Handle form submission
-  return data({ success: true });
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+  const jsonData = formData.get("data");
+
+  if (!jsonData || typeof jsonData !== "string") {
+    return data({ errors: { message: "Invalid form data" } }, { status: 400 });
+  }
+
+  try {
+    const parsedData = JSON.parse(jsonData);
+    // Build and validate DatasetQueryParams from form data
+    const queryParamsResult = DatasetQueryParamsSchema.safeParse({
+      inferenceType: parsedData.type,
+      function_name: parsedData.function,
+      variant_name: parsedData.variant,
+      join_demonstrations: parsedData.join_demonstrations,
+      extra_where: [],
+      extra_params: {},
+      ...(parsedData.metric && parsedData.threshold
+        ? {
+            metric_filter: {
+              metric: parsedData.metric,
+              metric_type: parsedData.metric_type,
+              operator: ">",
+              threshold: parsedData.threshold,
+              join_on: "inference_id",
+            },
+          }
+        : {}),
+    });
+
+    if (!queryParamsResult.success) {
+      return data(
+        { errors: { message: queryParamsResult.error.message } },
+        { status: 400 },
+      );
+    }
+
+    const count = await countRowsForDataset(queryParamsResult.data);
+    return data({ count });
+  } catch (error) {
+    console.error("Error processing dataset query:", error);
+    return data(
+      { errors: { message: "Error processing dataset query" } },
+      { status: 500 },
+    );
+  }
 }
 
 /**
