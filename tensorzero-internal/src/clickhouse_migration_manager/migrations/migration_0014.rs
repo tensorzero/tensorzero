@@ -12,6 +12,9 @@ use super::{check_table_exists, get_column_type};
 ///
 /// This migration should subsume migration 0012.
 /// They should have been removed from the binary upon merging of this migration.
+///
+/// There were two changes made form 0014: changing created_at to updated_at and
+/// changing the output column to be Nullable(String) instead of String.
 pub struct Migration0014<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
@@ -82,8 +85,8 @@ impl Migration for Migration0014<'_> {
                 tags Map(String, String),
                 auxiliary String, -- a JSON (unstructured, for now)
                 is_deleted Bool DEFAULT false,
-                created_at DateTime DEFAULT now()
-            ) ENGINE = ReplacingMergeTree(created_at, is_deleted)
+                updated_at DateTime DEFAULT now()
+            ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
@@ -102,8 +105,8 @@ impl Migration for Migration0014<'_> {
                 tags Map(String, String),
                 auxiliary String, -- a JSON (unstructured, for now)
                 is_deleted Bool DEFAULT false,
-                created_at DateTime DEFAULT now()
-            ) ENGINE = ReplacingMergeTree(created_at, is_deleted)
+                updated_at DateTime DEFAULT now()
+            ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
