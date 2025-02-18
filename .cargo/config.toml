@@ -1,7 +1,5 @@
 [target.'cfg(not(target_arch = "wasm32"))']
 rustflags = [
-    "-C",
-    "target-cpu=native",
     "--cfg",
     "aws_sdk_unstable",  # needed for aws-smithy-types + serde-(de)serialize
 ]
