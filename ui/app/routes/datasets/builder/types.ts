@@ -1,18 +1,19 @@
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { MetricConfigSchema } from "~/utils/config/metric";
 
 export const DatasetBuilderFormValuesSchema = z.object({
   dataset: z.string(),
   type: z.enum(["chat", "json"]),
   function: z.string().optional(),
   variant: z.string().optional(),
-  metric: z
+  metric_name: z
     .string()
     .nullable()
     .refine((val) => val === null || val !== "", {
       message: "Please select a metric or 'None'",
     }),
-  metric_type: z.enum(["boolean", "float"]).optional(),
+  metric_config: MetricConfigSchema.optional(),
   threshold: z.number().optional(),
   join_demonstrations: z.boolean().default(false),
 });

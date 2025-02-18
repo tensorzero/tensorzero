@@ -778,7 +778,10 @@ export async function queryMetricsWithFeedback(params: {
   const inferenceMetrics = Object.entries(metrics)
     .filter(([, metric]) => {
       try {
-        return getInferenceJoinKey(metric) === InferenceJoinKey.ID;
+        return (
+          "level" in metric &&
+          getInferenceJoinKey(metric.level) === InferenceJoinKey.ID
+        );
       } catch {
         return false;
       }
@@ -788,7 +791,10 @@ export async function queryMetricsWithFeedback(params: {
   const episodeMetrics = Object.entries(metrics)
     .filter(([, metric]) => {
       try {
-        return getInferenceJoinKey(metric) === InferenceJoinKey.EPISODE_ID;
+        return (
+          "level" in metric &&
+          getInferenceJoinKey(metric.level) === InferenceJoinKey.EPISODE_ID
+        );
       } catch {
         return false;
       }

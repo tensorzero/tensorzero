@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { MetricConfig } from "../config/metric";
+import type {
+  MetricConfig,
+  MetricConfigLevel,
+  MetricConfigOptimize,
+} from "../config/metric";
 import {
   contentBlockOutputSchema,
   getInferenceTableName,
@@ -10,21 +14,16 @@ import {
 } from "./common";
 import { clickhouseClient } from "./common";
 import type { FunctionConfig } from "../config/function";
+import { getComparisonOperator } from "../config/metric";
 
 export function getInferenceJoinKey(
-  metric_config: MetricConfig,
+  level: MetricConfigLevel,
 ): InferenceJoinKey {
-  if ("level" in metric_config) {
-    switch (metric_config.level) {
-      case "inference":
-        return InferenceJoinKey.ID;
-      case "episode":
-        return InferenceJoinKey.EPISODE_ID;
-    }
-  } else {
-    throw new Error(
-      "Metric config level is undefined. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new",
-    );
+  switch (level) {
+    case "inference":
+      return InferenceJoinKey.ID;
+    case "episode":
+      return InferenceJoinKey.EPISODE_ID;
   }
 }
 
@@ -37,7 +36,7 @@ export async function countFeedbacksForMetric(
   const inference_table_name = getInferenceTableName(function_config);
   switch (metric_config.type) {
     case "boolean": {
-      const inference_join_key = getInferenceJoinKey(metric_config);
+      const inference_join_key = getInferenceJoinKey(metric_config.level);
       return countMetricData(
         function_name,
         metric_name,
@@ -47,7 +46,7 @@ export async function countFeedbacksForMetric(
       );
     }
     case "float": {
-      const inference_join_key = getInferenceJoinKey(metric_config);
+      const inference_join_key = getInferenceJoinKey(metric_config.level);
       return countMetricData(
         function_name,
         metric_name,
@@ -74,27 +73,26 @@ export async function countCuratedInferences(
   threshold: number,
 ) {
   const inference_table_name = getInferenceTableName(function_config);
-  const inference_join_key = getInferenceJoinKey(metric_config);
   switch (metric_config.type) {
     case "boolean":
       return countMetricData(
         function_name,
         metric_name,
         inference_table_name,
-        inference_join_key,
+        getInferenceJoinKey(metric_config.level),
         "boolean",
-        { filterGood: true, maximize: metric_config.optimize === "max" },
+        { filterGood: true, optimize: metric_config.optimize },
       );
     case "float":
       return countMetricData(
         function_name,
         metric_name,
         inference_table_name,
-        inference_join_key,
+        getInferenceJoinKey(metric_config.level),
         "float",
         {
           filterGood: true,
-          maximize: metric_config.optimize === "max",
+          optimize: metric_config.optimize,
           threshold,
         },
       );
@@ -124,7 +122,6 @@ export async function getCuratedInferences(
       max_samples,
     );
   }
-  const inference_join_key = getInferenceJoinKey(metric_config);
 
   switch (metric_config.type) {
     case "boolean":
@@ -132,11 +129,11 @@ export async function getCuratedInferences(
         function_name,
         metric_name,
         inference_table_name,
-        inference_join_key,
+        getInferenceJoinKey(metric_config.level),
         "boolean",
         {
           filterGood: true,
-          maximize: metric_config.optimize === "max",
+          optimize: metric_config.optimize,
           max_samples,
         },
       );
@@ -145,11 +142,11 @@ export async function getCuratedInferences(
         function_name,
         metric_name,
         inference_table_name,
-        inference_join_key,
+        getInferenceJoinKey(metric_config.level),
         "float",
         {
           filterGood: true,
-          maximize: metric_config.optimize === "max",
+          optimize: metric_config.optimize,
           threshold,
           max_samples,
         },
@@ -190,14 +187,14 @@ async function queryCuratedMetricData(
   metricType: "boolean" | "float",
   options?: {
     filterGood?: boolean;
-    maximize?: boolean;
+    optimize?: MetricConfigOptimize;
     threshold?: number;
     max_samples?: number;
   },
 ): Promise<ParsedInferenceExample[]> {
   const {
     filterGood = false,
-    maximize = false,
+    optimize = "max",
     threshold,
     max_samples,
   } = options || {};
@@ -206,9 +203,10 @@ async function queryCuratedMetricData(
   let valueCondition = "";
   if (filterGood) {
     if (metricType === "boolean") {
-      valueCondition = `AND value = ${maximize ? 1 : 0}`;
+      valueCondition = `AND value = ${optimize === "max" ? 1 : 0}`;
     } else if (metricType === "float" && threshold !== undefined) {
-      valueCondition = `AND value ${maximize ? ">" : "<"} {threshold:Float}`;
+      const operator = getComparisonOperator(optimize);
+      valueCondition = `AND value ${operator} {threshold:Float}`;
     }
   }
 
@@ -261,18 +259,19 @@ async function countMetricData(
   metricType: "boolean" | "float",
   options?: {
     filterGood?: boolean;
-    maximize?: boolean;
+    optimize?: MetricConfigOptimize;
     threshold?: number;
   },
 ): Promise<number> {
-  const { filterGood = false, maximize = false, threshold } = options || {};
+  const { filterGood = false, optimize = "max", threshold } = options || {};
 
   let valueCondition = "";
   if (filterGood) {
     if (metricType === "boolean") {
-      valueCondition = `AND value = ${maximize ? 1 : 0}`;
+      valueCondition = `AND value = ${optimize === "max" ? 1 : 0}`;
     } else if (metricType === "float" && threshold !== undefined) {
-      valueCondition = `AND value ${maximize ? ">" : "<"} {threshold:Float}`;
+      const operator = getComparisonOperator(optimize);
+      valueCondition = `AND value ${operator} {threshold:Float}`;
     }
   }
 

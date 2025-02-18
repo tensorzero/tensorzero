@@ -12,6 +12,8 @@ import type { CountsData } from "~/routes/api/curated_inferences/count.route";
 import { useFetcher } from "react-router";
 import { useEffect } from "react";
 import type { ActionFunctionArgs } from "react-router";
+import { getComparisonOperator } from "~/utils/config/metric";
+import { getInferenceJoinKey } from "~/utils/clickhouse/curation";
 
 export const meta = () => {
   return [
@@ -47,14 +49,16 @@ export async function action({ request }: ActionFunctionArgs) {
       join_demonstrations: parsedData.join_demonstrations,
       extra_where: [],
       extra_params: {},
-      ...(parsedData.metric && parsedData.threshold
+      ...(parsedData.metric_name && parsedData.threshold
         ? {
             metric_filter: {
-              metric: parsedData.metric,
-              metric_type: parsedData.metric_type,
-              operator: ">",
+              metric: parsedData.metric_name,
+              metric_type: parsedData.metric_config?.type,
+              operator: getComparisonOperator(
+                parsedData.metric_config?.optimize,
+              ),
               threshold: parsedData.threshold,
-              join_on: "inference_id",
+              join_on: getInferenceJoinKey(parsedData.metric_config?.level),
             },
           }
         : {}),

@@ -223,6 +223,7 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
     whereClauses.push("variant_name = {variant_name:String}");
     queryParams.variant_name = variant_name;
   }
+  console.log("metric_filter", metric_filter);
 
   // -------------------------------------------------------------------
   // Metric Filter Join Logic:
@@ -329,6 +330,8 @@ export async function countRowsForDataset(
 
   const { query, query_params } = buildDatasetSelectQuery(params);
   const count_query = `SELECT toUInt32(count()) as count FROM (${query})`;
+  console.log("count_query", count_query);
+  console.log("query_params", query_params);
   const resultSet = await clickhouseClient.query({
     query: count_query,
     format: "JSONEachRow",
@@ -362,37 +365,41 @@ function getFeedbackTable(metric_type: "boolean" | "float") {
 
 const DatasetCountInfoSchema = z.object({
   dataset_name: z.string(),
-  type: z.enum(["chat", "json"]),
   count: z.number(),
   last_updated: z.string().datetime(),
 });
 export type DatasetCountInfo = z.infer<typeof DatasetCountInfoSchema>;
 
 /*
-Get name, type, and count for all datasets.
+Get name and count for all datasets.
+This function should sum the counts of chat and json inferences for each dataset.
+The groups should be ordered by last_updated in descending order.
 */
 export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
   const resultSet = await clickhouseClient.query({
     query: `
-      SELECT dataset_name, type, count, last_updated FROM (
+      SELECT
+        dataset_name,
+        toUInt32(sum(count)) AS count,
+        formatDateTime(max(last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
+      FROM (
         SELECT
           dataset_name,
-          'chat' as type,
-          toUInt32(count()) as count,
-          formatDateTime(max(created_at), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
+          toUInt32(count()) AS count,
+          max(created_at) AS last_updated
         FROM ChatInferenceDataset
         WHERE is_deleted = false
         GROUP BY dataset_name
         UNION ALL
         SELECT
           dataset_name,
-          'json' as type,
-          toUInt32(count()) as count,
-          formatDateTime(max(created_at), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
+          toUInt32(count()) AS count,
+          max(created_at) AS last_updated
         FROM JsonInferenceDataset
         WHERE is_deleted = false
         GROUP BY dataset_name
       )
+      GROUP BY dataset_name
       ORDER BY last_updated DESC
     `,
     format: "JSONEachRow",

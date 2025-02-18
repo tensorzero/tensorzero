@@ -31,8 +31,8 @@ export function DatasetBuilderForm({
       type: "chat",
       function: undefined,
       variant: undefined,
-      metric: undefined,
-      metric_type: undefined,
+      metric_name: undefined,
+      metric_config: undefined,
       threshold: 0.5,
       join_demonstrations: false,
     },
@@ -46,7 +46,7 @@ export function DatasetBuilderForm({
 
   const watchedFields = useWatch({
     control: form.control,
-    name: ["function", "metric", "threshold"] as const,
+    name: ["function", "metric_name", "threshold"] as const,
   });
 
   const [functionName, metricName, threshold] = watchedFields;
@@ -56,11 +56,8 @@ export function DatasetBuilderForm({
     threshold: threshold ?? undefined,
   });
   useEffect(() => {
-    const type = config.metrics[metricName ?? ""]?.type;
-    form.setValue(
-      "metric_type",
-      type === "boolean" || type === "float" ? type : undefined,
-    );
+    const metricConfig = config.metrics[metricName ?? ""];
+    form.setValue("metric_config", metricConfig ? metricConfig : undefined);
     const functionType = config.functions[functionName ?? ""]?.type;
     form.setValue("type", functionType);
   }, [metricName, functionName, config, form]);
@@ -133,7 +130,7 @@ export function DatasetBuilderForm({
           />
           <MetricSelector<DatasetBuilderFormValues>
             control={form.control}
-            name="metric"
+            name="metric_name"
             functionFieldName="function"
             feedbackCount={counts.feedbackCount}
             curatedInferenceCount={counts.curatedInferenceCount}

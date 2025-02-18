@@ -72,13 +72,6 @@ export function DatasetSelector({
                             <>
                               {field.value}
                               <span className="ml-2">
-                                <Badge variant="outline">
-                                  {
-                                    dataset_counts.find(
-                                      (d) => d.dataset_name === field.value,
-                                    )?.type
-                                  }
-                                </Badge>
                                 <Badge variant="secondary" className="ml-2">
                                   {dataset_counts
                                     .find((d) => d.dataset_name === field.value)
@@ -101,7 +94,7 @@ export function DatasetSelector({
                           )}
                         </div>
                       ) : (
-                        "Select a dataset..."
+                        "Create or select a dataset..."
                       )}
                     </div>
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -172,7 +165,6 @@ export function DatasetSelector({
                               <span>{dataset.dataset_name}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline">{dataset.type}</Badge>
                               <Badge variant="secondary">
                                 {dataset.count.toLocaleString()} rows
                               </Badge>
