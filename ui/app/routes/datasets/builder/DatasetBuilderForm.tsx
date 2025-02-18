@@ -25,7 +25,7 @@ export function DatasetBuilderForm({
   const [submissionPhase, setSubmissionPhase] = useState<
     "idle" | "submitting" | "complete"
   >("idle");
-  const [insertedCount, setInsertedCount] = useState<number | null>(null);
+  const [countToInsert, setCountToInsert] = useState<number | null>(null);
 
   const form = useForm<DatasetBuilderFormValues>({
     defaultValues: {
@@ -77,7 +77,6 @@ export function DatasetBuilderForm({
             "An error occurred while processing your request",
         });
       } else if (formFetcher.data.success) {
-        setInsertedCount(formFetcher.data.count);
         setSubmissionPhase("complete");
         form.clearErrors("root");
       }
@@ -103,9 +102,7 @@ export function DatasetBuilderForm({
       case "submitting":
         return "Creating Dataset...";
       case "complete":
-        return insertedCount !== null
-          ? `Inserted ${insertedCount.toLocaleString()} Rows`
-          : "Dataset Created";
+        return "Success";
       default:
         return "Insert Into Dataset";
     }
@@ -140,14 +137,20 @@ export function DatasetBuilderForm({
           />
           <OutputSourceSelector control={form.control} />
         </div>
-        <DatasetCountDisplay control={form.control} />
+        <DatasetCountDisplay
+          control={form.control}
+          setCountToInsert={setCountToInsert}
+        />
         <Button
           type="submit"
-          disabled={submissionPhase !== "idle"}
+          disabled={
+            submissionPhase !== "idle" ||
+            countToInsert === null ||
+            countToInsert === 0
+          }
           onClick={() => {
             if (submissionPhase === "complete") {
               setSubmissionPhase("idle");
-              setInsertedCount(null);
               form.clearErrors("root");
             }
           }}

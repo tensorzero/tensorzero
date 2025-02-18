@@ -4,7 +4,6 @@ import { DatasetBuilderForm } from "./DatasetBuilderForm";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import {
   getDatasetCounts,
-  countRowsForDataset,
   insertRowsForDataset,
 } from "~/utils/clickhouse/datasets.server";
 import type { ActionFunctionArgs } from "react-router";
@@ -36,14 +35,9 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     const queryParams = serializedFormDataToDatasetQueryParams(jsonData);
 
-    // TODO: make this one database call
-    // Count rows and insert them concurrently
-    const [count] = await Promise.all([
-      countRowsForDataset(queryParams),
-      insertRowsForDataset(queryParams),
-    ]);
+    await insertRowsForDataset(queryParams);
 
-    return data({ success: true, count });
+    return data({ success: true });
   } catch (error) {
     console.error("Error creating dataset:", error);
     return data(
