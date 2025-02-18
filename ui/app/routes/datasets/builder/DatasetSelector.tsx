@@ -122,27 +122,32 @@ export function DatasetSelector({
                       <CommandEmpty className="px-4 py-2 text-sm">
                         No datasets found.
                       </CommandEmpty>
-                      {filteredDatasets.length === 0 && inputValue && (
-                        <CommandItem
-                          onSelect={() => {
-                            field.onChange(inputValue);
-                            setInputValue("");
-                            setOpen(false);
-                          }}
-                          className="flex items-center justify-between"
-                        >
-                          <div className="flex items-center">
-                            <Plus className="mr-2 h-4 w-4 text-blue-500" />
-                            <span>{inputValue}</span>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className="bg-blue-50 text-blue-500"
+                      {inputValue &&
+                        !filteredDatasets.some(
+                          (d) =>
+                            d.dataset_name.toLowerCase() ===
+                            inputValue.toLowerCase(),
+                        ) && (
+                          <CommandItem
+                            onSelect={() => {
+                              field.onChange(inputValue);
+                              setInputValue("");
+                              setOpen(false);
+                            }}
+                            className="flex items-center justify-between"
                           >
-                            Create New Dataset
-                          </Badge>
-                        </CommandItem>
-                      )}
+                            <div className="flex items-center">
+                              <Plus className="mr-2 h-4 w-4 text-blue-500" />
+                              <span>{inputValue}</span>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className="bg-blue-50 text-blue-500"
+                            >
+                              Create New Dataset
+                            </Badge>
+                          </CommandItem>
+                        )}
                       <CommandGroup>
                         {filteredDatasets.map((dataset) => (
                           <CommandItem
