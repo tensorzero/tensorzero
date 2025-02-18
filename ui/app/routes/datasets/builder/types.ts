@@ -2,11 +2,16 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 export const DatasetBuilderFormValuesSchema = z.object({
-  dataset_name: z.string(),
+  dataset: z.string(),
   type: z.enum(["chat", "json"]),
-  function_name: z.string().optional(),
-  variant_name: z.string().optional(),
-  metric_name: z.string().optional(),
+  function: z.string().optional(),
+  variant: z.string().optional(),
+  metric: z
+    .string()
+    .nullable()
+    .refine((val) => val === null || val !== "", {
+      message: "Please select a metric or 'None'",
+    }),
   threshold: z.number().optional(),
   join_demonstrations: z.boolean().default(false),
 });

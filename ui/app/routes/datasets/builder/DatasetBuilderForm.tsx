@@ -20,11 +20,11 @@ export function DatasetBuilderForm({
 
   const form = useForm<DatasetBuilderFormValues>({
     defaultValues: {
-      dataset_name: "",
+      dataset: "",
       type: "chat",
-      function_name: undefined,
-      variant_name: undefined,
-      metric_name: undefined,
+      function: undefined,
+      variant: undefined,
+      metric: undefined,
       threshold: 0.5,
       join_demonstrations: false,
     },
@@ -34,7 +34,7 @@ export function DatasetBuilderForm({
 
   const watchedFields = useWatch({
     control: form.control,
-    name: ["function_name", "metric_name", "threshold"] as const,
+    name: ["function", "metric", "threshold"] as const,
   });
 
   const [functionName, metricName, threshold] = watchedFields;
@@ -54,14 +54,14 @@ export function DatasetBuilderForm({
           />
           <FunctionSelector<DatasetBuilderFormValues>
             control={form.control}
-            name="function_name"
+            name="function"
             inferenceCount={counts.inferenceCount}
             config={config}
           />
           <MetricSelector<DatasetBuilderFormValues>
             control={form.control}
-            name="metric_name"
-            functionFieldName="function_name"
+            name="metric"
+            functionFieldName="function"
             feedbackCount={counts.feedbackCount}
             curatedInferenceCount={counts.curatedInferenceCount}
             config={config}

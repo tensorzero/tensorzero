@@ -49,7 +49,7 @@ export function DatasetSelector({
   return (
     <FormField
       control={control}
-      name="dataset_name"
+      name="dataset"
       render={({ field }) => (
         <FormItem>
           <FormLabel>Dataset</FormLabel>
