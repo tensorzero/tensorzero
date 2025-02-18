@@ -13,7 +13,7 @@ import { Form } from "~/components/ui/form";
 import type { ChatCompletionConfig } from "~/utils/config/variant";
 import type { Config } from "~/utils/config";
 import { models } from "./model_options";
-import { useCountFetcher } from "~/routes/datasets/builder/route";
+import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 
 export function SFTForm({
   config,

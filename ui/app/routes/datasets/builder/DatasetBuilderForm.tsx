@@ -9,7 +9,7 @@ import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { useConfig } from "~/context/config";
 import { MetricSelector } from "~/components/metric/MetricSelector";
-import { useCountFetcher } from "./route";
+import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { useFetcher } from "react-router";
 import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
