@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use tensorzero_internal::{
     config_parser::Config,
     error::ErrorDetails,
-    gateway_util::{setup_clickhouse, AppStateData},
+    gateway_util::{setup_clickhouse, setup_http_client, AppStateData},
 };
 use thiserror::Error;
 use tokio_stream::StreamExt;
@@ -97,7 +97,7 @@ pub enum ClientBuilderError {
     #[error("Failed to parse config: {0}")]
     ConfigParsing(TensorZeroError),
     #[error("Failed to build HTTP client: {0}")]
-    HTTPClientBuild(reqwest::Error),
+    HTTPClientBuild(TensorZeroError),
 }
 
 /// Controls how a `Client` is run
@@ -155,11 +155,20 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
+                let http_client = if let Some(http_client) = self.http_client {
+                    http_client
+                } else {
+                    setup_http_client().map_err(|e| {
+                        ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
+                            source: e.into(),
+                        })
+                    })?
+                };
                 Ok(Client {
                     mode: ClientMode::EmbeddedGateway(EmbeddedGateway {
                         state: AppStateData {
                             config,
-                            http_client: self.http_client.unwrap_or_default(),
+                            http_client,
                             clickhouse_connection_info,
                         },
                     }),

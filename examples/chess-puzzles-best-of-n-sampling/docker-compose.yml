@@ -35,6 +35,7 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+
   ui:
     image: tensorzero/ui
     volumes:

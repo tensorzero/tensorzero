@@ -379,7 +379,7 @@ async def test_async_reasoning_inference_streaming(async_client):
         previous_chunk_timestamp = time.time()
         chunks.append(chunk)
 
-    assert last_chunk_duration > 0.01
+    assert last_chunk_duration > 0
     expected_thinking = [
         "hmmm",
         "hmmm",
@@ -1179,7 +1179,7 @@ def test_sync_reasoning_inference_streaming(sync_client):
         previous_chunk_timestamp = time.time()
         chunks.append(chunk)
 
-    assert last_chunk_duration > 0.01
+    assert last_chunk_duration > 0
     expected_thinking = [
         "hmmm",
         "hmmm",

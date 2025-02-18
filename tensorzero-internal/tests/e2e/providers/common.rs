@@ -1,8 +1,9 @@
 #![allow(clippy::print_stdout)]
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
+#[cfg(feature = "e2e_tests")]
 use rand::Rng;
 #[cfg(feature = "e2e_tests")]
 use reqwest::{Client, StatusCode};
@@ -15,10 +16,11 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
+#[cfg(feature = "e2e_tests")]
 use crate::common::get_gateway_endpoint;
 use crate::common::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
-    select_json_inference_clickhouse, select_model_inference_clickhouse, CLICKHOUSE_URL,
+    select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 
 #[derive(Clone, Debug)]
@@ -38,6 +40,7 @@ pub struct E2ETestProvider {
 /// then the provider should return an empty vector for the corresponding test.
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
+    #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub reasoning_inference: Vec<E2ETestProvider>,
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
@@ -51,6 +54,7 @@ pub struct E2ETestProviders {
     pub supports_batch_inference: bool,
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn make_http_gateway() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::HTTPGateway {
         url: get_gateway_endpoint("/"),
@@ -60,12 +64,13 @@ pub async fn make_http_gateway() -> tensorzero::Client {
     .unwrap()
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn make_embedded_gateway() -> tensorzero::Client {
-    let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_path: Some(config_path),
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
     })
     .build()
     .await
@@ -676,11 +681,6 @@ pub async fn check_simple_inference_response(
 
 #[cfg(feature = "e2e_tests")]
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
-    // OpenAI O1 doesn't support streaming responses
-    if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     // Generate random u32
@@ -851,13 +851,18 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let inference_params = inference_params.get("chat_completion").unwrap();
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
+    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+        400
+    } else {
+        100
+    };
     assert_eq!(
         inference_params
             .get("max_tokens")
             .unwrap()
             .as_u64()
             .unwrap(),
-        100
+        expected_max_tokens
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
