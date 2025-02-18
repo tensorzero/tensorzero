@@ -31,7 +31,7 @@ export function DatasetBuilderForm({
       type: "chat",
       function: undefined,
       variant: undefined,
-      metric_name: undefined,
+      metric_name: null,
       metric_config: undefined,
       threshold: 0.5,
       join_demonstrations: false,

@@ -107,7 +107,7 @@ export const DatasetQueryParamsSchema = z.object({
       metric_type: z.enum(["boolean", "float"]),
       operator: z.enum([">", "<"]),
       threshold: z.number(),
-      join_on: z.enum(["inference_id", "episode_id"]),
+      join_on: z.enum(["id", "episode_id"]),
     })
     .optional(), // Optional filter based on metric feedback
   join_demonstrations: z.boolean().optional(), // Flag to join demonstration feedback
@@ -232,8 +232,6 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
   // and applies a condition based on the metric threshold.
   // -------------------------------------------------------------------
   if (metric_filter) {
-    // Determine the join column based on the metric filter's join_on value.
-    const join_column = getFeedbackJoinColumn(metric_filter.join_on);
     // Choose the correct feedback table (BooleanMetricFeedback or FloatMetricFeedback).
     const feedback_table = getFeedbackTable(metric_filter.metric_type);
     // Build the condition for filtering based on the metric threshold.
@@ -247,7 +245,7 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
       FROM ${feedback_table}
       WHERE metric_name = {metric_name:String}
       ${reward_condition}
-    ) AS feedback ON ${tableName}.${join_column} = feedback.target_id AND feedback.rn = 1`;
+    ) AS feedback ON ${tableName}.${metric_filter.join_on} = feedback.target_id AND feedback.rn = 1`;
     // Set the query parameters for metric filtering.
     queryParams.metric_name = metric_filter.metric;
     queryParams.metric_threshold = metric_filter.threshold;
@@ -339,16 +337,6 @@ export async function countRowsForDataset(
   });
   const rows = await resultSet.json<{ count: number }>();
   return rows[0].count;
-}
-
-/**
- * Helper function to get the column name for joining on feedback.
- *
- * @param join_on - Indicates whether to join on "inference_id" or "episode_id".
- * @returns The corresponding column name in the dataset table.
- */
-function getFeedbackJoinColumn(join_on: "inference_id" | "episode_id") {
-  return join_on === "inference_id" ? "id" : "episode_id";
 }
 
 /**

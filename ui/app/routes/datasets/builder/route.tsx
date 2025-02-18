@@ -40,6 +40,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     const parsedData = JSON.parse(jsonData);
+    console.log(parsedData);
     // Build and validate DatasetQueryParams from form data
     const queryParamsResult = DatasetQueryParamsSchema.safeParse({
       inferenceType: parsedData.type,
