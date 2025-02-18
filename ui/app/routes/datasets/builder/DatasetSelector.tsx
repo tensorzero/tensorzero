@@ -36,11 +36,11 @@ export function DatasetSelector({
       new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime(),
   );
 
-  const filteredDatasets = inputValue
-    ? sortedDatasets.filter((dataset) =>
-        dataset.dataset_name.toLowerCase().includes(inputValue.toLowerCase()),
-      )
-    : sortedDatasets;
+  // We would probably want to remove the creation command element if there is an exact match
+  // But, it was hard to implement because command has its own state management that conflicts
+  // const hasExactMatch = sortedDatasets.some(
+  //   (d) => d.dataset_name.toLowerCase() === inputValue.trim().toLowerCase(),
+  // );
 
   const handleInputChange = (input: string) => {
     setInputValue(input);
@@ -69,7 +69,7 @@ export function DatasetSelector({
                           {dataset_counts.find(
                             (d) => d.dataset_name === field.value,
                           ) ? (
-                            <>
+                            <div className="flex items-center">
                               {field.value}
                               <span className="ml-2">
                                 <Badge variant="secondary" className="ml-2">
@@ -79,7 +79,7 @@ export function DatasetSelector({
                                   rows
                                 </Badge>
                               </span>
-                            </>
+                            </div>
                           ) : (
                             <>
                               <Plus className="mr-2 h-4 w-4 text-blue-500" />
@@ -115,34 +115,29 @@ export function DatasetSelector({
                       <CommandEmpty className="px-4 py-2 text-sm">
                         No datasets found.
                       </CommandEmpty>
-                      {inputValue &&
-                        !filteredDatasets.some(
-                          (d) =>
-                            d.dataset_name.toLowerCase() ===
-                            inputValue.toLowerCase(),
-                        ) && (
-                          <CommandItem
-                            onSelect={() => {
-                              field.onChange(inputValue);
-                              setInputValue("");
-                              setOpen(false);
-                            }}
-                            className="flex items-center justify-between"
+                      <CommandGroup heading="New Dataset">
+                        <CommandItem
+                          onSelect={() => {
+                            field.onChange(inputValue.trim());
+                            setInputValue("");
+                            setOpen(false);
+                          }}
+                          className="flex items-center justify-between"
+                        >
+                          <div className="flex items-center">
+                            <Plus className="mr-2 h-4 w-4 text-blue-500" />
+                            <span>{inputValue.trim() || "Type..."}</span>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className="bg-blue-50 text-blue-500"
                           >
-                            <div className="flex items-center">
-                              <Plus className="mr-2 h-4 w-4 text-blue-500" />
-                              <span>{inputValue}</span>
-                            </div>
-                            <Badge
-                              variant="outline"
-                              className="bg-blue-50 text-blue-500"
-                            >
-                              Create New Dataset
-                            </Badge>
-                          </CommandItem>
-                        )}
-                      <CommandGroup>
-                        {filteredDatasets.map((dataset) => (
+                            Create New Dataset
+                          </Badge>
+                        </CommandItem>
+                      </CommandGroup>
+                      <CommandGroup heading="Existing Datasets">
+                        {sortedDatasets.map((dataset) => (
                           <CommandItem
                             key={dataset.dataset_name}
                             value={dataset.dataset_name}
