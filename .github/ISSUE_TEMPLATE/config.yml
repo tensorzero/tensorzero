@@ -1,3 +1,4 @@
+blank_issues_enabled: false
 contact_links:
   - name: Submit a feature request
     url: https://github.com/tensorzero/tensorzero/discussions/new?category=feature-requests
