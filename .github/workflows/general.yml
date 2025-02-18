@@ -24,7 +24,7 @@ jobs:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
-        # We don't test on x86_64, because our main 'validate' step already does that
+        # We don't test on linux x86_64, because our main 'validate' step already does that
         # For now, we just check that the build works on our other supported platforms -
         # we don't run any tests.
         platform:
