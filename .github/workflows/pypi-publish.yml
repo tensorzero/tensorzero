@@ -37,17 +37,14 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: 'true'
           manylinux: auto
-      - name: Check built wheel
-        run: |
-          ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
-      - name: Setup tmate session
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-linux-${{ matrix.platform.target }}
           path: ./clients/python-pyo3/dist
+      - name: Check built wheel
+        run: |
+          ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
 
   musllinux:
     runs-on: ${{ matrix.platform.runner }}
@@ -73,14 +70,14 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: 'true'
           manylinux: musllinux_1_2
-      - name: Check built wheel
-        run: |
-          ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-musllinux-${{ matrix.platform.target }}
           path: ./clients/python-pyo3/dist
+      - name: Check built musl wheel
+        run: |
+          ./ci/check-musl-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
 
   windows:
     runs-on: ${{ matrix.platform.runner }}
@@ -105,14 +102,14 @@ jobs:
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
           sccache: 'true'
-      - name: Check built wheel
-        run: |
-          ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-${{ matrix.platform.target }}
           path: ./clients/python-pyo3/dist
+      - name: Check built wheel
+        run: |
+          ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
 
   macos:
     runs-on: ${{ matrix.platform.runner }}
@@ -140,14 +137,14 @@ jobs:
           args: --release --out dist --find-interpreter
           sccache: 'true'
 
-      - name: Check built wheel
-        run: |
-          ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-macos-${{ matrix.platform.target }}
           path: ./clients/python-pyo3/dist
+      - name: Check built wheel
+        run: |
+          ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero*.whl
 
   sdist:
     runs-on: ubuntu-latest
