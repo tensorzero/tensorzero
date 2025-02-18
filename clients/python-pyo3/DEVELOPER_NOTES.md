@@ -22,6 +22,10 @@ uv run maturin develop --uv
 uv run python
 ```
 
+## Running tests
+
+Integration tests can be run with `./test.sh` (this requires the same setup as `cargo test-e2e` - see `CONTRIBUTING.md`)
+
 ## Naming
 
 There are several different names in use in this client:

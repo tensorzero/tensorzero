@@ -28,7 +28,7 @@ pip install tensorzero
 ### Initialization
 
 The TensorZero client offers synchronous (`TensorZeroGateway`) and asynchronous (`AsyncTensorZeroGateway`) variants.
-Additionally, the client can launch an embedded (in-memory) gateway (`build_embedded`) or connect to an external HTTP gateway (`build_http`).
+Additionally, the client can launch an embedded (in-memory) gateway (`build_embedded`) or connect to an external HTTP gateway (`build_http`) - both of these methods return a gateway instance.
 
 > [!TIP]
 >
