@@ -6,11 +6,9 @@ import {
   getDatasetCounts,
   countRowsForDataset,
   insertRowsForDataset,
-  DatasetQueryParamsSchema,
-} from "~/utils/clickhouse/datasets";
+} from "~/utils/clickhouse/datasets.server";
 import type { ActionFunctionArgs } from "react-router";
-import { getComparisonOperator } from "~/utils/config/metric";
-import { getInferenceJoinKey } from "~/utils/clickhouse/curation";
+import { serializedFormDataToDatasetQueryParams } from "./types";
 
 export const meta = () => {
   return [
@@ -36,43 +34,13 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   try {
-    const parsedData = JSON.parse(jsonData);
-    console.log(parsedData);
-    // Build and validate DatasetQueryParams from form data
-    const queryParamsResult = DatasetQueryParamsSchema.safeParse({
-      inferenceType: parsedData.type,
-      function_name: parsedData.function,
-      variant_name: parsedData.variant,
-      dataset_name: parsedData.dataset,
-      join_demonstrations: parsedData.join_demonstrations,
-      extra_where: [],
-      extra_params: {},
-      ...(parsedData.metric_name && parsedData.threshold
-        ? {
-            metric_filter: {
-              metric: parsedData.metric_name,
-              metric_type: parsedData.metric_config?.type,
-              operator: getComparisonOperator(
-                parsedData.metric_config?.optimize,
-              ),
-              threshold: parsedData.threshold,
-              join_on: getInferenceJoinKey(parsedData.metric_config?.level),
-            },
-          }
-        : {}),
-    });
+    const queryParams = serializedFormDataToDatasetQueryParams(jsonData);
 
-    if (!queryParamsResult.success) {
-      return data(
-        { errors: { message: queryParamsResult.error.message } },
-        { status: 400 },
-      );
-    }
     // TODO: make this one database call
     // Count rows and insert them concurrently
     const [count] = await Promise.all([
-      countRowsForDataset(queryParamsResult.data),
-      insertRowsForDataset(queryParamsResult.data),
+      countRowsForDataset(queryParams),
+      insertRowsForDataset(queryParams),
     ]);
 
     return data({ success: true, count });

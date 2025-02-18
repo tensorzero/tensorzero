@@ -14,6 +14,7 @@ import { useFetcher } from "react-router";
 import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import OutputSourceSelector from "./OutputSourceSelector";
+import { DatasetCountDisplay } from "./DatasetCountDisplay";
 
 export function DatasetBuilderForm({
   dataset_counts,
@@ -139,7 +140,7 @@ export function DatasetBuilderForm({
           />
           <OutputSourceSelector control={form.control} />
         </div>
-
+        <DatasetCountDisplay control={form.control} />
         <Button
           type="submit"
           disabled={submissionPhase !== "idle"}

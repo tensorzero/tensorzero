@@ -3,7 +3,7 @@ import { useFetcher, type LoaderFunctionArgs } from "react-router";
 import {
   countCuratedInferences,
   countFeedbacksForMetric,
-} from "~/utils/clickhouse/curation";
+} from "~/utils/clickhouse/curation.server";
 import { countInferencesForFunction } from "~/utils/clickhouse/inference";
 import { getConfig } from "~/utils/config/index.server";
 

@@ -1,4 +1,5 @@
-import { countRowsForDataset, DatasetQueryParamsSchema } from "./datasets";
+import { DatasetQueryParamsSchema } from "./datasets";
+import { countRowsForDataset } from "./datasets.server";
 import { expect, test, describe } from "vitest";
 
 describe("countRowsForDataset", () => {

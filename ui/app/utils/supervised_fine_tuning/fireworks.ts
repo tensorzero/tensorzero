@@ -28,7 +28,7 @@ import { getConfig } from "../config/index.server";
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { z } from "zod";
 import { SFTJob, type SFTJobStatus } from "./common";
-import { getCuratedInferences } from "../clickhouse/curation";
+import { getCuratedInferences } from "../clickhouse/curation.server";
 import type {
   ContentBlockOutput,
   JsonInferenceOutput,
