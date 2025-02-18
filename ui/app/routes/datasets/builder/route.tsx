@@ -5,6 +5,7 @@ import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import {
   getDatasetCounts,
   countRowsForDataset,
+  insertRowsForDataset,
   DatasetQueryParamsSchema,
 } from "~/utils/clickhouse/datasets";
 import type { CountsData } from "~/routes/api/curated_inferences/count.route";
@@ -64,13 +65,18 @@ export async function action({ request }: ActionFunctionArgs) {
         { status: 400 },
       );
     }
+    // TODO: make this one database call
+    // Count rows and insert them concurrently
+    const [count] = await Promise.all([
+      countRowsForDataset(queryParamsResult.data),
+      insertRowsForDataset(queryParamsResult.data),
+    ]);
 
-    const count = await countRowsForDataset(queryParamsResult.data);
-    return data({ count });
+    return data({ success: true, count });
   } catch (error) {
-    console.error("Error processing dataset query:", error);
+    console.error("Error creating dataset:", error);
     return data(
-      { errors: { message: "Error processing dataset query" } },
+      { errors: { message: "Error creating dataset" } },
       { status: 500 },
     );
   }

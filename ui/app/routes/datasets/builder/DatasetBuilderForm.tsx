@@ -23,7 +23,7 @@ export function DatasetBuilderForm({
   const [submissionPhase, setSubmissionPhase] = useState<
     "idle" | "submitting" | "complete"
   >("idle");
-  const [rowCount, setRowCount] = useState<number | null>(null);
+  const [insertedCount, setInsertedCount] = useState<number | null>(null);
 
   const form = useForm<DatasetBuilderFormValues>({
     defaultValues: {
@@ -75,8 +75,8 @@ export function DatasetBuilderForm({
             formFetcher.data.errors.message ||
             "An error occurred while processing your request",
         });
-      } else if (formFetcher.data.count !== undefined) {
-        setRowCount(formFetcher.data.count);
+      } else if (formFetcher.data.success) {
+        setInsertedCount(formFetcher.data.count);
         setSubmissionPhase("complete");
         form.clearErrors("root");
       }
@@ -100,11 +100,13 @@ export function DatasetBuilderForm({
   function getButtonText() {
     switch (submissionPhase) {
       case "submitting":
-        return "Counting Rows...";
+        return "Creating Dataset...";
       case "complete":
-        return rowCount !== null ? `Found ${rowCount} Rows` : "Complete";
+        return insertedCount !== null
+          ? `Inserted ${insertedCount.toLocaleString()} Rows`
+          : "Dataset Created";
       default:
-        return "Count Dataset Rows";
+        return "Create Dataset";
     }
   }
 
@@ -143,7 +145,7 @@ export function DatasetBuilderForm({
           onClick={() => {
             if (submissionPhase === "complete") {
               setSubmissionPhase("idle");
-              setRowCount(null);
+              setInsertedCount(null);
               form.clearErrors("root");
             }
           }}
