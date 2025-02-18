@@ -3137,4 +3137,33 @@ mod tests {
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
         ));
     }
+
+    #[test]
+    fn test_serialize_user_messages() {
+        // Test that a single message is serialized as 'content: string'
+        let message = OpenAIUserRequestMessage {
+            content: vec![OpenAIUserContent::Text {
+                text: "My single message".into(),
+            }],
+        };
+        let serialized = serde_json::to_string(&message).unwrap();
+        assert_eq!(serialized, r#"{"content":"My single message"}"#);
+
+        // Test that a multiple messages are serialized as an array of content blocks
+        let message = OpenAIUserRequestMessage {
+            content: vec![
+                OpenAIUserContent::Text {
+                    text: "My first message".into(),
+                },
+                OpenAIUserContent::Text {
+                    text: "My second message".into(),
+                },
+            ],
+        };
+        let serialized = serde_json::to_string(&message).unwrap();
+        assert_eq!(
+            serialized,
+            r#"{"content":[{"type":"text","text":"My first message"},{"type":"text","text":"My second message"}]}"#
+        );
+    }
 }
