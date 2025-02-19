@@ -11,4 +11,5 @@ dynamic = ["version"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+include = [".cargo/*"]
 strip = true
