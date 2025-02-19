@@ -44,7 +44,7 @@ from tensorzero import (
 from uuid_utils import uuid7
 
 PWD = os.path.dirname(os.path.abspath(__file__))
-TEST_CONFIG_PATH = os.path.join(
+TEST_CONFIG_FILE = os.path.join(
     PWD, "../../../tensorzero-internal/tests/e2e/tensorzero.toml"
 )
 
@@ -63,7 +63,7 @@ async def async_client(request):
             yield client
     else:
         async with await AsyncTensorZeroGateway.build_embedded(
-            config_path=TEST_CONFIG_PATH,
+            config_file=TEST_CONFIG_FILE,
             clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
         ) as client:
             yield client
@@ -837,7 +837,7 @@ def sync_client(request):
             yield client
     else:
         with TensorZeroGateway.build_embedded(
-            config_path=TEST_CONFIG_PATH,
+            config_file=TEST_CONFIG_FILE,
             clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
         ) as client:
             yield client

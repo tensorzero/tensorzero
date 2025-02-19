@@ -211,7 +211,7 @@ impl BaseTensorZeroGateway {
 /// A synchronous client for a TensorZero gateway.
 ///
 /// To connect to a running HTTP gateway, call `TensorZeroGateway.build_http(base_url = "http://gateway_url")`
-/// To create an embedded gateway, call `TensorZeroGateway.build_embedded(config_path = "/path/to/tensorzero.toml", clickhouse_url = "http://clickhouse_url")`
+/// To create an embedded gateway, call `TensorZeroGateway.build_embedded(config_file = "/path/to/tensorzero.toml", clickhouse_url = "http://clickhouse_url")`
 struct TensorZeroGateway {}
 
 /// Calls `tokio::Runtime::block_on` without holding the Python GIL.
@@ -401,20 +401,20 @@ impl TensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (*, config_path=None, clickhouse_url=None))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
-    /// :param config_path: The path to the TensorZero configuration file. Example: "tensorzero.toml"
+    /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
     /// :return: A `TensorZeroGateway` instance configured to use an embedded gateway.
     fn build_embedded(
         cls: &Bound<'_, PyType>,
-        config_path: Option<&str>,
+        config_file: Option<&str>,
         clickhouse_url: Option<String>,
     ) -> PyResult<Py<TensorZeroGateway>> {
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: config_path.map(PathBuf::from),
+            config_file: config_file.map(PathBuf::from),
             clickhouse_url,
         })
         .build();
@@ -576,7 +576,7 @@ impl TensorZeroGateway {
 /// An async client for a TensorZero gateway.
 ///
 /// To connect to a running HTTP gateway, call `AsyncTensorZeroGateway(base_url = "http://gateway_url")`
-/// To create an embedded gateway, call `AsyncTensorZeroGateway.create_embedded_gateway(config_path = "/path/to/tensorzero.toml")`
+/// To create an embedded gateway, call `AsyncTensorZeroGateway.create_embedded_gateway(config_file = "/path/to/tensorzero.toml")`
 struct AsyncTensorZeroGateway {}
 
 #[pymethods]
@@ -649,21 +649,21 @@ impl AsyncTensorZeroGateway {
     // as `AsyncTensorZeroGateway` would be completely async *except* for this one method
     // (which potentially takes a very long time due to running DB migrations).
     #[classmethod]
-    #[pyo3(signature = (*, config_path=None, clickhouse_url=None))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
-    /// :param config_path: The path to the TensorZero configuration file. Example: "tensorzero.toml"
+    /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
     /// :return: A `Future` that resolves to an `AsyncTensorZeroGateway` instance configured to use an embedded gateway.
     fn build_embedded<'a>(
         // This is a classmethod, so it receives the class object as a parameter.
         cls: &Bound<'a, PyType>,
-        config_path: Option<&str>,
+        config_file: Option<&str>,
         clickhouse_url: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: config_path.map(PathBuf::from),
+            config_file: config_file.map(PathBuf::from),
             clickhouse_url,
         })
         .build();
