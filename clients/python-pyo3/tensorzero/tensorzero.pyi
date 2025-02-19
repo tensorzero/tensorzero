@@ -43,12 +43,12 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
     @classmethod
     def build_embedded(
-        cls, *, config_path: Optional[str] = None, clickhouse_url: Optional[str] = None
+        cls, *, config_file: Optional[str] = None, clickhouse_url: Optional[str] = None
     ) -> "TensorZeroGateway":
         """
         Build a TensorZeroGateway instance.
 
-        :param config_path: (Optional) The path to the TensorZero configuration file.
+        :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
         """
 
@@ -166,12 +166,12 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
     @classmethod
     async def build_embedded(
-        cls, *, config_path: Optional[str] = None, clickhouse_url: Optional[str] = None
+        cls, *, config_file: Optional[str] = None, clickhouse_url: Optional[str] = None
     ) -> "AsyncTensorZeroGateway":
         """
         Build an AsyncTensorZeroGateway instance.
 
-        :param config_path: (Optional) The path to the TensorZero configuration file.
+        :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
         """
 

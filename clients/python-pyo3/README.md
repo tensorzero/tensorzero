@@ -66,7 +66,7 @@ if __name__ == "__main__":
 from tensorzero import TensorZeroGateway
 
 with TensorZeroGateway.build_embedded(
-    config_path="/path/to/tensorzero.toml",
+    config_file="/path/to/tensorzero.toml",
     clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero"
 ) as client:
     # ...
@@ -82,7 +82,7 @@ from tensorzero import AsyncTensorZeroGateway
 
 async def run():
     async with await AsyncTensorZeroGateway.build_embedded(
-        config_path="/path/to/tensorzero.toml",
+        config_file="/path/to/tensorzero.toml",
         clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero"
     ) as client:
         # ...
