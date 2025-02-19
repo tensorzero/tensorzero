@@ -2,7 +2,7 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 
-use super::{check_table_exists, get_column_type};
+use super::{check_table_exists, get_column_type, table_is_nonempty};
 
 /// This migration is used to set up the ClickHouse database for the datasets feature.
 /// It creates two tables: `ChatInferenceDataset` and `JsonInferenceDataset`
@@ -53,6 +53,25 @@ impl Migration for Migration0014<'_> {
             || json_inference_dataset_output_type != "Nullable(String)"
         {
             return Ok(true);
+        }
+
+        let chat_inference_dataset_has_data =
+            table_is_nonempty(self.clickhouse, "ChatInferenceDataset", "0014").await?;
+        if chat_inference_dataset_has_data {
+            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                id: "0014".to_string(),
+                message: "ChatInferenceDataset has data. Your database state is invalid."
+                    .to_string(),
+            }));
+        }
+        let json_inference_dataset_has_data =
+            table_is_nonempty(self.clickhouse, "JsonInferenceDataset", "0014").await?;
+        if json_inference_dataset_has_data {
+            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                id: "0014".to_string(),
+                message: "JsonInferenceDataset has data. Your database state is invalid."
+                    .to_string(),
+            }));
         }
 
         Ok(false)
