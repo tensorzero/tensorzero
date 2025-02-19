@@ -414,7 +414,7 @@ impl TensorZeroGateway {
         config_file: Option<&str>,
         clickhouse_url: Option<String>,
     ) -> PyResult<Py<TensorZeroGateway>> {
-        warn_no_config(cls.py(), config_path)?;
+        warn_no_config(cls.py(), config_file)?;
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
@@ -664,7 +664,7 @@ impl AsyncTensorZeroGateway {
         config_file: Option<&str>,
         clickhouse_url: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
-        warn_no_config(cls.py(), config_path)?;
+        warn_no_config(cls.py(), config_file)?;
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
