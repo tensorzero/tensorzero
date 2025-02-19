@@ -1,5 +1,5 @@
 import { DatasetQueryParamsSchema } from "./datasets";
-import { countRowsForDataset } from "./datasets.server";
+import { countRowsForDataset, getDatasetCounts } from "./datasets.server";
 import { expect, test, describe } from "vitest";
 
 describe("countRowsForDataset", () => {
@@ -236,5 +236,23 @@ describe("countRowsForDataset", () => {
     });
     const jsonCount = await countRowsForDataset(jsonParams);
     expect(jsonCount).toBe(0);
+  });
+});
+
+describe("getDatasetCounts", () => {
+  test("returns the correct counts for all datasets", async () => {
+    const counts = await getDatasetCounts();
+    expect(counts).toEqual([
+      {
+        count: 5,
+        dataset_name: "bar",
+        last_updated: "2025-02-19T00:26:06Z",
+      },
+      {
+        count: 116,
+        dataset_name: "foo",
+        last_updated: "2025-02-19T00:25:29Z",
+      },
+    ]);
   });
 });
