@@ -165,7 +165,9 @@ jobs:
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/0.5.25/install.sh | sh
       - name: Try installing sdist
-        run: uv pip install ./clients/python-pyo3/dist/tensorzero-*.tar.gz
+        run: |
+          uv venv
+          uv pip install ./clients/python-pyo3/dist/tensorzero-*.tar.gz
   release:
     name: Release
     runs-on: ubuntu-latest
