@@ -70,9 +70,10 @@ async def async_client(request):
 
 
 def test_sync_embedded_gateway_no_config():
+    with pytest.warns(UserWarning, match="No config file provided"):
+        client = TensorZeroGateway.build_embedded()
     with pytest.raises(TensorZeroError) as exc_info:
-        with TensorZeroGateway.build_embedded() as client:
-            client.inference(function_name="my_missing_func", input={})
+        client.inference(function_name="my_missing_func", input={})
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.text == '{"error":"Unknown function: my_missing_func"}'
@@ -80,9 +81,10 @@ def test_sync_embedded_gateway_no_config():
 
 @pytest.mark.asyncio
 async def test_async_embedded_gateway_no_config():
+    with pytest.warns(UserWarning, match="No config file provided"):
+        client = await AsyncTensorZeroGateway.build_embedded()
     with pytest.raises(TensorZeroError) as exc_info:
-        async with await AsyncTensorZeroGateway.build_embedded() as client:
-            await client.inference(function_name="my_missing_func", input={})
+        await client.inference(function_name="my_missing_func", input={})
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.text == '{"error":"Unknown function: my_missing_func"}'
