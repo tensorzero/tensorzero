@@ -114,7 +114,6 @@ function buildDatasetSelectQuery(params: DatasetQueryParams): {
     whereClauses.push("variant_name = {variant_name:String}");
     queryParams.variant_name = variant_name;
   }
-  console.log("metric_filter", metric_filter);
 
   // -------------------------------------------------------------------
   // Metric Filter Join Logic:
@@ -219,8 +218,6 @@ export async function countRowsForDataset(
 
   const { query, query_params } = buildDatasetSelectQuery(params);
   const count_query = `SELECT toUInt32(count()) as count FROM (${query})`;
-  console.log("count_query", count_query);
-  console.log("query_params", query_params);
   const resultSet = await clickhouseClient.query({
     query: count_query,
     format: "JSONEachRow",
