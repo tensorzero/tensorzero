@@ -32,7 +32,6 @@ def test_double_feedback_query() -> None:
         "inference_parameters": {},
         "processing_time_ms": 100,
     }
-    print("Inference ID: ", inference["id"])
     query = f"""
     INSERT INTO ChatInference
     FORMAT JSONEachRow
