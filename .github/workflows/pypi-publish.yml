@@ -183,6 +183,12 @@ jobs:
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: "wheels-*/*"
-      - name: Publish to PyPI
+
+      - name: Publish to real PyPI (only on GitHub release)
+        if: ${{ github.event_name == 'release' }}
         run: |
-          ./ci/upload-pyo3.sh
+          ./ci/upload-pyo3.sh pypi
+
+      - name: Publish to TestPyPI
+        run: |
+          ./ci/upload-pyo3.sh testpypi
