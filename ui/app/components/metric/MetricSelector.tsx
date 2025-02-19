@@ -28,6 +28,7 @@ type MetricSelectorProps<T extends Record<string, unknown>> = {
   functionFieldName: Path<T>;
   feedbackCount: number | null;
   curatedInferenceCount: number | null;
+  removeDemonstrations?: boolean;
   config: Config;
 };
 
@@ -38,6 +39,7 @@ export function MetricSelector<T extends Record<string, unknown>>({
   feedbackCount,
   curatedInferenceCount,
   config,
+  removeDemonstrations = false,
 }: MetricSelectorProps<T>) {
   const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
   const { getValues, setValue } = useFormContext<T>();
@@ -57,8 +59,14 @@ export function MetricSelector<T extends Record<string, unknown>>({
 
   const validMetrics = useMemo(() => {
     if (!metricsFetcher.data) return new Set<string>();
-    return new Set(metricsFetcher.data.metrics.map((m) => m.metric_name));
-  }, [metricsFetcher.data]);
+    return new Set(
+      metricsFetcher.data.metrics
+        .filter(
+          (m) => !removeDemonstrations || m.metric_name !== "demonstration",
+        )
+        .map((m) => m.metric_name),
+    );
+  }, [metricsFetcher.data, removeDemonstrations]);
 
   const isLoading = metricsFetcher.state === "loading";
 
