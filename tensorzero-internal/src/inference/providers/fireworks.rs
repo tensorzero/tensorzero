@@ -21,6 +21,7 @@ use crate::{
 };
 
 use super::{
+    helpers::inject_extra_body,
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
         tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse,
@@ -130,7 +131,15 @@ impl InferenceProvider for FireworksProvider {
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = FireworksRequest::new(&self.model_name, request);
+        let mut request_body =
+            serde_json::to_value(FireworksRequest::new(&self.model_name, request)).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing Fireworks request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let request_url = get_chat_url(&FIREWORKS_API_BASE)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
@@ -202,7 +211,15 @@ impl InferenceProvider for FireworksProvider {
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = FireworksRequest::new(&self.model_name, request);
+        let mut request_body =
+            serde_json::to_value(FireworksRequest::new(&self.model_name, request)).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing Fireworks request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body: {e}"),
@@ -375,7 +392,7 @@ struct FireworksResponseWithMetadata<'a> {
     response: OpenAIResponse,
     raw_response: String,
     latency: Latency,
-    request: FireworksRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -477,6 +494,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let fireworks_request =
@@ -587,6 +605,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let fireworks_response_with_metadata = FireworksResponseWithMetadata {
             response: valid_response,
@@ -594,7 +613,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: FireworksRequest::new("test-model", &generic_request),
+            request: serde_json::to_value(&FireworksRequest::new("test-model", &generic_request))
+                .unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =

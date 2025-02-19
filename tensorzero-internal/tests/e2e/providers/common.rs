@@ -41,6 +41,8 @@ pub struct E2ETestProvider {
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
     #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+    pub extra_body_inference: Vec<E2ETestProvider>,
+    #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub reasoning_inference: Vec<E2ETestProvider>,
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
@@ -128,6 +130,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_use_tool_choice_required_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_specific_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_extra_body_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_with_provider;
         use $crate::providers::reasoning::test_streaming_reasoning_inference_request_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_with_provider_json_mode;
@@ -400,7 +403,108 @@ macro_rules! generate_provider_tests {
                 test_json_mode_streaming_inference_request_with_provider(provider).await;
             }
         }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
+        async fn test_extra_body() {
+            let providers = $func().await.extra_body_inference;
+            for provider in providers {
+                test_extra_body_with_provider(provider).await;
+            }
+        }
     };
+}
+
+pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "params": {
+            "chat_completion": {
+            //    "temperature": 9000
+            }
+        },
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check if ClickHouse is ok - ChatInference Table
+    let clickhouse = get_clickhouse().await;
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request_val: serde_json::Value = serde_json::from_str::<Value>(raw_request).unwrap();
+    let temp = if provider.variant_name.contains("aws-bedrock") {
+        raw_request_val
+            .get("inferenceConfig")
+            .unwrap()
+            .get("temperature")
+    } else if provider
+        .variant_name
+        .contains("google-ai-studio-gemini-flash-8b")
+    {
+        raw_request_val
+            .get("generationConfig")
+            .unwrap()
+            .get("temperature")
+    } else {
+        raw_request_val.get("temperature")
+    };
+    assert_eq!(
+        temp.expect("Missing temperature")
+            .as_f64()
+            .expect("Temperature is not a number"),
+        0.123
+    );
 }
 
 #[cfg(feature = "e2e_tests")]

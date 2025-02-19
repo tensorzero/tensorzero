@@ -1,4 +1,7 @@
 use aws_config::meta::region::RegionProviderChain;
+use aws_sdk_bedrockruntime::client::customize::CustomizableOperation;
+use aws_sdk_bedrockruntime::config::interceptors::BeforeTransmitInterceptorContextMut;
+use aws_sdk_bedrockruntime::config::{Intercept, RuntimeComponents};
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
 use aws_sdk_bedrockruntime::operation::converse_stream::ConverseStreamOutput;
 use aws_sdk_bedrockruntime::types::{
@@ -9,15 +12,18 @@ use aws_sdk_bedrockruntime::types::{
     ToolConfiguration, ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification,
     ToolUseBlock,
 };
+use aws_smithy_types::body::SdkBody;
+use aws_smithy_types::config_bag::ConfigBag;
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
 use futures::StreamExt;
 use reqwest::StatusCode;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::helpers::peek_first_chunk;
+use super::helpers::{inject_extra_body, peek_first_chunk};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
@@ -31,6 +37,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::variant::chat_completion::ExtraBodyConfig;
 
 #[allow(unused)]
 const PROVIDER_NAME: &str = "AWS Bedrock";
@@ -69,6 +76,108 @@ impl AWSBedrockProvider {
         let client = aws_sdk_bedrockruntime::Client::new(&config);
 
         Ok(Self { model_id, client })
+    }
+}
+
+struct WithRawRequest<T, E, S, F: FnOnce() -> Result<String, Error>> {
+    bedrock_request: CustomizableOperation<T, E, S>,
+    get_raw_request: F,
+}
+
+/// Attaches our custom interceptor to the request builder, which injects our 'extra_body' parameters into
+/// the request body.
+/// Returns the modified request builder, and a function to retrieve the raw request.
+/// This awkward signature is due to the fact that we cannot call `send()` from a generic
+/// function, as one of the needed traits is private: https://github.com/awslabs/aws-sdk-rust/issues/987
+fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
+    mut bedrock_request: CustomizableOperation<T, E, S>,
+    request: &ModelInferenceRequest<'_>,
+) -> WithRawRequest<T, E, S, impl FnOnce() -> Result<String, Error>> {
+    let raw_request = Arc::new(Mutex::new(None));
+    let extra_body = request.extra_body.cloned();
+
+    #[derive(Debug)]
+    struct TensorZeroInterceptor {
+        /// Captures the raw request from `modify_before_signing`.
+        /// After the request is executed, we use this to retrieve the raw request.
+        raw_request: Arc<Mutex<Option<String>>>,
+        extra_body: Option<ExtraBodyConfig>,
+    }
+    impl Intercept for TensorZeroInterceptor {
+        fn name(&self) -> &'static str {
+            "TensorZeroInterceptor"
+        }
+        // This interceptor injects our 'extra_body' parameters into the request body,
+        // and captures the raw request.
+        fn modify_before_signing(
+            &self,
+            context: &mut BeforeTransmitInterceptorContextMut<'_>,
+            _runtime_components: &RuntimeComponents,
+            _cfg: &mut ConfigBag,
+        ) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
+            let http_request = context.request_mut();
+            let bytes = http_request.body().bytes().ok_or_else(|| {
+                Error::new(ErrorDetails::Serialization {
+                    message: "Failed to get body from AWS Bedrock request".to_string(),
+                })
+            })?;
+            let mut body_json: serde_json::Value = serde_json::from_slice(bytes).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to deserialize AWS Bedrock request body: {e}"),
+                })
+            })?;
+            inject_extra_body(self.extra_body.as_ref(), &mut body_json)?;
+            let raw_request = serde_json::to_string(&body_json).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to serialize AWS Bedrock request body: {e}"),
+                })
+            })?;
+            // Bedrock inexplicably sets this header before calling this interceptor, so we need to update
+            // it ourselves (in case the body length changed)
+            http_request
+                .headers_mut()
+                .insert("content-length", raw_request.len().to_string());
+            *http_request.body_mut() = SdkBody::from(raw_request.clone());
+
+            // Capture the raw request for later use. Note that `modify_before_signing` may be
+            // called multiple times (due to internal aws sdk retries), so this will overwrite
+            // the Mutex to contain the latest raw request (which is what we want).
+            let body = self.raw_request.lock();
+            // Ignore poisoned lock, since we're overwriting it.
+            let mut body = match body {
+                Ok(body) => body,
+                Err(e) => e.into_inner(),
+            };
+            *body = Some(raw_request);
+            Ok(())
+        }
+    }
+
+    let interceptor = TensorZeroInterceptor {
+        raw_request: raw_request.clone(),
+        extra_body,
+    };
+
+    bedrock_request = bedrock_request.interceptor(interceptor);
+
+    WithRawRequest {
+        bedrock_request,
+        get_raw_request: move || {
+            let raw_request = raw_request
+                .lock()
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Poisoned raw_request mutex for AWS bedrock: {e:?}"),
+                    })
+                })?
+                .clone()
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: "Failed to get serialized AWS Bedrock request".to_string(),
+                    })
+                })?;
+            Ok(raw_request)
+        },
     }
 }
 
@@ -149,14 +258,16 @@ impl InferenceProvider for AWSBedrockProvider {
             }
         }
 
-        // We serialize here because the ConverseFluidBuilder type is not one you can import I guess
-        let raw_request = serialize_aws_bedrock_struct(&bedrock_request)?;
+        let WithRawRequest {
+            bedrock_request,
+            get_raw_request,
+        } = attach_interceptor(bedrock_request.customize(), request);
 
         let start_time = Instant::now();
         let output = bedrock_request.send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!(
-                    "Error sending request to AWS Bedrock: {}",
+                    "Error sending request to AWS Bedrock: {:?}",
                     DisplayErrorContext(&e)
                 ),
                 raw_request: None,
@@ -168,6 +279,8 @@ impl InferenceProvider for AWSBedrockProvider {
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
+
+        let raw_request = get_raw_request()?;
 
         ConverseOutputWithMetadata {
             output,
@@ -255,21 +368,25 @@ impl InferenceProvider for AWSBedrockProvider {
                 bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
             }
         }
-
-        let raw_request = serialize_aws_bedrock_struct(&bedrock_request)?;
+        let WithRawRequest {
+            bedrock_request,
+            get_raw_request,
+        } = attach_interceptor(bedrock_request.customize(), request);
 
         let start_time = Instant::now();
         let stream = bedrock_request.send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
-                raw_request: Some(raw_request.clone()),
-                raw_response: None,
                 message: format!(
                     "Error sending request to AWS Bedrock: {}",
                     DisplayErrorContext(&e)
                 ),
+                raw_request: None,
+                raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
+
+        let raw_request = get_raw_request()?;
 
         let mut stream = stream_bedrock(stream, start_time).peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;

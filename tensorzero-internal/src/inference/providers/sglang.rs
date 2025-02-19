@@ -20,6 +20,7 @@ use crate::inference::types::{
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 
+use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,
@@ -114,7 +115,13 @@ impl InferenceProvider for SGLangProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = SGLangRequest::new(&self.model_name, request)?;
+        let mut request_body = serde_json::to_value(SGLangRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing SGLang request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -189,7 +196,13 @@ impl InferenceProvider for SGLangProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = SGLangRequest::new(&self.model_name, request)?;
+        let mut request_body = serde_json::to_value(SGLangRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing SGLang request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -355,7 +368,7 @@ struct SGLangResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
     raw_response: String,
-    request: SGLangRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -466,6 +479,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let sglang_request = SGLangRequest::new(&model_name, &basic_request).unwrap();
 
@@ -501,6 +515,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         SGLangRequest::new(&model_name, &request_with_tools).expect_err("requires a schema");
 
@@ -523,6 +538,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         SGLangRequest::new(&model_name, &request_with_tools).expect_err("requires a schema");
 
@@ -546,6 +562,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
+            extra_body: None,
         };
 
         let sglang_request = SGLangRequest::new(&model_name, &request_with_tools).unwrap();
@@ -595,6 +612,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let sglang_response_with_metadata = SGLangResponseWithMetadata {
             response: valid_response,
@@ -602,7 +620,10 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: SGLangRequest::new("test-model", &generic_request).unwrap(),
+            request: serde_json::to_value(
+                &SGLangRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =

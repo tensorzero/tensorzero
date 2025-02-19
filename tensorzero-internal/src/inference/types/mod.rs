@@ -13,8 +13,8 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::cache::CacheData;
 use crate::cache::NonStreamingCacheData;
+use crate::{cache::CacheData, variant::chat_completion::ExtraBodyConfig};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
@@ -167,6 +167,7 @@ pub struct ModelInferenceRequest<'a> {
     pub json_mode: ModelInferenceRequestJsonMode,
     pub function_type: FunctionType,
     pub output_schema: Option<&'a Value>,
+    pub extra_body: Option<&'a ExtraBodyConfig>,
 }
 
 /// Each provider transforms a ModelInferenceRequest into a provider-specific (private) inference request type
