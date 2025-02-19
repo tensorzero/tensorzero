@@ -6,7 +6,6 @@ use base64::prelude::*;
 use futures::StreamExt;
 #[cfg(feature = "e2e_tests")]
 use rand::Rng;
-#[cfg(feature = "e2e_tests")]
 use reqwest::{Client, StatusCode};
 #[cfg(feature = "e2e_tests")]
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -17,7 +16,6 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
-#[cfg(feature = "e2e_tests")]
 use crate::common::get_gateway_endpoint;
 use crate::common::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
@@ -49,6 +47,7 @@ pub struct E2ETestProviders {
     pub dynamic_tool_use_inference: Vec<E2ETestProvider>,
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
+    #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub image_inference: Vec<E2ETestProvider>,
     #[cfg(feature = "e2e_tests")]
     pub shorthand_inference: Vec<E2ETestProvider>,
@@ -415,8 +414,10 @@ macro_rules! generate_provider_tests {
     };
 }
 
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
 
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_image_inference_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -585,6 +586,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     check_simple_inference_response(response_json, Some(episode_id), &provider, false, true).await;
 }
 
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn check_simple_image_inference_response(
     response_json: Value,
     episode_id: Option<Uuid>,
