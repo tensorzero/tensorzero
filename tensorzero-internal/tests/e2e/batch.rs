@@ -24,7 +24,7 @@ use tensorzero_internal::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
 use tensorzero_internal::inference::types::{
-    ContentBlockChatOutput, Input, JsonInferenceOutput, ResolvedInput, Usage,
+    ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, Usage,
 };
 use tensorzero_internal::jsonschema_util::JSONSchemaFromPath;
 use tokio::time::{sleep, Duration};
