@@ -167,7 +167,7 @@ jobs:
       - name: Try installing sdist
         run: |
           uv venv
-          uv pip install ./clients/python-pyo3/dist/tensorzero-*.tar.gz
+          uv pip install ./clients/python-pyo3/dist/tensorzero-*.tar.gz -v
   release:
     name: Release
     runs-on: ubuntu-latest
