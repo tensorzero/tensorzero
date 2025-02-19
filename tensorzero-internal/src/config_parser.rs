@@ -1,6 +1,6 @@
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
-use object_store::{ObjectStore, RetryConfig};
+use object_store::ObjectStore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
