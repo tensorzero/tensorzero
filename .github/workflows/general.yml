@@ -20,6 +20,31 @@ jobs:
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
 
+  check-pyo3-build:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        # We don't test on linux x86_64, because our main 'validate' step already does that
+        # For now, we just check that the build works on our other supported platforms -
+        # we don't run any tests.
+        platform:
+          - runner: ubuntu-22.04-arm
+            target: aarch64
+          - runner: windows-latest
+            target: x64
+          - runner: macos-13
+            target: x86_64
+          - runner: macos-14
+            target: aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - name: "TensorZero PyO3 Client: Build"
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: clients/python-pyo3
+          args: --find-interpreter
+
+
   validate:
     runs-on: namespace-profile-tensorzero-8x16
 
@@ -50,10 +75,10 @@ jobs:
             rust
             uv
 
-      - name: Install cargo-nextest and cargo-deny
+      - name: Install cargo-nextest, cargo-deny, and cargo-hack
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest,cargo-deny
+          tool: cargo-nextest,cargo-deny,cargo-hack
 
       - name: Build (Rust)
         run: cargo build --workspace --verbose
@@ -61,7 +86,7 @@ jobs:
       - name: Lint (Rust)
         run: |
           cargo fmt -- --check
-          cargo clippy --all-targets --all-features -- -D warnings
+          cargo hack clippy --all-targets --each-feature -- -D warnings
 
       - name: Run cargo-deny
         run: cargo deny check bans

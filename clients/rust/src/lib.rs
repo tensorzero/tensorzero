@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use tensorzero_internal::{
     config_parser::Config,
     error::ErrorDetails,
-    gateway_util::{setup_clickhouse, AppStateData},
+    gateway_util::{setup_clickhouse, setup_http_client, AppStateData},
 };
 use thiserror::Error;
 use tokio_stream::StreamExt;
@@ -97,7 +97,7 @@ pub enum ClientBuilderError {
     #[error("Failed to parse config: {0}")]
     ConfigParsing(TensorZeroError),
     #[error("Failed to build HTTP client: {0}")]
-    HTTPClientBuild(reqwest::Error),
+    HTTPClientBuild(TensorZeroError),
 }
 
 /// Controls how a `Client` is run
@@ -147,16 +147,28 @@ impl ClientBuilder {
                 } else {
                     Arc::new(Config::default())
                 };
-                let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url.clone())
-                    .await
-                    .map_err(|e| {
-                        ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
-                    })?;
+                let clickhouse_connection_info =
+                    setup_clickhouse(&config, clickhouse_url.clone(), true)
+                        .await
+                        .map_err(|e| {
+                            ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                                source: e.into(),
+                            })
+                        })?;
+                let http_client = if let Some(http_client) = self.http_client {
+                    http_client
+                } else {
+                    setup_http_client().map_err(|e| {
+                        ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
+                            source: e.into(),
+                        })
+                    })?
+                };
                 Ok(Client {
                     mode: ClientMode::EmbeddedGateway(EmbeddedGateway {
                         state: AppStateData {
                             config,
-                            http_client: self.http_client.unwrap_or_default(),
+                            http_client,
                             clickhouse_connection_info,
                         },
                     }),
@@ -422,6 +434,7 @@ pub use tensorzero_internal::observability;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tracing_test::traced_test;
 
     #[tokio::test]
     #[ignore] // TODO - set an environment variable, or create a new config with dummy credentials
@@ -441,5 +454,24 @@ mod tests {
             err.to_string().contains("Missing ClickHouse URL"),
             "Bad error message: {err_msg}"
         );
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_log_no_clickhouse() {
+        // Default observability and no ClickHouse URL
+        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_path: Some(PathBuf::from(
+                "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
+            )),
+            clickhouse_url: None,
+        })
+        .build()
+        .await
+        .expect("Failed to build client");
+        assert!(!logs_contain(
+            "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
+        ));
+        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."));
     }
 }

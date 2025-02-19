@@ -28,7 +28,7 @@ impl AppStateData {
                     tracing::warn!("Deprecation Warning: The environment variable \"CLICKHOUSE_URL\" has been renamed to \"TENSORZERO_CLICKHOUSE_URL\" and will be removed in a future version. Please update your environment to use \"TENSORZERO_CLICKHOUSE_URL\" instead.");
                 })
             });
-        let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url).await?;
+        let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let http_client = setup_http_client()?;
 
         Ok(Self {
@@ -42,6 +42,7 @@ impl AppStateData {
 pub async fn setup_clickhouse(
     config: &Config<'static>,
     clickhouse_url: Option<String>,
+    embedded_client: bool,
 ) -> Result<ClickHouseConnectionInfo, Error> {
     let clickhouse_connection_info = match (config.gateway.observability.enabled, clickhouse_url) {
         // Observability disabled by config
@@ -62,7 +63,12 @@ pub async fn setup_clickhouse(
         }
         // Observability default and no ClickHouse URL
         (None, None) => {
-            tracing::warn!("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `TENSORZERO_CLICKHOUSE_URL` is not set.");
+            let msg_suffix = if embedded_client {
+                "`clickhouse_url` was not provided."
+            } else {
+                "`TENSORZERO_CLICKHOUSE_URL` is not set."
+            };
+            tracing::warn!("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and {msg_suffix}");
             ClickHouseConnectionInfo::new_disabled()
         }
         // Observability default and ClickHouse URL provided
@@ -170,7 +176,7 @@ mod tests {
             ..Default::default()
         }));
 
-        let clickhouse_connection_info = setup_clickhouse(config, None).await.unwrap();
+        let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
         assert!(matches!(
             clickhouse_connection_info,
             ClickHouseConnectionInfo::Disabled
@@ -191,7 +197,7 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         }));
-        let clickhouse_connection_info = setup_clickhouse(config, None).await.unwrap();
+        let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
         assert!(matches!(
             clickhouse_connection_info,
             ClickHouseConnectionInfo::Disabled
@@ -199,6 +205,7 @@ mod tests {
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
+        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `TENSORZERO_CLICKHOUSE_URL` is not set."));
 
         // We do not test the case where a ClickHouse URL is provided but observability is default,
         // as this would require a working ClickHouse and we don't have one in unit tests.
@@ -218,7 +225,7 @@ mod tests {
             ..Default::default()
         }));
 
-        let err = setup_clickhouse(config, None).await.unwrap_err();
+        let err = setup_clickhouse(config, None, false).await.unwrap_err();
         assert!(err
             .to_string()
             .contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"));
@@ -236,7 +243,7 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         }));
-        setup_clickhouse(config, Some("bad_url".to_string()))
+        setup_clickhouse(config, Some("bad_url".to_string()), false)
             .await
             .expect_err("ClickHouse setup should fail given a bad URL");
         assert!(logs_contain("Invalid ClickHouse database URL"));
@@ -258,11 +265,13 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        setup_clickhouse(&config, Some("https://tensorzero.com:8123".to_string()))
-            .await
-            .expect_err(
-                "ClickHouse setup should fail given a URL that doesn't point to ClickHouse",
-            );
+        setup_clickhouse(
+            &config,
+            Some("https://tensorzero.com:8123".to_string()),
+            false,
+        )
+        .await
+        .expect_err("ClickHouse setup should fail given a URL that doesn't point to ClickHouse");
         assert!(logs_contain(
             "Error connecting to ClickHouse: ClickHouse is not healthy"
         ));
