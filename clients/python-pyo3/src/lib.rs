@@ -13,6 +13,7 @@ use std::{collections::HashMap, future::Future, path::PathBuf, sync::Arc, time::
 use futures::StreamExt;
 use pyo3::{
     exceptions::{PyStopAsyncIteration, PyStopIteration, PyValueError},
+    ffi::c_str,
     marker::Ungil,
     prelude::*,
     sync::GILOnceCell,
@@ -413,6 +414,7 @@ impl TensorZeroGateway {
         config_path: Option<&str>,
         clickhouse_url: Option<String>,
     ) -> PyResult<Py<TensorZeroGateway>> {
+        warn_no_config(cls.py(), config_path)?;
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_path: config_path.map(PathBuf::from),
             clickhouse_url,
@@ -662,6 +664,7 @@ impl AsyncTensorZeroGateway {
         config_path: Option<&str>,
         clickhouse_url: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
+        warn_no_config(cls.py(), config_path)?;
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_path: config_path.map(PathBuf::from),
             clickhouse_url,
@@ -865,4 +868,16 @@ fn tensorzero_internal_error(py: Python<'_>, msg: &str) -> PyResult<PyErr> {
         Ok(err.unbind())
     })?;
     Ok(PyErr::from_value(err.bind(py).call1((msg,))?))
+}
+
+fn warn_no_config(py: Python<'_>, config: Option<&str>) -> PyResult<()> {
+    if config.is_none() {
+        let user_warning = py.get_type::<pyo3::exceptions::PyUserWarning>();
+        PyErr::warn(
+            py,
+            &user_warning,
+            c_str!("No config file provided, so only default functions will be available. Use `config_file=\"path/to/tensorzero.toml\"` to specify a config file."), 0
+        )?;
+    }
+    Ok(())
 }
