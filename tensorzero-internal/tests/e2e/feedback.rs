@@ -17,7 +17,7 @@ async fn make_embedded_gateway() -> tensorzero::Client {
     let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_path: Some(config_path),
+        config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
     })
     .build()

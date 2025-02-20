@@ -16,7 +16,7 @@ use url::Url;
 struct Args {
     /// Path to tensorzero.toml. This runs the client in embedded gateway mode.
     #[arg(short, long)]
-    config_path: Option<PathBuf>,
+    config_file: Option<PathBuf>,
 
     /// URL of a running TensorZero HTTP gateway server to use for requests. This runs the client in HTTP gateway mode.
     #[arg(short, long)]
@@ -41,12 +41,12 @@ async fn main() {
 
     let args = Args::parse();
 
-    let client = match (args.gateway_url, args.config_path) {
+    let client = match (args.gateway_url, args.config_file) {
         (Some(gateway_url), None) => {
             ClientBuilder::new(ClientBuilderMode::HTTPGateway { url: gateway_url })
         }
-        (None, Some(config_path)) => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: Some(config_path),
+        (None, Some(config_file)) => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(config_file),
             clickhouse_url: std::env::var("CLICKHOUSE_URL").ok(),
         }),
         (Some(_), Some(_)) => {

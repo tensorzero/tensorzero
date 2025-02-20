@@ -106,3 +106,18 @@ async fn get_column_type(
         Ok(response) => Ok(response.trim().to_string()),
     }
 }
+
+async fn table_is_nonempty(
+    clickhouse: &ClickHouseConnectionInfo,
+    table: &str,
+    migration_id: &str,
+) -> Result<bool, Error> {
+    let query = format!("SELECT COUNT() FROM {} FORMAT CSV", table);
+    let result = clickhouse.run_query(query, None).await?;
+    Ok(result.trim().parse::<i64>().map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseMigration {
+            id: migration_id.to_string(),
+            message: e.to_string(),
+        })
+    })? > 0)
+}
