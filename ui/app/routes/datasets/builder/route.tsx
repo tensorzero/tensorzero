@@ -1,4 +1,4 @@
-import { data } from "react-router";
+import { data, redirect } from "react-router";
 import { useLoaderData } from "react-router";
 import { DatasetBuilderForm } from "./DatasetBuilderForm";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
@@ -37,7 +37,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     await insertRowsForDataset(queryParams);
 
-    return data({ success: true });
+    return redirect(`/datasets/${queryParams.dataset_name}`);
   } catch (error) {
     console.error("Error creating dataset:", error);
     return data(

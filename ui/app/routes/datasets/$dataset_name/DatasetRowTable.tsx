@@ -9,6 +9,7 @@ import {
 import { formatDate } from "~/utils/date";
 import type { DatasetDetailRow } from "~/utils/clickhouse/datasets";
 import { Badge } from "~/components/ui/badge";
+import { Link } from "react-router";
 
 export default function DatasetRowTable({
   rows,
@@ -31,34 +32,34 @@ export default function DatasetRowTable({
           {rows.map((row) => (
             <TableRow key={row.id} id={row.id}>
               <TableCell className="max-w-[200px]">
-                <a href={`#`} className="block no-underline">
+                <Link to={`#`} className="block no-underline">
                   <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                     {row.id}
                   </code>
-                </a>
+                </Link>
               </TableCell>
               <TableCell className="max-w-[200px]">
                 <Badge variant="outline">{row.type}</Badge>
               </TableCell>
               <TableCell>
-                <a
-                  href={`/observability/episodes/${row.episode_id}`}
+                <Link
+                  to={`/observability/episodes/${row.episode_id}`}
                   className="block no-underline"
                 >
                   <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                     {row.episode_id}
                   </code>
-                </a>
+                </Link>
               </TableCell>
               <TableCell>
-                <a
-                  href={`/observability/functions/${row.function_name}`}
+                <Link
+                  to={`/observability/functions/${row.function_name}`}
                   className="block no-underline"
                 >
                   <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                     {row.function_name}
                   </code>
-                </a>
+                </Link>
               </TableCell>
               <TableCell>{formatDate(new Date(row.updated_at))}</TableCell>
             </TableRow>
