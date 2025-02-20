@@ -24,7 +24,9 @@ use crate::{
         get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
         select_json_inference_clickhouse, select_model_inference_clickhouse,
     },
-    providers::common::{make_embedded_gateway, make_http_gateway},
+    providers::common::{
+        make_embedded_gateway, make_embedded_gateway_no_config, make_http_gateway,
+    },
 };
 
 #[tokio::test]
@@ -1823,6 +1825,49 @@ async fn test_inference_invalid_params() {
 
     // Should succeed with 200 OK
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_embedded_gateway_no_config() {
+    let client = make_embedded_gateway_no_config().await;
+    let response = client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::my-model".to_string()),
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text {
+                        value: "What is the name of the capital city of Japan?"
+                            .to_string()
+                            .into(),
+                    }],
+                }],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming response");
+    };
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check if ClickHouse is ok - ChatInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, response.inference_id())
+        .await
+        .unwrap();
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, response.inference_id());
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "tensorzero::default");
+    // It's not necessary to check ModelInference table given how many other places we do that
 }
 
 #[tokio::test]
