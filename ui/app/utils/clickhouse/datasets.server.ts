@@ -255,7 +255,7 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
         SELECT
           dataset_name,
           toUInt32(count()) AS count,
-          max(created_at) AS last_updated
+          max(updated_at) AS last_updated
         FROM ChatInferenceDataset
         WHERE is_deleted = false
         GROUP BY dataset_name
@@ -263,7 +263,7 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
         SELECT
           dataset_name,
           toUInt32(count()) AS count,
-          max(created_at) AS last_updated
+          max(updated_at) AS last_updated
         FROM JsonInferenceDataset
         WHERE is_deleted = false
         GROUP BY dataset_name
