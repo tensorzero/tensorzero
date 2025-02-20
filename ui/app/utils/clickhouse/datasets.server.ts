@@ -9,6 +9,7 @@ import {
   type DatasetDetailRow,
   type DatasetInsert,
   type DatasetQueryParams,
+  type DatasetRow,
 } from "./datasets";
 
 /**
@@ -396,10 +397,33 @@ export async function getDatapoint(
   const json_query = `
     SELECT function_name, id, episode_id, input, output, output_schema, tags, auxiliary, formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM JsonInferenceDataset WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
   `;
-  const resultSet = await clickhouseClient.query({
-    query: chat_query,
-    format: "JSONEachRow",
+
+  const [chatResult, jsonResult] = await Promise.all([
+    clickhouseClient
+      .query({
+        query: chat_query,
+        format: "JSONEachRow",
+        query_params: { dataset_name, id },
+      })
+      .then((rs) => rs.json<DatasetRow[]>()),
+    clickhouseClient
+      .query({
+        query: json_query,
+        format: "JSONEachRow",
+        query_params: { dataset_name, id },
+      })
+      .then((rs) => rs.json<DatasetRow[]>()),
+  ]);
+
+  const allResults = [...chatResult, ...jsonResult];
+  if (allResults.length !== 1) {
+    throw new Error(
+      `Expected exactly one result for dataset ${dataset_name} and id ${id}, but found ${allResults.length}`,
+    );
+  }
+
+  return DatasetDetailRowSchema.parse({
+    ...allResults[0],
+    type: "tool_params" in allResults[0] ? "chat" : "json",
   });
-  const 
-  return rows[0];
 }

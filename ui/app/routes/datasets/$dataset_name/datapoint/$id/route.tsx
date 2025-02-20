@@ -61,7 +61,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-export default function InferencePage({ loaderData }: Route.ComponentProps) {
+export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const { inference, model_inferences, feedback, feedback_bounds } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);

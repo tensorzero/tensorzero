@@ -60,7 +60,7 @@ export type DatasetRow = z.infer<typeof DatasetRowSchema>;
 export const ChatInferenceDatasetInsertSchema =
   ChatInferenceDatasetRowSchema.omit({
     is_deleted: true,
-    created_at: true,
+    updated_at: true,
   });
 export type ChatInferenceDatasetInsert = z.infer<
   typeof ChatInferenceDatasetInsertSchema
@@ -73,7 +73,7 @@ export type ChatInferenceDatasetInsert = z.infer<
 export const JsonInferenceDatasetInsertSchema =
   JsonInferenceDatasetRowSchema.omit({
     is_deleted: true,
-    created_at: true,
+    updated_at: true,
   });
 export type JsonInferenceDatasetInsert = z.infer<
   typeof JsonInferenceDatasetInsertSchema
