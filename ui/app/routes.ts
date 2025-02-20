@@ -20,6 +20,7 @@ export default [
   ),
   route("api/tensorzero/inference", "routes/api/tensorzero/inference.ts"),
   route("datasets/builder", "routes/datasets/builder/route.tsx"),
+  route("datasets/:dataset_name", "routes/datasets/$dataset_name/route.tsx"),
   route(
     "observability/inferences",
     "routes/observability/inferences/route.tsx",

@@ -9,7 +9,9 @@ import type { DatasetQueryParams } from "~/utils/clickhouse/datasets";
 import { getInferenceJoinKey } from "~/utils/clickhouse/curation";
 
 export const DatasetBuilderFormValuesSchema = z.object({
-  dataset: z.string(),
+  dataset: z.string().refine((val) => val !== "builder", {
+    message: "Dataset name cannot be 'builder'",
+  }),
   type: z.enum(["chat", "json"]),
   function: z.string().optional(),
   variant: z.string().optional(),
