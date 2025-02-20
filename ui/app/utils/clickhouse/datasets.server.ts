@@ -385,3 +385,21 @@ export async function getDatasetRows(
   const rows = await resultSet.json<DatasetDetailRow[]>();
   return z.array(DatasetDetailRowSchema).parse(rows);
 }
+
+export async function getDatapoint(
+  dataset_name: string,
+  id: string,
+): Promise<DatasetDetailRow> {
+  const chat_query = `
+    SELECT function_name, id, episode_id, input, output, tool_params, tags, auxiliary,  formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM ChatInferenceDataset WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
+  `;
+  const json_query = `
+    SELECT function_name, id, episode_id, input, output, output_schema, tags, auxiliary, formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM JsonInferenceDataset WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
+  `;
+  const resultSet = await clickhouseClient.query({
+    query: chat_query,
+    format: "JSONEachRow",
+  });
+  const 
+  return rows[0];
+}

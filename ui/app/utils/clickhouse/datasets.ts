@@ -15,7 +15,7 @@ export const ChatInferenceDatasetRowSchema = z
     tags: z.record(z.string(), z.string()),
     auxiliary: z.string(),
     is_deleted: z.boolean().default(false),
-    created_at: z.string().datetime().default(new Date().toISOString()),
+    updated_at: z.string().datetime().default(new Date().toISOString()),
   })
   .strict();
 export type ChatInferenceDatasetRow = z.infer<
@@ -37,7 +37,7 @@ export const JsonInferenceDatasetRowSchema = z
     tags: z.record(z.string(), z.string()),
     auxiliary: z.string(),
     is_deleted: z.boolean().default(false),
-    created_at: z.string().datetime(),
+    updated_at: z.string().datetime(),
   })
   .strict();
 export type JsonInferenceDatasetRow = z.infer<
