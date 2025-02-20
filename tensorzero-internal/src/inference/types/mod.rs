@@ -54,7 +54,7 @@ pub struct Input {
 
 pub struct FetchContext<'a> {
     pub client: &'a reqwest::Client,
-    pub object_store_data: &'a ObjectStoreData,
+    pub object_store_data: &'a Option<ObjectStoreData>,
 }
 
 impl Input {
@@ -104,11 +104,16 @@ impl InputMessageContent {
                 value: value.clone(),
             },
             InputMessageContent::Image(image) => {
-                let storage_kind = context.object_store_data.kind.clone().ok_or_else(|| {
-                    Error::new(ErrorDetails::ObjectStoreUnconfigured {
-                        block_type: "image".to_string(),
-                    })
-                })?;
+                let storage_kind = context
+                    .object_store_data
+                    .as_ref()
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::ObjectStoreUnconfigured {
+                            block_type: "image".to_string(),
+                        })
+                    })?
+                    .kind
+                    .clone();
                 let image = image.clone().take_or_fetch(context.client).await?;
                 let path = storage_kind.image_path(&image)?;
                 ResolvedInputMessageContent::Image {

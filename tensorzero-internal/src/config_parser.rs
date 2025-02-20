@@ -40,25 +40,21 @@ pub struct Config<'c> {
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,
-    pub object_store_data: ObjectStoreData,
+    pub object_store_data: Option<ObjectStoreData>,
     pub debug: bool,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ObjectStoreData {
-    // TODO - should we instead make a dummy `ObjectStore` to represent an explicitly disabled store?
+    // This will be `None` if we have `StorageKind::Disabled`
     pub object_store: Option<Arc<dyn ObjectStore>>,
-    // This will be `None` if the kind is not explicitly set in the config
-    pub kind: Option<StorageKind>,
+    pub kind: StorageKind,
 }
 
 impl ObjectStoreData {
-    fn new(config: Option<StorageKind>) -> Result<Self, Error> {
+    fn new(config: Option<StorageKind>) -> Result<Option<Self>, Error> {
         let Some(config) = config else {
-            return Ok(Self {
-                object_store: None,
-                kind: None,
-            });
+            return Ok(None);
         };
 
         let object_store: Option<Arc<dyn ObjectStore>> = match &config {
@@ -83,10 +79,10 @@ impl ObjectStoreData {
             }
         };
 
-        Ok(Self {
+        Ok(Some(Self {
             object_store,
-            kind: Some(config),
-        })
+            kind: config,
+        }))
     }
 }
 

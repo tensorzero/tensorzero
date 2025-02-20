@@ -627,39 +627,46 @@ pub struct InferenceDatabaseInsertMetadata {
 }
 
 async fn write_image(
-    object_store: &ObjectStoreData,
+    object_store: &Option<ObjectStoreData>,
     raw: &Base64Image,
     storage_path: &StoragePath,
 ) -> Result<(), Error> {
-    // The store might be explicitly disabled
-    if let Some(store) = object_store.object_store.as_ref() {
-        let res = store
-            .put_opts(
-                &storage_path.path,
-                raw.data()?.clone().into(),
-                PutOptions {
-                    mode: PutMode::Create,
-                    ..Default::default()
-                },
-            )
-            .await;
-        match res {
-            Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => {}
-            Err(e) => {
-                // TODO - what error should this be?
-                return Err(ErrorDetails::InternalError {
-                    message: format!("Failed to write image to object store: {e:?}"),
+    if let Some(object_store) = object_store {
+        // The store might be explicitly disabled
+        if let Some(store) = object_store.object_store.as_ref() {
+            let res = store
+                .put_opts(
+                    &storage_path.path,
+                    raw.data()?.clone().into(),
+                    PutOptions {
+                        mode: PutMode::Create,
+                        ..Default::default()
+                    },
+                )
+                .await;
+            match res {
+                Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => {}
+                Err(e) => {
+                    // TODO - what error should this be?
+                    return Err(ErrorDetails::InternalError {
+                        message: format!("Failed to write image to object store: {e:?}"),
+                    }
+                    .into());
                 }
-                .into());
             }
         }
+    } else {
+        return Err(ErrorDetails::InternalError {
+            message: "Called `write_image` with no object store configured".to_string(),
+        }
+        .into());
     }
     Ok(())
 }
 
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    object_store: &ObjectStoreData,
+    object_store: &Option<ObjectStoreData>,
     input: ResolvedInput,
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
