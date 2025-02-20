@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use futures::StreamExt;
 #[cfg(feature = "e2e_tests")]
 use rand::Rng;
-#[cfg(feature = "e2e_tests")]
 use reqwest::{Client, StatusCode};
 #[cfg(feature = "e2e_tests")]
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -16,7 +15,6 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
-#[cfg(feature = "e2e_tests")]
 use crate::common::get_gateway_endpoint;
 use crate::common::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
@@ -415,6 +413,7 @@ macro_rules! generate_provider_tests {
     };
 }
 
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
