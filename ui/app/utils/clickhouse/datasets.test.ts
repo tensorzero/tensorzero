@@ -1,5 +1,9 @@
-import { DatasetQueryParamsSchema } from "./datasets";
-import { countRowsForDataset, getDatasetCounts } from "./datasets.server";
+import { DatasetQueryParamsSchema, type DatasetDetailRow } from "./datasets";
+import {
+  countRowsForDataset,
+  getDatasetCounts,
+  getDatasetRows,
+} from "./datasets.server";
 import { expect, test, describe } from "vitest";
 
 describe("countRowsForDataset", () => {
@@ -254,5 +258,66 @@ describe("getDatasetCounts", () => {
         last_updated: "2025-02-19T00:25:29Z",
       },
     ]);
+  });
+});
+
+describe("getDatasetRows", () => {
+  test("returns the correct rows for a specific dataset", async () => {
+    const rows = await getDatasetRows("notadataset", 10, 0);
+    expect(rows).toEqual([]);
+  });
+  test("paging through the rows of foo", async () => {
+    let allRows: DatasetDetailRow[] = [];
+    let offset = 0;
+    const pageSize = 10;
+
+    while (true) {
+      const rows = await getDatasetRows("foo", pageSize, offset);
+      allRows = [...allRows, ...rows];
+      console.log(`Fetched ${rows.length} rows, total: ${allRows.length}`);
+      offset += pageSize;
+      if (rows.length !== pageSize) break;
+    }
+
+    expect(allRows.length).toBe(116);
+    expect(allRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: expect.any(String),
+          type: expect.stringMatching(/^(chat|json)$/),
+          function_name: expect.any(String),
+          episode_id: expect.any(String),
+          updated_at: expect.any(String),
+        }),
+      ]),
+    );
+  });
+  test("paging through bar dataset", async () => {
+    let allRows: DatasetDetailRow[] = [];
+    let offset = 0;
+    const pageSize = 10;
+
+    while (true) {
+      const rows = await getDatasetRows("bar", pageSize, offset);
+      allRows = [...allRows, ...rows];
+      console.log(`Fetched ${rows.length} rows, total: ${allRows.length}`);
+      offset += pageSize;
+      if (rows.length !== pageSize) break;
+    }
+
+    expect(allRows.length).toBe(5);
+    expect(allRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: expect.any(String),
+          type: "json",
+          function_name: expect.any(String),
+          episode_id: expect.any(String),
+          updated_at: expect.any(String),
+        }),
+      ]),
+    );
+    // Verify all rows are json type
+    expect(allRows.every((row) => row.type === "json")).toBe(true);
   });
 });

@@ -2,9 +2,11 @@ import z from "zod";
 import { clickhouseClient } from "./client.server";
 import {
   DatasetCountInfoSchema,
+  DatasetDetailRowSchema,
   DatasetInsertSchema,
   DatasetQueryParamsSchema,
   type DatasetCountInfo,
+  type DatasetDetailRow,
   type DatasetInsert,
   type DatasetQueryParams,
 } from "./datasets";
@@ -255,7 +257,7 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
         SELECT
           dataset_name,
           toUInt32(count()) AS count,
-          max(created_at) AS last_updated
+          max(updated_at) AS last_updated
         FROM ChatInferenceDataset
         WHERE is_deleted = false
         GROUP BY dataset_name
@@ -263,7 +265,7 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
         SELECT
           dataset_name,
           toUInt32(count()) AS count,
-          max(created_at) AS last_updated
+          max(updated_at) AS last_updated
         FROM JsonInferenceDataset
         WHERE is_deleted = false
         GROUP BY dataset_name
@@ -335,4 +337,51 @@ export async function insertRowsForDataset(
     query: wrappedQuery,
     query_params,
   });
+}
+
+export async function getDatasetRows(
+  dataset_name: string,
+  page_size: number,
+  offset: number,
+): Promise<DatasetDetailRow[]> {
+  // Ensure offset is not negative
+  const validOffset = Math.max(0, offset);
+
+  const query = `
+      SELECT *
+      FROM (
+        SELECT
+          id,
+          'chat' as type,
+          function_name,
+          episode_id,
+          formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
+        FROM ChatInferenceDataset
+        WHERE dataset_name = {dataset_name:String} AND is_deleted = false
+        UNION ALL
+        SELECT
+          id,
+          'json' as type,
+          function_name,
+          episode_id,
+          formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
+        FROM JsonInferenceDataset
+        WHERE dataset_name = {dataset_name:String} AND is_deleted = false
+      )
+      ORDER BY updated_at DESC, id DESC
+      LIMIT {page_size:UInt32}
+      OFFSET {offset:UInt32}
+    `;
+
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: {
+      dataset_name,
+      page_size,
+      offset: validOffset,
+    },
+  });
+  const rows = await resultSet.json<DatasetDetailRow[]>();
+  return z.array(DatasetDetailRowSchema).parse(rows);
 }

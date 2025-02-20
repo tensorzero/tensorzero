@@ -121,3 +121,13 @@ export const DatasetCountInfoSchema = z.object({
   last_updated: z.string().datetime(),
 });
 export type DatasetCountInfo = z.infer<typeof DatasetCountInfoSchema>;
+
+export const DatasetDetailRowSchema = z.object({
+  id: z.string().uuid(),
+  type: z.enum(["chat", "json"]),
+  function_name: z.string(),
+  episode_id: z.string().uuid(),
+  updated_at: z.string().datetime(),
+});
+
+export type DatasetDetailRow = z.infer<typeof DatasetDetailRowSchema>;
