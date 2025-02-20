@@ -28,7 +28,7 @@ export default function LLMFineTuningStatus({
   if (status.status === "idle") return null;
   const createdAt = extractTimestampFromUUIDv7(status.formData.jobId);
   return (
-    <div className="container mx-auto space-y-6 bg-background p-6">
+    <div className="bg-background container mx-auto space-y-6 p-6">
       <div className="space-y-4">
         <div className="space-y-2">
           <h3 className="text-lg font-semibold">
