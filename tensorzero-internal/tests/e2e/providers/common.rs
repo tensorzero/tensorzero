@@ -65,6 +65,7 @@ pub async fn make_http_gateway() -> tensorzero::Client {
     .unwrap()
 }
 
+#[allow(dead_code)]
 pub async fn make_embedded_gateway() -> tensorzero::Client {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
