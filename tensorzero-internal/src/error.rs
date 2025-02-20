@@ -7,6 +7,8 @@ use tokio::sync::OnceCell;
 use url::Url;
 use uuid::Uuid;
 
+use crate::inference::types::storage::StoragePath;
+
 /// Controls whether to include raw request/response details in error output
 ///
 /// When true:
@@ -142,6 +144,10 @@ pub enum ErrorDetails {
         provider_type: String,
         raw_request: Option<String>,
         raw_response: Option<String>,
+    },
+    ObjectStoreWrite {
+        message: String,
+        path: StoragePath,
     },
     InternalError {
         message: String,
@@ -316,6 +322,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
+            ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
@@ -394,6 +401,7 @@ impl ErrorDetails {
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ObjectStoreWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceClient { status_code, .. } => {
                 status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
             }
@@ -478,6 +486,12 @@ impl std::fmt::Display for ErrorDetails {
                         .map(|(variant_name, error)| format!("{}: {}", variant_name, error))
                         .collect::<Vec<_>>()
                         .join("\n")
+                )
+            }
+            ErrorDetails::ObjectStoreWrite { message, path } => {
+                write!(
+                    f,
+                    "Error writing to object store: `{message}`. Path: {path:?}"
                 )
             }
             ErrorDetails::InvalidInferenceTarget { message } => {

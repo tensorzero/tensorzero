@@ -648,8 +648,9 @@ async fn write_image(
                 Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => {}
                 Err(e) => {
                     // TODO - what error should this be?
-                    return Err(ErrorDetails::InternalError {
+                    return Err(ErrorDetails::ObjectStoreWrite {
                         message: format!("Failed to write image to object store: {e:?}"),
+                        path: storage_path.clone(),
                     }
                     .into());
                 }
