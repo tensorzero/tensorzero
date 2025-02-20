@@ -25,7 +25,7 @@ export default {
       },
       colors: {
         background: {
-          primary: "hsl(var(--background-primary))",
+          DEFAULT: "hsl(var(--background-primary))",
           secondary: "hsl(var(--background-secondary))",
           tertiary: "hsl(var(--background-tertiary))",
         },

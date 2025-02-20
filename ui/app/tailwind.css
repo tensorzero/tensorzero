@@ -4,7 +4,7 @@
 
 html,
 body {
-  @apply bg-background-primary dark:bg-background-primary;
+  @apply bg-background dark:bg-background;
 
   @media (prefers-color-scheme: dark) {
     color-scheme: dark;
@@ -100,6 +100,6 @@ body {
     @apply border-border;
   }
   body {
-    @apply bg-background-primary text-foreground;
+    @apply bg-background text-foreground;
   }
 }

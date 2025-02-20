@@ -80,7 +80,7 @@ export function ModelSelector({
           <div className="grid gap-x-8 md:grid-cols-2">
             <div className="w-full space-y-2">
               <Popover open={open} onOpenChange={setOpen}>
-                <PopoverTrigger className="border-gray-200 bg-gray-50" asChild>
+                <PopoverTrigger className="border-gray-200" asChild>
                   <Button
                     variant="outline"
                     role="combobox"
