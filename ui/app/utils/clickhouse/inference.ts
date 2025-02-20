@@ -10,7 +10,7 @@ import {
 } from "./common";
 import { data } from "react-router";
 import type { FunctionConfig } from "../config/function";
-import { clickhouseClient } from "./common";
+import { clickhouseClient } from "./client.server";
 
 export const inferenceByIdRowSchema = z
   .object({
