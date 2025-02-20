@@ -77,6 +77,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
     .unwrap()
 }
 
+#[allow(dead_code)]
 pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_path: None,
