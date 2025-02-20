@@ -34,3 +34,14 @@ export const MetricConfigSchema = z.discriminatedUnion("type", [
   }),
 ]);
 export type MetricConfig = z.infer<typeof MetricConfigSchema>;
+
+/**
+ * Returns the appropriate comparison operator based on the optimization direction
+ * @param optimize The optimization direction ("min" or "max")
+ * @returns The comparison operator (">" or "<")
+ */
+export function getComparisonOperator(
+  optimize: MetricConfigOptimize,
+): "<" | ">" {
+  return optimize === "max" ? ">" : "<";
+}

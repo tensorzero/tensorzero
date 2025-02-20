@@ -1,9 +1,10 @@
-import { z } from "zod";
 import { type TableBounds, TableBoundsSchema } from "./common";
 import { data } from "react-router";
-import { clickhouseClient, InferenceJoinKey } from "./common";
+import { InferenceJoinKey } from "./common";
+import { clickhouseClient } from "./client.server";
 import type { MetricConfig } from "~/utils/config/metric";
 import { getInferenceJoinKey } from "~/utils/clickhouse/curation";
+import { z } from "zod";
 
 export const booleanMetricFeedbackRowSchema = z.object({
   type: z.literal("boolean"),
@@ -778,7 +779,10 @@ export async function queryMetricsWithFeedback(params: {
   const inferenceMetrics = Object.entries(metrics)
     .filter(([, metric]) => {
       try {
-        return getInferenceJoinKey(metric) === InferenceJoinKey.ID;
+        return (
+          "level" in metric &&
+          getInferenceJoinKey(metric.level) === InferenceJoinKey.ID
+        );
       } catch {
         return false;
       }
@@ -788,7 +792,10 @@ export async function queryMetricsWithFeedback(params: {
   const episodeMetrics = Object.entries(metrics)
     .filter(([, metric]) => {
       try {
-        return getInferenceJoinKey(metric) === InferenceJoinKey.EPISODE_ID;
+        return (
+          "level" in metric &&
+          getInferenceJoinKey(metric.level) === InferenceJoinKey.EPISODE_ID
+        );
       } catch {
         return false;
       }
