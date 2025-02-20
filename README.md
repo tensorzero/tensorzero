@@ -122,7 +122,7 @@ You can access any provider using the TensorZero Python client.
 from tensorzero import TensorZeroGateway
 
 
-with TensorZeroGateway(...) as client:
+with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
     response = client.inference(
         model_name="openai::gpt-4o-mini",
         input={

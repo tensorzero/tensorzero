@@ -41,7 +41,9 @@ from tensorzero.util import uuid7
 
 @pytest_asyncio.fixture
 async def async_client():
-    async with AsyncTensorZeroGateway("http://localhost:3000") as client:
+    async with await AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000"
+    ) as client:
         yield client
 
 
@@ -654,7 +656,7 @@ async def test_async_dynamic_credentials(async_client):
 
 @pytest.fixture
 def sync_client():
-    with TensorZeroGateway("http://localhost:3000") as client:
+    with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
         yield client
 
 

@@ -1,12 +1,5 @@
-# We define a model and a provider just like in our Quick Start...
-[models.gpt_4o_mini]
-routing = ["openai"]
-
-[models.gpt_4o_mini.providers.openai]
-type = "openai"
-model_name = "gpt-4o-mini"
-
-# ... but this time our function and variant include a schema and a template.
+# We define a function and a variant, just like in our Quick Start...
+# ... but this time we include a schema and a template.
 [functions.generate_haiku_with_topic]
 type = "chat"
 user_schema = "functions/generate_haiku_with_topic/user_schema.json" # relative to tensorzero.toml
@@ -15,7 +8,7 @@ user_schema = "functions/generate_haiku_with_topic/user_schema.json" # relative 
 
 [functions.generate_haiku_with_topic.variants.gpt_4o_mini]
 type = "chat_completion"
-model = "gpt_4o_mini"
+model = "openai::gpt-4o-mini"
 user_template = "functions/generate_haiku_with_topic/gpt_4o_mini/user_template.minijinja" # relative to tensorzero.toml
 # system_template = "..."
 # assistant_template = "..."

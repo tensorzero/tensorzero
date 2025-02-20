@@ -11,11 +11,11 @@ The main classes, TensorZeroGateway and AsyncTensorZeroGateway, offer methods fo
 - Managing the client session using async context managers
 
 Usage:
-    with TensorZeroGateway(base_url) as client:
+    with TensorZeroGateway.build_http(gateway_url="...") as client:
         response = client.inference(...)
         feedback = client.feedback(...)
 
-    async with AsyncTensorZeroGateway(base_url) as client:
+    async with await AsyncTensorZeroGateway.build_http(gateway_url="...") as client:
         response = await client.inference(...)
         feedback = await client.feedback(...)
 
