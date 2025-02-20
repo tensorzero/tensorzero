@@ -414,7 +414,6 @@ impl ErrorDetails {
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            // TODO - what should this error code be?
             ErrorDetails::UnsupportedContentBlockType { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidBatchParams { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
