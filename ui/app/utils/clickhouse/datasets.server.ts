@@ -5,6 +5,7 @@ import {
   DatasetDetailRowSchema,
   DatasetInsertSchema,
   DatasetQueryParamsSchema,
+  DatasetRowSchema,
   type DatasetCountInfo,
   type DatasetDetailRow,
   type DatasetInsert,
@@ -390,12 +391,12 @@ export async function getDatasetRows(
 export async function getDatapoint(
   dataset_name: string,
   id: string,
-): Promise<DatasetDetailRow> {
+): Promise<DatasetRow | null> {
   const chat_query = `
-    SELECT function_name, id, episode_id, input, output, tool_params, tags, auxiliary,  formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM ChatInferenceDataset WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
+    SELECT dataset_name,function_name, id, episode_id, input, output, tool_params, tags, auxiliary,  formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM ChatInferenceDataset WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
   `;
   const json_query = `
-    SELECT function_name, id, episode_id, input, output, output_schema, tags, auxiliary, formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM JsonInferenceDataset WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
+    SELECT dataset_name, function_name, id, episode_id, input, output, output_schema, tags, auxiliary, formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM JsonInferenceDataset WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
   `;
 
   const [chatResult, jsonResult] = await Promise.all([
@@ -416,14 +417,17 @@ export async function getDatapoint(
   ]);
 
   const allResults = [...chatResult, ...jsonResult];
-  if (allResults.length !== 1) {
+  if (allResults.length === 0) {
+    return null;
+  }
+
+  if (allResults.length > 1) {
     throw new Error(
       `Expected exactly one result for dataset ${dataset_name} and id ${id}, but found ${allResults.length}`,
     );
   }
 
-  return DatasetDetailRowSchema.parse({
+  return DatasetRowSchema.parse({
     ...allResults[0],
-    type: "tool_params" in allResults[0] ? "chat" : "json",
   });
 }

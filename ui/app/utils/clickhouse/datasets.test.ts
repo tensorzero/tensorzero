@@ -1,6 +1,7 @@
 import { DatasetQueryParamsSchema, type DatasetDetailRow } from "./datasets";
 import {
   countRowsForDataset,
+  getDatapoint,
   getDatasetCounts,
   getDatasetRows,
 } from "./datasets.server";
@@ -274,7 +275,6 @@ describe("getDatasetRows", () => {
     while (true) {
       const rows = await getDatasetRows("foo", pageSize, offset);
       allRows = [...allRows, ...rows];
-      console.log(`Fetched ${rows.length} rows, total: ${allRows.length}`);
       offset += pageSize;
       if (rows.length !== pageSize) break;
     }
@@ -300,7 +300,6 @@ describe("getDatasetRows", () => {
     while (true) {
       const rows = await getDatasetRows("bar", pageSize, offset);
       allRows = [...allRows, ...rows];
-      console.log(`Fetched ${rows.length} rows, total: ${allRows.length}`);
       offset += pageSize;
       if (rows.length !== pageSize) break;
     }
@@ -319,5 +318,60 @@ describe("getDatasetRows", () => {
     );
     // Verify all rows are json type
     expect(allRows.every((row) => row.type === "json")).toBe(true);
+  });
+});
+
+describe("getDatapoint", () => {
+  test("returns the correct datapoint for a specific dataset (json)", async () => {
+    const datapoint = await getDatapoint(
+      "bar",
+      "01942e26-c48c-7720-b971-a1f7a3a9ac98",
+    );
+    expect(datapoint).toEqual({
+      auxiliary: "",
+      dataset_name: "bar",
+      episode_id: "01942e26-4693-7e80-8591-47b98e25d721",
+      function_name: "ask_question",
+      id: "01942e26-c48c-7720-b971-a1f7a3a9ac98",
+      input:
+        '{"system":{"remaining_questions":18},"messages":[{"role":"user","content":[{"type":"text","value":"Is it a living thing?"}]},{"role":"assistant","content":[{"type":"text","value":"no."}]},{"role":"user","content":[{"type":"text","value":"Is it commonly found indoors?"}]},{"role":"assistant","content":[{"type":"text","value":"no."}]},{"role":"user","content":[{"type":"text","value":"Is it a natural object, like a rock or tree?"}]},{"role":"assistant","content":[{"type":"text","value":"yes."}]}]}',
+      is_deleted: false,
+      output:
+        '{"raw":"{\\n  \\"thinking\\": \\"Since the object is not a living thing and is not commonly found indoors, but is a natural object, it narrows down the possibilities to various elements from nature. It could be a rock, a tree, or potentially something like a mountain or a river. To further narrow it down, I will ask if it is a large object or a small object.\\",\\n  \\"question\\": \\"Is it a large natural object, like a mountain or a tree?\\"\\n}","parsed":{"thinking":"Since the object is not a living thing and is not commonly found indoors, but is a natural object, it narrows down the possibilities to various elements from nature. It could be a rock, a tree, or potentially something like a mountain or a river. To further narrow it down, I will ask if it is a large object or a small object.","question":"Is it a large natural object, like a mountain or a tree?"}}',
+      output_schema:
+        '{"type":"object","properties":{"thinking":{"type":"string"},"question":{"type":"string"}},"required":["thinking","question"],"additionalProperties":false}',
+      tags: {},
+      updated_at: "2025-02-19T00:26:06Z",
+    });
+  });
+
+  test("returns the correct datapoint for a specific dataset (chat)", async () => {
+    const datapoint = await getDatapoint(
+      "foo",
+      "01934fc5-ea98-71f0-8191-9fd88f34c28b",
+    );
+    expect(datapoint).toEqual({
+      auxiliary: "",
+      dataset_name: "foo",
+      episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff9",
+      function_name: "write_haiku",
+      id: "01934fc5-ea98-71f0-8191-9fd88f34c28b",
+      input:
+        '{"messages":[{"role":"user","content":[{"type":"text","value":{"topic":"upward"}}]}]}',
+      is_deleted: false,
+      output:
+        '[{"type":"text","text":"Alright, the theme of \\"upward\\" immediately brings to mind things that ascend or rise. This can be movements, emotions, or natural events.\\n\\nLet\'s craft a haiku:\\n\\nMountains touch the sky,  \\nClouds race past the soaring peaks,  \\nWorld beneath grows small."}]',
+      tags: {},
+      tool_params: "",
+      updated_at: "2025-02-19T00:25:04Z",
+    });
+  });
+
+  test("empty result", async () => {
+    const datapoint = await getDatapoint(
+      "foo",
+      "00000000-0000-0000-0000-000000000000",
+    );
+    expect(datapoint).toEqual(null);
   });
 });
