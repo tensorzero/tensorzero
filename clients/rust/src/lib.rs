@@ -83,7 +83,7 @@ pub struct TensorZeroInternalError(#[from] tensorzero_internal::error::Error);
 #[non_exhaustive]
 pub enum ClientBuilderError {
     #[error(
-        "Missing config - you must call `with_config_path` before calling `build` in EmbeddedGateway mode"
+        "Missing config - you must call `with_config_file` before calling `build` in EmbeddedGateway mode"
     )]
     MissingConfig,
     #[error(
@@ -107,7 +107,7 @@ pub enum ClientBuilderMode {
     /// In EmbeddedGateway mode, we run an embedded gateway using a config file.
     /// We do not launch an HTTP server - we only make outgoing HTTP requests to model providers and to ClickHouse.
     EmbeddedGateway {
-        config_path: Option<PathBuf>,
+        config_file: Option<PathBuf>,
         clickhouse_url: Option<String>,
     },
 }
@@ -135,11 +135,11 @@ impl ClientBuilder {
         match &self.mode {
             ClientBuilderMode::HTTPGateway { .. } => self.build_http(),
             ClientBuilderMode::EmbeddedGateway {
-                config_path,
+                config_file,
                 clickhouse_url,
             } => {
-                let config = if let Some(config_path) = config_path {
-                    Arc::new(Config::load_from_path(config_path).map_err(|e| {
+                let config = if let Some(config_file) = config_file {
+                    Arc::new(Config::load_from_path(config_file).map_err(|e| {
                         ClientBuilderError::ConfigParsing(TensorZeroError::Other {
                             source: e.into(),
                         })
@@ -441,7 +441,7 @@ mod tests {
     async fn test_missing_clickhouse() {
         // This config file requires ClickHouse, so it should fail if no ClickHouse URL is provided
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: Some(PathBuf::from(
+            config_file: Some(PathBuf::from(
                 "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
             )),
             clickhouse_url: None,
@@ -461,7 +461,7 @@ mod tests {
     async fn test_log_no_clickhouse() {
         // Default observability and no ClickHouse URL
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: Some(PathBuf::from(
+            config_file: Some(PathBuf::from(
                 "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
             )),
             clickhouse_url: None,
