@@ -621,7 +621,7 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             request: serde_json::to_value(
-                &SGLangRequest::new("test-model", &generic_request).unwrap(),
+                SGLangRequest::new("test-model", &generic_request).unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,

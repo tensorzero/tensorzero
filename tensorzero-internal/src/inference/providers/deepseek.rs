@@ -948,7 +948,7 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             request: serde_json::to_value(
-                &DeepSeekRequest::new("deepseek-chat", &generic_request).unwrap(),
+                DeepSeekRequest::new("deepseek-chat", &generic_request).unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,

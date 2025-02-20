@@ -898,10 +898,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: serde_json::to_value(
-                &TGIRequest::new("test-model", &generic_request).unwrap(),
-            )
-            .unwrap(),
+            request: serde_json::to_value(TGIRequest::new("test-model", &generic_request).unwrap())
+                .unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =

@@ -585,7 +585,7 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             request: serde_json::to_value(
-                &VLLMRequest::new("test-model", &generic_request).unwrap(),
+                VLLMRequest::new("test-model", &generic_request).unwrap(),
             )
             .unwrap(),
             generic_request: &generic_request,

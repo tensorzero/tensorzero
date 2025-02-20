@@ -613,7 +613,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: serde_json::to_value(&FireworksRequest::new("test-model", &generic_request))
+            request: serde_json::to_value(FireworksRequest::new("test-model", &generic_request))
                 .unwrap(),
             generic_request: &generic_request,
         };
