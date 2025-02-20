@@ -8,19 +8,22 @@ import {
   type TryWithVariantButtonProps,
   TryWithVariantButton,
 } from "./TryWithVariantButton";
+import type { DatasetRow } from "~/utils/clickhouse/datasets";
 interface BasicInfoProps {
-  inference: ParsedInferenceRow;
+  datapoint: DatasetRow;
   tryWithVariantProps: TryWithVariantButtonProps;
 }
 
 export default function BasicInfo({
-  inference,
+  datapoint,
   tryWithVariantProps,
 }: BasicInfoProps) {
   const config = useConfig();
-  const variantType =
-    config.functions[inference.function_name]?.variants[inference.variant_name]
-      ?.type;
+  const function_config = config.functions[datapoint.function_name];
+  const type = function_config?.type;
+  if (!type) {
+    throw new Error(`Function ${datapoint.function_name} not found`);
+  }
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -32,8 +35,8 @@ export default function BasicInfo({
           <div>
             <dt className="text-lg font-semibold">Function</dt>
             <dd>
-              <Link to={`/observability/functions/${inference.function_name}`}>
-                <Code>{inference.function_name}</Code>
+              <Link to={`/observability/functions/${datapoint.function_name}`}>
+                <Code>{datapoint.function_name}</Code>
               </Link>
             </dd>
           </div>

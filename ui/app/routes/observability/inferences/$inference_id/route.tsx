@@ -14,7 +14,7 @@ import Input from "./Input";
 import Output from "./Output";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { ParameterCard } from "./InferenceParameters";
-import { TagsTable } from "./TagsTable";
+import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesAccordion } from "./ModelInferencesAccordion";
 import { TooltipContent } from "~/components/ui/tooltip";
 import { TooltipTrigger } from "~/components/ui/tooltip";

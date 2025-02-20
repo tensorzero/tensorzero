@@ -13,6 +13,7 @@ import BasicInfo from "./BasicInfo";
 import Input from "./Input";
 import Output from "./Output";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
+import { TagsTable } from "~/components/utils/TagsTable";
 import { TooltipContent } from "~/components/ui/tooltip";
 import { TooltipTrigger } from "~/components/ui/tooltip";
 import { Tooltip } from "~/components/ui/tooltip";
@@ -24,84 +25,32 @@ import { useConfig } from "~/context/config";
 // TODO: this
 // import { VariantResponseModal } from "./VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
+import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { inference_id } = params;
-  const url = new URL(request.url);
-  const beforeFeedback = url.searchParams.get("beforeFeedback");
-  const afterFeedback = url.searchParams.get("afterFeedback");
-  const pageSize = Number(url.searchParams.get("pageSize")) || 10;
-  if (pageSize > 100) {
-    throw data("Page size cannot exceed 100", { status: 400 });
-  }
-
-  const [inference, model_inferences, feedback, feedback_bounds] =
-    await Promise.all([
-      queryInferenceById(inference_id),
-      queryModelInferencesByInferenceId(inference_id),
-      queryFeedbackByTargetId({
-        target_id: inference_id,
-        before: beforeFeedback || undefined,
-        after: afterFeedback || undefined,
-        page_size: pageSize,
-      }),
-      queryFeedbackBoundsByTargetId({ target_id: inference_id }),
-    ]);
-  if (!inference) {
-    throw data(`No inference found for id ${inference_id}.`, {
+  const { dataset_name, id } = params;
+  const datapoint = await getDatapoint(dataset_name, id);
+  if (!datapoint) {
+    throw data(`No datapoint found for id ${id}.`, {
       status: 404,
     });
   }
 
   return {
-    inference,
-    model_inferences,
-    feedback,
-    feedback_bounds,
+    datapoint,
   };
 }
 
-export default function DatapointPage({ loaderData }: Route.ComponentProps) {
-  const { inference, model_inferences, feedback, feedback_bounds } = loaderData;
-  const navigate = useNavigate();
+export default function DatapointPage({
+  loaderData,
+}: Route.ComponentProps<typeof loader>) {
+  const { datapoint } = loaderData;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [variantInferenceIsLoading, setVariantInferenceIsLoading] =
     useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
-
-  const topFeedback = feedback[0] as { id: string } | undefined;
-  const bottomFeedback = feedback[feedback.length - 1] as
-    | { id: string }
-    | undefined;
-
-  const handleNextFeedbackPage = () => {
-    if (!bottomFeedback?.id) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("afterFeedback");
-    searchParams.set("beforeFeedback", bottomFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const handlePreviousFeedbackPage = () => {
-    if (!topFeedback?.id) return;
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.delete("beforeFeedback");
-    searchParams.set("afterFeedback", topFeedback.id);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  // These are swapped because the table is sorted in descending order
-  const disablePreviousFeedbackPage =
-    !topFeedback?.id ||
-    !feedback_bounds.last_id ||
-    feedback_bounds.last_id === topFeedback.id;
-
-  const disableNextFeedbackPage =
-    !bottomFeedback?.id ||
-    !feedback_bounds.first_id ||
-    feedback_bounds.first_id === bottomFeedback.id;
-
-  const num_feedbacks = feedback.length;
+  const config = useConfig();
+  const variants = config.functions[datapoint.function_name].variants;
 
   const onVariantSelect = (variant: string) => {
     setSelectedVariant(variant);
@@ -113,29 +62,25 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setSelectedVariant(null);
     setVariantInferenceIsLoading(false);
   };
-  const config = useConfig();
-  const variants = Object.keys(
-    config.functions[inference.function_name]?.variants || {},
-  );
 
   return (
     <div className="container mx-auto space-y-6 p-4">
       <h2 className="mb-4 text-2xl font-semibold">
-        Inference{" "}
-        <code className="rounded bg-gray-100 p-1 text-2xl">{inference.id}</code>
+        Datapoint{" "}
+        <code className="rounded bg-gray-100 p-1 text-2xl">{datapoint.id}</code>
       </h2>
       <div className="mb-6 h-px w-full bg-gray-200"></div>
 
       <BasicInfo
-        inference={inference}
+        datapoint={datapoint}
         tryWithVariantProps={{
           variants,
           onVariantSelect,
           isLoading: variantInferenceIsLoading,
         }}
       />
-      <Input input={inference.input} />
-      <Output output={inference.output} />
+      <Input input={datapoint.input} />
+      <Output output={datapoint.output} />
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl">
@@ -169,22 +114,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           />
         </CardContent>
       </Card>
-      <ParameterCard
-        title="Inference Parameters"
-        parameters={inference.inference_params}
-      />
-      {inference.function_type === "chat" && (
-        <ParameterCard
-          title="Tool Parameters"
-          parameters={inference.tool_params}
-        />
-      )}
-      {inference.function_type === "json" && (
-        <ParameterCard
-          title="Output Schema"
-          parameters={inference.output_schema}
-        />
-      )}
+
       {Object.keys(inference.tags).length > 0 && (
         <TagsTable tags={inference.tags} />
       )}
