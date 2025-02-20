@@ -65,12 +65,21 @@ pub async fn make_http_gateway() -> tensorzero::Client {
     .unwrap()
 }
 
-#[cfg(feature = "e2e_tests")]
 pub async fn make_embedded_gateway() -> tensorzero::Client {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_path: Some(config_path),
+        clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
+pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
+    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+        config_path: None,
         clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
     })
     .build()
@@ -415,7 +424,7 @@ macro_rules! generate_provider_tests {
 }
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
-static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
+pub static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_image_inference_with_provider(provider: E2ETestProvider) {

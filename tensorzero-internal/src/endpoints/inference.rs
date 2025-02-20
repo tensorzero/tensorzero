@@ -148,6 +148,15 @@ pub enum InferenceOutput {
     Streaming(InferenceStream),
 }
 
+impl std::fmt::Debug for InferenceOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InferenceOutput::NonStreaming(response) => write!(f, "NonStreaming({:?})", response),
+            InferenceOutput::Streaming(_) => write!(f, "Streaming"),
+        }
+    }
+}
+
 const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 
 #[derive(Copy, Clone, Debug)]
