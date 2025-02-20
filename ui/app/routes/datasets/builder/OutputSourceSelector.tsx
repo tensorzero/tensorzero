@@ -44,15 +44,15 @@ export default function OutputSourceSelector({
           <FormLabel>Outputs to be used in dataset</FormLabel>
           <div className="mt-2 grid gap-x-8 gap-y-2">
             <RadioGroup onValueChange={field.onChange} value={field.value}>
-              <div className="flex items-center space-x-2">
+              <div className="flex h-5 items-center space-x-2">
                 <RadioGroupItem value="none" id="none" />
                 <FormLabel htmlFor="none">None</FormLabel>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex h-5 items-center space-x-2">
                 <RadioGroupItem value="inference" id="inference" />
                 <FormLabel htmlFor="inference">Inference</FormLabel>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex h-5 items-center space-x-2">
                 <RadioGroupItem
                   value="demonstration"
                   id="demonstration"

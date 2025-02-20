@@ -40,10 +40,7 @@ export async function action({ request }: ActionFunctionArgs) {
     return redirect(`/datasets/${queryParams.dataset_name}`);
   } catch (error) {
     console.error("Error creating dataset:", error);
-    return data(
-      { errors: { message: "Error creating dataset" } },
-      { status: 500 },
-    );
+    return data({ errors: { message: `${error}` } }, { status: 500 });
   }
 }
 
