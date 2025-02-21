@@ -186,14 +186,7 @@ pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
             }
             "openai::text-embedding-3-small" | "text-embedding-3-small" => {
                 // The embedding call should not generate any output tokens
-                assert_eq!(
-                    model_inference
-                        .get("output_tokens")
-                        .unwrap()
-                        .as_u64()
-                        .unwrap(),
-                    0
-                );
+                assert!(model_inference.get("output_tokens").unwrap().is_null());
             }
             _ => {
                 panic!("Unexpected model: {}", model_name);
@@ -573,14 +566,7 @@ pub async fn test_dicl_inference_request() {
             }
             "text-embedding-3-small" => {
                 // The embedding call should not generate any output tokens
-                assert_eq!(
-                    model_inference
-                        .get("output_tokens")
-                        .unwrap()
-                        .as_u64()
-                        .unwrap(),
-                    0
-                );
+                assert!(model_inference.get("output_tokens").unwrap().is_null());
                 assert!(model_inference.get("system").unwrap().is_null());
                 assert_eq!(input_messages.len(), 1);
                 assert_eq!(output.len(), 0);
@@ -823,14 +809,7 @@ pub async fn test_dicl_inference_request() {
             }
             "text-embedding-3-small" => {
                 // The embedding call should not generate any output tokens
-                assert_eq!(
-                    model_inference
-                        .get("output_tokens")
-                        .unwrap()
-                        .as_u64()
-                        .unwrap(),
-                    0
-                );
+                assert!(model_inference.get("output_tokens").unwrap().is_null());
                 assert!(model_inference.get("system").unwrap().is_null());
                 assert_eq!(input_messages.len(), 1);
                 assert_eq!(output.len(), 0);
@@ -1154,14 +1133,7 @@ async fn test_dicl_json_request() {
             }
             "text-embedding-3-small" => {
                 // The embedding call should not generate any output tokens
-                assert_eq!(
-                    model_inference
-                        .get("output_tokens")
-                        .unwrap()
-                        .as_u64()
-                        .unwrap(),
-                    0
-                );
+                assert!(model_inference.get("output_tokens").unwrap().is_null());
                 assert!(model_inference.get("system").unwrap().is_null());
                 assert_eq!(input_messages.len(), 1);
                 assert_eq!(output.len(), 0);
