@@ -50,7 +50,7 @@ fn default_timeout() -> f64 {
 #[serde(deny_unknown_fields)]
 pub struct EvaluatorConfig {
     #[serde(flatten)]
-    inner: ChatCompletionConfig,
+    pub inner: ChatCompletionConfig,
 }
 
 lazy_static! {
