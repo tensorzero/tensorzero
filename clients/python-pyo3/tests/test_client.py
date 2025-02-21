@@ -1709,3 +1709,9 @@ def test_sync_timeout():
                 variant_name="slow",
                 input={"messages": [{"role": "user", "content": "Hello"}]},
             )
+
+
+def test_uuid7_import():
+    from tensorzero.util import uuid7
+
+    assert uuid7() is not None

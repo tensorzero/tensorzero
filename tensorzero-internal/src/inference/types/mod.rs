@@ -474,8 +474,8 @@ pub struct ModelInferenceDatabaseInsert {
     pub system: Option<String>,
     pub input_messages: String,
     pub output: String,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: Option<u32>,
+    pub output_tokens: Option<u32>,
     pub response_time_ms: Option<u32>,
     pub model_name: String,
     pub model_provider_name: String,
@@ -666,6 +666,22 @@ impl ModelInferenceDatabaseInsert {
         };
         let serialized_input_messages = serialize_or_log(&result.input_messages);
         let serialized_output = serialize_or_log(&result.output);
+
+        // A usage of 0 indicates that something went wrong, since a model
+        // should always consume and produce at least one token.
+        // We store this as `null` in ClickHouse, so that we can easily filter
+        // out these values from aggregation queries.
+        let input_tokens = if result.usage.input_tokens > 0 {
+            Some(result.usage.input_tokens)
+        } else {
+            None
+        };
+        let output_tokens = if result.usage.output_tokens > 0 {
+            Some(result.usage.output_tokens)
+        } else {
+            None
+        };
+
         Self {
             id: Uuid::now_v7(),
             inference_id,
@@ -674,8 +690,8 @@ impl ModelInferenceDatabaseInsert {
             system: result.system,
             input_messages: serialized_input_messages,
             output: serialized_output,
-            input_tokens: result.usage.input_tokens,
-            output_tokens: result.usage.output_tokens,
+            input_tokens,
+            output_tokens,
             response_time_ms: latency_ms,
             ttft_ms,
             model_provider_name: result.model_provider_name.to_string(),

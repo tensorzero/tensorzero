@@ -46,7 +46,7 @@ fn default_timeout() -> f64 {
 #[serde(deny_unknown_fields)]
 pub struct FuserConfig {
     #[serde(flatten)]
-    inner: ChatCompletionConfig,
+    pub inner: ChatCompletionConfig,
 }
 
 impl Variant for MixtureOfNConfig {

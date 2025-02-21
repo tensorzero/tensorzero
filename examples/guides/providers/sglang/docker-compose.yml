@@ -1,0 +1,15 @@
+# This is a simplified example for learning purposes. Do not use this in production.
+# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+
+services:
+  gateway:
+    image: tensorzero/gateway
+    volumes:
+      - ./config:/app/config:ro
+    # environment:
+    #   - SGLANG_API_KEY=${SGLANG_API_KEY:?Environment variable SGLANG_API_KEY must be set.}
+    ports:
+      - "3000:3000"
+    # The following entry is needed if SGLang runs on the host machine. If it runs on a separate server, you can remove it.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
