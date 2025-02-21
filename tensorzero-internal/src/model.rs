@@ -1279,6 +1279,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let model_name = "test model";
         let response = model_config
@@ -1365,6 +1366,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let model_config = ModelConfig {
@@ -1423,6 +1425,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         // Test good model
@@ -1556,6 +1559,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         // Test fallback
@@ -1663,6 +1667,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let model_name = "test model";
         let error = model_config
@@ -1759,6 +1764,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let error = model_config
             .infer(&request, &clients, model_name)

@@ -370,6 +370,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let model_provider_request = ModelProviderRequest {
             request: &model_inference_request,
@@ -392,6 +393,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let model_provider_request = ModelProviderRequest {
             request: &model_inference_request,
@@ -416,6 +418,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let model_provider_request = ModelProviderRequest {
             request: &streaming_model_inference_request,

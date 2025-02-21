@@ -21,6 +21,7 @@ use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 
+use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, prepare_openai_messages, prepare_openai_tools, OpenAIRequestMessage, OpenAITool,
     OpenAIToolChoice, OpenAIToolType, StreamOptions,
@@ -124,7 +125,13 @@ impl InferenceProvider for TGIProvider {
     ) -> Result<ProviderInferenceResponse, Error> {
         // TGI doesn't care about this field, so we can hardcode it to "tgi"
         let model_name = PROVIDER_TYPE.to_string();
-        let request_body = TGIRequest::new(&model_name, request)?;
+        let mut request_body = serde_json::to_value(TGIRequest::new(&model_name, request)?)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing TGI request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -203,9 +210,15 @@ impl InferenceProvider for TGIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let model_name = PROVIDER_NAME.to_lowercase().clone();
-        let request_body = TGIRequest::new(&model_name, request)?;
+        let mut request_body = serde_json::to_value(TGIRequest::new(&model_name, request)?)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing TGI request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         // TGI integration does not support tools in streaming mode
-        if request_body.tools.is_some() {
+        if request_body.get("tools").is_some() {
             return Err(ErrorDetails::InvalidTool {
                 message: "TGI does not support tools in streaming mode".to_string(),
             }
@@ -404,7 +417,7 @@ struct TGIResponseWithMetadata<'a> {
     response: TGIResponse,
     latency: Latency,
     raw_response: String,
-    request: TGIRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -689,6 +702,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let tgi_request = TGIRequest::new(&model_name, &basic_request).unwrap();
 
@@ -724,6 +738,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let tgi_request = TGIRequest::new(&model_name, &request_with_tools).unwrap();
@@ -770,6 +785,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let tgi_request = TGIRequest::new(&model_name, &request_with_tools).unwrap();
@@ -804,6 +820,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
+            extra_body: None,
         };
 
         let tgi_request = TGIRequest::new(&model_name, &request_with_tools).unwrap();
@@ -873,6 +890,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let tgi_response_with_metadata = TGIResponseWithMetadata {
             response: valid_response,
@@ -880,7 +898,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: TGIRequest::new("test-model", &generic_request).unwrap(),
+            request: serde_json::to_value(TGIRequest::new("test-model", &generic_request).unwrap())
+                .unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =

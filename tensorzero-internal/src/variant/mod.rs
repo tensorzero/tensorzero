@@ -1,5 +1,6 @@
 use backon::ExponentialBuilder;
 use backon::Retryable;
+use chat_completion::ExtraBodyConfig;
 use futures::StreamExt;
 use itertools::izip;
 use serde::Deserialize;
@@ -388,6 +389,7 @@ impl Variant for VariantConfig {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn prepare_model_inference_request<'a, 'request>(
     messages: Vec<RequestMessage>,
     system: Option<String>,
@@ -396,6 +398,7 @@ fn prepare_model_inference_request<'a, 'request>(
     stream: bool,
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
+    extra_body: Option<&'request ExtraBodyConfig>,
 ) -> Result<ModelInferenceRequest<'request>, Error>
 where
     'a: 'request,
@@ -424,6 +427,7 @@ where
                 json_mode: json_mode.unwrap_or(JsonMode::Off).into(),
                 function_type: FunctionType::Chat,
                 output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
+                extra_body,
             }
         }
         FunctionConfig::Json(json_config) => {
@@ -457,6 +461,7 @@ where
                 json_mode: json_mode.unwrap_or(JsonMode::Strict).into(),
                 function_type: FunctionType::Json,
                 output_schema,
+                extra_body,
             }
         }
     })
@@ -683,6 +688,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            None,
         )
         .unwrap();
 
@@ -730,6 +736,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            None,
         )
         .unwrap();
 
@@ -774,6 +781,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            None,
         )
         .unwrap();
 
@@ -796,6 +804,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            None,
         )
         .unwrap();
 
@@ -814,6 +823,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            None,
         )
         .unwrap();
 
@@ -883,6 +893,7 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
+            extra_body: None,
         };
 
         // Create a dummy provider config with the desired model name
@@ -979,6 +990,7 @@ mod tests {
             output_schema: Some(&output_schema),
             tool_config: None,
             function_type: FunctionType::Json,
+            extra_body: None,
         };
 
         // Create a dummy provider config with model_name "json" to trigger JSON response
@@ -1124,6 +1136,7 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
+            extra_body: None,
         };
 
         // Create a dummy provider config with the error model name
@@ -1250,6 +1263,7 @@ mod tests {
             seed: None,
             tool_config: None,
             function_type: FunctionType::Chat,
+            extra_body: None,
         };
 
         // Initialize inference parameters
@@ -1369,6 +1383,7 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
+            extra_body: None,
         };
 
         // Create a dummy provider config with the error model name

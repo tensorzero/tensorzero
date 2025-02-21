@@ -24,6 +24,7 @@ use crate::{
 };
 
 use super::{
+    helpers::inject_extra_body,
     openai::{
         get_chat_url, tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage,
         OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
@@ -126,7 +127,13 @@ impl InferenceProvider for MistralProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = MistralRequest::new(&self.model_name, request)?;
+        let mut request_body =
+            serde_json::to_value(MistralRequest::new(&self.model_name, request)?).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing Mistral request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let request_url = get_chat_url(&MISTRAL_API_BASE)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -197,7 +204,13 @@ impl InferenceProvider for MistralProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = MistralRequest::new(&self.model_name, request)?;
+        let mut request_body =
+            serde_json::to_value(MistralRequest::new(&self.model_name, request)?).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing Mistral request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -545,7 +558,7 @@ struct MistralResponseWithMetadata<'a> {
     response: MistralResponse,
     raw_response: String,
     latency: Latency,
-    request: MistralRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -729,6 +742,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let mistral_request =
@@ -787,6 +801,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let request_body = MistralRequest {
@@ -795,9 +810,9 @@ mod tests {
             temperature: Some(0.5),
             max_tokens: Some(100),
             random_seed: Some(69),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.1),
+            top_p: Some(0.5),
+            presence_penalty: Some(0.5),
+            frequency_penalty: Some(0.5),
             stream: false,
             response_format: Some(MistralResponseFormat::JsonObject),
             tools: None,
@@ -810,7 +825,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -878,6 +893,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let request_body = MistralRequest {
             messages: vec![],
@@ -885,9 +901,9 @@ mod tests {
             temperature: Some(0.5),
             max_tokens: Some(100),
             random_seed: Some(69),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.1),
+            top_p: Some(0.5),
+            presence_penalty: Some(0.5),
+            frequency_penalty: Some(0.5),
             stream: false,
             response_format: Some(MistralResponseFormat::JsonObject),
             tools: None,
@@ -899,7 +915,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
             },
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -959,7 +975,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
             },
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -1008,7 +1024,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),
             },
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });

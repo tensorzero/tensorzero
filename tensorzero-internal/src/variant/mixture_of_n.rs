@@ -486,6 +486,7 @@ impl FuserConfig {
             false,
             inference_params,
             self.inner.json_mode,
+            self.inner.extra_body.as_ref(),
         )?;
         Ok((model_inference_request, included_indices))
     }

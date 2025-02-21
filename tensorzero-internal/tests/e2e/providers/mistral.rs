@@ -19,6 +19,14 @@ async fn get_providers() -> E2ETestProviders {
         model_provider_name: "mistral".into(),
         credentials: HashMap::new(),
     }];
+
+    let extra_body_providers = vec![E2ETestProvider {
+        variant_name: "mistral-extra-body".to_string(),
+        model_name: "open-mistral-nemo-2407".into(),
+        model_provider_name: "mistral".into(),
+        credentials: HashMap::new(),
+    }];
+
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "mistral".to_string(),
@@ -51,6 +59,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: providers.clone(),
+        extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
         tool_use_inference: providers.clone(),
