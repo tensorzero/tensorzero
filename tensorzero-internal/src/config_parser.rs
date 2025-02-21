@@ -162,7 +162,7 @@ impl<'c> Config<'c> {
         let functions = config
             .functions
             .into_iter()
-            .map(|(name, config)| config.load(&base_path).map(|c| (name, Arc::new(c))))
+            .map(|(name, config)| config.load(&name, &base_path).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
 
         let tools = config
@@ -438,7 +438,11 @@ struct UninitializedFunctionConfigJson {
 }
 
 impl UninitializedFunctionConfig {
-    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<FunctionConfig, Error> {
+    pub fn load<P: AsRef<Path>>(
+        self,
+        function_name: &str,
+        base_path: P,
+    ) -> Result<FunctionConfig, Error> {
         match self {
             UninitializedFunctionConfig::Chat(params) => {
                 let system_schema = params
@@ -510,6 +514,35 @@ impl UninitializedFunctionConfig {
                     .into_iter()
                     .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
+
+                for (name, variant) in variants.iter() {
+                    let mut warn_variant = None;
+                    match variant {
+                        VariantConfig::ChatCompletion(chat_config) => {
+                            if chat_config.json_mode.is_none() {
+                                warn_variant = Some(name.clone());
+                            }
+                        }
+                        VariantConfig::BestOfNSampling(best_of_n_config) => {
+                            if best_of_n_config.evaluator.inner.json_mode.is_none() {
+                                warn_variant = Some(format!("{name}.evaluator"));
+                            }
+                        }
+                        VariantConfig::MixtureOfN(mixture_of_n_config) => {
+                            if mixture_of_n_config.fuser.inner.json_mode.is_none() {
+                                warn_variant = Some(format!("{name}.fuser"));
+                            }
+                        }
+                        VariantConfig::Dicl(best_of_n_config) => {
+                            if best_of_n_config.json_mode.is_none() {
+                                warn_variant = Some(name.clone());
+                            }
+                        }
+                    }
+                    if let Some(warn_variant) = warn_variant {
+                        tracing::warn!("Deprecation Warning: `json_mode` is not specified for `[functions.{function_name}.variants.{warn_variant}]` (parent function `{function_name}` is a JSON function), defaulting to `strict`. This field will become required in a future release - see https://github.com/tensorzero/tensorzero/issues/1043 on GitHub for details.");
+                    }
+                }
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     system_schema,
@@ -1969,5 +2002,64 @@ mod tests {
             err.contains("Config file not found"),
             "Unexpected error message: {err}"
         );
+    }
+
+    #[traced_test]
+    #[test]
+    fn test_deprecated_missing_json_mode() {
+        let config_str = r#"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+        [functions.basic_test]
+        type = "json"
+
+        [functions.basic_test.variants.good_variant]
+        type = "chat_completion"
+        model = "my-model"
+        json_mode = "off"
+
+        [functions.basic_test.variants.test]
+        type = "chat_completion"
+        model = "my-model"
+
+        [functions.basic_test.variants.dicl]
+        type = "experimental_dynamic_in_context_learning"
+        model = "my-model"
+        embedding_model = "openai::text-embedding-3-small"
+        k = 3
+        max_tokens = 100
+
+        [functions.basic_test.variants.mixture_of_n_variant]
+        type = "experimental_mixture_of_n"
+        candidates = ["test"]
+
+        [functions.basic_test.variants.mixture_of_n_variant.fuser]
+        model = "my-model"
+
+        [functions.basic_test.variants.best_of_n_variant]
+        type = "experimental_best_of_n_sampling"
+        candidates = ["test"]
+
+        [functions.basic_test.variants.best_of_n_variant.evaluator]
+        model = "my-model"
+
+        [models."my-model"]
+        routing = ["openai"]
+
+        [models.my-model.providers.openai]
+        type = "openai"
+        model_name = "gpt-4o-mini-2024-07-18"
+        "#;
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        Config::load_from_toml(config, base_path.clone()).expect("Failed to construct config");
+
+        assert!(!logs_contain("good_variant"));
+        assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.test]`"));
+        assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.dicl]`"));
+        assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.mixture_of_n_variant.fuser]`"));
+        assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.best_of_n_variant.evaluator]`"));
     }
 }

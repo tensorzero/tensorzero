@@ -247,7 +247,7 @@ soupsieve==2.6
     # via beautifulsoup4
 stack-data==0.6.3
     # via ipython
-tensorzero==2025.2.4
+tensorzero==2025.2.5
     # via -r requirements.in
 terminado==0.18.1
     # via
