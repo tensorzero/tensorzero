@@ -77,6 +77,17 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
     .unwrap()
 }
 
+#[allow(dead_code)]
+pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
+    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+        config_file: None,
+        clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
 // We use a multi-threaded runtime so that the embedded gateway can use 'block_on'.
 // For consistency, we also use a multi-threaded runtime for the http gateway test.
 #[cfg(feature = "e2e_tests")]
