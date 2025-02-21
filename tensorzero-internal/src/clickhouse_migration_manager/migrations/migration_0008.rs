@@ -3,6 +3,7 @@ use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 
 use super::{check_column_exists, check_table_exists, get_column_type};
+use async_trait::async_trait;
 
 /// This migration continues setting up the ClickHouse database for batch inference.
 ///
@@ -16,6 +17,7 @@ pub struct Migration0008<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
+#[async_trait]
 impl Migration for Migration0008<'_> {
     /// Check if you can connect to the database
     /// Also check that the tables that need altering already exist

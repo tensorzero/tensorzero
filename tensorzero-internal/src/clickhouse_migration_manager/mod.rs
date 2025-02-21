@@ -17,6 +17,8 @@ use migrations::migration_0011::Migration0011;
 use migrations::migration_0013::Migration0013;
 use migrations::migration_0014::Migration0014;
 
+use async_trait::async_trait;
+
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     // This is a no-op if the database already exists
     clickhouse.create_database().await?;
@@ -157,6 +159,7 @@ mod tests {
         }
     }
 
+    #[async_trait]
     impl Migration for MockMigration {
         async fn can_apply(&self) -> Result<(), Error> {
             self.called_can_apply

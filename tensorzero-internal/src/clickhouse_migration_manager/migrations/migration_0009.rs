@@ -5,6 +5,7 @@ use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 
 use super::check_table_exists;
+use async_trait::async_trait;
 
 /// This migration allows us to efficiently query feedback tables by their target IDs.
 pub struct Migration0009<'a> {
@@ -12,6 +13,7 @@ pub struct Migration0009<'a> {
     pub clean_start: bool,
 }
 
+#[async_trait]
 impl Migration for Migration0009<'_> {
     /// Check if you can connect to the database
     /// Then check if the four feedback tables exist
