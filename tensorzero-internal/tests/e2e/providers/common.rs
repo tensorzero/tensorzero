@@ -479,7 +479,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
 
         [functions]
         "#,
-            temp_dir.path().to_string_lossy().to_string()
+            temp_dir.path().to_string_lossy()
         ),
     )
     .await;
@@ -762,7 +762,7 @@ pub async fn check_simple_image_inference_response(
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
 
-    let kind_json = serde_json::to_value(&kind).unwrap();
+    let kind_json = serde_json::to_value(kind).unwrap();
 
     let correct_input = json!({
         "messages": [
