@@ -92,3 +92,4 @@ tracing-test = { workspace = true}
 tensorzero = { path = "../clients/rust"}
 paste = "1.0.15"
 base64 = "0.22.1"
+aws-sdk-s3 = "1.76.0"

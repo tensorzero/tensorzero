@@ -17,7 +17,8 @@ use tensorzero::{
 use tensorzero_internal::{
     cache::CacheEnabledMode,
     inference::types::{
-        ContentBlock, ContentBlockChatOutput, Image, ImageKind, RequestMessage, Role,
+        storage::StorageKind, ContentBlock, ContentBlockChatOutput, Image, ImageKind,
+        RequestMessage, Role,
     },
     tool::{ToolCall, ToolResult},
 };
@@ -141,7 +142,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_inference_params_streaming_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
-        use $crate::providers::common::test_image_inference_with_provider;
+        use $crate::providers::common::test_image_inference_with_provider_filesystem;
+        use $crate::providers::common::test_image_inference_with_provider_s3_compatible;
         use $crate::providers::common::test_dynamic_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_parallel_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_parallel_tool_use_streaming_inference_request_with_provider;
@@ -436,10 +438,19 @@ macro_rules! generate_provider_tests {
 
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
-        async fn test_image_inference() {
+        async fn test_image_inference_store_filesystem() {
             let providers = $func().await.image_inference;
             for provider in providers {
-                test_image_inference_with_provider(provider).await;
+                test_image_inference_with_provider_filesystem(provider).await;
+            }
+        }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
+        async fn test_image_inference_store_s3_compatible() {
+            let providers = $func().await.image_inference;
+            for provider in providers {
+                test_image_inference_with_provider_s3_compatible(provider).await;
             }
         }
     };
@@ -449,7 +460,46 @@ macro_rules! generate_provider_tests {
 pub static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
-pub async fn test_image_inference_with_provider(provider: E2ETestProvider) {
+pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
+    test_image_inference_with_provider_and_store(
+        provider,
+        StorageKind::Filesystem {
+            path: "/tmp/tensorzero-test-images".to_string(),
+        },
+    )
+    .await;
+}
+
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestProvider) {
+    let config = aws_config::load_from_env().await;
+    let client = aws_sdk_s3::Client::new(&config);
+
+    let test_bucket = "tensorzero-e2e-test-images";
+
+    let expected_key = "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png";
+    client.delete_object()
+    .key(expected_key)
+    .bucket(test_bucket)
+    .send()
+    .await
+    .unwrap();
+
+
+    test_image_inference_with_provider_and_store(
+        provider,
+        StorageKind::S3 {
+            bucket_name: "tensorzero-test-images".to_string(),
+            region: "us-east-1".to_string(),
+        },
+    );;
+}
+
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+pub async fn test_image_inference_with_provider_and_store(
+    provider: E2ETestProvider,
+    kind: StorageKind,
+) {
     let episode_id = Uuid::now_v7();
 
     let image_data = BASE64_STANDARD.encode(FERRIS_PNG);

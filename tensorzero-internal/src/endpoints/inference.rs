@@ -645,13 +645,10 @@ async fn write_image(
         if let Some(store) = object_store.object_store.as_ref() {
             let data = raw.data()?;
             let bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
-                Error::new(
-                    ErrorDetails::ObjectStoreWrite {
-                        message: format!("Failed to decode image as base64: {e:?}"),
-                        path: storage_path.clone(),
-                    }
-                    .into(),
-                )
+                Error::new(ErrorDetails::ObjectStoreWrite {
+                    message: format!("Failed to decode image as base64: {e:?}"),
+                    path: storage_path.clone(),
+                })
             })?;
             let res = store
                 .put_opts(
