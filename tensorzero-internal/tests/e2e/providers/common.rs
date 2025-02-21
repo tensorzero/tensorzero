@@ -492,7 +492,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestP
             bucket_name: "tensorzero-test-images".to_string(),
             region: "us-east-1".to_string(),
         },
-    );;
+    ).await;
 }
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
