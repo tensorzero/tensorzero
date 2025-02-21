@@ -270,7 +270,7 @@ pub async fn inference(
         models: &config.models,
         embedding_models: &config.embedding_models,
     };
-    let stripped_input = params
+    let resolved_input = params
         .input
         .resolve(&FetchContext {
             client: http_client,
@@ -292,7 +292,7 @@ pub async fn inference(
         if stream {
             let result = variant
                 .infer_stream(
-                    &stripped_input,
+                    &resolved_input,
                     &inference_models,
                     function.as_ref(),
                     &inference_config,
@@ -322,7 +322,7 @@ pub async fn inference(
                 variant_name: variant_name.to_string(),
                 inference_id,
                 episode_id,
-                input: stripped_input.clone(),
+                input: resolved_input.clone(),
                 dryrun,
                 start_time,
                 inference_params: model_used_info.inference_params,
@@ -350,7 +350,7 @@ pub async fn inference(
         } else {
             let result = variant
                 .infer(
-                    &stripped_input,
+                    &resolved_input,
                     &inference_models,
                     function.as_ref(),
                     &inference_config,
@@ -390,7 +390,7 @@ pub async fn inference(
                     write_inference(
                         &clickhouse_connection_info,
                         &config.gateway.object_store_data,
-                        stripped_input,
+                        resolved_input,
                         result_to_write,
                         write_metadata,
                     )
