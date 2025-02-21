@@ -463,7 +463,7 @@ pub static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
-    eprintln!("Temp dir: {}", temp_dir.path().to_string_lossy());
+    println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
     test_image_inference_with_provider_and_store(
         provider,
         StorageKind::Filesystem {
@@ -537,7 +537,6 @@ pub async fn test_image_inference_with_provider_and_store(
     kind: StorageKind,
 ) {
     let kind_toml = toml::to_string(&kind).unwrap();
-    eprintln!("Toml: {kind_toml}");
     let episode_id = Uuid::now_v7();
 
     let image_data = BASE64_STANDARD.encode(FERRIS_PNG);
