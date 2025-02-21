@@ -489,7 +489,8 @@ pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
             .get("temperature")
     } else if provider
         .variant_name
-        .contains("google-ai-studio-gemini-flash-8b")
+        .contains("google-ai-studio-gemini-flash-8b") ||
+        provider.variant_name.contains("gcp-vertex-gemini-flash")
     {
         raw_request_val
             .get("generationConfig")

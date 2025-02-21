@@ -608,7 +608,8 @@ type = "chat_completion"
 model = "gemini-1.5-flash-001"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
-extra_body = { temperature = 0.123 }
+extra_body = { generationConfig = { temperature = 0.123 } }
+
 [functions.basic_test.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
 model = "gemini-1.5-pro-001"
