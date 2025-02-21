@@ -21,7 +21,7 @@ with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
     print(inference_result)
 
 
-with TensorZeroGateway("http://localhost:3000") as client:
+with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
     feedback_result = client.feedback(
         metric_name="email_draft_accepted",
         # Set the inference_id from the inference response
