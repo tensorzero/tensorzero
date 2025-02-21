@@ -34,7 +34,7 @@ from tensorzero import AsyncTensorZeroGateway
 
 
 async def run(topic):
-    async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
+    async with AsyncTensorZeroGateway("http://localhost:3000") as client:
         result = await client.inference(
             function_name="generate_haiku",
             input={
@@ -60,7 +60,7 @@ from tensorzero import AsyncTensorZeroGateway
 
 
 async def run(topic):
-    async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
+    async with AsyncTensorZeroGateway("http://localhost:3000") as client:
         stream = await client.inference(
             function_name="generate_haiku",
             input={
@@ -89,7 +89,7 @@ from tensorzero import AsyncTensorZeroGateway
 
 
 async def run(inference_id):
-    async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
+    async with AsyncTensorZeroGateway("http://localhost:3000") as client:
         result = await client.feedback(
             metric_name="thumbs_up",
             inference_id=inference_id,
