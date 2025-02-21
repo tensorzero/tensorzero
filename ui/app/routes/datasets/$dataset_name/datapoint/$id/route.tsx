@@ -26,6 +26,7 @@ import { useConfig } from "~/context/config";
 // import { VariantResponseModal } from "./VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
+import { VariantResponseModal } from "~/routes/observability/inferences/$inference_id/VariantResponseModal";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name, id } = params;
@@ -81,45 +82,6 @@ export default function DatapointPage({
       />
       <Input input={datapoint.input} />
       <Output output={datapoint.output} />
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-xl">
-            Feedback
-            <TooltipProvider>
-              <Tooltip delayDuration={0}>
-                <TooltipTrigger asChild>
-                  <Badge variant="outline" className="px-2 py-0.5 text-xs">
-                    inference
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs">
-                    This table only includes inference-level feedback. To see
-                    episode-level feedback, open the detail page for that
-                    episode.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <Badge variant="secondary">Count: {num_feedbacks}</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <FeedbackTable feedback={feedback} />
-          <PageButtons
-            onNextPage={handleNextFeedbackPage}
-            onPreviousPage={handlePreviousFeedbackPage}
-            disableNext={disableNextFeedbackPage}
-            disablePrevious={disablePreviousFeedbackPage}
-          />
-        </CardContent>
-      </Card>
-
-      {Object.keys(inference.tags).length > 0 && (
-        <TagsTable tags={inference.tags} />
-      )}
-      <ModelInferencesAccordion modelInferences={model_inferences} />
-
       {selectedVariant && (
         <VariantResponseModal
           isOpen={isModalOpen}

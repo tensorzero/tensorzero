@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  contentBlockOutputSchema,
+  inputSchema,
+  jsonInferenceOutputSchema,
+} from "./common";
 
 /**
  * Schema representing a fully-qualified row in the Chat Inference dataset.
@@ -52,6 +57,44 @@ export const DatasetRowSchema = z.union([
   JsonInferenceDatasetRowSchema,
 ]);
 export type DatasetRow = z.infer<typeof DatasetRowSchema>;
+
+export const ParsedChatInferenceDatasetRowSchema =
+  ChatInferenceDatasetRowSchema.omit({
+    input: true,
+    output: true,
+    tool_params: true,
+  }).extend({
+    input: inputSchema,
+    output: z.array(contentBlockOutputSchema).optional(),
+    tool_params: z.record(z.string(), z.unknown()),
+    tags: z.record(z.string(), z.string()),
+  });
+export type ParsedChatInferenceDatasetRow = z.infer<
+  typeof ParsedChatInferenceDatasetRowSchema
+>;
+
+export const ParsedJsonInferenceDatasetRowSchema =
+  JsonInferenceDatasetRowSchema.omit({
+    input: true,
+    output: true,
+    output_schema: true,
+  }).extend({
+    input: inputSchema,
+    output: jsonInferenceOutputSchema.optional(),
+    output_schema: z.record(z.string(), z.unknown()),
+  });
+export type ParsedJsonInferenceDatasetRow = z.infer<
+  typeof ParsedJsonInferenceDatasetRowSchema
+>;
+
+/**
+ * Union schema representing a parsed dataset row, which can be either a Chat or JSON inference row.
+ */
+export const ParsedDatasetRowSchema = z.union([
+  ParsedChatInferenceDatasetRowSchema,
+  ParsedJsonInferenceDatasetRowSchema,
+]);
+export type ParsedDatasetRow = z.infer<typeof ParsedDatasetRowSchema>;
 
 /**
  * Schema for inserts into the Chat Inference dataset.

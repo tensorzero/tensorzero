@@ -11,7 +11,13 @@ import {
   type DatasetInsert,
   type DatasetQueryParams,
   type DatasetRow,
+  type ParsedDatasetRow,
 } from "./datasets";
+import {
+  contentBlockOutputSchema,
+  inputSchema,
+  jsonInferenceOutputSchema,
+} from "./common";
 
 /**
  * Constructs a SELECT query for either the Chat or JSON dataset table.
@@ -391,7 +397,7 @@ export async function getDatasetRows(
 export async function getDatapoint(
   dataset_name: string,
   id: string,
-): Promise<DatasetRow | null> {
+): Promise<ParsedDatasetRow | null> {
   const chat_query = `
     SELECT dataset_name,function_name, id, episode_id, input, output, tool_params, tags, auxiliary,  formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM ChatInferenceDataset WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
   `;
@@ -427,7 +433,40 @@ export async function getDatapoint(
     );
   }
 
-  return DatasetRowSchema.parse({
-    ...allResults[0],
-  });
+  const row = DatasetRowSchema.parse(allResults[0]);
+  const parsedRow = parseDatasetRow(row);
+
+  return parsedRow;
+}
+
+function parseDatasetRow(row: DatasetRow): ParsedDatasetRow {
+  if ("tool_params" in row) {
+    // Chat inference row
+    return {
+      ...row,
+      input: inputSchema.parse(JSON.parse(row.input)),
+      output: row.output
+        ? z.array(contentBlockOutputSchema).parse(JSON.parse(row.output))
+        : undefined,
+      tool_params:
+        row.tool_params === ""
+          ? {}
+          : z
+              .record(z.string(), z.unknown())
+              .parse(JSON.parse(row.tool_params)),
+      tags: row.tags,
+    };
+  } else {
+    // JSON inference row
+    return {
+      ...row,
+      input: inputSchema.parse(JSON.parse(row.input)),
+      output: row.output
+        ? jsonInferenceOutputSchema.parse(JSON.parse(row.output))
+        : undefined,
+      output_schema: z
+        .record(z.string(), z.unknown())
+        .parse(JSON.parse(row.output_schema)),
+    };
+  }
 }
