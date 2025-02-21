@@ -399,7 +399,7 @@ mod tests {
     };
     use crate::jsonschema_util::{DynamicJSONSchema, JSONSchemaFromPath};
     use crate::minijinja_util::tests::get_test_template_config;
-    use crate::model::{ModelConfig, ProviderConfig};
+    use crate::model::{ModelConfig, ModelProvider, ProviderConfig};
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         error::Error,
@@ -751,11 +751,21 @@ mod tests {
         });
         let text_model_config = ModelConfig {
             routing: vec!["good".into()],
-            providers: HashMap::from([("good".into(), good_provider_config)]),
+            providers: HashMap::from([(
+                "good".into(),
+                ModelProvider {
+                    config: good_provider_config,
+                },
+            )]),
         };
         let json_model_config = ModelConfig {
             routing: vec!["json_provider".into()],
-            providers: HashMap::from([("json_provider".into(), json_provider_config)]),
+            providers: HashMap::from([(
+                "json_provider".into(),
+                ModelProvider {
+                    config: json_provider_config,
+                },
+            )]),
         };
         let tool_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "tool".into(),
@@ -763,11 +773,21 @@ mod tests {
         });
         let tool_model_config = ModelConfig {
             routing: vec!["tool_provider".into()],
-            providers: HashMap::from([("tool_provider".into(), tool_provider_config)]),
+            providers: HashMap::from([(
+                "tool_provider".into(),
+                ModelProvider {
+                    config: tool_provider_config,
+                },
+            )]),
         };
         let error_model_config = ModelConfig {
             routing: vec!["error".into()],
-            providers: HashMap::from([("error".into(), error_provider_config)]),
+            providers: HashMap::from([(
+                "error".into(),
+                ModelProvider {
+                    config: error_provider_config,
+                },
+            )]),
         };
         // Test case 1: invalid message (String passed when template required)
         let messages = vec![InputMessage {
@@ -928,7 +948,12 @@ mod tests {
         });
         let text_model_config = ModelConfig {
             routing: vec!["good_provider".into()],
-            providers: HashMap::from([("good_provider".into(), good_provider_config)]),
+            providers: HashMap::from([(
+                "good_provider".into(),
+                ModelProvider {
+                    config: good_provider_config,
+                },
+            )]),
         };
         let models = HashMap::from([("good".into(), text_model_config)])
             .try_into()
@@ -1448,11 +1473,21 @@ mod tests {
         });
         let text_model_config = ModelConfig {
             routing: vec!["good_provider".into()],
-            providers: HashMap::from([("good_provider".into(), good_provider_config)]),
+            providers: HashMap::from([(
+                "good_provider".into(),
+                ModelProvider {
+                    config: good_provider_config,
+                },
+            )]),
         };
         let error_model_config = ModelConfig {
             routing: vec!["error_provider".into()],
-            providers: HashMap::from([("error_provider".into(), error_provider_config)]),
+            providers: HashMap::from([(
+                "error_provider".into(),
+                ModelProvider {
+                    config: error_provider_config,
+                },
+            )]),
         };
         // Test case 1: Model inference fails because of model issues
         let inference_params = InferenceParams::default();
