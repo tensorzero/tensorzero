@@ -4,8 +4,9 @@ from tensorzero import AsyncTensorZeroGateway
 
 
 async def main():
-    async with await AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000"
+    async with await AsyncTensorZeroGateway.build_embedded(
+        clickhouse_url="http://chuser:chpassword@localhost:8123",
+        config_file="config/tensorzero.toml",
     ) as gateway:
         response = await gateway.inference(
             function_name="generate_haiku",
