@@ -10,10 +10,12 @@ export function PageHeader({ headline, count, itemId }: PageHeaderProps) {
       <div className="flex items-center gap-2">
         <h4 className="text-2xl font-medium">{headline}</h4>
         {itemId !== undefined && (
-          <h4 className="text-2xl font-medium text-gray-500">{itemId}</h4>
+          <h4 className="text-2xl font-medium text-foreground-tertiary">
+            {itemId}
+          </h4>
         )}
         {count !== undefined && (
-          <h4 className="text-2xl font-medium text-gray-500">
+          <h4 className="text-2xl font-medium text-foreground-tertiary">
             {count.toLocaleString()}
           </h4>
         )}

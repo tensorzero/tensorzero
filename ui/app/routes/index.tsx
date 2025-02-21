@@ -34,11 +34,11 @@ function FeatureCard({
 }: FeatureCardProps) {
   return (
     <Link to={source} className="block">
-      <Card className="group h-full rounded-xl border-[1px] border-neutral-200 hover:border-neutral-400 hover:shadow-[0_0_0_4px_rgba(0,0,0,0.05)]">
+      <Card className="hover:border-border-hover group h-full rounded-xl border-[1px] border-border hover:shadow-[0_0_0_4px_rgba(0,0,0,0.05)]">
         <div className="p-6">
-          <Icon className="mb-8 h-4 w-4 text-neutral-500 transition-colors group-hover:text-neutral-900" />
+          <Icon className="mb-8 h-4 w-4 text-foreground-tertiary transition-colors group-hover:text-foreground" />
           <h3 className="text-lg font-medium">{title}</h3>
-          <p className="text-xs text-neutral-500">{description}</p>
+          <p className="text-xs text-foreground-tertiary">{description}</p>
         </div>
       </Card>
     </Link>
@@ -54,8 +54,8 @@ interface FooterLinkProps {
 function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
   return (
     <Link to={source} className="group flex w-fit items-center">
-      <Icon className="mr-2 h-4 w-4 text-neutral-500 transition-colors group-hover:text-neutral-900" />
-      <span className="text-neutral-700 transition-colors group-hover:text-neutral-900">
+      <Icon className="mr-2 h-4 w-4 text-foreground-tertiary transition-colors group-hover:text-foreground" />
+      <span className="text-foreground-tertiary transition-colors group-hover:text-foreground">
         {children}
       </span>
     </Link>
@@ -85,7 +85,7 @@ export default function Home() {
       <div className="container mx-auto my-16 max-w-[960px]">
         <div id="observability" className="mb-16">
           <h2 className="mb-1 text-2xl font-medium">Observability</h2>
-          <p className="mb-6 max-w-[640px] text-sm text-gray-500">
+          <p className="mb-6 max-w-[640px] text-sm text-foreground-tertiary">
             Monitor metrics across models and prompts and debug individual API
             calls.
           </p>
@@ -113,7 +113,7 @@ export default function Home() {
 
         <div id="optimization" className="mb-12">
           <h2 className="mb-1 text-2xl font-medium">Optimization</h2>
-          <p className="mb-6 max-w-[640px] text-sm text-gray-500">
+          <p className="mb-6 max-w-[640px] text-sm text-foreground-tertiary">
             Optimize your prompts, models, and inference strategies.
           </p>
           <div className="grid gap-6 md:grid-cols-3">

@@ -26,10 +26,16 @@ export default {
       colors: {
         background: {
           DEFAULT: "hsl(var(--background-primary))",
+          primary: "hsl(var(--background-primary))",
           secondary: "hsl(var(--background-secondary))",
           tertiary: "hsl(var(--background-tertiary))",
         },
-        foreground: "hsl(var(--foreground))",
+        foreground: {
+          DEFAULT: "hsl(var(--foreground-primary))",
+          primary: "hsl(var(--foreground-primary))",
+          secondary: "hsl(var(--foreground-secondary))",
+          tertiary: "hsl(var(--foreground-tertiary))",
+        },
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
