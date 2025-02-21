@@ -995,7 +995,7 @@ mod tests {
             input_tokens: 35,
             output_tokens: 55,
         };
-        let expected_content: JsonInferenceOutput = JsonInferenceOutput {
+        let expected_content = JsonInferenceOutput {
             raw: "{\"answer\":\"Hello\"}".to_string(),
             parsed: Some(json!({"answer": "Hello"})),
         };
