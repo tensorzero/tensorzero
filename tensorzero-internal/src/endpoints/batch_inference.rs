@@ -221,10 +221,10 @@ pub async fn start_batch_inference_handler(
 
     let context = FetchContext {
         client: &http_client,
-        object_store_data: &config.gateway.object_store_data,
+        object_store_info: &config.gateway.object_store_info,
     };
 
-    let stripped_inputs =
+    let resolved_inputs =
         futures::future::try_join_all(params.inputs.iter().map(|input| input.resolve(&context)))
             .await?;
 
@@ -255,7 +255,7 @@ pub async fn start_batch_inference_handler(
 
         let result = variant
             .start_batch_inference(
-                &stripped_inputs,
+                &resolved_inputs,
                 &inference_models,
                 function,
                 &inference_configs,
@@ -287,7 +287,7 @@ pub async fn start_batch_inference_handler(
 
         let (batch_id, inference_ids) = write_start_batch_inference(
             &clickhouse_connection_info,
-            stripped_inputs,
+            resolved_inputs,
             result,
             write_metadata,
             inference_config,

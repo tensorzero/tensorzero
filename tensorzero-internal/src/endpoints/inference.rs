@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::config_parser::{Config, ObjectStoreData};
+use crate::config_parser::{Config, ObjectStoreInfo};
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -274,7 +274,7 @@ pub async fn inference(
         .input
         .resolve(&FetchContext {
             client: http_client,
-            object_store_data: &config.gateway.object_store_data,
+            object_store_info: &config.gateway.object_store_info,
         })
         .await?;
     // Keep sampling variants until one succeeds
@@ -389,7 +389,7 @@ pub async fn inference(
                 let write_future = async move {
                     write_inference(
                         &clickhouse_connection_info,
-                        &config.gateway.object_store_data,
+                        &config.gateway.object_store_info,
                         resolved_input,
                         result_to_write,
                         write_metadata,
@@ -561,7 +561,7 @@ fn create_stream(
                         processing_time: Some(start_time.elapsed()),
                         tags,
                     };
-                    let object_store = config.gateway.object_store_data.clone();
+                    let object_store = config.gateway.object_store_info.clone();
 
                         let clickhouse_connection_info = clickhouse_connection_info.clone();
                         write_inference(
@@ -636,7 +636,7 @@ pub struct InferenceDatabaseInsertMetadata {
 }
 
 async fn write_image(
-    object_store: &Option<ObjectStoreData>,
+    object_store: &Option<ObjectStoreInfo>,
     raw: &Base64Image,
     storage_path: &StoragePath,
 ) -> Result<(), Error> {
@@ -683,7 +683,7 @@ async fn write_image(
 
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    object_store: &Option<ObjectStoreData>,
+    object_store: &Option<ObjectStoreInfo>,
     input: ResolvedInput,
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,

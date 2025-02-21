@@ -17,7 +17,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
-use crate::{cache::CacheData, config_parser::ObjectStoreData};
+use crate::{cache::CacheData, config_parser::ObjectStoreInfo};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
@@ -54,7 +54,7 @@ pub struct Input {
 
 pub struct FetchContext<'a> {
     pub client: &'a reqwest::Client,
-    pub object_store_data: &'a Option<ObjectStoreData>,
+    pub object_store_info: &'a Option<ObjectStoreInfo>,
 }
 
 impl Input {
@@ -105,7 +105,7 @@ impl InputMessageContent {
             },
             InputMessageContent::Image(image) => {
                 let storage_kind = context
-                    .object_store_data
+                    .object_store_info
                     .as_ref()
                     .ok_or_else(|| {
                         Error::new(ErrorDetails::ObjectStoreUnconfigured {

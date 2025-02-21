@@ -40,18 +40,18 @@ pub struct Config<'c> {
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,
-    pub object_store_data: Option<ObjectStoreData>,
+    pub object_store_info: Option<ObjectStoreInfo>,
     pub debug: bool,
 }
 
 #[derive(Clone, Debug)]
-pub struct ObjectStoreData {
+pub struct ObjectStoreInfo {
     // This will be `None` if we have `StorageKind::Disabled`
     pub object_store: Option<Arc<dyn ObjectStore>>,
     pub kind: StorageKind,
 }
 
-impl ObjectStoreData {
+impl ObjectStoreInfo {
     fn new(config: Option<StorageKind>) -> Result<Option<Self>, Error> {
         let Some(config) = config else {
             return Ok(None);
@@ -127,7 +127,7 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
                 async_writes: config.observability.async_writes,
             },
             debug: config.debug,
-            object_store_data: ObjectStoreData::new(config.object_store)?,
+            object_store_info: ObjectStoreInfo::new(config.object_store)?,
         })
     }
 }

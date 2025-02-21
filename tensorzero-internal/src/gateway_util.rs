@@ -169,7 +169,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            object_store_data: Default::default(),
+            object_store_info: Default::default(),
         };
 
         let config = Box::leak(Box::new(Config {
@@ -219,7 +219,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            object_store_data: Default::default(),
+            object_store_info: Default::default(),
         };
 
         let config = Box::leak(Box::new(Config {
@@ -240,7 +240,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            object_store_data: Default::default(),
+            object_store_info: Default::default(),
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -263,7 +263,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            object_store_data: Default::default(),
+            object_store_info: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,
