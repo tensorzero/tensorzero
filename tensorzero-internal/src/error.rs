@@ -500,7 +500,7 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Error fetching image from {}: {message}", url)
             }
             ErrorDetails::ObjectStoreUnconfigured { block_type } => {
-                write!(f, "Object storage is not configured. You must set `gateway.observability.object_storage` before making requests containing a `{block_type}` content block")
+                write!(f, "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block")
             }
             ErrorDetails::UnsupportedContentBlockType {
                 content_block_type,

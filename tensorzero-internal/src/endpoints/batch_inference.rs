@@ -221,7 +221,7 @@ pub async fn start_batch_inference_handler(
 
     let context = FetchContext {
         client: &http_client,
-        object_store_info: &config.gateway.object_store_info,
+        object_store_info: &config.object_store_info,
     };
 
     let resolved_inputs =

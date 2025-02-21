@@ -471,6 +471,16 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
         StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
         },
+        &format!(
+            r#"
+        [object_storage]
+        type = "filesystem"
+        path = "{}"
+
+        [functions]
+        "#,
+            temp_dir.path().to_string_lossy().to_string()
+        ),
     )
     .await;
 
@@ -524,10 +534,20 @@ pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestP
 
     test_image_inference_with_provider_and_store(
         provider,
-        StorageKind::S3 {
+        StorageKind::S3Compatible {
             bucket_name: test_bucket.to_string(),
             region: "us-east-1".to_string(),
         },
+        &format!(
+            r#"
+        [object_storage]
+        type = "s3_compatible"
+        region = "us-east-1"
+        bucket_name = "{test_bucket}"
+        
+        [functions]
+        "#
+        ),
     )
     .await;
 
@@ -547,24 +567,13 @@ pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestP
 pub async fn test_image_inference_with_provider_and_store(
     provider: E2ETestProvider,
     kind: StorageKind,
+    config_toml: &str,
 ) {
-    let kind_toml = toml::to_string(&kind).unwrap();
     let episode_id = Uuid::now_v7();
 
     let image_data = BASE64_STANDARD.encode(FERRIS_PNG);
 
-    let client = make_embedded_gateway_with_config(
-        format!(
-            r#"
-    [gateway.object_store]
-    {kind_toml}
-
-    [functions]
-    "#,
-        )
-        .as_str(),
-    )
-    .await;
+    let client = make_embedded_gateway_with_config(config_toml).await;
 
     for should_be_cached in [false, true] {
         let response = client

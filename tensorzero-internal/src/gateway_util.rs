@@ -169,7 +169,6 @@ mod tests {
             },
             bind_address: None,
             debug: false,
-            object_store_info: Default::default(),
         };
 
         let config = Box::leak(Box::new(Config {

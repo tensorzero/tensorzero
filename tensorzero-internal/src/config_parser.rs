@@ -34,13 +34,13 @@ pub struct Config<'c> {
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub templates: TemplateConfig<'c>,
+    pub object_store_info: Option<ObjectStoreInfo>,
 }
 
 #[derive(Debug, Default)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,
-    pub object_store_info: Option<ObjectStoreInfo>,
     pub debug: bool,
 }
 
@@ -61,7 +61,7 @@ impl ObjectStoreInfo {
             StorageKind::Filesystem { path } => Some(Arc::new(LocalFileSystem::new_with_prefix(path).map_err(|e| Error::new(ErrorDetails::Config {
                 message: format!("Failed to create filesystem object store for path: {path}: {e}"),
             }))?)),
-            StorageKind::S3 {
+            StorageKind::S3Compatible {
                 bucket_name,
                 region,
             } => Some(Arc::new(
@@ -99,8 +99,6 @@ pub struct UninitializedGatewayConfig {
     pub observability: ObservabilityConfig,
     #[serde(default)]
     pub debug: bool,
-    #[serde(default)]
-    pub object_store: Option<StorageKind>,
 }
 
 impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
@@ -127,7 +125,6 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
                 async_writes: config.observability.async_writes,
             },
             debug: config.debug,
-            object_store_info: ObjectStoreInfo::new(config.object_store)?,
         })
     }
 }
@@ -227,6 +224,8 @@ impl<'c> Config<'c> {
             })
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
+        let object_store_info = ObjectStoreInfo::new(config.object_storage)?;
+
         let mut config = Config {
             gateway,
             models: config.models,
@@ -235,6 +234,7 @@ impl<'c> Config<'c> {
             metrics: config.metrics,
             tools,
             templates,
+            object_store_info,
         };
 
         // Initialize the templates
@@ -411,6 +411,8 @@ struct UninitializedConfig {
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
+    #[serde(default)]
+    pub object_storage: Option<StorageKind>,
 }
 
 impl UninitializedConfig {

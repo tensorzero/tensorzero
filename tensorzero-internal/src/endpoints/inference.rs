@@ -274,7 +274,7 @@ pub async fn inference(
         .input
         .resolve(&FetchContext {
             client: http_client,
-            object_store_info: &config.gateway.object_store_info,
+            object_store_info: &config.object_store_info,
         })
         .await?;
     // Keep sampling variants until one succeeds
@@ -389,7 +389,7 @@ pub async fn inference(
                 let write_future = async move {
                     write_inference(
                         &clickhouse_connection_info,
-                        &config.gateway.object_store_info,
+                        &config,
                         resolved_input,
                         result_to_write,
                         write_metadata,
@@ -561,12 +561,12 @@ fn create_stream(
                         processing_time: Some(start_time.elapsed()),
                         tags,
                     };
-                    let object_store = config.gateway.object_store_info.clone();
+                    let config = config.clone();
 
                         let clickhouse_connection_info = clickhouse_connection_info.clone();
                         write_inference(
                             &clickhouse_connection_info,
-                            &object_store,
+                            &config,
                             input,
                             inference_response,
                             write_metadata,
@@ -682,28 +682,33 @@ async fn write_image(
 
 async fn write_inference(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    object_store: &Option<ObjectStoreInfo>,
+    config: &Config<'_>,
     input: ResolvedInput,
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
-    let mut futures = Vec::new();
-    for message in &input.messages {
-        for content_block in &message.content {
-            if let ResolvedInputMessageContent::Image {
-                image: raw,
-                storage_path,
-            } = content_block
-            {
-                futures.push(async {
-                    if let Err(e) = write_image(object_store, raw, storage_path).await {
-                        tracing::error!("Failed to write image to object store: {e:?}");
-                    }
-                });
+    if config.gateway.observability.enabled.unwrap_or(true) {
+        let mut futures = Vec::new();
+
+        for message in &input.messages {
+            for content_block in &message.content {
+                if let ResolvedInputMessageContent::Image {
+                    image: raw,
+                    storage_path,
+                } = content_block
+                {
+                    futures.push(async {
+                        if let Err(e) =
+                            write_image(&config.object_store_info, raw, storage_path).await
+                        {
+                            tracing::error!("Failed to write image to object store: {e:?}");
+                        }
+                    });
+                }
             }
         }
+        futures::future::join_all(futures).await;
     }
-    futures::future::join_all(futures).await;
     let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
     // Write the model responses to the ModelInference table
     for response in model_responses {

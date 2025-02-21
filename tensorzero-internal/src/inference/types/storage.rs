@@ -8,7 +8,7 @@ use super::{Base64Image, ImageKind};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StorageKind {
-    S3 { bucket_name: String, region: String },
+    S3Compatible { bucket_name: String, region: String },
     Filesystem { path: String },
     // This must be set explicitly in `tensorzero.toml` to allow image requests to succeed
     // By default, requests will fail (we'll have a `None` for the outer `ObjectStoreDat`)
