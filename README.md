@@ -113,8 +113,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 
 You can access any provider using the TensorZero Python client.
 
-1. Deploy `tensorzero/gateway` using Docker.
-   **[Detailed instructions →](https://www.tensorzero.com/docs/gateway/deployment)**
+1. `pip install tensorzero`
 2. Optional: Set up the TensorZero configuration.
 3. Run inference:
 
@@ -122,7 +121,7 @@ You can access any provider using the TensorZero Python client.
 from tensorzero import TensorZeroGateway
 
 
-with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
+with TensorZeroGateway.build_embedded(clickhouse_url="...", config_file="...") as client:
     response = client.inference(
         model_name="openai::gpt-4o-mini",
         input={
