@@ -7,7 +7,7 @@ import { useConfig } from "~/context/config";
 import {
   type TryWithVariantButtonProps,
   TryWithVariantButton,
-} from "./TryWithVariantButton";
+} from "~/components/utils/TryWithVariantButton";
 interface BasicInfoProps {
   inference: ParsedInferenceRow;
   tryWithVariantProps: TryWithVariantButtonProps;

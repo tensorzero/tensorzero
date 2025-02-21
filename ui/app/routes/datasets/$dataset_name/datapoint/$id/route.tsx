@@ -51,7 +51,9 @@ export default function DatapointPage({
     useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const config = useConfig();
-  const variants = config.functions[datapoint.function_name].variants;
+  const variants = Object.keys(
+    config.functions[datapoint.function_name]?.variants || {},
+  );
 
   const onVariantSelect = (variant: string) => {
     setSelectedVariant(variant);

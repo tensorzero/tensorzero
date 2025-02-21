@@ -7,7 +7,7 @@ import { useConfig } from "~/context/config";
 import {
   type TryWithVariantButtonProps,
   TryWithVariantButton,
-} from "./TryWithVariantButton";
+} from "~/components/utils/TryWithVariantButton";
 import type { DatasetRow } from "~/utils/clickhouse/datasets";
 interface BasicInfoProps {
   datapoint: DatasetRow;
@@ -41,33 +41,16 @@ export default function BasicInfo({
             </dd>
           </div>
           <div>
-            <dt className="text-lg font-semibold">Variant</dt>
-            <dd>
-              <Link
-                to={`/observability/functions/${inference.function_name}/variants/${inference.variant_name}`}
-              >
-                <Code>{inference.variant_name}</Code>
-              </Link>
-            </dd>
-            <Badge variant="outline" className="bg-blue-200">
-              {variantType}
-            </Badge>
-          </div>
-          <div>
             <dt className="text-lg font-semibold">Episode ID</dt>
             <dd>
-              <Link to={`/observability/episodes/${inference.episode_id}`}>
-                <Code>{inference.episode_id}</Code>
+              <Link to={`/observability/episodes/${datapoint.episode_id}`}>
+                <Code>{datapoint.episode_id}</Code>
               </Link>
             </dd>
           </div>
           <div>
             <dt className="text-lg font-semibold">Timestamp</dt>
-            <dd>{new Date(inference.timestamp).toLocaleString()}</dd>
-          </div>
-          <div>
-            <dt className="text-lg font-semibold">Processing Time</dt>
-            <dd>{inference.processing_time_ms}ms</dd>
+            <dd>{new Date(datapoint.updated_at).toLocaleString()}</dd>
           </div>
         </dl>
       </CardContent>
