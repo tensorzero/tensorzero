@@ -98,9 +98,9 @@ repos:
     rev: v1.1.391
     hooks:
       - id: pyright
-        name: "pyright: clients/python"
-        files: ^clients/python/
-        args: ["--project", "clients/python/pyproject.toml"]
+        name: "pyright: clients/python-deprecated"
+        files: ^clients/python-deprecated/
+        args: ["--project", "clients/python-deprecated/pyproject.toml"]
         additional_dependencies:
           - httpx
           - uuid_utils
