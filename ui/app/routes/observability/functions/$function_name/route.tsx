@@ -27,6 +27,7 @@ import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import FunctionVariantTable from "./FunctionVariantTable";
+import { PageHeader } from "~/components/layout/PageHeader";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -181,14 +182,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h2 className="mb-4 text-2xl font-semibold">
-        Function{" "}
-        <code className="rounded bg-gray-100 p-1 text-2xl">
-          {function_name}
-        </code>
-      </h2>
-      <div className="mb-6 h-px w-full bg-gray-200"></div>
+    <div className="container mx-auto px-4 pb-8">
+      <PageHeader headline="Function" itemId={`${function_name}`} />
       <BasicInfo functionConfig={function_config} />
       <div className="mb-6 h-px w-full bg-gray-200"></div>
       <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">

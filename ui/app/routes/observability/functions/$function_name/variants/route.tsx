@@ -28,6 +28,7 @@ import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
 import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
+import { PageHeader } from "~/components/layout/PageHeader";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { function_name, variant_name } = params;
@@ -191,14 +192,9 @@ export default function VariantDetails() {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h2 className="mb-4 text-2xl font-semibold">
-        Variant{" "}
-        <code className="rounded bg-gray-100 p-1 text-2xl">{variant_name}</code>
-      </h2>
-      <div className="mb-6 h-px w-full bg-gray-200"></div>
+    <div className="container mx-auto px-4 pb-8">
+      <PageHeader headline="Variant" itemId={`${variant_name}`} />
       <BasicInfo variantConfig={variant_config} function_name={function_name} />
-      <div className="mb-6 h-px w-full bg-gray-200"></div>
       <MetricSelector
         metricsWithFeedback={metricsWithFeedback}
         selectedMetric={metric_name || ""}
