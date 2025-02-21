@@ -1,7 +1,9 @@
 #![allow(clippy::print_stdout)]
-use std::{collections::HashMap, path::Path};
+use std::collections::HashMap;
 
 use aws_config::Region;
+use aws_sdk_bedrockruntime::error::SdkError;
+use aws_sdk_s3::operation::get_object::GetObjectError;
 use base64::prelude::*;
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
@@ -502,13 +504,23 @@ pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestP
         .unwrap();
 
     // Check that object is deleted
-    let result = client
+    let err = client
         .get_object()
         .key(expected_key)
         .bucket(test_bucket)
         .send()
         .await
-        .expect("Deleted");
+        .expect_err("Image should not exist in s3 after deletion");
+
+    if let SdkError::ServiceError(err) = err {
+        let err = err.err();
+        assert!(
+            matches!(err, GetObjectError::NoSuchKey(_)),
+            "Unexpected service error: {err:?}"
+        );
+    } else {
+        panic!("Expected ServiceError: {err:?}");
+    }
 
     test_image_inference_with_provider_and_store(
         provider,
@@ -526,9 +538,9 @@ pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestP
         .bucket(test_bucket)
         .send()
         .await
-        .expect("Deleted");
+        .expect("Failed to get image from s3");
 
-    assert_eq!(result.body().bytes().unwrap(), FERRIS_PNG);
+    assert_eq!(result.body.collect().await.unwrap().to_vec(), FERRIS_PNG);
 }
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
