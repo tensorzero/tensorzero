@@ -206,7 +206,7 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = OpenAIRequest::new(&self.model_name, request)?;
-        let request_without_image = serde_json::to_string(&request_body).map_err(|e| {
+        let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
             })
@@ -234,7 +234,7 @@ impl InferenceProvider for OpenAIProvider {
             })?;
 
         let stream = stream_openai(event_source, start_time).peekable();
-        Ok((stream, request_without_image))
+        Ok((stream, raw_request))
     }
 
     // Get a single chunk from the stream and make sure it is OK then send to client.
@@ -992,6 +992,9 @@ pub(super) fn tensorzero_to_openai_system_message<'a>(
     }
 }
 
+// This function returns a `Result` because of the `image.data()` - if
+// we incorrectly pass in a deserialized `Base64Image` (which will
+// have no image data), we'll produce an error.
 pub(super) fn tensorzero_to_openai_messages(
     message: &RequestMessage,
 ) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
@@ -1044,6 +1047,8 @@ pub(super) fn tensorzero_to_openai_messages(
                 messages.push(OpenAIRequestMessage::User(OpenAIUserRequestMessage {
                     content: vec![OpenAIUserContent::ImageUrl {
                         image_url: OpenAIImageUrl {
+                            // This will only produce an error if we pass in a bad
+                            // `Base64Image` (with missing image data)
                             url: format!("data:{};base64,{}", image.mime_type, image.data()?),
                         },
                     }],
