@@ -1,6 +1,7 @@
 #![allow(clippy::print_stdout)]
 use std::{collections::HashMap, path::Path};
 
+use aws_config::Region;
 use base64::prelude::*;
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
@@ -461,38 +462,73 @@ pub static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
+    let temp_dir = tempfile::tempdir().unwrap();
+    eprintln!("Temp dir: {}", temp_dir.path().to_string_lossy());
     test_image_inference_with_provider_and_store(
         provider,
         StorageKind::Filesystem {
-            path: "/tmp/tensorzero-test-images".to_string(),
+            path: temp_dir.path().to_string_lossy().to_string(),
         },
     )
     .await;
+
+    // Check that image was stored in filesystem
+    let result = std::fs::read(temp_dir.path().join(
+        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+    ))
+    .unwrap();
+    assert_eq!(result, FERRIS_PNG);
 }
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestProvider) {
-    let config = aws_config::load_from_env().await;
+    let test_bucket = "tensorzero-e2e-test-images";
+    let test_bucket_region = "us-east-1";
+    let config = aws_config::load_from_env()
+        .await
+        .to_builder()
+        .region(Region::new(test_bucket_region))
+        .build();
     let client = aws_sdk_s3::Client::new(&config);
 
-    let test_bucket = "tensorzero-e2e-test-images";
+    let expected_key =
+        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png";
+    client
+        .delete_object()
+        .key(expected_key)
+        .bucket(test_bucket)
+        .send()
+        .await
+        .unwrap();
 
-    let expected_key = "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png";
-    client.delete_object()
-    .key(expected_key)
-    .bucket(test_bucket)
-    .send()
-    .await
-    .unwrap();
-
+    // Check that object is deleted
+    let result = client
+        .get_object()
+        .key(expected_key)
+        .bucket(test_bucket)
+        .send()
+        .await
+        .expect("Deleted");
 
     test_image_inference_with_provider_and_store(
         provider,
         StorageKind::S3 {
-            bucket_name: "tensorzero-test-images".to_string(),
+            bucket_name: test_bucket.to_string(),
             region: "us-east-1".to_string(),
         },
-    ).await;
+    )
+    .await;
+
+    // Check that image was stored in bucket
+    let result = client
+        .get_object()
+        .key(expected_key)
+        .bucket(test_bucket)
+        .send()
+        .await
+        .expect("Deleted");
+
+    assert_eq!(result.body().bytes().unwrap(), FERRIS_PNG);
 }
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
@@ -500,22 +536,20 @@ pub async fn test_image_inference_with_provider_and_store(
     provider: E2ETestProvider,
     kind: StorageKind,
 ) {
+    let kind_toml = toml::to_string(&kind).unwrap();
+    eprintln!("Toml: {kind_toml}");
     let episode_id = Uuid::now_v7();
 
     let image_data = BASE64_STANDARD.encode(FERRIS_PNG);
-
-    let temp_dir = tempfile::tempdir().unwrap();
 
     let client = make_embedded_gateway_with_config(
         format!(
             r#"
     [gateway.object_store]
-    type = "filesystem"
-    path = "{}"
+    {kind_toml}
 
     [functions]
     "#,
-            temp_dir.path().to_string_lossy()
         )
         .as_str(),
     )
@@ -559,7 +593,7 @@ pub async fn test_image_inference_with_provider_and_store(
             Some(episode_id),
             &provider,
             should_be_cached,
-            temp_dir.path(),
+            &kind,
         )
         .await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -645,7 +679,7 @@ pub async fn check_simple_image_inference_response(
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
     should_be_cached: bool,
-    temp_dir: &Path,
+    kind: &StorageKind,
 ) {
     let inference_id = response.inference_id();
 
@@ -707,6 +741,9 @@ pub async fn check_simple_image_inference_response(
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+
+    let kind_json = serde_json::to_value(&kind).unwrap();
+
     let correct_input = json!({
         "messages": [
             {
@@ -720,10 +757,7 @@ pub async fn check_simple_image_inference_response(
                             "mime_type": "image/png",
                         },
                         "storage_path": {
-                            "kind": {
-                                "type": "filesystem",
-                                "path": temp_dir.to_string_lossy(),
-                            },
+                            "kind": kind_json,
                             "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                         },
                     }
