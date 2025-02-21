@@ -1,5 +1,5 @@
 #![allow(clippy::print_stdout)]
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use base64::prelude::*;
 #[cfg(feature = "e2e_tests")]
@@ -10,8 +10,15 @@ use reqwest::{Client, StatusCode};
 #[cfg(feature = "e2e_tests")]
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
+use tensorzero::{
+    CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
+    InputMessage, InputMessageContent,
+};
 use tensorzero_internal::{
-    inference::types::{ContentBlock, RequestMessage, Role},
+    cache::CacheEnabledMode,
+    inference::types::{
+        ContentBlock, ContentBlockChatOutput, Image, ImageKind, RequestMessage, Role,
+    },
     tool::{ToolCall, ToolResult},
 };
 use uuid::Uuid;
@@ -82,6 +89,19 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
 pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: None,
+        clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
+#[allow(dead_code)]
+pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Client {
+    let tmp_config = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp_config.path(), config).unwrap();
+    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
     })
     .build()
@@ -434,94 +454,66 @@ pub async fn test_image_inference_with_provider(provider: E2ETestProvider) {
 
     let image_data = BASE64_STANDARD.encode(FERRIS_PNG);
 
-    // TODO - how do repeated runs work for the other tests with caching
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input":
-            {
-               "system": {"assistant_name": "Dr. Mehta"},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "value": "Describe the contents of the image"
-                        },
-                        {
-                            "type": "image",
-                            "mime_type": "image/png",
-                            "data": image_data
-                        }
-                    ]
-                }
-            ]},
-        "stream": false,
-        "cache_options": {"enabled": "write_only", "lookback_s": 10}
-    });
+    let temp_dir = tempfile::tempdir().unwrap();
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
+    let client = make_embedded_gateway_with_config(
+        format!(
+            r#"
+    [gateway.object_store]
+    type = "filesystem"
+    path = "{}"
 
-    // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
+    [functions]
+    "#,
+            temp_dir.path().to_string_lossy()
+        )
+        .as_str(),
+    )
+    .await;
 
-    println!("API response: {response_json:#?}");
+    for should_be_cached in [false, true] {
+        let response = client
+            .inference(ClientInferenceParams {
+                model_name: Some(provider.model_name.clone()),
+                episode_id: Some(episode_id),
+                input: Input {
+                    system: None,
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![
+                            InputMessageContent::Text {
+                                value: "Describe the contents of the image".to_string().into(),
+                            },
+                            InputMessageContent::Image(Image::Base64 {
+                                mime_type: ImageKind::Png,
+                                data: image_data.clone(),
+                            }),
+                        ],
+                    }],
+                },
+                cache_options: CacheParamsOptions {
+                    enabled: CacheEnabledMode::On,
+                    max_age_s: Some(10),
+                },
+                ..Default::default()
+            })
+            .await
+            .unwrap();
 
-    check_simple_image_inference_response(response_json, Some(episode_id), &provider, false).await;
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let InferenceOutput::NonStreaming(response) = response else {
+            panic!("Expected non-streaming inference response");
+        };
 
-    let episode_id = Uuid::now_v7();
-
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": provider.variant_name,
-        "episode_id": episode_id,
-        "input":
-            {
-               "system": {"assistant_name": "Dr. Mehta"},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "value": "Describe the contents of the image"
-                        },
-                        {
-                            "type": "image",
-                            "mime_type": "image/png",
-                            "data": image_data
-                        }
-                    ]
-                }
-            ]},
-        "stream": false,
-        "tags": {"foo": "bar"},
-        "cache_options": {"enabled": "on", "lookback_s": 10}
-    });
-
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-
-    // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-
-    println!("API response: {response_json:#?}");
-
-    check_simple_image_inference_response(response_json, Some(episode_id), &provider, true).await;
+        check_simple_image_inference_response(
+            response,
+            Some(episode_id),
+            &provider,
+            should_be_cached,
+            temp_dir.path(),
+        )
+        .await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -599,38 +591,38 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn check_simple_image_inference_response(
-    response_json: Value,
+    response: InferenceResponse,
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
     should_be_cached: bool,
+    temp_dir: &Path,
 ) {
-    let hardcoded_function_name = "basic_test";
-    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let inference_id = response.inference_id();
 
-    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
-    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    let episode_id_response = response.episode_id();
     if let Some(episode_id) = episode_id {
         assert_eq!(episode_id_response, episode_id);
     }
 
-    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    let InferenceResponse::Chat(response) = response else {
+        panic!("Expected chat inference response");
+    };
 
-    let content = response_json.get("content").unwrap().as_array().unwrap();
+    let content = response.content;
     assert_eq!(content.len(), 1);
     let content_block = content.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "text");
-    let content = content_block.get("text").unwrap().as_str().unwrap();
+    let ContentBlockChatOutput::Text(text) = content_block else {
+        panic!("Expected text content block: {content_block:?}");
+    };
+    let content = &text.text;
     assert!(
         content.to_lowercase().contains("cartoon") || content.to_lowercase().contains("crab"),
         "Content should contain 'cartoon' or 'crab': {content}"
     );
 
-    let usage = response_json.get("usage").unwrap();
-    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    let usage = response.usage;
+    let input_tokens = usage.input_tokens;
+    let output_tokens = usage.output_tokens;
     if should_be_cached {
         assert_eq!(input_tokens, 0);
         assert_eq!(output_tokens, 0);
@@ -655,10 +647,7 @@ pub async fn check_simple_image_inference_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
-
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, provider.variant_name);
+    assert_eq!(function_name, "tensorzero::default");
 
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
@@ -669,7 +658,6 @@ pub async fn check_simple_image_inference_response(
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
     let correct_input = json!({
-        "system": {"assistant_name": "Dr. Mehta"},
         "messages": [
             {
                 "role": "user",
@@ -684,9 +672,9 @@ pub async fn check_simple_image_inference_response(
                         "storage_path": {
                             "kind": {
                                 "type": "filesystem",
-                                "path": "/tmp/tensorzero-test-images"
+                                "path": temp_dir.to_string_lossy(),
                             },
-                            "path": "images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png.base64"
+                            "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                         },
                     }
                 ]
@@ -722,6 +710,10 @@ pub async fn check_simple_image_inference_response(
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
+    );
+    assert_eq!(
+        result.get("cached").unwrap().as_bool().unwrap(),
+        should_be_cached
     );
 }
 

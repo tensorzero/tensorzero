@@ -15,7 +15,7 @@ async fn get_providers() -> E2ETestProviders {
 
     let standard_providers = vec![E2ETestProvider {
         variant_name: "anthropic".to_string(),
-        model_name: "claude-3-haiku-20240307-anthropic".into(),
+        model_name: "anthropic::claude-3-haiku-20240307-anthropic".into(),
         model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
     }];

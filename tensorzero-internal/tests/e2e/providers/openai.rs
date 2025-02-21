@@ -59,7 +59,7 @@ async fn get_providers() -> E2ETestProviders {
 
     let image_providers = vec![E2ETestProvider {
         variant_name: "openai".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
         credentials: HashMap::new(),
     }];

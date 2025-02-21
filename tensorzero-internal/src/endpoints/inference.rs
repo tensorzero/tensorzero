@@ -656,7 +656,7 @@ async fn write_image(
             let res = store
                 .put_opts(
                     &storage_path.path,
-                    raw.data()?.clone().into(),
+                    bytes.into(),
                     PutOptions {
                         mode: PutMode::Create,
                         ..Default::default()
