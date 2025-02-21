@@ -620,7 +620,7 @@ pub async fn test_image_inference_with_provider_and_store(
     }
 }
 
-#[cfg(feature = "e2e_tests")]
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
