@@ -161,6 +161,7 @@ impl InferenceProvider for DummyProvider {
         if self.model_name == "slow" {
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
+
         // Check for flaky models
         if self.model_name.starts_with("flaky_") {
             #[allow(clippy::expect_used)]
@@ -277,7 +278,21 @@ impl InferenceProvider for DummyProvider {
             "best_of_n_big" => r#"{"thinking": "hmmm", "answer_choice": 100}"#.to_string(),
             _ => DUMMY_INFER_RESPONSE_RAW.to_string(),
         };
-        let usage = DUMMY_INFER_USAGE.clone();
+        let usage = match self.model_name.as_str() {
+            "input_tokens_zero" => Usage {
+                input_tokens: 0,
+                output_tokens: 10,
+            },
+            "output_tokens_zero" => Usage {
+                input_tokens: 10,
+                output_tokens: 0,
+            },
+            "input_tokens_output_tokens_zero" => Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+            },
+            _ => DUMMY_INFER_USAGE.clone(),
+        };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
         };
