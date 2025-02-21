@@ -1,3 +1,6 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
@@ -21,72 +24,77 @@ pub struct Migration0014<'a> {
 
 impl Migration for Migration0014<'_> {
     /// Check if you can connect to the database
-    async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse.health().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0014".to_string(),
-                message: e.to_string(),
-            })
-        })?;
+    fn can_apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            self.clickhouse.health().await.map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0014".to_string(),
+                    message: e.to_string(),
+                })
+            })?;
 
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Check if the migration needs to be applied
     /// This should be equivalent to checking if `ChatInferenceDataset` is missing
     /// or if `JsonInferenceDataset` is missing
     /// OR if they exist and either `output` column is not Nullable(String)
-    async fn should_apply(&self) -> Result<bool, Error> {
-        let chat_inference_dataset_table_exists =
-            check_table_exists(self.clickhouse, "ChatInferenceDataset", "0014").await?;
-        let json_inference_dataset_table_exists =
-            check_table_exists(self.clickhouse, "JsonInferenceDataset", "0014").await?;
-        if !chat_inference_dataset_table_exists || !json_inference_dataset_table_exists {
-            return Ok(true);
-        }
+    fn should_apply(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let chat_inference_dataset_table_exists =
+                check_table_exists(self.clickhouse, "ChatInferenceDataset", "0014").await?;
+            let json_inference_dataset_table_exists =
+                check_table_exists(self.clickhouse, "JsonInferenceDataset", "0014").await?;
+            if !chat_inference_dataset_table_exists || !json_inference_dataset_table_exists {
+                return Ok(true);
+            }
 
-        let chat_inference_dataset_output_type =
-            get_column_type(self.clickhouse, "ChatInferenceDataset", "output", "0014").await?;
-        let json_inference_dataset_output_type =
-            get_column_type(self.clickhouse, "JsonInferenceDataset", "output", "0014").await?;
-        if chat_inference_dataset_output_type != "Nullable(String)"
-            || json_inference_dataset_output_type != "Nullable(String)"
-        {
-            return Ok(true);
-        }
+            let chat_inference_dataset_output_type =
+                get_column_type(self.clickhouse, "ChatInferenceDataset", "output", "0014").await?;
+            let json_inference_dataset_output_type =
+                get_column_type(self.clickhouse, "JsonInferenceDataset", "output", "0014").await?;
+            if chat_inference_dataset_output_type != "Nullable(String)"
+                || json_inference_dataset_output_type != "Nullable(String)"
+            {
+                return Ok(true);
+            }
 
-        let chat_inference_dataset_has_data =
-            table_is_nonempty(self.clickhouse, "ChatInferenceDataset", "0014").await?;
-        if chat_inference_dataset_has_data {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0014".to_string(),
-                message: "ChatInferenceDataset has data. Your database state is invalid."
-                    .to_string(),
-            }));
-        }
-        let json_inference_dataset_has_data =
-            table_is_nonempty(self.clickhouse, "JsonInferenceDataset", "0014").await?;
-        if json_inference_dataset_has_data {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0014".to_string(),
-                message: "JsonInferenceDataset has data. Your database state is invalid."
-                    .to_string(),
-            }));
-        }
+            let chat_inference_dataset_has_data =
+                table_is_nonempty(self.clickhouse, "ChatInferenceDataset", "0014").await?;
+            if chat_inference_dataset_has_data {
+                return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0014".to_string(),
+                    message: "ChatInferenceDataset has data. Your database state is invalid."
+                        .to_string(),
+                }));
+            }
+            let json_inference_dataset_has_data =
+                table_is_nonempty(self.clickhouse, "JsonInferenceDataset", "0014").await?;
+            if json_inference_dataset_has_data {
+                return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0014".to_string(),
+                    message: "JsonInferenceDataset has data. Your database state is invalid."
+                        .to_string(),
+                }));
+            }
 
-        Ok(false)
+            Ok(false)
+        })
     }
 
-    async fn apply(&self) -> Result<(), Error> {
-        // First, drop the tables if they were created in 0012
-        let query = "DROP TABLE IF EXISTS ChatInferenceDataset";
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+    fn apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            // First, drop the tables if they were created in 0012
+            let query = "DROP TABLE IF EXISTS ChatInferenceDataset";
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        let query = "DROP TABLE IF EXISTS JsonInferenceDataset";
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let query = "DROP TABLE IF EXISTS JsonInferenceDataset";
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Create the `ChatInferenceDataset` table
-        let query = r#"
+            // Create the `ChatInferenceDataset` table
+            let query = r#"
             CREATE TABLE IF NOT EXISTS ChatInferenceDataset
             (
                 dataset_name LowCardinality(String),
@@ -108,10 +116,10 @@ impl Migration for Migration0014<'_> {
             ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Create the `JsonInferenceDataset` table
-        let query = r#"
+            // Create the `JsonInferenceDataset` table
+            let query = r#"
             CREATE TABLE IF NOT EXISTS JsonInferenceDataset
             (
                 dataset_name LowCardinality(String),
@@ -128,9 +136,10 @@ impl Migration for Migration0014<'_> {
             ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        Ok(())
+            Ok(())
+        })
     }
 
     fn rollback_instructions(&self) -> String {
@@ -143,8 +152,10 @@ impl Migration for Migration0014<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
-        let should_apply = self.should_apply().await?;
-        Ok(!should_apply)
+    fn has_succeeded(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let should_apply = self.should_apply().await?;
+            Ok(!should_apply)
+        })
     }
 }

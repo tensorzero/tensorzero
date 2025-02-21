@@ -1,3 +1,6 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
@@ -19,32 +22,37 @@ impl Migration for Migration0011<'_> {
     /// Check if you can connect to the database
     /// Then check if the two inference tables exist as the sources for the materialized views
     /// If all of this is OK, then we can apply the migration
-    async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse.health().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0011".to_string(),
-                message: e.to_string(),
-            })
-        })?;
+    fn can_apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            self.clickhouse.health().await.map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0011".to_string(),
+                    message: e.to_string(),
+                })
+            })?;
 
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Check if the migration needs to be applied
     /// This should be equivalent to checking if `ModelInferenceCache` is missing or
     /// if the `cached` column is missing from `ModelInference`
-    async fn should_apply(&self) -> Result<bool, Error> {
-        let table_exists =
-            check_table_exists(self.clickhouse, "ModelInferenceCache", "0011").await?;
-        let cached_column_exists =
-            check_column_exists(self.clickhouse, "ModelInference", "cached", "0011").await?;
-        Ok(!table_exists || !cached_column_exists)
+    fn should_apply(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let table_exists =
+                check_table_exists(self.clickhouse, "ModelInferenceCache", "0011").await?;
+            let cached_column_exists =
+                check_column_exists(self.clickhouse, "ModelInference", "cached", "0011").await?;
+            Ok(!table_exists || !cached_column_exists)
+        })
     }
 
-    async fn apply(&self) -> Result<(), Error> {
-        // Create the `ModelInferenceCache` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS ModelInferenceCache
+    fn apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            // Create the `ModelInferenceCache` table
+            let query = r#"
+                CREATE TABLE IF NOT EXISTS ModelInferenceCache
             (
                 short_cache_key UInt64,
                 long_cache_key FixedString(64), -- for a hex-encoded 256-bit key
@@ -60,15 +68,16 @@ impl Migration for Migration0011<'_> {
             PRIMARY KEY (short_cache_key)
             SETTINGS index_granularity = 256
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Add the `cached` column to ModelInference
-        let query = r#"
+            // Add the `cached` column to ModelInference
+            let query = r#"
             ALTER TABLE ModelInference ADD COLUMN cached Bool DEFAULT false;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        Ok(())
+            Ok(())
+        })
     }
 
     fn rollback_instructions(&self) -> String {
@@ -82,8 +91,10 @@ impl Migration for Migration0011<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
-        let should_apply = self.should_apply().await?;
-        Ok(!should_apply)
+    fn has_succeeded(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let should_apply = self.should_apply().await?;
+            Ok(!should_apply)
+        })
     }
 }

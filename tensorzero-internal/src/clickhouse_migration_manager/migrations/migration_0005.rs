@@ -1,3 +1,6 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
@@ -21,87 +24,92 @@ impl Migration for Migration0005<'_> {
     /// Check if you can connect to the database
     /// Then check if the two inference tables exist as the sources for the materialized views
     /// If all of this is OK, then we can apply the migration
-    async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse.health().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0005".to_string(),
-                message: e.to_string(),
-            })
-        })?;
+    fn can_apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            self.clickhouse.health().await.map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0005".to_string(),
+                    message: e.to_string(),
+                })
+            })?;
 
-        let tables = vec!["ChatInference", "JsonInference"];
-        for table in tables {
-            match check_table_exists(self.clickhouse, table, "0005").await {
-                Ok(exists) => {
-                    if !exists {
-                        return Err(ErrorDetails::ClickHouseMigration {
-                            id: "0005".to_string(),
-                            message: format!("Table {} does not exist", table),
+            let tables = vec!["ChatInference", "JsonInference"];
+            for table in tables {
+                match check_table_exists(self.clickhouse, table, "0005").await {
+                    Ok(exists) => {
+                        if !exists {
+                            return Err(ErrorDetails::ClickHouseMigration {
+                                id: "0005".to_string(),
+                                message: format!("Table {} does not exist", table),
+                            }
+                            .into());
                         }
-                        .into());
                     }
+                    Err(e) => return Err(e),
                 }
-                Err(e) => return Err(e),
             }
-        }
 
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Check if the migration has already been applied by checking if the new columns exist
-    async fn should_apply(&self) -> Result<bool, Error> {
-        let database = self.clickhouse.database();
+    fn should_apply(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let database = self.clickhouse.database();
 
-        if !check_table_exists(self.clickhouse, "InferenceTag", "0005").await? {
-            return Ok(true);
-        }
+            if !check_table_exists(self.clickhouse, "InferenceTag", "0005").await? {
+                return Ok(true);
+            }
 
-        // Check each of the original inference tables for a `tags` column
-        let tables = vec!["ChatInference", "JsonInference"];
+            // Check each of the original inference tables for a `tags` column
+            let tables = vec!["ChatInference", "JsonInference"];
 
-        for table in tables {
-            let query = format!(
-                r#"SELECT EXISTS(
+            for table in tables {
+                let query = format!(
+                    r#"SELECT EXISTS(
                     SELECT 1
                     FROM system.columns
                     WHERE database = '{}'
                       AND table = '{}'
                       AND name = 'tags'
                 )"#,
-                database, table
-            );
-            match self.clickhouse.run_query(query, None).await {
-                Err(e) => {
-                    return Err(ErrorDetails::ClickHouseMigration {
-                        id: "0005".to_string(),
-                        message: e.to_string(),
+                    database, table
+                );
+                match self.clickhouse.run_query(query, None).await {
+                    Err(e) => {
+                        return Err(ErrorDetails::ClickHouseMigration {
+                            id: "0005".to_string(),
+                            message: e.to_string(),
+                        }
+                        .into());
                     }
-                    .into());
-                }
-                Ok(response) => {
-                    if response.trim() != "1" {
-                        return Ok(true);
+                    Ok(response) => {
+                        if response.trim() != "1" {
+                            return Ok(true);
+                        }
                     }
                 }
             }
-        }
 
-        // Check that each of the materialized views exists
-        let views = vec!["ChatInferenceTagView", "JsonInferenceTagView"];
+            // Check that each of the materialized views exists
+            let views = vec!["ChatInferenceTagView", "JsonInferenceTagView"];
 
-        for view in views {
-            if !check_table_exists(self.clickhouse, view, "0005").await? {
-                return Ok(true);
+            for view in views {
+                if !check_table_exists(self.clickhouse, view, "0005").await? {
+                    return Ok(true);
+                }
             }
-        }
-        // Everything is in place, so we should not apply the migration
-        Ok(false)
+            // Everything is in place, so we should not apply the migration
+            Ok(false)
+        })
     }
 
-    async fn apply(&self) -> Result<(), Error> {
-        // Create the `InferenceTag` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS InferenceTag
+    fn apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            // Create the `InferenceTag` table
+            let query = r#"
+                CREATE TABLE IF NOT EXISTS InferenceTag
             (
                 function_name LowCardinality(String),
                 key String,
@@ -110,25 +118,25 @@ impl Migration for Migration0005<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (function_name, key, value);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Add a column `tags` to the `BooleanMetricFeedback` table
-        let query = r#"
+            // Add a column `tags` to the `BooleanMetricFeedback` table
+            let query = r#"
             ALTER TABLE ChatInference
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Add a column `tags` to the `JsonInference` table
-        let query = r#"
+            // Add a column `tags` to the `JsonInference` table
+            let query = r#"
             ALTER TABLE JsonInference
             ADD COLUMN IF NOT EXISTS tags Map(String, String) DEFAULT map();"#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // In the following few queries we create the materialized views that map the tags from the original tables to the new `InferenceTag` table
-        // We do not need to handle the case where there are already tags in the table since we created those columns just now.
-        // So, we don't worry about timestamps for cutting over to the materialized views.
-        // Create the materialized view for the `InferenceTag` table from ChatInference
-        let query = r#"
+            // In the following few queries we create the materialized views that map the tags from the original tables to the new `InferenceTag` table
+            // We do not need to handle the case where there are already tags in the table since we created those columns just now.
+            // So, we don't worry about timestamps for cutting over to the materialized views.
+            // Create the materialized view for the `InferenceTag` table from ChatInference
+            let query = r#"
             CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceTagView
             TO InferenceTag
             AS
@@ -140,10 +148,10 @@ impl Migration for Migration0005<'_> {
                 FROM ChatInference
                 ARRAY JOIN mapKeys(tags) as key
             "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Create the materialized view for the `InferenceTag` table from JsonInference
-        let query = r#"
+            // Create the materialized view for the `InferenceTag` table from JsonInference
+            let query = r#"
             CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceTagView
             TO InferenceTag
             AS
@@ -155,8 +163,10 @@ impl Migration for Migration0005<'_> {
                 FROM JsonInference
                 ARRAY JOIN mapKeys(tags) as key
             "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
-        Ok(())
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+
+            Ok(())
+        })
     }
 
     fn rollback_instructions(&self) -> String {
@@ -176,8 +186,10 @@ impl Migration for Migration0005<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
-        let should_apply = self.should_apply().await?;
-        Ok(!should_apply)
+    fn has_succeeded(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let should_apply = self.should_apply().await?;
+            Ok(!should_apply)
+        })
     }
 }

@@ -1,3 +1,6 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
@@ -20,45 +23,50 @@ pub struct Migration0000<'a> {
 
 impl Migration for Migration0000<'_> {
     /// Check if you can connect to the database
-    async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse.health().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0000".to_string(),
-                message: e.to_string(),
+    fn can_apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            self.clickhouse.health().await.map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0000".to_string(),
+                    message: e.to_string(),
+                })
             })
         })
     }
 
     /// Check if the tables exist
-    async fn should_apply(&self) -> Result<bool, Error> {
-        let tables = vec![
-            "BooleanMetricFeedback",
-            "CommentFeedback",
-            "DemonstrationFeedback",
-            "FloatMetricFeedback",
-            "ChatInference",
-            "JsonInference",
-            "ModelInference",
-        ];
-        for table in tables {
-            match check_table_exists(self.clickhouse, table, "0000").await {
-                Ok(exists) => {
-                    if !exists {
-                        return Ok(true);
+    fn should_apply(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let tables = vec![
+                "BooleanMetricFeedback",
+                "CommentFeedback",
+                "DemonstrationFeedback",
+                "FloatMetricFeedback",
+                "ChatInference",
+                "JsonInference",
+                "ModelInference",
+            ];
+            for table in tables {
+                match check_table_exists(self.clickhouse, table, "0000").await {
+                    Ok(exists) => {
+                        if !exists {
+                            return Ok(true);
+                        }
                     }
+                    // If `can_apply` succeeds but this fails, it likely means the database does not exist
+                    Err(_) => return Ok(true),
                 }
-                // If `can_apply` succeeds but this fails, it likely means the database does not exist
-                Err(_) => return Ok(true),
             }
-        }
 
-        Ok(false)
+            Ok(false)
+        })
     }
 
-    async fn apply(&self) -> Result<(), Error> {
-        // Create the `BooleanMetricFeedback` table
-        let query = r#"
-            CREATE TABLE IF NOT EXISTS BooleanMetricFeedback
+    fn apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            // Create the `BooleanMetricFeedback` table
+            let query = r#"
+                CREATE TABLE IF NOT EXISTS BooleanMetricFeedback
             (
                 id UUID, -- must be a UUIDv7
                 target_id UUID, -- must be a UUIDv7
@@ -68,10 +76,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (metric_name, target_id);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Create the `CommentFeedback` table
-        let query = r#"
+            // Create the `CommentFeedback` table
+            let query = r#"
             CREATE TABLE IF NOT EXISTS CommentFeedback
             (
                 id UUID, -- must be a UUIDv7
@@ -82,10 +90,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY target_id;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Create the `DemonstrationFeedback` table
-        let query = r#"
+            // Create the `DemonstrationFeedback` table
+            let query = r#"
            CREATE TABLE IF NOT EXISTS DemonstrationFeedback
             (
                 id UUID, -- must be a UUIDv7
@@ -95,10 +103,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY inference_id;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Create the `FloatMetricFeedback` table
-        let query = r#"
+            // Create the `FloatMetricFeedback` table
+            let query = r#"
             CREATE TABLE IF NOT EXISTS FloatMetricFeedback
             (
                 id UUID, -- must be a UUIDv7
@@ -109,10 +117,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (metric_name, target_id);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Create the `ChatInference` table
-        let query = r#"
+            // Create the `ChatInference` table
+            let query = r#"
             CREATE TABLE IF NOT EXISTS ChatInference
             (
                 id UUID, -- must be a UUIDv7
@@ -128,10 +136,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, episode_id);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Create the `JsonInference` table
-        let query = r#"
+            // Create the `JsonInference` table
+            let query = r#"
             CREATE TABLE IF NOT EXISTS JsonInference
             (
                 id UUID, -- must be a UUIDv7
@@ -147,10 +155,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, episode_id);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Create the `ModelInference` table
-        let query = r#"
+            // Create the `ModelInference` table
+            let query = r#"
             CREATE TABLE IF NOT EXISTS ModelInference
             (
                 id UUID, -- must be a UUIDv7
@@ -167,9 +175,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY inference_id;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        Ok(())
+            Ok(())
+        })
     }
 
     fn rollback_instructions(&self) -> String {
@@ -188,8 +197,10 @@ impl Migration for Migration0000<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
-        let should_apply = self.should_apply().await?;
-        Ok(!should_apply)
+    fn has_succeeded(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let should_apply = self.should_apply().await?;
+            Ok(!should_apply)
+        })
     }
 }

@@ -1,3 +1,6 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
@@ -20,60 +23,66 @@ pub struct Migration0004<'a> {
 impl Migration for Migration0004<'_> {
     /// Check if you can connect to the database and if the ModelInference table exists
     /// If all of this is OK, then we can apply the migration
-    async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse.health().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0004".to_string(),
-                message: e.to_string(),
-            })
-        })?;
+    fn can_apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            self.clickhouse.health().await.map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0004".to_string(),
+                    message: e.to_string(),
+                })
+            })?;
 
-        if !check_table_exists(self.clickhouse, "ModelInference", "0004").await? {
-            return Err(ErrorDetails::ClickHouseMigration {
-                id: "0004".to_string(),
-                message: "ModelInference table does not exist".to_string(),
+            if !check_table_exists(self.clickhouse, "ModelInference", "0004").await? {
+                return Err(ErrorDetails::ClickHouseMigration {
+                    id: "0004".to_string(),
+                    message: "ModelInference table does not exist".to_string(),
+                }
+                .into());
             }
-            .into());
-        }
 
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Check if the migration has already been applied by checking if the new columns exist
-    async fn should_apply(&self) -> Result<bool, Error> {
-        let database = self.clickhouse.database();
-        let query = format!(
-            "SELECT name FROM system.columns WHERE database = '{}' AND table = 'ModelInference'",
+    fn should_apply(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let database = self.clickhouse.database();
+            let query = format!(
+                "SELECT name FROM system.columns WHERE database = '{}' AND table = 'ModelInference'",
             database
         );
-        let response = self.clickhouse.run_query(query, None).await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0004".to_string(),
-                message: format!("Failed to fetch columns for ModelInference: {}", e),
-            })
-        })?;
-        let present_columns: Vec<&str> = response.lines().map(|line| line.trim()).collect();
-        if present_columns.contains(&"system")
-            && present_columns.contains(&"input_messages")
-            && present_columns.contains(&"output")
-        {
-            Ok(false)
-        } else {
-            Ok(true)
-        }
+            let response = self.clickhouse.run_query(query, None).await.map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0004".to_string(),
+                    message: format!("Failed to fetch columns for ModelInference: {}", e),
+                })
+            })?;
+            let present_columns: Vec<&str> = response.lines().map(|line| line.trim()).collect();
+            if present_columns.contains(&"system")
+                && present_columns.contains(&"input_messages")
+                && present_columns.contains(&"output")
+            {
+                Ok(false)
+            } else {
+                Ok(true)
+            }
+        })
     }
 
-    async fn apply(&self) -> Result<(), Error> {
-        // Add a column `system` to the `ModelInference` table
-        let query = r#"
-            ALTER TABLE ModelInference
-            ADD COLUMN IF NOT EXISTS system Nullable(String),
-            ADD COLUMN IF NOT EXISTS input_messages String,
-            ADD COLUMN IF NOT EXISTS output String
+    fn apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            // Add a column `system` to the `ModelInference` table
+            let query = r#"
+                ALTER TABLE ModelInference
+                ADD COLUMN IF NOT EXISTS system Nullable(String),
+                ADD COLUMN IF NOT EXISTS input_messages String,
+                ADD COLUMN IF NOT EXISTS output String
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        Ok(())
+            Ok(())
+        })
     }
 
     fn rollback_instructions(&self) -> String {
@@ -85,8 +94,10 @@ impl Migration for Migration0004<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
-        let should_apply = self.should_apply().await?;
-        Ok(!should_apply)
+    fn has_succeeded(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let should_apply = self.should_apply().await?;
+            Ok(!should_apply)
+        })
     }
 }

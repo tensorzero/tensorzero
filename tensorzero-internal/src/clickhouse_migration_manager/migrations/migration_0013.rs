@@ -1,3 +1,5 @@
+use std::future::Future;
+use std::pin::Pin;
 use std::time::Duration;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
@@ -27,110 +29,115 @@ impl Migration for Migration0013<'_> {
     /// Check if you can connect to the database
     /// Then check if the two inference tables exist as the sources for the materialized views
     /// If all of this is OK, then we can apply the migration
-    async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse.health().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0013".to_string(),
-                message: e.to_string(),
-            })
-        })?;
-
-        let tables = vec!["ChatInference", "JsonInference"];
-
-        for table in tables {
-            if !check_table_exists(self.clickhouse, table, "0013").await? {
-                return Err(ErrorDetails::ClickHouseMigration {
+    fn can_apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            self.clickhouse.health().await.map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
                     id: "0013".to_string(),
-                    message: format!("Table {} does not exist", table),
-                }
-                .into());
-            }
-        }
+                    message: e.to_string(),
+                })
+            })?;
 
-        Ok(())
+            let tables = vec!["ChatInference", "JsonInference"];
+
+            for table in tables {
+                if !check_table_exists(self.clickhouse, table, "0013").await? {
+                    return Err(ErrorDetails::ClickHouseMigration {
+                        id: "0013".to_string(),
+                        message: format!("Table {} does not exist", table),
+                    }
+                    .into());
+                }
+            }
+
+            Ok(())
+        })
     }
 
     /// Check if the migration has already been applied
     /// This should be equivalent to checking if `InferenceById` and `InferenceByEpisodeId` exist
     /// We also need to check if the materialized views have been created.
-    async fn should_apply(&self) -> Result<bool, Error> {
-        let inference_by_id_exists =
-            check_table_exists(self.clickhouse, "InferenceById", "0013").await?;
-        if !inference_by_id_exists {
-            return Ok(true);
-        }
-        let inference_by_episode_id_exists =
-            check_table_exists(self.clickhouse, "InferenceByEpisodeId", "0013").await?;
-        if !inference_by_episode_id_exists {
-            return Ok(true);
-        }
-        let json_inference_by_id_view_exists =
-            check_table_exists(self.clickhouse, "JsonInferenceByIdView", "0013").await?;
-        if !json_inference_by_id_view_exists {
-            return Ok(true);
-        }
-        let chat_inference_by_id_view_exists =
-            check_table_exists(self.clickhouse, "ChatInferenceByIdView", "0013").await?;
-        if !chat_inference_by_id_view_exists {
-            return Ok(true);
-        }
-        let json_inference_by_episode_id_view_exists =
-            check_table_exists(self.clickhouse, "JsonInferenceByEpisodeIdView", "0013").await?;
-        if !json_inference_by_episode_id_view_exists {
-            return Ok(true);
-        }
-        let chat_inference_by_episode_id_view_exists =
-            check_table_exists(self.clickhouse, "ChatInferenceByEpisodeIdView", "0013").await?;
-        if !chat_inference_by_episode_id_view_exists {
-            return Ok(true);
-        }
-        let query = "SHOW CREATE TABLE InferenceById".to_string();
-        let result = self.clickhouse.run_query(query, None).await?;
-        if !result.contains("UInt128") {
-            return Ok(true);
-        }
-        let query = "SHOW CREATE TABLE InferenceByEpisodeId".to_string();
-        let result = self.clickhouse.run_query(query, None).await?;
-        if !result.contains("UInt128") {
-            return Ok(true);
-        }
-        let query = "SELECT 1 FROM system.functions WHERE name = 'uint_to_uuid'".to_string();
-        let result = self.clickhouse.run_query(query, None).await?;
-        if !result.contains("1") {
-            return Ok(true);
-        }
-        Ok(false)
+    fn should_apply(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let inference_by_id_exists =
+                check_table_exists(self.clickhouse, "InferenceById", "0013").await?;
+            if !inference_by_id_exists {
+                return Ok(true);
+            }
+            let inference_by_episode_id_exists =
+                check_table_exists(self.clickhouse, "InferenceByEpisodeId", "0013").await?;
+            if !inference_by_episode_id_exists {
+                return Ok(true);
+            }
+            let json_inference_by_id_view_exists =
+                check_table_exists(self.clickhouse, "JsonInferenceByIdView", "0013").await?;
+            if !json_inference_by_id_view_exists {
+                return Ok(true);
+            }
+            let chat_inference_by_id_view_exists =
+                check_table_exists(self.clickhouse, "ChatInferenceByIdView", "0013").await?;
+            if !chat_inference_by_id_view_exists {
+                return Ok(true);
+            }
+            let json_inference_by_episode_id_view_exists =
+                check_table_exists(self.clickhouse, "JsonInferenceByEpisodeIdView", "0013").await?;
+            if !json_inference_by_episode_id_view_exists {
+                return Ok(true);
+            }
+            let chat_inference_by_episode_id_view_exists =
+                check_table_exists(self.clickhouse, "ChatInferenceByEpisodeIdView", "0013").await?;
+            if !chat_inference_by_episode_id_view_exists {
+                return Ok(true);
+            }
+            let query = "SHOW CREATE TABLE InferenceById".to_string();
+            let result = self.clickhouse.run_query(query, None).await?;
+            if !result.contains("UInt128") {
+                return Ok(true);
+            }
+            let query = "SHOW CREATE TABLE InferenceByEpisodeId".to_string();
+            let result = self.clickhouse.run_query(query, None).await?;
+            if !result.contains("UInt128") {
+                return Ok(true);
+            }
+            let query = "SELECT 1 FROM system.functions WHERE name = 'uint_to_uuid'".to_string();
+            let result = self.clickhouse.run_query(query, None).await?;
+            if !result.contains("1") {
+                return Ok(true);
+            }
+            Ok(false)
+        })
     }
 
-    async fn apply(&self) -> Result<(), Error> {
-        // Only gets used when we are not doing a clean start
-        let view_offset = Duration::from_secs(15);
-        let view_timestamp = (std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
-                    id: "0013".to_string(),
-                    message: e.to_string(),
-                })
-            })?
-            + view_offset)
-            .as_secs();
-        // Drop the original tables and materialized views (if they exist)
-        let query = "DROP TABLE IF EXISTS InferenceById".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
-        let query = "DROP VIEW IF EXISTS ChatInferenceByIdView".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
-        let query = "DROP VIEW IF EXISTS JsonInferenceByIdView".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
-        let query = "DROP TABLE IF EXISTS InferenceByEpisodeId".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
-        let query = "DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
-        let query = "DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
-        // Create the new tables with UInt128 primary keys
-        // Create the `InferenceById` table
-        let query = r#"
+    fn apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            // Only gets used when we are not doing a clean start
+            let view_offset = Duration::from_secs(15);
+            let view_timestamp = (std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseMigration {
+                        id: "0013".to_string(),
+                        message: e.to_string(),
+                    })
+                })?
+                + view_offset)
+                .as_secs();
+            // Drop the original tables and materialized views (if they exist)
+            let query = "DROP TABLE IF EXISTS InferenceById".to_string();
+            let _ = self.clickhouse.run_query(query, None).await?;
+            let query = "DROP VIEW IF EXISTS ChatInferenceByIdView".to_string();
+            let _ = self.clickhouse.run_query(query, None).await?;
+            let query = "DROP VIEW IF EXISTS JsonInferenceByIdView".to_string();
+            let _ = self.clickhouse.run_query(query, None).await?;
+            let query = "DROP TABLE IF EXISTS InferenceByEpisodeId".to_string();
+            let _ = self.clickhouse.run_query(query, None).await?;
+            let query = "DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView".to_string();
+            let _ = self.clickhouse.run_query(query, None).await?;
+            let query = "DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView".to_string();
+            let _ = self.clickhouse.run_query(query, None).await?;
+            // Create the new tables with UInt128 primary keys
+            // Create the `InferenceById` table
+            let query = r#"
             CREATE TABLE IF NOT EXISTS InferenceById
             (
                 id_uint UInt128,
@@ -141,9 +148,9 @@ impl Migration for Migration0013<'_> {
             ) ENGINE = MergeTree()
             ORDER BY id_uint;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
-        // Create the `InferenceByEpisodeId` table
-        let query = r#"
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            // Create the `InferenceByEpisodeId` table
+            let query = r#"
             CREATE TABLE IF NOT EXISTS InferenceByEpisodeId
             (
                 episode_id_uint UInt128,
@@ -155,26 +162,28 @@ impl Migration for Migration0013<'_> {
             ENGINE = MergeTree()
             ORDER BY (episode_id_uint, id_uint);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
-        // Create the `uint_to_uuid` function
-        let query = r#"CREATE FUNCTION IF NOT EXISTS uint_to_uuid AS (x) -> reinterpretAsUUID(
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            // Create the `uint_to_uuid` function
+            let query = r#"CREATE FUNCTION IF NOT EXISTS uint_to_uuid AS (x) -> reinterpretAsUUID(
             concat(
                 substring(reinterpretAsString(x), 9, 8),
                 substring(reinterpretAsString(x), 1, 8)
             )
         );"#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
-        let view_where_clause = if !self.clean_start {
-            format!("WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
-        } else {
-            String::new()
-        };
-        // Create the materialized views for the `InferenceById` table
-        // IMPORTANT: The function_type column is now correctly set to 'chat'
-        let query = format!(
-            r#"
+            // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
+            let view_where_clause = if !self.clean_start {
+                format!(
+                    "WHERE UUIDv7ToDateTime(id) >= toDateTime(toUnixTimestamp({view_timestamp}))"
+                )
+            } else {
+                String::new()
+            };
+            // Create the materialized views for the `InferenceById` table
+            // IMPORTANT: The function_type column is now correctly set to 'chat'
+            let query = format!(
+                r#"
             CREATE MATERIALIZED VIEW ChatInferenceByIdView
             TO InferenceById
             AS
@@ -187,13 +196,13 @@ impl Migration for Migration0013<'_> {
                 FROM ChatInference
                 {view_where_clause};
             "#,
-            view_where_clause = view_where_clause
-        );
-        let _ = self.clickhouse.run_query(query, None).await?;
+                view_where_clause = view_where_clause
+            );
+            let _ = self.clickhouse.run_query(query, None).await?;
 
-        // IMPORTANT: The function_type column is now correctly set to 'json'
-        let query = format!(
-            r#"
+            // IMPORTANT: The function_type column is now correctly set to 'json'
+            let query = format!(
+                r#"
             CREATE MATERIALIZED VIEW JsonInferenceByIdView
             TO InferenceById
             AS
@@ -206,14 +215,14 @@ impl Migration for Migration0013<'_> {
                 FROM JsonInference
                 {view_where_clause};
             "#,
-            view_where_clause = view_where_clause
-        );
-        let _ = self.clickhouse.run_query(query, None).await?;
+                view_where_clause = view_where_clause
+            );
+            let _ = self.clickhouse.run_query(query, None).await?;
 
-        // Create the materialized view for the `InferenceByEpisodeId` table from ChatInference
-        // IMPORTANT: The function_type column is now correctly set to 'chat'
-        let query = format!(
-            r#"
+            // Create the materialized view for the `InferenceByEpisodeId` table from ChatInference
+            // IMPORTANT: The function_type column is now correctly set to 'chat'
+            let query = format!(
+                r#"
             CREATE MATERIALIZED VIEW ChatInferenceByEpisodeIdView
             TO InferenceByEpisodeId
             AS
@@ -226,14 +235,14 @@ impl Migration for Migration0013<'_> {
                 FROM ChatInference
                 {view_where_clause};
             "#,
-            view_where_clause = view_where_clause
-        );
-        let _ = self.clickhouse.run_query(query, None).await?;
+                view_where_clause = view_where_clause
+            );
+            let _ = self.clickhouse.run_query(query, None).await?;
 
-        // Create the materialized view for the `InferenceByEpisodeId` table from JsonInference
-        // IMPORTANT: The function_type column is now correctly set to 'json'
-        let query = format!(
-            r#"
+            // Create the materialized view for the `InferenceByEpisodeId` table from JsonInference
+            // IMPORTANT: The function_type column is now correctly set to 'json'
+            let query = format!(
+                r#"
             CREATE MATERIALIZED VIEW JsonInferenceByEpisodeIdView
             TO InferenceByEpisodeId
             AS
@@ -246,17 +255,17 @@ impl Migration for Migration0013<'_> {
                 FROM JsonInference
                 {view_where_clause};
             "#,
-            view_where_clause = view_where_clause
-        );
-        let _ = self.clickhouse.run_query(query, None).await?;
+                view_where_clause = view_where_clause
+            );
+            let _ = self.clickhouse.run_query(query, None).await?;
 
-        if !self.clean_start {
-            // Sleep for the duration specified by view_offset to allow the materialized views to catch up
-            tokio::time::sleep(view_offset).await;
+            if !self.clean_start {
+                // Sleep for the duration specified by view_offset to allow the materialized views to catch up
+                tokio::time::sleep(view_offset).await;
 
-            let insert_chat_inference = async {
-                let query = format!(
-                    r#"
+                let insert_chat_inference = async {
+                    let query = format!(
+                        r#"
                     INSERT INTO InferenceById
                     SELECT
                         toUInt128(id) as id_uint,
@@ -267,14 +276,14 @@ impl Migration for Migration0013<'_> {
                     FROM ChatInference
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "#,
-                    view_timestamp = view_timestamp
-                );
-                self.clickhouse.run_query(query, None).await
-            };
+                        view_timestamp = view_timestamp
+                    );
+                    self.clickhouse.run_query(query, None).await
+                };
 
-            let insert_json_inference = async {
-                let query = format!(
-                    r#"
+                let insert_json_inference = async {
+                    let query = format!(
+                        r#"
                     INSERT INTO InferenceById
                     SELECT
                         toUInt128(id) as id_uint,
@@ -285,15 +294,15 @@ impl Migration for Migration0013<'_> {
                     FROM JsonInference
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "#,
-                    view_timestamp = view_timestamp
-                );
-                self.clickhouse.run_query(query, None).await
-            };
+                        view_timestamp = view_timestamp
+                    );
+                    self.clickhouse.run_query(query, None).await
+                };
 
-            // Insert the data from the original tables into the new table (we do this concurrently since it could theoretically take a long time)
-            let insert_chat_inference_by_episode_id = async {
-                let query = format!(
-                    r#"
+                // Insert the data from the original tables into the new table (we do this concurrently since it could theoretically take a long time)
+                let insert_chat_inference_by_episode_id = async {
+                    let query = format!(
+                        r#"
                     INSERT INTO InferenceByEpisodeId
                     SELECT
                         toUInt128(episode_id) as episode_id_uint,
@@ -304,14 +313,14 @@ impl Migration for Migration0013<'_> {
                     FROM ChatInference
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "#,
-                    view_timestamp = view_timestamp
-                );
-                self.clickhouse.run_query(query, None).await
-            };
+                        view_timestamp = view_timestamp
+                    );
+                    self.clickhouse.run_query(query, None).await
+                };
 
-            let insert_json_inference_by_episode_id = async {
-                let query = format!(
-                    r#"
+                let insert_json_inference_by_episode_id = async {
+                    let query = format!(
+                        r#"
                     INSERT INTO InferenceByEpisodeId
                     SELECT
                         toUInt128(episode_id) as episode_id_uint,
@@ -322,20 +331,21 @@ impl Migration for Migration0013<'_> {
                     FROM JsonInference
                     WHERE UUIDv7ToDateTime(id) < toDateTime(toUnixTimestamp({view_timestamp}));
                 "#,
-                    view_timestamp = view_timestamp
-                );
-                self.clickhouse.run_query(query, None).await
-            };
+                        view_timestamp = view_timestamp
+                    );
+                    self.clickhouse.run_query(query, None).await
+                };
 
-            tokio::try_join!(
-                insert_chat_inference,
-                insert_json_inference,
-                insert_chat_inference_by_episode_id,
-                insert_json_inference_by_episode_id
-            )?;
-        }
+                tokio::try_join!(
+                    insert_chat_inference,
+                    insert_json_inference,
+                    insert_chat_inference_by_episode_id,
+                    insert_json_inference_by_episode_id
+                )?;
+            }
 
-        Ok(())
+            Ok(())
+        })
     }
 
     fn rollback_instructions(&self) -> String {
@@ -357,8 +367,10 @@ impl Migration for Migration0013<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
-        let should_apply = self.should_apply().await?;
-        Ok(!should_apply)
+    fn has_succeeded(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let should_apply = self.should_apply().await?;
+            Ok(!should_apply)
+        })
     }
 }

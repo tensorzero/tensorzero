@@ -1,3 +1,6 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
@@ -12,30 +15,36 @@ pub struct Migration0002<'a> {
 
 impl Migration for Migration0002<'_> {
     /// Check if you can connect to the database
-    async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse.health().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0002".to_string(),
-                message: e.to_string(),
+    fn can_apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            self.clickhouse.health().await.map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0002".to_string(),
+                    message: e.to_string(),
+                })
             })
         })
     }
 
     /// Check if the migration has already been applied
     /// This should be equivalent to checking if `DynamicInContextLearningExample` exists
-    async fn should_apply(&self) -> Result<bool, Error> {
-        let exists =
-            check_table_exists(self.clickhouse, "DynamicInContextLearningExample", "0002").await?;
-        if !exists {
-            return Ok(true);
-        }
+    fn should_apply(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let exists =
+                check_table_exists(self.clickhouse, "DynamicInContextLearningExample", "0002")
+                    .await?;
+            if !exists {
+                return Ok(true);
+            }
 
-        Ok(false)
+            Ok(false)
+        })
     }
 
-    async fn apply(&self) -> Result<(), Error> {
-        // Create the `DynamicInContextLearningExample` table
-        let query = r#"
+    fn apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+        Box::pin(async move {
+            // Create the `DynamicInContextLearningExample` table
+            let query = r#"
             CREATE TABLE IF NOT EXISTS DynamicInContextLearningExample
             (
                 id UUID, -- must be a UUIDv7
@@ -49,8 +58,9 @@ impl Migration for Migration0002<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, namespace);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
-        Ok(())
+            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            Ok(())
+        })
     }
 
     fn rollback_instructions(&self) -> String {
@@ -63,8 +73,10 @@ impl Migration for Migration0002<'_> {
     }
 
     /// Check if the migration has succeeded (i.e. it should not be applied again)
-    async fn has_succeeded(&self) -> Result<bool, Error> {
-        let should_apply = self.should_apply().await?;
-        Ok(!should_apply)
+    fn has_succeeded(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+        Box::pin(async move {
+            let should_apply = self.should_apply().await?;
+            Ok(!should_apply)
+        })
     }
 }

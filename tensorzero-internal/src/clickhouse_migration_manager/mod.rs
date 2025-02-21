@@ -129,6 +129,8 @@ pub async fn run_migration(migration: &impl Migration) -> Result<bool, Error> {
 }
 
 mod tests {
+    use std::{future::Future, pin::Pin};
+
     use super::*;
 
     struct MockMigration {
@@ -158,44 +160,52 @@ mod tests {
     }
 
     impl Migration for MockMigration {
-        async fn can_apply(&self) -> Result<(), Error> {
-            self.called_can_apply
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-            if self.can_apply_result {
-                Ok(())
-            } else {
-                Err(ErrorDetails::ClickHouseMigration {
-                    id: "0000".to_string(),
-                    message: "MockMigration can_apply failed".to_string(),
+        fn can_apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+            Box::pin(async move {
+                self.called_can_apply
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                if self.can_apply_result {
+                    Ok(())
+                } else {
+                    Err(ErrorDetails::ClickHouseMigration {
+                        id: "0000".to_string(),
+                        message: "MockMigration can_apply failed".to_string(),
+                    }
+                    .into())
                 }
-                .into())
-            }
+            })
         }
 
-        async fn should_apply(&self) -> Result<bool, Error> {
-            self.called_should_apply
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-            Ok(self.should_apply_result)
+        fn should_apply(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+            Box::pin(async move {
+                self.called_should_apply
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                Ok(self.should_apply_result)
+            })
         }
 
-        async fn apply(&self) -> Result<(), Error> {
-            self.called_apply
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-            if self.apply_result {
-                Ok(())
-            } else {
-                Err(ErrorDetails::ClickHouseMigration {
-                    id: "0000".to_string(),
-                    message: "MockMigration apply failed".to_string(),
+        fn apply(&self) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + '_>> {
+            Box::pin(async move {
+                self.called_apply
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                if self.apply_result {
+                    Ok(())
+                } else {
+                    Err(ErrorDetails::ClickHouseMigration {
+                        id: "0000".to_string(),
+                        message: "MockMigration apply failed".to_string(),
+                    }
+                    .into())
                 }
-                .into())
-            }
+            })
         }
 
-        async fn has_succeeded(&self) -> Result<bool, Error> {
-            self.called_has_succeeded
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-            Ok(self.has_succeeded_result)
+        fn has_succeeded(&self) -> Pin<Box<dyn Future<Output = Result<bool, Error>> + Send + '_>> {
+            Box::pin(async move {
+                self.called_has_succeeded
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                Ok(self.has_succeeded_result)
+            })
         }
 
         fn rollback_instructions(&self) -> String {
