@@ -19,6 +19,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let extra_body_providers = vec![E2ETestProvider {
+        variant_name: "deepseek-chat-extra-body".to_string(),
+        model_name: "deepseek-chat".to_string(),
+        model_provider_name: "deepseek".to_string(),
+        credentials: HashMap::new(),
+    }];
+
     let reasoning_providers = vec![E2ETestProvider {
         variant_name: "deepseek-reasoner".to_string(),
         model_name: "deepseek-reasoner".to_string(),
@@ -57,6 +64,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        extra_body_inference: extra_body_providers,
         reasoning_inference: reasoning_providers.clone(),
         inference_params_inference: inference_params_providers,
         tool_use_inference: vec![],

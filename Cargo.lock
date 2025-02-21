@@ -152,9 +152,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.83"
+version = "0.1.86"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "721cae7de5c34fbb2acd27e21e6d2cf7b886dce0c27388d46c4e6c47ea4318dd"
+checksum = "644dd749086bf3771a2fbc5f256fdb982d53f011c7d5d560304eafeecebce79d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3760,6 +3760,7 @@ name = "tensorzero-internal"
 version = "0.1.0"
 dependencies = [
  "async-stream",
+ "async-trait",
  "aws-config",
  "aws-sdk-bedrockruntime",
  "aws-sdk-s3",

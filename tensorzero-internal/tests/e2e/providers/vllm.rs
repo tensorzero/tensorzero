@@ -20,6 +20,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let extra_body_providers = vec![E2ETestProvider {
+        variant_name: "vllm-extra-body".to_string(),
+        model_name: "microsoft/Phi-3.5-mini-instruct".into(),
+        model_provider_name: "vllm".into(),
+        credentials: HashMap::new(),
+    }];
+
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "vllm-default".to_string(),
@@ -45,6 +52,7 @@ async fn get_providers() -> E2ETestProviders {
     // TODOs (#169): Implement a solution for vLLM tool use
     E2ETestProviders {
         simple_inference: providers.clone(),
+        extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
         tool_use_inference: vec![],

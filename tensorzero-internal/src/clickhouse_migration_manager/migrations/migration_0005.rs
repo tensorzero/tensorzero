@@ -1,6 +1,7 @@
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
+use async_trait::async_trait;
 
 use super::check_table_exists;
 
@@ -17,6 +18,7 @@ pub struct Migration0005<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
+#[async_trait]
 impl Migration for Migration0005<'_> {
     /// Check if you can connect to the database
     /// Then check if the two inference tables exist as the sources for the materialized views

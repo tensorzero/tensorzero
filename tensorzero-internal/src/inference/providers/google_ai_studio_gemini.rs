@@ -28,6 +28,7 @@ use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
+use super::helpers::inject_extra_body;
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
 const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
@@ -138,7 +139,12 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body: GeminiRequest = GeminiRequest::new(request)?;
+        let mut request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing Gemini request: {e}"),
+            })
+        })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut url = self.request_url.clone();
@@ -208,7 +214,12 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body: GeminiRequest = GeminiRequest::new(request)?;
+        let mut request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing Gemini request: {e}"),
+            })
+        })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -772,7 +783,7 @@ struct GeminiResponseWithMetadata<'a> {
     response: GeminiResponse,
     raw_response: String,
     latency: Latency,
-    request: GeminiRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -1107,6 +1118,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let result = GeminiRequest::new(&inference_request);
         let details = result.unwrap_err().get_owned_details();
@@ -1143,6 +1155,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let result = GeminiRequest::new(&inference_request);
         let request = result.unwrap();
@@ -1192,6 +1205,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
+            extra_body: None,
         };
         // JSON schema should be supported for Gemini Pro models
         let result = GeminiRequest::new(&inference_request);
@@ -1292,6 +1306,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let request_body = GeminiRequest {
             contents: vec![],
@@ -1305,7 +1320,7 @@ mod tests {
         let response_with_latency = GeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         };
@@ -1374,6 +1389,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let request_body = GeminiRequest {
             contents: vec![],
@@ -1386,7 +1402,7 @@ mod tests {
         let response_with_latency = GeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         };
@@ -1473,7 +1489,7 @@ mod tests {
         let response_with_latency = GeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         };
@@ -1545,6 +1561,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools);
         let tools = tools.unwrap();
@@ -1586,6 +1603,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools);
         let tools = tools.unwrap();

@@ -9,6 +9,7 @@ use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
 
+use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
     OpenAIRequestMessage, OpenAIResponse, OpenAISystemRequestMessage, StreamOptions,
@@ -114,7 +115,13 @@ impl InferenceProvider for VLLMProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = VLLMRequest::new(&self.model_name, request)?;
+        let mut request_body = serde_json::to_value(VLLMRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing VLLM request: {e}"),
+            })
+        })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let request_url = get_chat_url(&self.api_base)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -185,7 +192,13 @@ impl InferenceProvider for VLLMProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = VLLMRequest::new(&self.model_name, request)?;
+        let mut request_body = serde_json::to_value(VLLMRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing VLLM request: {e}"),
+            })
+        })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -318,7 +331,7 @@ struct VLLMResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
     raw_response: String,
-    request: VLLMRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -452,6 +465,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
+            extra_body: None,
         };
 
         let vllm_request = VLLMRequest::new("llama-v3-8b", &request_with_tools).unwrap();
@@ -488,6 +502,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
+            extra_body: None,
         };
 
         let err = VLLMRequest::new("llama-v3-8b", &request_with_tools).unwrap_err();
@@ -560,6 +575,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let vllm_response_with_metadata = VLLMResponseWithMetadata {
             response: valid_response,
@@ -567,7 +583,10 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: VLLMRequest::new("test-model", &generic_request).unwrap(),
+            request: serde_json::to_value(
+                VLLMRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =

@@ -27,6 +27,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let extra_body_providers = vec![E2ETestProvider {
+        variant_name: "anthropic-extra-body".to_string(),
+        model_name: "claude-3-haiku-20240307-anthropic".into(),
+        model_provider_name: "anthropic".into(),
+        credentials: HashMap::new(),
+    }];
+
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "anthropic-dynamic".to_string(),
         model_name: "claude-3-haiku-20240307-anthropic-dynamic".into(),
@@ -65,6 +72,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
         tool_use_inference: standard_providers.clone(),

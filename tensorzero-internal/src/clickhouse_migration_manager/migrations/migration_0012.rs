@@ -3,6 +3,7 @@ use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 
 use super::check_table_exists;
+use async_trait::async_trait;
 
 /// This migration is used to set up the ClickHouse database for the datasets feature.
 /// It creates two tables: `ChatInferenceDataset` and `JsonInferenceDataset`
@@ -13,6 +14,7 @@ pub struct Migration0012<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
+#[async_trait]
 impl Migration for Migration0012<'_> {
     /// Check if you can connect to the database
     async fn can_apply(&self) -> Result<(), Error> {

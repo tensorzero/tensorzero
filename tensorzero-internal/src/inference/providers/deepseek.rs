@@ -26,6 +26,7 @@ use crate::inference::types::{
 use crate::model::{Credential, CredentialLocation};
 use crate::tool::ToolCallChunk;
 
+use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
     tensorzero_to_openai_system_message, OpenAIAssistantRequestMessage, OpenAIRequestMessage,
@@ -125,7 +126,15 @@ impl InferenceProvider for DeepSeekProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = DeepSeekRequest::new(&self.model_name, request)?;
+        let mut request_body =
+            serde_json::to_value(DeepSeekRequest::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing DeepSeek request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let request_url = get_chat_url(&DEEPSEEK_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -199,7 +208,15 @@ impl InferenceProvider for DeepSeekProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = DeepSeekRequest::new(&self.model_name, request)?;
+        let mut request_body =
+            serde_json::to_value(DeepSeekRequest::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing DeepSeek request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
@@ -599,7 +616,7 @@ struct DeepSeekResponseWithMetadata<'a> {
     response: DeepSeekResponse,
     raw_response: String,
     latency: Latency,
-    request: DeepSeekRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -759,6 +776,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools)
@@ -803,6 +821,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Json,
             output_schema: None,
+            extra_body: None,
         };
 
         let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools)
@@ -919,6 +938,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let deepseek_response_with_metadata = DeepSeekResponseWithMetadata {
             response: valid_response,
@@ -926,7 +946,10 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: DeepSeekRequest::new("deepseek-chat", &generic_request).unwrap(),
+            request: serde_json::to_value(
+                DeepSeekRequest::new("deepseek-chat", &generic_request).unwrap(),
+            )
+            .unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =
@@ -976,6 +999,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let messages = prepare_deepseek_messages(&request, "deepseek-chat").unwrap();
@@ -1022,6 +1046,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let messages = prepare_deepseek_messages(&request_no_system, "deepseek-chat").unwrap();
@@ -1057,6 +1082,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let messages = prepare_deepseek_messages(&request_multiple, "deepseek-chat").unwrap();

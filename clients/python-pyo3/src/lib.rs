@@ -577,8 +577,8 @@ impl TensorZeroGateway {
 #[pyclass(extends=BaseTensorZeroGateway)]
 /// An async client for a TensorZero gateway.
 ///
-/// To connect to a running HTTP gateway, call `AsyncTensorZeroGateway(base_url = "http://gateway_url")`
-/// To create an embedded gateway, call `AsyncTensorZeroGateway.create_embedded_gateway(config_file = "/path/to/tensorzero.toml")`
+/// To connect to a running HTTP gateway, call `AsyncTensorZeroGateway.build_http(gateway_url="http://gateway_url")`
+/// To create an embedded gateway, call `AsyncTensorZeroGateway.build_embedded(config_file="/path/to/tensorzero.toml")`
 struct AsyncTensorZeroGateway {}
 
 #[pymethods]

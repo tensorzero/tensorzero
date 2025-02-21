@@ -27,6 +27,7 @@ use crate::{
     tool::{ToolCall, ToolCallChunk},
 };
 
+use super::helpers::inject_extra_body;
 use super::{
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
@@ -136,7 +137,15 @@ impl InferenceProvider for TogetherProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = TogetherRequest::new(&self.model_name, request)?;
+        let mut request_body =
+            serde_json::to_value(TogetherRequest::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing Together request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let request_url = get_chat_url(&TOGETHER_API_BASE)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -206,7 +215,15 @@ impl InferenceProvider for TogetherProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = TogetherRequest::new(&self.model_name, request)?;
+        let mut request_body =
+            serde_json::to_value(TogetherRequest::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -464,7 +481,7 @@ struct TogetherResponseWithMetadata<'a> {
     response: TogetherResponse,
     latency: Latency,
     raw_response: String,
-    request: TogetherRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
     parse_think_blocks: bool,
 }
@@ -834,6 +851,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let together_request =
@@ -932,6 +950,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let together_response_with_metadata = TogetherResponseWithMetadata {
             response: valid_response,
@@ -939,7 +958,10 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: TogetherRequest::new("test-model", &generic_request).unwrap(),
+            request: serde_json::to_value(
+                TogetherRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap(),
             generic_request: &generic_request,
             parse_think_blocks: true,
         };
@@ -982,7 +1004,10 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: TogetherRequest::new("test-model", &generic_request).unwrap(),
+            request: serde_json::to_value(
+                TogetherRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap(),
             generic_request: &generic_request,
             parse_think_blocks: true,
         };
@@ -1022,7 +1047,10 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: TogetherRequest::new("test-model", &generic_request).unwrap(),
+            request: serde_json::to_value(
+                TogetherRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap(),
             generic_request: &generic_request,
             parse_think_blocks: true,
         };

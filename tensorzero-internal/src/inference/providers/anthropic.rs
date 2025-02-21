@@ -27,7 +27,7 @@ use crate::inference::types::{
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
-use super::helpers::peek_first_chunk;
+use super::helpers::{inject_extra_body, peek_first_chunk};
 
 lazy_static! {
     static ref ANTHROPIC_BASE_URL: Url = {
@@ -126,7 +126,15 @@ impl InferenceProvider for AnthropicProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
+        let mut request_body =
+            serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing Anthropic request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let res = http_client
@@ -211,7 +219,15 @@ impl InferenceProvider for AnthropicProvider {
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
+        let mut request_body =
+            serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing Anthropic request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
@@ -800,7 +816,7 @@ struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     raw_response: String,
     latency: Latency,
-    request: AnthropicRequestBody<'a>,
+    request: serde_json::Value,
     input_messages: Vec<RequestMessage>,
     function_type: &'a FunctionType,
     json_mode: &'a ModelInferenceRequestJsonMode,
@@ -842,7 +858,10 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
 
         Ok(ProviderInferenceResponse::new(
             content,
-            request_body.system.map(String::from),
+            request_body
+                .get("system")
+                .and_then(|s| s.as_str())
+                .map(|s| s.to_owned()),
             input_messages,
             raw_request,
             raw_response,
@@ -1292,6 +1311,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         let details = anthropic_request_body.unwrap_err().get_owned_details();
@@ -1322,6 +1342,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1370,6 +1391,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1422,6 +1444,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1474,6 +1497,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Json,
             output_schema: None,
+            extra_body: None,
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1770,7 +1794,7 @@ mod tests {
             max_tokens: 100,
             stream: Some(false),
             system: None,
-            top_p: Some(0.9),
+            top_p: Some(0.5),
             temperature: None,
             tool_choice: None,
             tools: None,
@@ -1785,7 +1809,7 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
@@ -1829,7 +1853,7 @@ mod tests {
             stream: Some(false),
             system: None,
             temperature: None,
-            top_p: Some(0.9),
+            top_p: Some(0.5),
             tool_choice: None,
             tools: None,
         };
@@ -1842,7 +1866,7 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
@@ -1896,7 +1920,7 @@ mod tests {
             stream: Some(false),
             system: None,
             temperature: None,
-            top_p: Some(0.9),
+            top_p: Some(0.5),
             tool_choice: None,
             tools: None,
         };
@@ -1909,7 +1933,7 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,

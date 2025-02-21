@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -24,6 +24,12 @@ use super::{
     InferModelRequestArgs, InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
 };
 
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct ExtraBodyConfig {
+    pub data: serde_json::Map<String, Value>,
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChatCompletionConfig {
@@ -43,6 +49,8 @@ pub struct ChatCompletionConfig {
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     #[serde(default)]
     pub retries: RetryConfig,
+    #[serde(default)]
+    pub extra_body: Option<ExtraBodyConfig>,
 }
 
 impl ChatCompletionConfig {
@@ -154,6 +162,7 @@ impl ChatCompletionConfig {
             stream,
             inference_params,
             self.json_mode,
+            self.extra_body.as_ref(),
         )
     }
 }
@@ -436,6 +445,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             retries: RetryConfig::default(),
+            extra_body: None,
         };
 
         // Test case 1: Regular user message

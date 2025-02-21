@@ -16,6 +16,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
+use crate::variant::chat_completion::ExtraBodyConfig;
 use crate::{cache::CacheData, config_parser::ObjectStoreInfo};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{
@@ -247,6 +248,7 @@ pub struct ModelInferenceRequest<'a> {
     pub json_mode: ModelInferenceRequestJsonMode,
     pub function_type: FunctionType,
     pub output_schema: Option<&'a Value>,
+    pub extra_body: Option<&'a ExtraBodyConfig>,
 }
 
 /// Each provider transforms a ModelInferenceRequest into a provider-specific (private) inference request type

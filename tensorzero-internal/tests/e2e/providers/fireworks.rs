@@ -20,6 +20,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let extra_body_providers = vec![E2ETestProvider {
+        variant_name: "fireworks-extra-body".to_string(),
+        model_name: "qwen2p5-72b-instruct".into(),
+        model_provider_name: "fireworks".into(),
+        credentials: HashMap::new(),
+    }];
+
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "fireworks-dynamic".to_string(),
         model_name: "llama3.3-70b-instruct-fireworks-dynamic".into(),
@@ -65,6 +72,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: providers,
+        extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
         tool_use_inference: tool_providers.clone(),

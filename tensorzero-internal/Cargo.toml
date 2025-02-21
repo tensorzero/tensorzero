@@ -28,6 +28,7 @@ workspace = true
 
 [dependencies]
 async-stream = { workspace = true }
+async-trait = "0.1.86"
 aws-config = { version = "1.5.11", features = ["behavior-version-latest"] }
 aws-sdk-bedrockruntime = { version = "1.65.0", features = [
     "behavior-version-latest",

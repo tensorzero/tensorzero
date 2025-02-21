@@ -14,6 +14,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let extra_body_providers = vec![E2ETestProvider {
+        variant_name: "tgi-extra-body".to_string(),
+        model_name: model_name.clone(),
+        model_provider_name: "tgi".into(),
+        credentials: HashMap::new(),
+    }];
+
     let json_providers = vec![E2ETestProvider {
         variant_name: "tgi-default".to_string(),
         model_name: model_name.clone(),
@@ -23,6 +30,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
         inference_params_inference: standard_providers.clone(),
         tool_use_inference: vec![],
