@@ -68,6 +68,7 @@ impl ObjectStoreData {
                 AmazonS3Builder::from_env()
                     .with_region(region)
                     .with_bucket_name(bucket_name)
+                    // Uses the S3 'If-Match' and 'If-None-Match' headers to implement condition put
                     .with_conditional_put(object_store::aws::S3ConditionalPut::ETagMatch)
                     .build()
                     .map_err(|e| Error::new(ErrorDetails::Config {

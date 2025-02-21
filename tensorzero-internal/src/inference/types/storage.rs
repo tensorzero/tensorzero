@@ -34,7 +34,7 @@ impl StorageKind {
             ImageKind::Png => "png",
             ImageKind::WebP => "webp",
         };
-        let path = Path::parse(format!("images/{hash}.{suffix}.base64")).map_err(|e| {
+        let path = Path::parse(format!("observability/images/{hash}.{suffix}")).map_err(|e| {
             Error::new(ErrorDetails::InternalError {
                 message: format!("Failed to construct object_store path: {e}"),
             })
