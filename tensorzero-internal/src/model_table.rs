@@ -70,6 +70,7 @@ impl<T: ShorthandModelConfig> std::ops::Deref for BaseModelTable<T> {
 
 /// This is `Cow` without the `T: Clone` bound.
 /// Useful when we want a `Cow`, but don't want to (or can't) implement `Clone`
+#[derive(Debug)]
 pub enum CowNoClone<'a, T> {
     Borrowed(&'a T),
     Owned(T),

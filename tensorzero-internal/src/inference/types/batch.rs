@@ -9,7 +9,7 @@ use crate::{
     uuid_util::validate_episode_id,
 };
 
-use super::{ContentBlockOutput, Input, ModelInferenceRequest, RequestMessage, Usage};
+use super::{ContentBlockOutput, ModelInferenceRequest, RequestMessage, ResolvedInput, Usage};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
@@ -218,7 +218,7 @@ pub struct BatchModelInferenceRow<'a> {
     pub variant_name: Cow<'a, str>,
     pub episode_id: Uuid,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: Input,
+    pub input: ResolvedInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub input_messages: Vec<RequestMessage>,
     pub system: Option<Cow<'a, str>>,

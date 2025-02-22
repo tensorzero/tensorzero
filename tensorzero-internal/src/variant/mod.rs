@@ -19,8 +19,9 @@ use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
+use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
-    FunctionType, InferenceResultChunk, InferenceResultStream, Input, ModelInferenceRequest,
+    FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
@@ -120,7 +121,7 @@ pub struct ModelUsedInfo {
 pub trait Variant {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -130,7 +131,7 @@ pub trait Variant {
 
     async fn infer_stream<'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -152,7 +153,7 @@ pub trait Variant {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        input: &[Input],
+        input: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_configs: &'a [InferenceConfig<'a, 'a>],
@@ -179,7 +180,7 @@ impl Variant for VariantConfig {
     )]
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -245,7 +246,7 @@ impl Variant for VariantConfig {
     )]
     async fn infer_stream<'a, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -307,7 +308,7 @@ impl Variant for VariantConfig {
     #[instrument(skip_all, fields(variant_name = %inference_configs.first().map(|x| x.variant_name.unwrap_or("")).unwrap_or("")))]
     async fn start_batch_inference<'a>(
         &'a self,
-        inputs: &[Input],
+        inputs: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_configs: &'a [InferenceConfig<'a, 'a>],

@@ -1,3 +1,5 @@
+use crate::providers::common::FERRIS_PNG;
+use base64::prelude::*;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -13,7 +15,7 @@ use tensorzero_internal::{
             DUMMY_JSON_RESPONSE_RAW, DUMMY_RAW_REQUEST, DUMMY_STREAMING_RESPONSE,
             DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
         },
-        types::{ContentBlock, RequestMessage, Role},
+        types::{ContentBlock, Image, ImageKind, RequestMessage, Role},
     },
     tool::ToolCall,
 };
@@ -2047,6 +2049,39 @@ async fn test_inference_invalid_default_function_arg() {
             "Message has non-string content but there is no schema given for role system."
         ),
         "Unexpected error message: {response_text}",
+    );
+}
+
+#[tokio::test]
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+async fn test_image_inference_without_object_store() {
+    let client = make_embedded_gateway_no_config().await;
+    let err_msg = client
+        .inference(ClientInferenceParams {
+            model_name: Some("openai::gpt-4o-mini".to_string()),
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![
+                        InputMessageContent::Text {
+                            value: "Describe the contents of the image".to_string().into(),
+                        },
+                        InputMessageContent::Image(Image::Base64 {
+                            mime_type: ImageKind::Png,
+                            data: BASE64_STANDARD.encode(FERRIS_PNG),
+                        }),
+                    ],
+                }],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err_msg.contains("Object storage is not configured"),
+        "Unexpected error message: {err_msg}"
     );
 }
 

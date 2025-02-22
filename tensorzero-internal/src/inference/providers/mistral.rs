@@ -335,17 +335,16 @@ pub fn stream_mistral(
 }
 
 pub(super) fn prepare_mistral_messages<'a>(
-    request: &'a ModelInferenceRequest,
-) -> Vec<OpenAIRequestMessage<'a>> {
-    let mut messages: Vec<OpenAIRequestMessage> = request
-        .messages
-        .iter()
-        .flat_map(tensorzero_to_openai_messages)
-        .collect();
+    request: &'a ModelInferenceRequest<'_>,
+) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
+    let mut messages = Vec::with_capacity(request.messages.len());
+    for message in request.messages.iter() {
+        messages.extend(tensorzero_to_openai_messages(message)?);
+    }
     if let Some(system_msg) = tensorzero_to_mistral_system_message(request.system.as_deref()) {
         messages.insert(0, system_msg);
     }
-    messages
+    Ok(messages)
 }
 
 fn tensorzero_to_mistral_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
@@ -466,7 +465,7 @@ struct MistralRequest<'a> {
 impl<'a> MistralRequest<'a> {
     pub fn new(
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<MistralRequest<'a>, Error> {
         let response_format = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
@@ -474,7 +473,7 @@ impl<'a> MistralRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages = prepare_mistral_messages(request);
+        let messages = prepare_mistral_messages(request)?;
         let (tools, tool_choice) = prepare_mistral_tools(request)?;
 
         Ok(MistralRequest {

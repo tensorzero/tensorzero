@@ -48,6 +48,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
+        image_inference: vec![],
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: vec![],
         #[cfg(feature = "batch_tests")]

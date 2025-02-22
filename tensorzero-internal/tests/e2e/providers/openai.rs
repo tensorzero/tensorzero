@@ -64,6 +64,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials,
     }];
 
+    let image_providers = vec![E2ETestProvider {
+        variant_name: "openai".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
+
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "openai".to_string(),
@@ -115,6 +122,7 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_without_o1.clone(),
         json_mode_inference: json_providers.clone(),
+        image_inference: image_providers.clone(),
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
         #[cfg(feature = "batch_tests")]

@@ -24,7 +24,7 @@ use tensorzero_internal::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
 use tensorzero_internal::inference::types::{
-    ContentBlockChatOutput, Input, JsonInferenceOutput, Usage,
+    ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, Usage,
 };
 use tensorzero_internal::jsonschema_util::JSONSchemaFromPath;
 use tokio::time::{sleep, Duration};
@@ -84,7 +84,7 @@ async fn test_get_batch_request() {
     // Next, we'll insert a BatchModelInferenceRow
     let inference_id = Uuid::now_v7();
     let episode_id = Uuid::now_v7();
-    let input = Input {
+    let input = ResolvedInput {
         system: None,
         messages: vec![],
     };
@@ -223,7 +223,7 @@ async fn write_2_batch_model_inference_rows(
     let function_name = "test_function";
     let variant_name = "test_variant";
     let episode_id = Uuid::now_v7();
-    let input = Input {
+    let input = ResolvedInput {
         system: None,
         messages: vec![],
     };

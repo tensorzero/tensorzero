@@ -330,7 +330,7 @@ struct SGLangRequest<'a> {
 impl<'a> SGLangRequest<'a> {
     pub fn new(
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<SGLangRequest<'a>, Error> {
         let response_format = Some(SGLangResponseFormat::new(
             &request.json_mode,
@@ -342,7 +342,7 @@ impl<'a> SGLangRequest<'a> {
             }),
             false => None,
         };
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_openai_messages(request)?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
         Ok(SGLangRequest {
