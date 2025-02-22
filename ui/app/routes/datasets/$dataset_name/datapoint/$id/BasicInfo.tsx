@@ -5,7 +5,7 @@ import { useConfig } from "~/context/config";
 import {
   type TryWithVariantButtonProps,
   TryWithVariantButton,
-} from "~/components/utils/TryWithVariantButton";
+} from "~/components/inference/TryWithVariantButton";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 interface BasicInfoProps {
   datapoint: ParsedDatasetRow;
