@@ -1,31 +1,6 @@
 import { z } from "zod";
 import type { FunctionConfig } from "../config/function";
 
-import { createClient } from "@clickhouse/client";
-
-export const clickhouseClient = createClient({
-  url:
-    process.env.TENSORZERO_CLICKHOUSE_URL ??
-    (() => {
-      if (process.env.CLICKHOUSE_URL) {
-        console.warn(
-          'Deprecation Warning: The environment variable "CLICKHOUSE_URL" has been renamed to "TENSORZERO_CLICKHOUSE_URL" and will be removed in a future version. Please update your environment to use "TENSORZERO_CLICKHOUSE_URL" instead.',
-        );
-        return process.env.CLICKHOUSE_URL;
-      }
-      return undefined;
-    })(),
-});
-
-export async function checkClickHouseConnection(): Promise<boolean> {
-  try {
-    const result = await clickhouseClient.ping();
-    return result.success;
-  } catch {
-    return false;
-  }
-}
-
 export const roleSchema = z.enum(["user", "assistant"]);
 export type Role = z.infer<typeof roleSchema>;
 
