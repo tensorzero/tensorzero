@@ -193,7 +193,7 @@ export default function VariantDetails() {
   };
   return (
     <div className="container mx-auto px-4 pb-8">
-      <PageHeader headline="Variant" itemId={`${variant_name}`} />
+      <PageHeader headline={`Variant ${variant_name}`} />
       <BasicInfo variantConfig={variant_config} function_name={function_name} />
       <MetricSelector
         metricsWithFeedback={metricsWithFeedback}

@@ -54,8 +54,8 @@ interface FooterLinkProps {
 function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
   return (
     <Link to={source} className="group flex w-fit items-center">
-      <Icon className="mr-2 h-4 w-4 text-foreground-tertiary transition-colors group-hover:text-foreground" />
-      <span className="text-foreground-tertiary transition-colors group-hover:text-foreground">
+      <Icon className="mr-2 h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground-secondary" />
+      <span className="text-foreground-secondary transition-colors group-hover:text-foreground-primary">
         {children}
       </span>
     </Link>
@@ -129,7 +129,7 @@ export default function Home() {
         <div className="mt-16 border-t border-gray-200 pt-16">
           <div className="grid gap-8 md:grid-cols-3">
             <div>
-              <h3 className="mb-4 text-sm text-gray-400">Learn more</h3>
+              <h3 className="mb-4 text-sm text-muted-foreground">Learn more</h3>
               <div className="flex flex-col gap-3">
                 <FooterLink
                   source="https://www.tensorzero.com/docs"
@@ -147,7 +147,9 @@ export default function Home() {
             </div>
 
             <div>
-              <h3 className="mb-4 text-sm text-gray-400">Ask a question</h3>
+              <h3 className="mb-4 text-sm text-muted-foreground">
+                Ask a question
+              </h3>
               <div className="flex flex-col gap-3">
                 <FooterLink
                   source="https://www.tensorzero.com/slack"
@@ -165,7 +167,9 @@ export default function Home() {
             </div>
 
             <div>
-              <h3 className="mb-4 text-sm text-gray-400">Explore TensorZero</h3>
+              <h3 className="mb-4 text-sm text-muted-foreground">
+                Explore TensorZero
+              </h3>
               <div className="flex flex-col gap-3">
                 <FooterLink source="https://www.tensorzero.com/" icon={Globe}>
                   Website

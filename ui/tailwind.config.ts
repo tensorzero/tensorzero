@@ -29,12 +29,14 @@ export default {
           primary: "hsl(var(--background-primary))",
           secondary: "hsl(var(--background-secondary))",
           tertiary: "hsl(var(--background-tertiary))",
+          muted: "hsl(var(--background-muted))",
         },
         foreground: {
           DEFAULT: "hsl(var(--foreground-primary))",
           primary: "hsl(var(--foreground-primary))",
           secondary: "hsl(var(--foreground-secondary))",
           tertiary: "hsl(var(--foreground-tertiary))",
+          muted: "hsl(var(--foreground-muted))",
         },
         card: {
           DEFAULT: "hsl(var(--card))",

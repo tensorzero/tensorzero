@@ -123,7 +123,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="container mx-auto px-4 pb-8">
-      <PageHeader headline="Inference" itemId={`${inference.id}`} />
+      <PageHeader headline={`Inference ${inference.id}`} />
       <div className="space-y-6">
         <BasicInfo
           inference={inference}

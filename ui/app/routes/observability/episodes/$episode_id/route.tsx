@@ -147,7 +147,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="container mx-auto px-4 pb-8">
-      <PageHeader headline="Episode" itemId={`${episode_id}`} />
+      <PageHeader headline={`Episode ${episode_id}`} />
 
       <div className="pb-8 pt-4">
         <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">

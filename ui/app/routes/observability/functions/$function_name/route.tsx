@@ -183,7 +183,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="container mx-auto px-4 pb-8">
-      <PageHeader headline="Function" itemId={`${function_name}`} />
+      <PageHeader headline={`Function ${function_name}`} />
       <div className="flex flex-col gap-12">
         <BasicInfo functionConfig={function_config} />
 
