@@ -1,57 +1,106 @@
-import type { Route } from "./+types/route";
-import { data, isRouteErrorResponse, Link } from "react-router";
+import { useFetcher, Link } from "react-router";
+import { data, isRouteErrorResponse, redirect } from "react-router";
 import BasicInfo from "./BasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
 import { useState } from "react";
 import { useConfig } from "~/context/config";
+import { getDatapoint } from "~/utils/clickhouse/datasets.server";
+import { VariantResponseModal } from "./VariantResponseModal";
+import type { Route } from "./+types/route";
+import type { ActionFunctionArgs } from "react-router";
 import {
-  getDatapoint,
+  ParsedDatasetRowSchema,
+  type ParsedDatasetRow,
+} from "~/utils/clickhouse/datasets";
+import {
+  deleteDatapoint as deleteDatapointServer,
   getDatasetCounts,
 } from "~/utils/clickhouse/datasets.server";
-import { VariantResponseModal } from "./VariantResponseModal";
-import { useDatapointDeleter } from "~/routes/api/datasets/delete.route";
 
-export async function loader({ params }: Route.LoaderArgs) {
-  const { dataset_name, id } = params;
-  const datapoint = await getDatapoint(dataset_name, id);
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+
+  const rawData = {
+    dataset_name: formData.get("dataset_name"),
+    function_name: formData.get("function_name"),
+    id: formData.get("id"),
+    episode_id: formData.get("episode_id"),
+    input: JSON.parse(formData.get("input") as string),
+    output: formData.get("output")
+      ? JSON.parse(formData.get("output") as string)
+      : undefined,
+    output_schema: formData.get("output_schema")
+      ? JSON.parse(formData.get("output_schema") as string)
+      : undefined,
+    tags: JSON.parse(formData.get("tags") as string),
+    auxiliary: formData.get("auxiliary"),
+    is_deleted: formData.get("is_deleted") === "true",
+    updated_at: formData.get("updated_at"),
+  };
+
+  const parsedFormData: ParsedDatasetRow =
+    ParsedDatasetRowSchema.parse(rawData);
+  await deleteDatapointServer(parsedFormData);
   const datasetCounts = await getDatasetCounts();
   const datasetCount = datasetCounts.find(
-    (count) => count.dataset_name === dataset_name,
+    (count) => count.dataset_name === parsedFormData.dataset_name,
   );
+
+  if (datasetCount === undefined) {
+    return redirect("/datasets");
+  }
+  return redirect(`/datasets/${parsedFormData.dataset_name}`);
+}
+
+export async function loader({
+  params,
+}: {
+  params: { dataset_name: string; id: string };
+}) {
+  const { dataset_name, id } = params;
+  const datapoint = await getDatapoint(dataset_name, id);
   if (!datapoint) {
     throw data(`No datapoint found for id ${id}.`, {
       status: 404,
     });
   }
-  if (!datasetCount) {
-    throw data(
-      `No dataset count found for dataset ${dataset_name}. This should never happen. Please open a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.`,
-      {
-        status: 500,
-      },
-    );
-  }
-  console.log(datasetCount);
-
   return {
     datapoint,
-    count: datasetCount.count,
   };
 }
 
 export default function DatapointPage({ loaderData }: Route.ComponentProps) {
-  const { datapoint, count } = loaderData;
+  const { datapoint } = loaderData;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [variantInferenceIsLoading, setVariantInferenceIsLoading] =
     useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const config = useConfig();
-  const { deleteDatapoint, isDeleting, isDeleted } = useDatapointDeleter();
+
+  // Use the fetcher directly
+  const deleteFetcher = useFetcher();
+
+  const handleDelete = () => {
+    const formData = new FormData();
+    Object.entries(datapoint).forEach(([key, value]) => {
+      if (value === undefined) return;
+      if (value === null) {
+        formData.append(key, "null");
+      } else if (typeof value === "object") {
+        formData.append(key, JSON.stringify(value));
+      } else {
+        formData.append(key, String(value));
+      }
+    });
+
+    // Submit to the local action by targeting the current route (".")
+    deleteFetcher.submit(formData, { method: "post", action: "." });
+  };
+
   const variants = Object.keys(
     config.functions[datapoint.function_name]?.variants || {},
   );
-  console.log(isDeleted);
 
   const onVariantSelect = (variant: string) => {
     setSelectedVariant(variant);
@@ -62,10 +111,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setIsModalOpen(false);
     setSelectedVariant(null);
     setVariantInferenceIsLoading(false);
-  };
-
-  const handleDelete = () => {
-    deleteDatapoint(datapoint, count);
   };
 
   return (
@@ -90,7 +135,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           isLoading: variantInferenceIsLoading,
         }}
         onDelete={handleDelete}
-        isDeleting={isDeleting}
+        isDeleting={deleteFetcher.state === "submitting"}
       />
       <Input input={datapoint.input} />
       {datapoint.output && <Output output={datapoint.output} />}
