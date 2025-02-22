@@ -1,4 +1,5 @@
 import {
+  parseInferenceOutput,
   queryInferenceById,
   queryModelInferencesByInferenceId,
 } from "~/utils/clickhouse/inference";
@@ -8,7 +9,13 @@ import {
   queryFeedbackByTargetId,
 } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
+import {
+  data,
+  isRouteErrorResponse,
+  redirect,
+  useFetcher,
+  useNavigate,
+} from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./BasicInfo";
 import Input from "~/components/inference/Input";
@@ -27,7 +34,12 @@ import { useState } from "react";
 import { useConfig } from "~/context/config";
 import { VariantResponseModal } from "./VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
-import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
+import {
+  getDatasetCounts,
+  insertDatapoint,
+} from "~/utils/clickhouse/datasets.server";
+import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
+import { inferenceRowToDatasetRow } from "~/utils/clickhouse/datasets";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -76,6 +88,46 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     dataset_counts,
     hasDemonstration: demonstration_feedback.length > 0,
   };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const dataset = formData.get("dataset");
+  const output = formData.get("output");
+  const inference_id = formData.get("inference_id");
+  if (!dataset || !output || !inference_id) {
+    throw data("Missing required fields", { status: 400 });
+  }
+  console.log("dataset", dataset);
+  console.log("output", output);
+  console.log("inference_id", inference_id);
+  const promises = [queryInferenceById(inference_id.toString())] as const;
+  let datapoint: ParsedDatasetRow;
+  if (output === "demonstration") {
+    const [inference, demonstration_feedback] = await Promise.all([
+      ...promises,
+      queryDemonstrationFeedbackByInferenceId({
+        inference_id: inference_id.toString(),
+        page_size: 1,
+      }),
+    ]);
+    if (!inference) {
+      throw data("No inference found", { status: 404 });
+    }
+    datapoint = inferenceRowToDatasetRow(inference, dataset.toString());
+    datapoint.output = parseInferenceOutput(demonstration_feedback[0].value);
+  } else {
+    const [inference] = await Promise.all(promises);
+    if (!inference) {
+      throw data("No inference found", { status: 404 });
+    }
+    datapoint = inferenceRowToDatasetRow(inference, dataset.toString());
+    if (output === "none") {
+      datapoint.output = undefined;
+    }
+  }
+  await insertDatapoint(datapoint);
+  return redirect(`/datasets/${dataset.toString()}/datapoint/${datapoint.id}`);
 }
 
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
@@ -141,6 +193,18 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   const variants = Object.keys(
     config.functions[inference.function_name]?.variants || {},
   );
+  const addToDatasetFetcher = useFetcher();
+
+  const handleAddToDataset = (
+    dataset: string,
+    output: "inference" | "demonstration" | "none",
+  ) => {
+    const formData = new FormData();
+    formData.append("dataset", dataset);
+    formData.append("output", output);
+    formData.append("inference_id", inference.id);
+    addToDatasetFetcher.submit(formData, { method: "post", action: "." });
+  };
 
   return (
     <div className="container mx-auto space-y-6 p-4">
@@ -158,9 +222,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           isLoading: variantInferenceIsLoading,
         }}
         dataset_counts={dataset_counts}
-        onDatasetSelect={(dataset: string) => {
-          console.log("Selected dataset:", dataset);
-        }}
+        onDatasetSelect={handleAddToDataset}
         hasDemonstration={hasDemonstration}
       />
       <Input input={inference.input} />

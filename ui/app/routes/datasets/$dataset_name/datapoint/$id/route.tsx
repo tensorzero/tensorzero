@@ -59,12 +59,18 @@ export async function loader({
   params: { dataset_name: string; id: string };
 }) {
   const { dataset_name, id } = params;
+  if (!dataset_name || !id) {
+    throw data(`No datapoint found for id ${id}.`, {
+      status: 404,
+    });
+  }
   const datapoint = await getDatapoint(dataset_name, id);
   if (!datapoint) {
     throw data(`No datapoint found for id ${id}.`, {
       status: 404,
     });
   }
+  console.log("datapoint", datapoint);
   return {
     datapoint,
   };
@@ -79,7 +85,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const config = useConfig();
 
   const deleteFetcher = useFetcher();
-
   const handleDelete = () => {
     const formData = new FormData();
     Object.entries(datapoint).forEach(([key, value]) => {

@@ -15,7 +15,10 @@ interface BasicInfoProps {
   inference: ParsedInferenceRow;
   tryWithVariantProps: TryWithVariantButtonProps;
   dataset_counts: DatasetCountInfo[];
-  onDatasetSelect: (dataset: string) => void;
+  onDatasetSelect: (
+    dataset: string,
+    output: "inference" | "demonstration" | "none",
+  ) => void;
   hasDemonstration: boolean;
 }
 

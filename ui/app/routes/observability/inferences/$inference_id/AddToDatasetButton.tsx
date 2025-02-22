@@ -174,7 +174,7 @@ export function AddToDatasetButton({
       </DropdownMenu>
 
       <AlertDialog open={outputDialogOpen} onOpenChange={setOutputDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="min-w-[600px]">
           <AlertDialogHeader>
             <AlertDialogTitle>
               What should be the datapoint's output?
