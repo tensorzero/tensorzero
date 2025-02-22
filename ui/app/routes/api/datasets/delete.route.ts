@@ -46,7 +46,10 @@ export function useDatapointDeleter() {
   const deleteFetcher = useFetcher();
   const navigate = useNavigate();
 
-  const deleteDatapoint = async (datapoint: ParsedDatasetRow) => {
+  const deleteDatapoint = async (
+    datapoint: ParsedDatasetRow,
+    datasetCount: number,
+  ) => {
     const formData = new FormData();
 
     Object.entries(datapoint).forEach(([key, value]) => {
@@ -74,7 +77,13 @@ export function useDatapointDeleter() {
         action: "/api/datasets/delete",
       })
       .then(() => {
-        navigate(`/datasets/${datapoint.dataset_name}`, { replace: true });
+        if (datasetCount === 1) {
+          // The dataset page will 404 if we delete the last datapoint.
+          // Under these circumstances, we just redirect to the datasets page.
+          navigate(`/datasets`, { replace: true });
+        } else {
+          navigate(`/datasets/${datapoint.dataset_name}`, { replace: true });
+        }
       });
   };
 

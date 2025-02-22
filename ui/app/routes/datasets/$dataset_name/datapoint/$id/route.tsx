@@ -1,30 +1,47 @@
 import type { Route } from "./+types/route";
-import { data, isRouteErrorResponse, Link, useNavigate } from "react-router";
+import { data, isRouteErrorResponse, Link } from "react-router";
 import BasicInfo from "./BasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useConfig } from "~/context/config";
-import { getDatapoint } from "~/utils/clickhouse/datasets.server";
+import {
+  getDatapoint,
+  getDatasetCounts,
+} from "~/utils/clickhouse/datasets.server";
 import { VariantResponseModal } from "./VariantResponseModal";
 import { useDatapointDeleter } from "~/routes/api/datasets/delete.route";
 
 export async function loader({ params }: Route.LoaderArgs) {
   const { dataset_name, id } = params;
   const datapoint = await getDatapoint(dataset_name, id);
+  const datasetCounts = await getDatasetCounts();
+  const datasetCount = datasetCounts.find(
+    (count) => count.dataset_name === dataset_name,
+  );
   if (!datapoint) {
     throw data(`No datapoint found for id ${id}.`, {
       status: 404,
     });
   }
+  if (!datasetCount) {
+    throw data(
+      `No dataset count found for dataset ${dataset_name}. This should never happen. Please open a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.`,
+      {
+        status: 500,
+      },
+    );
+  }
+  console.log(datasetCount);
 
   return {
     datapoint,
+    count: datasetCount.count,
   };
 }
 
 export default function DatapointPage({ loaderData }: Route.ComponentProps) {
-  const { datapoint } = loaderData;
+  const { datapoint, count } = loaderData;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [variantInferenceIsLoading, setVariantInferenceIsLoading] =
     useState(false);
@@ -34,14 +51,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const variants = Object.keys(
     config.functions[datapoint.function_name]?.variants || {},
   );
-  const navigate = useNavigate();
   console.log(isDeleted);
-
-  useEffect(() => {
-    if (isDeleted) {
-      navigate(`/datasets/${datapoint.dataset_name}`);
-    }
-  }, [isDeleted, navigate, datapoint.dataset_name]);
 
   const onVariantSelect = (variant: string) => {
     setSelectedVariant(variant);
@@ -55,7 +65,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   const handleDelete = () => {
-    deleteDatapoint(datapoint);
+    deleteDatapoint(datapoint, count);
   };
 
   return (
