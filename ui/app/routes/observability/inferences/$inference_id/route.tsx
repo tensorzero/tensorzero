@@ -3,6 +3,7 @@ import {
   queryModelInferencesByInferenceId,
 } from "~/utils/clickhouse/inference";
 import {
+  queryDemonstrationFeedbackByInferenceId,
   queryFeedbackBoundsByTargetId,
   queryFeedbackByTargetId,
 } from "~/utils/clickhouse/feedback";
@@ -44,6 +45,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     feedback,
     feedback_bounds,
     dataset_counts,
+    demonstration_feedback,
   ] = await Promise.all([
     queryInferenceById(inference_id),
     queryModelInferencesByInferenceId(inference_id),
@@ -55,6 +57,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     }),
     queryFeedbackBoundsByTargetId({ target_id: inference_id }),
     getDatasetCounts(),
+    queryDemonstrationFeedbackByInferenceId({
+      inference_id,
+      page_size: 1,
+    }),
   ]);
   if (!inference) {
     throw data(`No inference found for id ${inference_id}.`, {
@@ -68,6 +74,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     feedback,
     feedback_bounds,
     dataset_counts,
+    hasDemonstration: demonstration_feedback.length > 0,
   };
 }
 
@@ -78,6 +85,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     feedback,
     feedback_bounds,
     dataset_counts,
+    hasDemonstration,
   } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -153,6 +161,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         onDatasetSelect={(dataset: string) => {
           console.log("Selected dataset:", dataset);
         }}
+        hasDemonstration={hasDemonstration}
       />
       <Input input={inference.input} />
       <Output output={inference.output} />

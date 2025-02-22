@@ -16,13 +16,15 @@ interface BasicInfoProps {
   tryWithVariantProps: TryWithVariantButtonProps;
   dataset_counts: DatasetCountInfo[];
   onDatasetSelect: (dataset: string) => void;
+  hasDemonstration: boolean;
 }
 
 export default function BasicInfo({
   inference,
   tryWithVariantProps,
-  dataset_counts: datasets,
+  dataset_counts,
   onDatasetSelect,
+  hasDemonstration,
 }: BasicInfoProps) {
   const config = useConfig();
   const variantType =
@@ -35,8 +37,9 @@ export default function BasicInfo({
         <div className="flex gap-2">
           <TryWithVariantButton {...tryWithVariantProps} />
           <AddToDatasetButton
-            datasets={datasets}
+            dataset_counts={dataset_counts}
             onDatasetSelect={onDatasetSelect}
+            hasDemonstration={hasDemonstration}
           />
         </div>
       </CardHeader>
