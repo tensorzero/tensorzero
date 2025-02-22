@@ -147,7 +147,7 @@ export function SFTForm({
   }
 
   return (
-    <div className="mt-8">
+    <div className="mt-4">
       <Form {...form}>
         <form
           onSubmit={(e) => {

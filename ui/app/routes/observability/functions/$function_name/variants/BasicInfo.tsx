@@ -13,6 +13,7 @@ import type {
   MixtureOfNConfig,
 } from "~/utils/config/variant";
 import { Code } from "~/components/ui/code";
+import { Link } from "react-router";
 
 interface BasicVariantInfoProps {
   variantConfig: VariantConfig;
@@ -65,9 +66,9 @@ function BaseField({ title, content, href }: BaseFieldProps) {
       <dt className="text-lg font-semibold">{title}</dt>
       <dd>
         {href ? (
-          <a href={href}>
+          <Link to={href} className="block no-underline">
             <Code>{content}</Code>
-          </a>
+          </Link>
         ) : typeof content === "number" ? (
           content
         ) : (
@@ -208,11 +209,12 @@ export default function BasicVariantInfo({
                       {config.candidates.map((candidate, i) => (
                         <>
                           {i > 0 && ", "}
-                          <a
-                            href={`/observability/functions/${function_name}/variants/${candidate}`}
+                          <Link
+                            to={`/observability/functions/${function_name}/variants/${candidate}`}
+                            className="block no-underline"
                           >
                             <Code>{candidate}</Code>
-                          </a>
+                          </Link>
                         </>
                       ))}
                     </dd>
@@ -287,11 +289,12 @@ export default function BasicVariantInfo({
                       {config.candidates.map((candidate, i) => (
                         <>
                           {i > 0 && ", "}
-                          <a
-                            href={`/observability/functions/${function_name}/variants/${candidate}`}
+                          <Link
+                            to={`/observability/functions/${function_name}/variants/${candidate}`}
+                            className="block no-underline"
                           >
                             <Code>{candidate}</Code>
-                          </a>
+                          </Link>
                         </>
                       ))}
                     </dd>

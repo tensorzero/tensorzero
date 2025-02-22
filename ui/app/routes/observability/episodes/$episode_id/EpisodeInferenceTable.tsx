@@ -8,6 +8,7 @@ import {
 } from "~/components/ui/table";
 import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
 import { formatDate } from "~/utils/date";
+import { Link } from "react-router";
 
 export default function EpisodeInferenceTable({
   inferences,
@@ -28,34 +29,34 @@ export default function EpisodeInferenceTable({
         {inferences.map((inference) => (
           <TableRow key={inference.id} id={inference.id}>
             <TableCell className="max-w-[200px]">
-              <a
-                href={`/observability/inferences/${inference.id}`}
+              <Link
+                to={`/observability/inferences/${inference.id}`}
                 className="block no-underline"
               >
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                   {inference.id}
                 </code>
-              </a>
+              </Link>
             </TableCell>
             <TableCell>
-              <a
-                href={`/observability/functions/${inference.function_name}`}
+              <Link
+                to={`/observability/functions/${inference.function_name}`}
                 className="block no-underline"
               >
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                   {inference.function_name}
                 </code>
-              </a>
+              </Link>
             </TableCell>
             <TableCell>
-              <a
-                href={`/observability/functions/${inference.function_name}/variant/${inference.variant_name}`}
+              <Link
+                to={`/observability/functions/${inference.function_name}/variant/${inference.variant_name}`}
                 className="block no-underline"
               >
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                   {inference.variant_name}
                 </code>
-              </a>
+              </Link>
             </TableCell>
             <TableCell>{formatDate(new Date(inference.timestamp))}</TableCell>
           </TableRow>

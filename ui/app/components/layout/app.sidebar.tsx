@@ -1,20 +1,18 @@
 import * as React from "react";
 import {
-  ChevronRight,
-  ChevronLeft,
-  BookOpenText,
-  ChartSpline,
-  GalleryVerticalEnd,
-  SquareFunction,
-  View,
   Home,
-  type LucideIcon,
-} from "lucide-react";
+  Inferences,
+  Episodes,
+  Functions,
+  SupervisedFineTuning,
+  Documentation,
+} from "~/components/icons/Icons";
 import { useSidebar } from "~/components/ui/sidebar";
 import { cn } from "~/utils/common";
 import { useActivePath } from "~/hooks/use-active-path";
 import { TensorZeroLogo } from "~/components/icons/Icons";
 import { Link } from "react-router";
+import type { IconProps } from "~/components/icons/Icons";
 
 import {
   Sidebar,
@@ -34,7 +32,7 @@ import {
 interface NavigationItem {
   title: string;
   url: string;
-  icon: LucideIcon;
+  icon: React.FC<IconProps>;
 }
 
 interface NavigationSection {
@@ -49,17 +47,17 @@ const navigation: NavigationSection[] = [
       {
         title: "Inferences",
         url: "/observability/inferences",
-        icon: ChartSpline,
+        icon: Inferences,
       },
       {
         title: "Episodes",
         url: "/observability/episodes",
-        icon: GalleryVerticalEnd,
+        icon: Episodes,
       },
       {
         title: "Functions",
         url: "/observability/functions",
-        icon: SquareFunction,
+        icon: Functions,
       },
     ],
   },
@@ -69,7 +67,7 @@ const navigation: NavigationSection[] = [
       {
         title: "Supervised Fine-Tuning",
         url: "/optimization/supervised-fine-tuning",
-        icon: View,
+        icon: SupervisedFineTuning,
       },
     ],
   },
@@ -152,7 +150,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuItem className="list-none">
               <SidebarMenuButton
                 asChild
-                tooltip={state === "collapsed" ? "Documentation" : undefined}
+                tooltip={state === "collapsed" ? "Documentation ↗" : undefined}
               >
                 <Link
                   to="https://www.tensorzero.com/docs"
@@ -161,7 +159,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <BookOpenText className="h-4 w-4" />
+                  <Documentation className="h-4 w-4" />
                   {state === "expanded" && (
                     <span>
                       Documentation <sup>↗</sup>
@@ -175,11 +173,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter className="relative">
         <SidebarTrigger className="justify-left flex">
-          {state === "expanded" ? (
-            <ChevronLeft className="h-4 w-4" />
-          ) : (
-            <ChevronRight className="h-4 w-4" />
-          )}
           <span className="sr-only">
             {state === "expanded" ? "Collapse sidebar" : "Expand sidebar"}
           </span>

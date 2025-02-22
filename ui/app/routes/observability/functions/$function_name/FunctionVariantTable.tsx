@@ -9,6 +9,7 @@ import {
 } from "~/components/ui/table";
 import type { VariantCounts } from "~/utils/clickhouse/function";
 import { formatDate } from "~/utils/date";
+import { Link } from "react-router";
 
 type VariantCountsWithMetadata = VariantCounts & {
   type: string;
@@ -40,14 +41,14 @@ export default function FunctionVariantTable({
             id={variant_count.variant_name}
           >
             <TableCell className="max-w-[200px]">
-              <a
-                href={`/observability/functions/${function_name}/variants/${variant_count.variant_name}`}
+              <Link
+                to={`/observability/functions/${function_name}/variants/${variant_count.variant_name}`}
                 className="block no-underline"
               >
                 <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                   {variant_count.variant_name}
                 </code>
-              </a>
+              </Link>
             </TableCell>
             <TableCell>
               <Code>{variant_count.type}</Code>

@@ -1,17 +1,17 @@
 import { Link } from "react-router";
 import { Card } from "~/components/ui/card";
 import {
-  BookOpenText,
-  SquareFunction,
+  Inferences,
+  Episodes,
+  Functions,
+  SupervisedFineTuning,
+  Blog,
+  Discord,
   Slack,
-  MessageSquare,
-  Newspaper,
+  GitHub,
   Globe,
-  Github,
-  GalleryVerticalEnd,
-  ChartSpline,
-  View,
-} from "lucide-react";
+  Documentation,
+} from "~/components/icons/Icons";
 import {
   countInferencesByFunction,
   countEpisodes,
@@ -34,11 +34,11 @@ function FeatureCard({
 }: FeatureCardProps) {
   return (
     <Link to={source} className="block">
-      <Card className="group h-full rounded-xl border-[1px] border-gray-200 transition-colors hover:border-gray-500">
+      <Card className="hover:border-border-hover group h-full rounded-xl border-[1px] border-border hover:shadow-[0_0_0_4px_rgba(0,0,0,0.05)]">
         <div className="p-6">
-          <Icon className="mb-8 h-5 w-5 text-gray-500 transition-colors group-hover:text-gray-900" />
+          <Icon className="mb-8 h-4 w-4 text-foreground-tertiary transition-colors group-hover:text-foreground" />
           <h3 className="text-lg font-medium">{title}</h3>
-          <p className="text-xs text-gray-500">{description}</p>
+          <p className="text-xs text-foreground-tertiary">{description}</p>
         </div>
       </Card>
     </Link>
@@ -54,8 +54,8 @@ interface FooterLinkProps {
 function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
   return (
     <Link to={source} className="group flex w-fit items-center">
-      <Icon className="mr-2 h-4 w-4 text-gray-500 transition-colors group-hover:text-gray-900" />
-      <span className="text-gray-700 transition-colors group-hover:text-gray-900">
+      <Icon className="mr-2 h-4 w-4 text-foreground-muted transition-colors group-hover:text-foreground-secondary" />
+      <span className="text-foreground-secondary transition-colors group-hover:text-foreground-primary">
         {children}
       </span>
     </Link>
@@ -85,26 +85,26 @@ export default function Home() {
       <div className="container mx-auto my-16 max-w-[960px]">
         <div id="observability" className="mb-16">
           <h2 className="mb-1 text-2xl font-medium">Observability</h2>
-          <p className="mb-6 max-w-[640px] text-sm text-gray-500">
+          <p className="mb-6 max-w-[640px] text-sm text-foreground-muted">
             Monitor metrics across models and prompts and debug individual API
             calls.
           </p>
           <div className="grid gap-6 md:grid-cols-3">
             <FeatureCard
               source="/observability/inferences"
-              icon={ChartSpline}
+              icon={Inferences}
               title="Inferences"
               description={`${totalInferences.toLocaleString()} total inferences`}
             />
             <FeatureCard
               source="/observability/episodes"
-              icon={GalleryVerticalEnd}
+              icon={Episodes}
               title="Episodes"
               description={`${numEpisodes.toLocaleString()} episodes`}
             />
             <FeatureCard
               source="/observability/functions"
-              icon={SquareFunction}
+              icon={Functions}
               title="Functions"
               description={`${numFunctions} functions`}
             />
@@ -113,13 +113,13 @@ export default function Home() {
 
         <div id="optimization" className="mb-12">
           <h2 className="mb-1 text-2xl font-medium">Optimization</h2>
-          <p className="mb-6 max-w-[640px] text-sm text-gray-500">
+          <p className="mb-6 max-w-[640px] text-sm text-foreground-muted">
             Optimize your prompts, models, and inference strategies.
           </p>
           <div className="grid gap-6 md:grid-cols-3">
             <FeatureCard
               source="/optimization/supervised-fine-tuning"
-              icon={View}
+              icon={SupervisedFineTuning}
               title="Supervised Fine-tuning"
               description={`${numFunctions} functions available`}
             />
@@ -129,17 +129,17 @@ export default function Home() {
         <div className="mt-16 border-t border-gray-200 pt-16">
           <div className="grid gap-8 md:grid-cols-3">
             <div>
-              <h3 className="mb-4 text-sm text-gray-400">Learn more</h3>
+              <h3 className="mb-4 text-sm text-foreground-muted">Learn more</h3>
               <div className="flex flex-col gap-3">
                 <FooterLink
                   source="https://www.tensorzero.com/docs"
-                  icon={BookOpenText}
+                  icon={Documentation}
                 >
                   Documentation
                 </FooterLink>
                 <FooterLink
                   source="https://github.com/tensorzero/tensorzero"
-                  icon={Github}
+                  icon={GitHub}
                 >
                   GitHub
                 </FooterLink>
@@ -147,7 +147,9 @@ export default function Home() {
             </div>
 
             <div>
-              <h3 className="mb-4 text-sm text-gray-400">Ask a question</h3>
+              <h3 className="mb-4 text-sm text-foreground-muted">
+                Ask a question
+              </h3>
               <div className="flex flex-col gap-3">
                 <FooterLink
                   source="https://www.tensorzero.com/slack"
@@ -157,7 +159,7 @@ export default function Home() {
                 </FooterLink>
                 <FooterLink
                   source="https://www.tensorzero.com/discord"
-                  icon={MessageSquare}
+                  icon={Discord}
                 >
                   Discord
                 </FooterLink>
@@ -165,14 +167,16 @@ export default function Home() {
             </div>
 
             <div>
-              <h3 className="mb-4 text-sm text-gray-400">Explore TensorZero</h3>
+              <h3 className="mb-4 text-sm text-foreground-muted">
+                Explore TensorZero
+              </h3>
               <div className="flex flex-col gap-3">
                 <FooterLink source="https://www.tensorzero.com/" icon={Globe}>
                   Website
                 </FooterLink>
                 <FooterLink
                   source="https://www.tensorzero.com/blog"
-                  icon={Newspaper}
+                  icon={Blog}
                 >
                   Blog
                 </FooterLink>

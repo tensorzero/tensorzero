@@ -63,7 +63,7 @@ export default function App() {
   return (
     <ConfigProvider value={config}>
       <SidebarProvider>
-        <div className="fixed inset-0 flex bg-neutral-50">
+        <div className="fixed inset-0 flex bg-background-secondary">
           <AppSidebar />
           <ContentLayout>
             <Outlet />

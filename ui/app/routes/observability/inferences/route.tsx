@@ -1,13 +1,14 @@
 import {
   queryInferenceTable,
   queryInferenceTableBounds,
+  countInferencesByFunction,
 } from "~/utils/clickhouse/inference";
 import type { Route } from "./+types/route";
 import InferencesTable from "./InferencesTable";
-import { data, isRouteErrorResponse } from "react-router";
-import { useNavigate } from "react-router";
+import { data, isRouteErrorResponse, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import InferenceSearchBar from "./InferenceSearchBar";
+import { PageHeader } from "~/components/layout/PageHeader";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -18,31 +19,34 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
 
-  const [inferences, bounds] = await Promise.all([
+  const [inferences, bounds, countsInfo] = await Promise.all([
     queryInferenceTable({
       before: before || undefined,
       after: after || undefined,
       page_size: pageSize,
     }),
     queryInferenceTableBounds(),
+    countInferencesByFunction(),
   ]);
+
+  const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
 
   return {
     inferences,
     pageSize,
     bounds,
+    totalInferences,
   };
 }
 
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
-  const { inferences, pageSize, bounds } = loaderData;
+  const { inferences, pageSize, bounds, totalInferences } = loaderData;
   const navigate = useNavigate();
 
   if (inferences.length === 0) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <h2 className="mb-4 text-2xl font-semibold">Inferences</h2>
-        <div className="mb-6 h-px w-full bg-gray-200"></div>
+      <div className="container mx-auto px-4 pb-8">
+        <PageHeader headline="Inferences" count={totalInferences} />
         <InferenceSearchBar />
         <div className="my-6 h-px w-full bg-gray-200"></div>
         <div className="py-8 text-center text-gray-500">
@@ -73,9 +77,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     !bounds?.first_id || bounds.first_id === bottomInference.id;
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h2 className="mb-4 text-2xl font-semibold">Inferences</h2>
-      <div className="mb-6 h-px w-full bg-gray-200"></div>
+    <div className="container mx-auto px-4 pb-8">
+      <PageHeader headline="Inferences" count={totalInferences} />
       <InferenceSearchBar />
       <div className="my-6 h-px w-full bg-gray-200"></div>
       <InferencesTable inferences={inferences} />

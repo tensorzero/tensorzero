@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import {
   Table,
   TableBody,
@@ -62,14 +63,14 @@ export default function FunctionsTable({
             ({ function_name, count, max_timestamp, type }) => (
               <TableRow key={function_name} id={function_name}>
                 <TableCell className="max-w-[200px] lg:max-w-none">
-                  <a
-                    href={`/observability/functions/${function_name}`}
+                  <Link
+                    to={`/observability/functions/${function_name}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                       {function_name}
                     </code>
-                  </a>
+                  </Link>
                 </TableCell>
                 <TableCell>
                   <Code>{type}</Code>
