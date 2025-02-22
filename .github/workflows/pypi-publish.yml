@@ -11,7 +11,6 @@ permissions:
   contents: read
   id-token: write
 
-
 jobs:
   linux:
     runs-on: ${{ matrix.platform.runner }}
@@ -35,7 +34,7 @@ jobs:
           working-directory: ./clients/python-pyo3
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
-          sccache: 'true'
+          sccache: "true"
           manylinux: auto
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -68,7 +67,7 @@ jobs:
           working-directory: ./clients/python-pyo3
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
-          sccache: 'true'
+          sccache: "true"
           manylinux: musllinux_1_2
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -101,7 +100,7 @@ jobs:
           working-directory: ./clients/python-pyo3
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
-          sccache: 'true'
+          sccache: "true"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -136,7 +135,7 @@ jobs:
           working-directory: ./clients/python-pyo3
           target: ${{ matrix.platform.target }}
           args: --release --out dist --find-interpreter
-          sccache: 'true'
+          sccache: "true"
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -162,11 +161,17 @@ jobs:
         with:
           name: wheels-sdist
           path: ./clients/python-pyo3/dist
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/0.5.25/install.sh | sh
+      - name: Check local sdist
+        run: |
+          ./ci/check-local-wheel.sh ./clients/python-pyo3/dist/tensorzero-*.tar.gz
 
   release:
     name: Release
     runs-on: ubuntu-latest
     needs: [linux, musllinux, windows, macos, sdist]
+    environment: pypi-publish
     permissions:
       # Use to sign the release artifacts
       id-token: write
@@ -182,7 +187,13 @@ jobs:
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: 'wheels-*/*'
-      - name: Publish to PyPI
+          subject-path: "wheels-*/*"
+
+      - name: Publish to real PyPI (only on GitHub release)
+        if: ${{ github.event_name == 'release' }}
         run: |
-          ./ci/upload-pyo3.sh
+          ./ci/upload-pyo3.sh pypi
+
+      - name: Publish to TestPyPI
+        run: |
+          ./ci/upload-pyo3.sh testpypi

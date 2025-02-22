@@ -13,6 +13,7 @@ use std::{collections::HashMap, future::Future, path::PathBuf, sync::Arc, time::
 use futures::StreamExt;
 use pyo3::{
     exceptions::{PyStopAsyncIteration, PyStopIteration, PyValueError},
+    ffi::c_str,
     marker::Ungil,
     prelude::*,
     sync::GILOnceCell,
@@ -211,7 +212,7 @@ impl BaseTensorZeroGateway {
 /// A synchronous client for a TensorZero gateway.
 ///
 /// To connect to a running HTTP gateway, call `TensorZeroGateway.build_http(base_url = "http://gateway_url")`
-/// To create an embedded gateway, call `TensorZeroGateway.build_embedded(config_path = "/path/to/tensorzero.toml", clickhouse_url = "http://clickhouse_url")`
+/// To create an embedded gateway, call `TensorZeroGateway.build_embedded(config_file = "/path/to/tensorzero.toml", clickhouse_url = "http://clickhouse_url")`
 struct TensorZeroGateway {}
 
 /// Calls `tokio::Runtime::block_on` without holding the Python GIL.
@@ -401,20 +402,21 @@ impl TensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (*, config_path=None, clickhouse_url=None))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
-    /// :param config_path: The path to the TensorZero configuration file. Example: "tensorzero.toml"
+    /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
     /// :return: A `TensorZeroGateway` instance configured to use an embedded gateway.
     fn build_embedded(
         cls: &Bound<'_, PyType>,
-        config_path: Option<&str>,
+        config_file: Option<&str>,
         clickhouse_url: Option<String>,
     ) -> PyResult<Py<TensorZeroGateway>> {
+        warn_no_config(cls.py(), config_file)?;
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: config_path.map(PathBuf::from),
+            config_file: config_file.map(PathBuf::from),
             clickhouse_url,
         })
         .build();
@@ -575,8 +577,8 @@ impl TensorZeroGateway {
 #[pyclass(extends=BaseTensorZeroGateway)]
 /// An async client for a TensorZero gateway.
 ///
-/// To connect to a running HTTP gateway, call `AsyncTensorZeroGateway(base_url = "http://gateway_url")`
-/// To create an embedded gateway, call `AsyncTensorZeroGateway.create_embedded_gateway(config_path = "/path/to/tensorzero.toml")`
+/// To connect to a running HTTP gateway, call `AsyncTensorZeroGateway.build_http(gateway_url="http://gateway_url")`
+/// To create an embedded gateway, call `AsyncTensorZeroGateway.build_embedded(config_file="/path/to/tensorzero.toml")`
 struct AsyncTensorZeroGateway {}
 
 #[pymethods]
@@ -649,21 +651,22 @@ impl AsyncTensorZeroGateway {
     // as `AsyncTensorZeroGateway` would be completely async *except* for this one method
     // (which potentially takes a very long time due to running DB migrations).
     #[classmethod]
-    #[pyo3(signature = (*, config_path=None, clickhouse_url=None))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
-    /// :param config_path: The path to the TensorZero configuration file. Example: "tensorzero.toml"
+    /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
     /// :return: A `Future` that resolves to an `AsyncTensorZeroGateway` instance configured to use an embedded gateway.
     fn build_embedded<'a>(
         // This is a classmethod, so it receives the class object as a parameter.
         cls: &Bound<'a, PyType>,
-        config_path: Option<&str>,
+        config_file: Option<&str>,
         clickhouse_url: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
+        warn_no_config(cls.py(), config_file)?;
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: config_path.map(PathBuf::from),
+            config_file: config_file.map(PathBuf::from),
             clickhouse_url,
         })
         .build();
@@ -865,4 +868,16 @@ fn tensorzero_internal_error(py: Python<'_>, msg: &str) -> PyResult<PyErr> {
         Ok(err.unbind())
     })?;
     Ok(PyErr::from_value(err.bind(py).call1((msg,))?))
+}
+
+fn warn_no_config(py: Python<'_>, config: Option<&str>) -> PyResult<()> {
+    if config.is_none() {
+        let user_warning = py.get_type::<pyo3::exceptions::PyUserWarning>();
+        PyErr::warn(
+            py,
+            &user_warning,
+            c_str!("No config file provided, so only default functions will be available. Use `config_file=\"path/to/tensorzero.toml\"` to specify a config file."), 0
+        )?;
+    }
+    Ok(())
 }

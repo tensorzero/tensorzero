@@ -50,7 +50,7 @@ fn default_timeout() -> f64 {
 #[serde(deny_unknown_fields)]
 pub struct EvaluatorConfig {
     #[serde(flatten)]
-    inner: ChatCompletionConfig,
+    pub inner: ChatCompletionConfig,
 }
 
 lazy_static! {
@@ -626,6 +626,7 @@ impl EvaluatorConfig {
                 json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
+                extra_body: None,
             },
             skipped_indices,
         ))

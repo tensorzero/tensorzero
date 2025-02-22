@@ -35,6 +35,8 @@ use crate::inference::types::{
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
+use crate::inference::providers::helpers::inject_extra_body;
+
 lazy_static! {
     static ref OPENAI_DEFAULT_BASE_URL: Url = {
         #[allow(clippy::expect_used)]
@@ -130,7 +132,13 @@ impl InferenceProvider for OpenAIProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = OpenAIRequest::new(&self.model_name, request)?;
+        let mut request_body = serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing OpenAI request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -205,7 +213,13 @@ impl InferenceProvider for OpenAIProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = OpenAIRequest::new(&self.model_name, request)?;
+        let mut request_body = serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing OpenAI request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -1408,7 +1422,7 @@ pub(super) struct OpenAIResponse {
 struct OpenAIResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
-    request: OpenAIRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
     raw_response: String,
 }
@@ -1997,6 +2011,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let openai_request = OpenAIRequest::new("gpt-3.5-turbo", &basic_request).unwrap();
@@ -2037,6 +2052,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools).unwrap();
@@ -2087,6 +2103,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools).unwrap();
@@ -2126,6 +2143,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
+            extra_body: None,
         };
 
         let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools).unwrap();
@@ -2168,6 +2186,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let openai_request = OpenAIRequest::new("o1-preview", &request).unwrap();
@@ -2206,6 +2225,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let openai_request_with_system =
@@ -2272,15 +2292,16 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let request_body = OpenAIRequest {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.2),
+            top_p: Some(0.5),
+            presence_penalty: Some(0.5),
+            frequency_penalty: Some(0.5),
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
@@ -2297,7 +2318,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -2365,15 +2386,16 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let request_body = OpenAIRequest {
             messages: vec![],
             model: "gpt-3.5-turbo",
             temperature: Some(0.5),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.2),
+            top_p: Some(0.5),
+            presence_penalty: Some(0.5),
+            frequency_penalty: Some(0.5),
             max_completion_tokens: Some(100),
             seed: Some(69),
             stream: false,
@@ -2389,7 +2411,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
             },
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -2451,7 +2473,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
             },
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -2506,7 +2528,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),
             },
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -2536,6 +2558,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_with_tools);
         let tools = tools.unwrap();
@@ -2576,6 +2599,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let (tools, tool_choice, parallel_tool_calls) =
             prepare_openai_tools(&request_without_tools);

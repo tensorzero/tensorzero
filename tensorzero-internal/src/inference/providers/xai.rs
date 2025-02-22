@@ -20,6 +20,7 @@ use crate::inference::types::{
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
 
+use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,
@@ -119,7 +120,13 @@ impl InferenceProvider for XAIProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = XAIRequest::new(&self.model_name, request)?;
+        let mut request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing xAI request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -365,7 +372,7 @@ struct XAIResponseWithMetadata<'a> {
     response: OpenAIResponse,
     raw_response: String,
     latency: Latency,
-    request: XAIRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -470,6 +477,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
@@ -514,6 +522,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Json,
             output_schema: None,
+            extra_body: None,
         };
 
         let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
@@ -613,6 +622,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let xai_response_with_metadata = XAIResponseWithMetadata {
             response: valid_response,
@@ -620,7 +630,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: XAIRequest::new("grok-beta", &generic_request).unwrap(),
+            request: serde_json::to_value(XAIRequest::new("grok-beta", &generic_request).unwrap())
+                .unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =

@@ -484,6 +484,7 @@ impl DiclConfig {
             stream,
             inference_params,
             self.json_mode,
+            None,
         )
     }
 }

@@ -45,7 +45,7 @@ fn default_timeout() -> f64 {
 #[serde(deny_unknown_fields)]
 pub struct FuserConfig {
     #[serde(flatten)]
-    inner: ChatCompletionConfig,
+    pub inner: ChatCompletionConfig,
 }
 
 impl Variant for MixtureOfNConfig {
@@ -486,6 +486,7 @@ impl FuserConfig {
             false,
             inference_params,
             self.inner.json_mode,
+            self.inner.extra_body.as_ref(),
         )?;
         Ok((model_inference_request, included_indices))
     }

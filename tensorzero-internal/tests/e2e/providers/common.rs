@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use futures::StreamExt;
 #[cfg(feature = "e2e_tests")]
 use rand::Rng;
-#[cfg(feature = "e2e_tests")]
 use reqwest::{Client, StatusCode};
 #[cfg(feature = "e2e_tests")]
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -16,7 +15,6 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
-#[cfg(feature = "e2e_tests")]
 use crate::common::get_gateway_endpoint;
 use crate::common::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
@@ -40,6 +38,8 @@ pub struct E2ETestProvider {
 /// then the provider should return an empty vector for the corresponding test.
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
+    #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+    pub extra_body_inference: Vec<E2ETestProvider>,
     #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub reasoning_inference: Vec<E2ETestProvider>,
     pub inference_params_inference: Vec<E2ETestProvider>,
@@ -69,7 +69,18 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("tests/e2e/tensorzero.toml");
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_path: Some(config_path),
+        config_file: Some(config_path),
+        clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
+    })
+    .build()
+    .await
+    .unwrap()
+}
+
+#[allow(dead_code)]
+pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
+    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
+        config_file: None,
         clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
     })
     .build()
@@ -128,6 +139,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_use_tool_choice_required_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_specific_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_extra_body_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_with_provider;
         use $crate::providers::reasoning::test_streaming_reasoning_inference_request_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_with_provider_json_mode;
@@ -400,7 +412,110 @@ macro_rules! generate_provider_tests {
                 test_json_mode_streaming_inference_request_with_provider(provider).await;
             }
         }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
+        async fn test_extra_body() {
+            let providers = $func().await.extra_body_inference;
+            for provider in providers {
+                test_extra_body_with_provider(provider).await;
+            }
+        }
     };
+}
+
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "params": {
+            "chat_completion": {
+            //    "temperature": 9000
+            }
+        },
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check if ClickHouse is ok - ChatInference Table
+    let clickhouse = get_clickhouse().await;
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request_val: serde_json::Value = serde_json::from_str::<Value>(raw_request).unwrap();
+    let temp = if provider.variant_name.contains("aws-bedrock") {
+        raw_request_val
+            .get("inferenceConfig")
+            .unwrap()
+            .get("temperature")
+    } else if provider
+        .variant_name
+        .contains("google-ai-studio-gemini-flash-8b")
+        || provider.variant_name.contains("gcp-vertex-gemini-flash")
+    {
+        raw_request_val
+            .get("generationConfig")
+            .unwrap()
+            .get("temperature")
+    } else {
+        raw_request_val.get("temperature")
+    };
+    assert_eq!(
+        temp.expect("Missing temperature")
+            .as_f64()
+            .expect("Temperature is not a number"),
+        0.123
+    );
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -626,14 +741,14 @@ pub async fn check_simple_inference_response(
     assert!(raw_response.to_lowercase().contains("tokyo"));
     assert!(serde_json::from_str::<Value>(raw_response).is_ok());
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = result.get("input_tokens").unwrap();
+    let output_tokens = result.get("output_tokens").unwrap();
     if should_be_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert!(input_tokens.is_null());
+        assert!(output_tokens.is_null());
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.as_u64().unwrap() > 0);
+        assert!(output_tokens.as_u64().unwrap() > 0);
     }
     if !is_batch && !should_be_cached {
         let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -905,16 +1020,16 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = result.get("input_tokens").unwrap();
+    let output_tokens = result.get("output_tokens").unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") || check_cache {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert!(input_tokens.is_null());
+        assert!(output_tokens.is_null());
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.as_u64().unwrap() > 0);
+        assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -1419,16 +1534,16 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = result.get("input_tokens").unwrap();
+    let output_tokens = result.get("output_tokens").unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert!(input_tokens.is_null());
+        assert!(output_tokens.is_null());
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.as_u64().unwrap() > 0);
+        assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -2013,18 +2128,18 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = result.get("input_tokens").unwrap();
+    let output_tokens = result.get("output_tokens").unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert!(input_tokens.is_null());
+        assert!(output_tokens.is_null());
     } else if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.as_u64().unwrap() > 0);
+        assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -2574,16 +2689,16 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = result.get("input_tokens").unwrap();
+    let output_tokens = result.get("output_tokens").unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert!(input_tokens.is_null());
+        assert!(output_tokens.is_null());
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.as_u64().unwrap() > 0);
+        assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -3735,16 +3850,16 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = result.get("input_tokens").unwrap();
+    let output_tokens = result.get("output_tokens").unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert!(input_tokens.is_null());
+        assert!(output_tokens.is_null());
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.as_u64().unwrap() > 0);
+        assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -4456,16 +4571,16 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = result.get("input_tokens").unwrap();
+    let output_tokens = result.get("output_tokens").unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert!(input_tokens.is_null());
+        assert!(output_tokens.is_null());
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.as_u64().unwrap() > 0);
+        assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -5047,18 +5162,18 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = result.get("input_tokens").unwrap();
+    let output_tokens = result.get("output_tokens").unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert!(input_tokens.is_null());
+        assert!(output_tokens.is_null());
     } else if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.as_u64().unwrap() > 0);
+        assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -5642,16 +5757,16 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = result.get("input_tokens").unwrap();
+    let output_tokens = result.get("output_tokens").unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert!(input_tokens.is_null());
+        assert!(output_tokens.is_null());
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.as_u64().unwrap() > 0);
+        assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -6295,18 +6410,18 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = result.get("input_tokens").unwrap();
+    let output_tokens = result.get("output_tokens").unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert!(input_tokens.is_null());
+        assert!(output_tokens.is_null());
     } else if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.as_u64().unwrap() > 0);
+        assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -7034,18 +7149,18 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = result.get("input_tokens").unwrap();
+    let output_tokens = result.get("output_tokens").unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert!(input_tokens.is_null());
+        assert!(output_tokens.is_null());
     } else if provider.variant_name.contains("together") {
         // Do nothing: Together is flaky. Sometimes it returns non-zero usage, sometimes it returns zero usage...
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.as_u64().unwrap() > 0);
+        assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
@@ -7777,16 +7892,16 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
         assert!(serde_json::from_str::<Value>(line).is_ok());
     }
 
-    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
-    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    let input_tokens = result.get("input_tokens").unwrap();
+    let output_tokens = result.get("output_tokens").unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
     if provider.variant_name.contains("azure") {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert!(input_tokens.is_null());
+        assert!(output_tokens.is_null());
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.as_u64().unwrap() > 0);
+        assert!(output_tokens.as_u64().unwrap() > 0);
     }
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();

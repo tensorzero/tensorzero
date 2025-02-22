@@ -5,7 +5,26 @@ use futures::{stream::Peekable, Stream};
 use crate::{
     error::{Error, ErrorDetails},
     inference::types::ProviderInferenceResponseChunk,
+    variant::chat_completion::ExtraBodyConfig,
 };
+
+pub fn inject_extra_body(
+    config: Option<&ExtraBodyConfig>,
+    body: &mut serde_json::Value,
+) -> Result<(), Error> {
+    let Some(body_map) = body.as_object_mut() else {
+        return Err(Error::new(ErrorDetails::Serialization {
+            message: "Body is not a map".to_string(),
+        }));
+    };
+    if let Some(extra_body) = config.as_ref() {
+        for (key, value) in extra_body.data.iter() {
+            // We intentionally overwrite any existing keys in the body.
+            body_map.insert(key.to_string(), value.clone());
+        }
+    }
+    Ok(())
+}
 
 /// Gives mutable access to the first chunk of a stream, returning an error if the stream is empty
 pub async fn peek_first_chunk<
@@ -120,5 +139,56 @@ mod tests {
                 .await
                 .expect("Peeking stream should succeed");
         assert_eq!(&chunk, peeked_chunk);
+    }
+
+    #[test]
+    fn test_inject_nothing() {
+        let mut body = serde_json::json!({});
+        inject_extra_body(None, &mut body).unwrap();
+        assert_eq!(body, serde_json::json!({}));
+    }
+
+    #[test]
+    fn test_inject_to_non_map() {
+        let err = inject_extra_body(None, &mut serde_json::Value::String("test".to_string()))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Body is not a map"),
+            "Unexpected error message: {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_inject_overwrite_object() {
+        let mut body = serde_json::json!({
+            "otherKey": "otherValue",
+            "generationConfig": {
+                "temperature": 123
+            }
+        });
+        inject_extra_body(
+            Some(&ExtraBodyConfig {
+                data: serde_json::json!({
+                    "generationConfig": {
+                        "otherNestedKey": "otherNestedValue"
+                    }
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            }),
+            &mut body,
+        )
+        .unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "otherKey": "otherValue",
+                "generationConfig": {
+                    "otherNestedKey": "otherNestedValue"
+                }
+            })
+        );
     }
 }

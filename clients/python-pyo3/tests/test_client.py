@@ -44,7 +44,7 @@ from tensorzero import (
 from uuid_utils import uuid7
 
 PWD = os.path.dirname(os.path.abspath(__file__))
-TEST_CONFIG_PATH = os.path.join(
+TEST_CONFIG_FILE = os.path.join(
     PWD, "../../../tensorzero-internal/tests/e2e/tensorzero.toml"
 )
 
@@ -63,16 +63,17 @@ async def async_client(request):
             yield client
     else:
         async with await AsyncTensorZeroGateway.build_embedded(
-            config_path=TEST_CONFIG_PATH,
+            config_file=TEST_CONFIG_FILE,
             clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
         ) as client:
             yield client
 
 
 def test_sync_embedded_gateway_no_config():
+    with pytest.warns(UserWarning, match="No config file provided"):
+        client = TensorZeroGateway.build_embedded()
     with pytest.raises(TensorZeroError) as exc_info:
-        with TensorZeroGateway.build_embedded() as client:
-            client.inference(function_name="my_missing_func", input={})
+        client.inference(function_name="my_missing_func", input={})
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.text == '{"error":"Unknown function: my_missing_func"}'
@@ -80,9 +81,10 @@ def test_sync_embedded_gateway_no_config():
 
 @pytest.mark.asyncio
 async def test_async_embedded_gateway_no_config():
+    with pytest.warns(UserWarning, match="No config file provided"):
+        client = await AsyncTensorZeroGateway.build_embedded()
     with pytest.raises(TensorZeroError) as exc_info:
-        async with await AsyncTensorZeroGateway.build_embedded() as client:
-            await client.inference(function_name="my_missing_func", input={})
+        await client.inference(function_name="my_missing_func", input={})
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.text == '{"error":"Unknown function: my_missing_func"}'
@@ -815,7 +817,7 @@ async def test_async_dynamic_credentials(async_client):
 
 def test_sync_error():
     with pytest.raises(Exception) as exc_info:
-        with TensorZeroGateway("http://localhost:3000"):
+        with TensorZeroGateway.build_http(gateway_url="http://localhost:3000"):
             raise Exception("My error")
     assert str(exc_info.value) == "My error"
 
@@ -823,7 +825,9 @@ def test_sync_error():
 @pytest.mark.asyncio
 async def test_async_error():
     with pytest.raises(Exception) as exc_info:
-        async with AsyncTensorZeroGateway("http://localhost:3000"):
+        async with await AsyncTensorZeroGateway.build_http(
+            gateway_url="http://localhost:3000"
+        ):
             raise Exception("My error")
     assert str(exc_info.value) == "My error"
 
@@ -837,7 +841,7 @@ def sync_client(request):
             yield client
     else:
         with TensorZeroGateway.build_embedded(
-            config_path=TEST_CONFIG_PATH,
+            config_file=TEST_CONFIG_FILE,
             clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
         ) as client:
             yield client
@@ -1688,8 +1692,8 @@ async def test_async_err_in_stream(async_client):
 
 @pytest.mark.asyncio
 async def test_async_timeout():
-    async with AsyncTensorZeroGateway(
-        "http://localhost:3000", timeout=1
+    async with await AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000", timeout=1
     ) as async_client:
         with pytest.raises(TensorZeroError):
             await async_client.inference(
@@ -1700,10 +1704,18 @@ async def test_async_timeout():
 
 
 def test_sync_timeout():
-    with TensorZeroGateway("http://localhost:3000", timeout=1) as sync_client:
+    with TensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000", timeout=1
+    ) as sync_client:
         with pytest.raises(TensorZeroError):
             sync_client.inference(
                 function_name="basic_test",
                 variant_name="slow",
                 input={"messages": [{"role": "user", "content": "Hello"}]},
             )
+
+
+def test_uuid7_import():
+    from tensorzero.util import uuid7
+
+    assert uuid7() is not None

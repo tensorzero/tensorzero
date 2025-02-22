@@ -129,7 +129,7 @@ cargo test-unit
 
 1. Launch ClickHouse and the gateway in E2E testing mode (see above).
 
-2. Go to the relevant directory (e.g. `cd clients/python`)
+2. Go to the relevant directory (e.g. `cd clients/python-deprecated`)
 
 3. Create a virtual environment and install the dependencies
 
@@ -183,7 +183,8 @@ TENSORZERO_CLICKHOUSE_URL=<your-clickhouse-url> # For testing, set to http://chu
 TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures/config/tensorzero.toml
 ```
 
-4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up`
+4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up --build --force-recreate`
+   (you can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway)
 
 With the dependencies running, you can run the tests with `pnpm run test`.
 Similarly, you can start a development server with `pnpm run dev`.

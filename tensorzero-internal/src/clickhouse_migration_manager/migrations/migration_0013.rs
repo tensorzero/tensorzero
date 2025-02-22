@@ -5,6 +5,7 @@ use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 
 use super::check_table_exists;
+use async_trait::async_trait;
 
 /// This migration reinitializes the `InferenceById` and `InferenceByEpisodeId` tables and
 /// their associated materialized views.
@@ -23,6 +24,7 @@ pub struct Migration0013<'a> {
     pub clean_start: bool,
 }
 
+#[async_trait]
 impl Migration for Migration0013<'_> {
     /// Check if you can connect to the database
     /// Then check if the two inference tables exist as the sources for the materialized views
