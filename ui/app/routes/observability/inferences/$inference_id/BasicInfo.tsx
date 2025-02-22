@@ -8,14 +8,21 @@ import {
   type TryWithVariantButtonProps,
   TryWithVariantButton,
 } from "~/components/inference/TryWithVariantButton";
+import { AddToDatasetButton } from "./AddToDatasetButton";
+import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
+
 interface BasicInfoProps {
   inference: ParsedInferenceRow;
   tryWithVariantProps: TryWithVariantButtonProps;
+  dataset_counts: DatasetCountInfo[];
+  onDatasetSelect: (dataset: string) => void;
 }
 
 export default function BasicInfo({
   inference,
   tryWithVariantProps,
+  dataset_counts: datasets,
+  onDatasetSelect,
 }: BasicInfoProps) {
   const config = useConfig();
   const variantType =
@@ -25,7 +32,13 @@ export default function BasicInfo({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-xl">Basic Information</CardTitle>
-        <TryWithVariantButton {...tryWithVariantProps} />
+        <div className="flex gap-2">
+          <TryWithVariantButton {...tryWithVariantProps} />
+          <AddToDatasetButton
+            datasets={datasets}
+            onDatasetSelect={onDatasetSelect}
+          />
+        </div>
       </CardHeader>
       <CardContent>
         <dl className="grid grid-cols-2 gap-4">

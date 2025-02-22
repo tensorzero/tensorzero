@@ -26,6 +26,7 @@ import { useState } from "react";
 import { useConfig } from "~/context/config";
 import { VariantResponseModal } from "./VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
+import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -37,18 +38,24 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
 
-  const [inference, model_inferences, feedback, feedback_bounds] =
-    await Promise.all([
-      queryInferenceById(inference_id),
-      queryModelInferencesByInferenceId(inference_id),
-      queryFeedbackByTargetId({
-        target_id: inference_id,
-        before: beforeFeedback || undefined,
-        after: afterFeedback || undefined,
-        page_size: pageSize,
-      }),
-      queryFeedbackBoundsByTargetId({ target_id: inference_id }),
-    ]);
+  const [
+    inference,
+    model_inferences,
+    feedback,
+    feedback_bounds,
+    dataset_counts,
+  ] = await Promise.all([
+    queryInferenceById(inference_id),
+    queryModelInferencesByInferenceId(inference_id),
+    queryFeedbackByTargetId({
+      target_id: inference_id,
+      before: beforeFeedback || undefined,
+      after: afterFeedback || undefined,
+      page_size: pageSize,
+    }),
+    queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+    getDatasetCounts(),
+  ]);
   if (!inference) {
     throw data(`No inference found for id ${inference_id}.`, {
       status: 404,
@@ -60,11 +67,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     model_inferences,
     feedback,
     feedback_bounds,
+    dataset_counts,
   };
 }
 
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
-  const { inference, model_inferences, feedback, feedback_bounds } = loaderData;
+  const {
+    inference,
+    model_inferences,
+    feedback,
+    feedback_bounds,
+    dataset_counts,
+  } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [variantInferenceIsLoading, setVariantInferenceIsLoading] =
@@ -134,6 +148,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           variants,
           onVariantSelect,
           isLoading: variantInferenceIsLoading,
+        }}
+        dataset_counts={dataset_counts}
+        onDatasetSelect={(dataset: string) => {
+          console.log("Selected dataset:", dataset);
         }}
       />
       <Input input={inference.input} />
