@@ -479,163 +479,63 @@ export async function deleteDatapoint(
   datapoint: ParsedDatasetRow,
   id: string,
 ): Promise<void> {
-  if ("tool_params" in datapoint) {
-    await clickhouseClient.query({
-      query: `
-        INSERT INTO ChatInferenceDataset (
-          dataset_name,
-          function_name, 
-          id,
-          episode_id,
-          input,
-          output,
-          tool_params,
-          tags,
-          auxiliary,
-          is_deleted
-        ) VALUES (
-          '{dataset_name:String}',
-          '{function_name:String}',
-          '{id:String}',
-          '{episode_id:String}', 
-          '{input:String}',
-          '{output:String}',
-          '{tool_params:String}',
-          {tags:String},
-          '{auxiliary:String}',
-          true
-        )`,
-      query_params: {
-        dataset_name: datapoint.dataset_name,
-        function_name: datapoint.function_name,
-        id,
-        episode_id: datapoint.episode_id,
-        input: JSON.stringify(datapoint.input),
-        output: JSON.stringify(datapoint.output),
-        tool_params: JSON.stringify(datapoint.tool_params),
-        tags: JSON.stringify(datapoint.tags),
-        auxiliary: JSON.stringify(datapoint.auxiliary),
-      },
-    });
-  } else {
-    await clickhouseClient.query({
-      query: `
-        INSERT INTO JsonInferenceDataset (
-          dataset_name,
-          function_name,
-          id, 
-          episode_id,
-          input,
-          output,
-          output_schema,
-          tags,
-          auxiliary,
-          is_deleted
-        ) VALUES (
-          '{dataset_name:String}',
-          '{function_name:String}', 
-          '{id:String}',
-          '{episode_id:String}',
-          '{input:String}',
-          '{output:String}',
-          '{output_schema:String}',
-          {tags:String},
-          '{auxiliary:String}',
-          true
-        )`,
-      query_params: {
-        dataset_name: datapoint.dataset_name,
-        function_name: datapoint.function_name,
-        id,
-        episode_id: datapoint.episode_id,
-        input: JSON.stringify(datapoint.input),
-        output: JSON.stringify(datapoint.output),
-        output_schema: JSON.stringify(datapoint.output_schema),
-        tags: JSON.stringify(datapoint.tags),
-        auxiliary: JSON.stringify(datapoint.auxiliary),
-      },
-    });
-  }
+  const table =
+    "tool_params" in datapoint
+      ? "ChatInferenceDataset"
+      : "JsonInferenceDataset";
+  const values = [
+    {
+      dataset_name: datapoint.dataset_name,
+      function_name: datapoint.function_name,
+      id,
+      episode_id: datapoint.episode_id,
+      input: datapoint.input,
+      output: datapoint.output,
+      tags: datapoint.tags,
+      auxiliary: datapoint.auxiliary,
+      is_deleted: true,
+      // Add type-specific fields
+      ...("tool_params" in datapoint
+        ? { tool_params: datapoint.tool_params }
+        : { output_schema: datapoint.output_schema }),
+    },
+  ];
+
+  await clickhouseClient.insert({
+    table,
+    values,
+    format: "JSONEachRow",
+  });
 }
 
 export async function insertDatapoint(
   datapoint: ParsedDatasetRow,
 ): Promise<void> {
-  if ("tool_params" in datapoint) {
-    await clickhouseClient.query({
-      query: `
-        INSERT INTO ChatInferenceDataset (
-          dataset_name,
-          function_name,
-          id,
-          episode_id,
-          input,
-          output,
-          tool_params,
-          tags,
-          auxiliary,
-          is_deleted
-        ) VALUES (
-          '{dataset_name:String}',
-          '{function_name:String}',
-          '{id:String}',
-          '{episode_id:String}',
-          '{input:String}',
-          '{output:String}',
-          '{tool_params:String}',
-          {tags:String},
-          '{auxiliary:String}',
-          false
-        )`,
-      query_params: {
-        dataset_name: datapoint.dataset_name,
-        function_name: datapoint.function_name,
-        id: datapoint.id,
-        episode_id: datapoint.episode_id,
-        input: JSON.stringify(datapoint.input),
-        output: JSON.stringify(datapoint.output),
-        tool_params: JSON.stringify(datapoint.tool_params),
-        tags: JSON.stringify(datapoint.tags),
-        auxiliary: JSON.stringify(datapoint.auxiliary),
-      },
-    });
-  } else {
-    await clickhouseClient.query({
-      query: `
-        INSERT INTO JsonInferenceDataset (
-          dataset_name,
-          function_name,
-          id,
-          episode_id,
-          input,
-          output,
-          output_schema,
-          tags,
-          auxiliary,
-          is_deleted
-        ) VALUES (
-          '{dataset_name:String}',
-          '{function_name:String}',
-          '{id:String}',
-          '{episode_id:String}',
-          '{input:String}',
-          '{output:String}',
-          '{output_schema:String}',
-          {tags:String},
-          '{auxiliary:String}',
-          false
-        )`,
-      query_params: {
-        dataset_name: datapoint.dataset_name,
-        function_name: datapoint.function_name,
-        id: datapoint.id,
-        episode_id: datapoint.episode_id,
-        input: JSON.stringify(datapoint.input),
-        output: JSON.stringify(datapoint.output),
-        output_schema: JSON.stringify(datapoint.output_schema),
-        tags: JSON.stringify(datapoint.tags),
-        auxiliary: JSON.stringify(datapoint.auxiliary),
-      },
-    });
-  }
+  const table =
+    "tool_params" in datapoint
+      ? "ChatInferenceDataset"
+      : "JsonInferenceDataset";
+  const values = [
+    {
+      dataset_name: datapoint.dataset_name,
+      function_name: datapoint.function_name,
+      id: datapoint.id,
+      episode_id: datapoint.episode_id,
+      input: datapoint.input,
+      output: datapoint.output,
+      tags: datapoint.tags,
+      auxiliary: datapoint.auxiliary,
+      is_deleted: false,
+      // Add type-specific fields
+      ...("tool_params" in datapoint
+        ? { tool_params: datapoint.tool_params }
+        : { output_schema: datapoint.output_schema }),
+    },
+  ];
+
+  await clickhouseClient.insert({
+    table,
+    values,
+    format: "JSONEachRow",
+  });
 }

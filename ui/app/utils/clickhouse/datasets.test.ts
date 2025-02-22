@@ -1,7 +1,6 @@
 import {
   DatasetQueryParamsSchema,
   type DatasetDetailRow,
-  type ParsedDatasetRow,
   type ParsedJsonInferenceDatasetRow,
   type ParsedChatInferenceDatasetRow,
 } from "./datasets";
@@ -255,18 +254,22 @@ describe("countRowsForDataset", () => {
 describe("getDatasetCounts", () => {
   test("returns the correct counts for all datasets", async () => {
     const counts = await getDatasetCounts();
-    expect(counts).toEqual([
-      {
-        count: 5,
-        dataset_name: "bar",
-        last_updated: "2025-02-19T00:26:06Z",
-      },
-      {
-        count: 116,
-        dataset_name: "foo",
-        last_updated: "2025-02-19T00:25:29Z",
-      },
-    ]);
+    expect(counts).toEqual(
+      // We only assert that the result contains the expected datasets
+      // Because other tests insert into the table, there could be additional datasets
+      expect.arrayContaining([
+        {
+          count: 5,
+          dataset_name: "bar",
+          last_updated: "2025-02-19T00:26:06Z",
+        },
+        {
+          count: 116,
+          dataset_name: "foo",
+          last_updated: "2025-02-19T00:25:29Z",
+        },
+      ]),
+    );
   });
 });
 
@@ -520,9 +523,7 @@ describe("datapoint operations", () => {
     expect(retrievedDatapoint?.id).toBe(chatDatapoint.id);
     expect(retrievedDatapoint?.function_name).toBe(chatDatapoint.function_name);
     expect(retrievedDatapoint?.dataset_name).toBe(chatDatapoint.dataset_name);
-    expect(JSON.stringify(retrievedDatapoint?.input)).toBe(
-      JSON.stringify(chatDatapoint.input),
-    );
+    expect(retrievedDatapoint?.input).toEqual(chatDatapoint.input);
 
     // Check if it's a chat inference row before accessing tool_params
     if (retrievedDatapoint && "tool_params" in retrievedDatapoint) {
@@ -600,12 +601,8 @@ describe("datapoint operations", () => {
     expect(retrievedDatapoint?.id).toBe(jsonDatapoint.id);
     expect(retrievedDatapoint?.function_name).toBe(jsonDatapoint.function_name);
     expect(retrievedDatapoint?.dataset_name).toBe(jsonDatapoint.dataset_name);
-    expect(JSON.stringify(retrievedDatapoint?.input)).toBe(
-      JSON.stringify(jsonDatapoint.input),
-    );
-    expect(JSON.stringify(retrievedDatapoint?.output)).toBe(
-      JSON.stringify(jsonDatapoint.output),
-    );
+    expect(retrievedDatapoint?.input).toEqual(jsonDatapoint.input);
+    expect(retrievedDatapoint?.output).toEqual(jsonDatapoint.output);
 
     // Check if it's a JSON inference row before accessing output_schema
     if (retrievedDatapoint && !("tool_params" in retrievedDatapoint)) {
