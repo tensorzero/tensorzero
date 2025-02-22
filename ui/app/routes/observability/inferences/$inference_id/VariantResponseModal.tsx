@@ -15,7 +15,7 @@ import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import { useFetcher } from "react-router";
 import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
 import type { ContentBlockOutput } from "~/utils/clickhouse/common";
-import { OutputContent } from "./Output";
+import { OutputContent } from "~/components/inference/Output";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
 

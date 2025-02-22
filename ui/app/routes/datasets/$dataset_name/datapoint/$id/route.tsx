@@ -2,7 +2,7 @@ import type { Route } from "./+types/route";
 import { data, isRouteErrorResponse } from "react-router";
 import BasicInfo from "./BasicInfo";
 import Input from "./Input";
-import Output from "./Output";
+import Output from "~/components/inference/Output";
 import { useState } from "react";
 import { useConfig } from "~/context/config";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";

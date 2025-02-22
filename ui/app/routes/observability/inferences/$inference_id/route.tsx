@@ -11,7 +11,7 @@ import { data, isRouteErrorResponse, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./BasicInfo";
 import Input from "./Input";
-import Output from "./Output";
+import Output from "~/components/inference/Output";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { ParameterCard } from "./InferenceParameters";
 import { TagsTable } from "~/components/utils/TagsTable";
