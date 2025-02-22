@@ -22,8 +22,8 @@ body {
   :root {
     --background-primary: 0 0% 100%;
     --background-secondary: 0 0% 98.5%;
-    --background-tertiary: 0 0% 94%;
-    --background-muted: 0 0% 89%;
+    --background-tertiary: 0 0% 96%;
+    --background-muted: 0 0% 91%;
     --foreground-primary: 0 0% 0%;
     --foreground-secondary: 0 0% 30%;
     --foreground-tertiary: 0 0% 45%;
@@ -51,11 +51,11 @@ body {
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
-    --sidebar-background: 0 0% 94%;
+    --sidebar-background: 0 0% 96%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 240 5.9% 10%;
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 0 0% 89%;
+    --sidebar-accent: 0 0% 91%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
