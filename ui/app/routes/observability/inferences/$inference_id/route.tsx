@@ -10,7 +10,7 @@ import type { Route } from "./+types/route";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./BasicInfo";
-import Input from "./Input";
+import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { ParameterCard } from "./InferenceParameters";

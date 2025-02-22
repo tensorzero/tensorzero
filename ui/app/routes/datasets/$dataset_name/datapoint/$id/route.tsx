@@ -1,7 +1,7 @@
 import type { Route } from "./+types/route";
 import { data, isRouteErrorResponse } from "react-router";
 import BasicInfo from "./BasicInfo";
-import Input from "./Input";
+import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
 import { useState } from "react";
 import { useConfig } from "~/context/config";
