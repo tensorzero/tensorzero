@@ -54,7 +54,7 @@ interface FooterLinkProps {
 function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
   return (
     <Link to={source} className="group flex w-fit items-center">
-      <Icon className="mr-2 h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground-secondary" />
+      <Icon className="mr-2 h-4 w-4 text-foreground-muted transition-colors group-hover:text-foreground-secondary" />
       <span className="text-foreground-secondary transition-colors group-hover:text-foreground-primary">
         {children}
       </span>
@@ -85,7 +85,7 @@ export default function Home() {
       <div className="container mx-auto my-16 max-w-[960px]">
         <div id="observability" className="mb-16">
           <h2 className="mb-1 text-2xl font-medium">Observability</h2>
-          <p className="mb-6 max-w-[640px] text-sm text-foreground-tertiary">
+          <p className="mb-6 max-w-[640px] text-sm text-foreground-muted">
             Monitor metrics across models and prompts and debug individual API
             calls.
           </p>
@@ -113,7 +113,7 @@ export default function Home() {
 
         <div id="optimization" className="mb-12">
           <h2 className="mb-1 text-2xl font-medium">Optimization</h2>
-          <p className="mb-6 max-w-[640px] text-sm text-foreground-tertiary">
+          <p className="mb-6 max-w-[640px] text-sm text-foreground-muted">
             Optimize your prompts, models, and inference strategies.
           </p>
           <div className="grid gap-6 md:grid-cols-3">
@@ -129,7 +129,7 @@ export default function Home() {
         <div className="mt-16 border-t border-gray-200 pt-16">
           <div className="grid gap-8 md:grid-cols-3">
             <div>
-              <h3 className="mb-4 text-sm text-muted-foreground">Learn more</h3>
+              <h3 className="mb-4 text-sm text-foreground-muted">Learn more</h3>
               <div className="flex flex-col gap-3">
                 <FooterLink
                   source="https://www.tensorzero.com/docs"
@@ -147,7 +147,7 @@ export default function Home() {
             </div>
 
             <div>
-              <h3 className="mb-4 text-sm text-muted-foreground">
+              <h3 className="mb-4 text-sm text-foreground-muted">
                 Ask a question
               </h3>
               <div className="flex flex-col gap-3">
@@ -167,7 +167,7 @@ export default function Home() {
             </div>
 
             <div>
-              <h3 className="mb-4 text-sm text-muted-foreground">
+              <h3 className="mb-4 text-sm text-foreground-muted">
                 Explore TensorZero
               </h3>
               <div className="flex flex-col gap-3">
