@@ -98,9 +98,6 @@ export async function action({ request }: Route.ActionArgs) {
   if (!dataset || !output || !inference_id) {
     throw data("Missing required fields", { status: 400 });
   }
-  console.log("dataset", dataset);
-  console.log("output", output);
-  console.log("inference_id", inference_id);
   const promises = [queryInferenceById(inference_id.toString())] as const;
   let datapoint: ParsedDatasetRow;
   if (output === "demonstration") {
