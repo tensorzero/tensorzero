@@ -23,6 +23,10 @@ export default [
   route("datasets/builder", "routes/datasets/builder/route.tsx"),
   route("datasets/:dataset_name", "routes/datasets/$dataset_name/route.tsx"),
   route(
+    "datasets/:dataset_name/datapoint/:id",
+    "routes/datasets/$dataset_name/datapoint/$id/route.tsx",
+  ),
+  route(
     "observability/inferences",
     "routes/observability/inferences/route.tsx",
   ),

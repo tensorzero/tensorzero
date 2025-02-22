@@ -56,7 +56,7 @@ export default function DatasetDetailPage({
         </Code>
       </h1>
       <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
-      <DatasetRowTable rows={rows} />
+      <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
       <PageButtons
         onPreviousPage={handlePreviousPage}
         onNextPage={handleNextPage}

@@ -1,34 +1,14 @@
-import {
-  queryInferenceById,
-  queryModelInferencesByInferenceId,
-} from "~/utils/clickhouse/inference";
-import {
-  queryFeedbackBoundsByTargetId,
-  queryFeedbackByTargetId,
-} from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
-import PageButtons from "~/components/utils/PageButtons";
+import { data, isRouteErrorResponse } from "react-router";
 import BasicInfo from "./BasicInfo";
 import Input from "./Input";
 import Output from "./Output";
-import FeedbackTable from "~/components/feedback/FeedbackTable";
-import { TagsTable } from "~/components/utils/TagsTable";
-import { TooltipContent } from "~/components/ui/tooltip";
-import { TooltipTrigger } from "~/components/ui/tooltip";
-import { Tooltip } from "~/components/ui/tooltip";
-import { TooltipProvider } from "~/components/ui/tooltip";
-import { Badge } from "~/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { useState } from "react";
 import { useConfig } from "~/context/config";
-// TODO: this
-// import { VariantResponseModal } from "./VariantResponseModal";
-import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
-import { VariantResponseModal } from "~/routes/observability/inferences/$inference_id/VariantResponseModal";
+import { VariantResponseModal } from "./VariantResponseModal";
 
-export async function loader({ request, params }: Route.LoaderArgs) {
+export async function loader({ params }: Route.LoaderArgs) {
   const { dataset_name, id } = params;
   const datapoint = await getDatapoint(dataset_name, id);
   if (!datapoint) {
@@ -42,9 +22,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-export default function DatapointPage({
-  loaderData,
-}: Route.ComponentProps<typeof loader>) {
+export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const { datapoint } = loaderData;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [variantInferenceIsLoading, setVariantInferenceIsLoading] =
@@ -83,15 +61,14 @@ export default function DatapointPage({
         }}
       />
       <Input input={datapoint.input} />
-      <Output output={datapoint.output} />
+      {datapoint.output && <Output output={datapoint.output} />}
       {selectedVariant && (
         <VariantResponseModal
           isOpen={isModalOpen}
           isLoading={variantInferenceIsLoading}
           setIsLoading={setVariantInferenceIsLoading}
           onClose={handleModalClose}
-          inference={inference}
-          inferenceUsage={getTotalInferenceUsage(model_inferences)}
+          datapoint={datapoint}
           selectedVariant={selectedVariant}
         />
       )}

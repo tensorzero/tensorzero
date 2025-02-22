@@ -1,16 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Code } from "~/components/ui/code";
-import { Badge } from "~/components/ui/badge";
 import { Link } from "react-router";
-import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import { useConfig } from "~/context/config";
 import {
   type TryWithVariantButtonProps,
   TryWithVariantButton,
 } from "~/components/utils/TryWithVariantButton";
-import type { DatasetRow } from "~/utils/clickhouse/datasets";
+import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 interface BasicInfoProps {
-  datapoint: DatasetRow;
+  datapoint: ParsedDatasetRow;
   tryWithVariantProps: TryWithVariantButtonProps;
 }
 

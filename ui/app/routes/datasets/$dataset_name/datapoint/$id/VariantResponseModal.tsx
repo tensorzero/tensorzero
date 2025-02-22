@@ -10,7 +10,6 @@ import {
 import { Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
-import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import { useFetcher } from "react-router";
 import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
@@ -18,19 +17,19 @@ import type { ContentBlockOutput } from "~/utils/clickhouse/common";
 import { OutputContent } from "./Output";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
+import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 
 interface VariantResponseModalProps {
   isOpen: boolean;
   isLoading: boolean;
   setIsLoading: (isLoading: boolean) => void;
   onClose: () => void;
-  inference: ParsedInferenceRow;
-  inferenceUsage: InferenceUsage;
+  datapoint: ParsedDatasetRow;
   selectedVariant: string;
 }
 
 interface VariantResponseInfo {
-  output: JsonInferenceOutput | ContentBlockOutput[];
+  output?: JsonInferenceOutput | ContentBlockOutput[];
   usage?: InferenceUsage;
 }
 
@@ -39,8 +38,7 @@ export function VariantResponseModal({
   isLoading,
   setIsLoading,
   onClose,
-  inference,
-  inferenceUsage,
+  datapoint,
   selectedVariant,
 }: VariantResponseModalProps) {
   const [variantResponse, setVariantResponse] =
@@ -51,10 +49,8 @@ export function VariantResponseModal({
   const [showRawResponse, setShowRawResponse] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const baselineResponse: VariantResponseInfo = {
-    output: inference.output,
-    usage: inferenceUsage,
+    output: datapoint.output,
   };
-  const originalVariant = inference.variant_name;
 
   const variantInferenceFetcher = useFetcher();
 
@@ -64,8 +60,8 @@ export function VariantResponseModal({
       setShowRawResponse(false);
       setError(null);
       const request = {
-        function_name: inference.function_name,
-        input: inference.input,
+        function_name: datapoint.function_name,
+        input: datapoint.input,
         variant_name: selectedVariant,
         dryrun: true,
       };
@@ -130,11 +126,13 @@ export function VariantResponseModal({
         <>
           <div className="flex-1">
             <h4 className="mb-1 text-xs font-semibold">Output</h4>
-            <Card>
-              <CardContent className="pt-8">
-                <OutputContent output={response.output} />
-              </CardContent>
-            </Card>
+            {response.output && (
+              <Card>
+                <CardContent className="pt-8">
+                  <OutputContent output={response.output} />
+                </CardContent>
+              </Card>
+            )}
           </div>
           {response.usage && (
             <div className="mt-4">
@@ -157,11 +155,7 @@ export function VariantResponseModal({
       <DialogContent className="max-h-[90vh] sm:max-w-[1200px]">
         <DialogHeader>
           <DialogTitle>
-            Comparing{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">
-              {originalVariant}
-            </code>{" "}
-            vs{" "}
+            Comparing Datapoint vs{" "}
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">
               {selectedVariant}
             </code>
