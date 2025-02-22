@@ -5,7 +5,10 @@ import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
 import { useState } from "react";
 import { useConfig } from "~/context/config";
-import { getDatapoint } from "~/utils/clickhouse/datasets.server";
+import {
+  deleteDatapoint,
+  getDatapoint,
+} from "~/utils/clickhouse/datasets.server";
 import { VariantResponseModal } from "./VariantResponseModal";
 
 export async function loader({ params }: Route.LoaderArgs) {
@@ -44,6 +47,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setVariantInferenceIsLoading(false);
   };
 
+  const handleDelete = () => {
+    deleteDatapoint(datapoint);
+  };
+
   return (
     <div className="container mx-auto space-y-6 p-4">
       <h2 className="mb-4 text-2xl font-semibold">
@@ -59,6 +66,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           onVariantSelect,
           isLoading: variantInferenceIsLoading,
         }}
+        onDelete={handleDelete}
       />
       <Input input={datapoint.input} />
       {datapoint.output && <Output output={datapoint.output} />}

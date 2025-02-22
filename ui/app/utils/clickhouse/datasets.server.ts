@@ -477,7 +477,6 @@ function parseDatasetRow(row: DatasetRow): ParsedDatasetRow {
 
 export async function deleteDatapoint(
   datapoint: ParsedDatasetRow,
-  id: string,
 ): Promise<void> {
   const table =
     "tool_params" in datapoint
@@ -487,7 +486,7 @@ export async function deleteDatapoint(
     {
       dataset_name: datapoint.dataset_name,
       function_name: datapoint.function_name,
-      id,
+      id: datapoint.id,
       episode_id: datapoint.episode_id,
       input: datapoint.input,
       output: datapoint.output,

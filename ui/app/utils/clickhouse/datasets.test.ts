@@ -538,7 +538,7 @@ describe("datapoint operations", () => {
     }
 
     // Test deletion
-    await deleteDatapoint(chatDatapoint, chatDatapoint.id);
+    await deleteDatapoint(chatDatapoint);
     const deletedDatapoint = await getDatapoint(
       "test_chat_dataset",
       "01934fc5-ea98-71f0-8191-9fd88f34c28b",
@@ -614,7 +614,7 @@ describe("datapoint operations", () => {
     }
 
     // Test deletion
-    await deleteDatapoint(jsonDatapoint, jsonDatapoint.id);
+    await deleteDatapoint(jsonDatapoint);
     const deletedDatapoint = await getDatapoint(
       "test_json_dataset",
       "01934fc5-ea98-71f0-8191-9fd88f34c29c",
@@ -666,7 +666,7 @@ describe("datapoint operations", () => {
     await insertDatapoint(chatDatapoint);
 
     // Cleanup
-    await deleteDatapoint(chatDatapoint, chatDatapoint.id);
+    await deleteDatapoint(chatDatapoint);
   });
 
   test("handles deletion of non-existent datapoint", async () => {
@@ -692,8 +692,6 @@ describe("datapoint operations", () => {
     };
 
     // Should not throw
-    await expect(
-      deleteDatapoint(nonExistentDatapoint, nonExistentDatapoint.id),
-    ).resolves.not.toThrow();
+    await expect(deleteDatapoint(nonExistentDatapoint)).resolves.not.toThrow();
   });
 });

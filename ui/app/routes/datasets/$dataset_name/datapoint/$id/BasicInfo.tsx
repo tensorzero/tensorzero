@@ -12,11 +12,13 @@ import { DeleteButton } from "~/components/utils/DeleteButton";
 interface BasicInfoProps {
   datapoint: ParsedDatasetRow;
   tryWithVariantProps: TryWithVariantButtonProps;
+  onDelete: () => void;
 }
 
 export default function BasicInfo({
   datapoint,
   tryWithVariantProps,
+  onDelete,
 }: BasicInfoProps) {
   const config = useConfig();
   const function_config = config.functions[datapoint.function_name];
@@ -31,7 +33,7 @@ export default function BasicInfo({
         <div className="flex gap-2">
           <TryWithVariantButton {...tryWithVariantProps} />
           <EditButton onClick={() => (window.location.href = "#")} />
-          <DeleteButton onClick={() => (window.location.href = "#")} />
+          <DeleteButton onClick={onDelete} />
         </div>
       </CardHeader>
       <CardContent>
