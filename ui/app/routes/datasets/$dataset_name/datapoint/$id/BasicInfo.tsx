@@ -7,6 +7,8 @@ import {
   TryWithVariantButton,
 } from "~/components/inference/TryWithVariantButton";
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
+import { EditButton } from "~/components/utils/EditButton";
+import { DeleteButton } from "~/components/utils/DeleteButton";
 interface BasicInfoProps {
   datapoint: ParsedDatasetRow;
   tryWithVariantProps: TryWithVariantButtonProps;
@@ -26,7 +28,11 @@ export default function BasicInfo({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-xl">Basic Information</CardTitle>
-        <TryWithVariantButton {...tryWithVariantProps} />
+        <div className="flex gap-2">
+          <TryWithVariantButton {...tryWithVariantProps} />
+          <EditButton onClick={() => (window.location.href = "#")} />
+          <DeleteButton onClick={() => (window.location.href = "#")} />
+        </div>
       </CardHeader>
       <CardContent>
         <dl className="grid grid-cols-2 gap-4">

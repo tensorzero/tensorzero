@@ -267,6 +267,7 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
           toUInt32(count()) AS count,
           max(updated_at) AS last_updated
         FROM ChatInferenceDataset
+        FINAL
         WHERE is_deleted = false
         GROUP BY dataset_name
         UNION ALL
@@ -275,6 +276,7 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
           toUInt32(count()) AS count,
           max(updated_at) AS last_updated
         FROM JsonInferenceDataset
+        FINAL
         WHERE is_deleted = false
         GROUP BY dataset_name
       )
@@ -365,6 +367,7 @@ export async function getDatasetRows(
           episode_id,
           formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
         FROM ChatInferenceDataset
+        FINAL
         WHERE dataset_name = {dataset_name:String} AND is_deleted = false
         UNION ALL
         SELECT
@@ -374,6 +377,7 @@ export async function getDatasetRows(
           episode_id,
           formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
         FROM JsonInferenceDataset
+        FINAL
         WHERE dataset_name = {dataset_name:String} AND is_deleted = false
       )
       ORDER BY updated_at DESC, id DESC
@@ -399,10 +403,10 @@ export async function getDatapoint(
   id: string,
 ): Promise<ParsedDatasetRow | null> {
   const chat_query = `
-    SELECT dataset_name,function_name, id, episode_id, input, output, tool_params, tags, auxiliary,  formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM ChatInferenceDataset WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
+    SELECT dataset_name,function_name, id, episode_id, input, output, tool_params, tags, auxiliary,  formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM ChatInferenceDataset FINAL WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
   `;
   const json_query = `
-    SELECT dataset_name, function_name, id, episode_id, input, output, output_schema, tags, auxiliary, formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM JsonInferenceDataset WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
+    SELECT dataset_name, function_name, id, episode_id, input, output, output_schema, tags, auxiliary, formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM JsonInferenceDataset FINAL WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
   `;
 
   const [chatResult, jsonResult] = await Promise.all([
@@ -468,5 +472,170 @@ function parseDatasetRow(row: DatasetRow): ParsedDatasetRow {
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.output_schema)),
     };
+  }
+}
+
+export async function deleteDatapoint(
+  datapoint: ParsedDatasetRow,
+  id: string,
+): Promise<void> {
+  if ("tool_params" in datapoint) {
+    await clickhouseClient.query({
+      query: `
+        INSERT INTO ChatInferenceDataset (
+          dataset_name,
+          function_name, 
+          id,
+          episode_id,
+          input,
+          output,
+          tool_params,
+          tags,
+          auxiliary,
+          is_deleted
+        ) VALUES (
+          '{dataset_name:String}',
+          '{function_name:String}',
+          '{id:String}',
+          '{episode_id:String}', 
+          '{input:String}',
+          '{output:String}',
+          '{tool_params:String}',
+          {tags:String},
+          '{auxiliary:String}',
+          true
+        )`,
+      query_params: {
+        dataset_name: datapoint.dataset_name,
+        function_name: datapoint.function_name,
+        id,
+        episode_id: datapoint.episode_id,
+        input: JSON.stringify(datapoint.input),
+        output: JSON.stringify(datapoint.output),
+        tool_params: JSON.stringify(datapoint.tool_params),
+        tags: JSON.stringify(datapoint.tags),
+        auxiliary: JSON.stringify(datapoint.auxiliary),
+      },
+    });
+  } else {
+    await clickhouseClient.query({
+      query: `
+        INSERT INTO JsonInferenceDataset (
+          dataset_name,
+          function_name,
+          id, 
+          episode_id,
+          input,
+          output,
+          output_schema,
+          tags,
+          auxiliary,
+          is_deleted
+        ) VALUES (
+          '{dataset_name:String}',
+          '{function_name:String}', 
+          '{id:String}',
+          '{episode_id:String}',
+          '{input:String}',
+          '{output:String}',
+          '{output_schema:String}',
+          {tags:String},
+          '{auxiliary:String}',
+          true
+        )`,
+      query_params: {
+        dataset_name: datapoint.dataset_name,
+        function_name: datapoint.function_name,
+        id,
+        episode_id: datapoint.episode_id,
+        input: JSON.stringify(datapoint.input),
+        output: JSON.stringify(datapoint.output),
+        output_schema: JSON.stringify(datapoint.output_schema),
+        tags: JSON.stringify(datapoint.tags),
+        auxiliary: JSON.stringify(datapoint.auxiliary),
+      },
+    });
+  }
+}
+
+export async function insertDatapoint(
+  datapoint: ParsedDatasetRow,
+): Promise<void> {
+  if ("tool_params" in datapoint) {
+    await clickhouseClient.query({
+      query: `
+        INSERT INTO ChatInferenceDataset (
+          dataset_name,
+          function_name,
+          id,
+          episode_id,
+          input,
+          output,
+          tool_params,
+          tags,
+          auxiliary,
+          is_deleted
+        ) VALUES (
+          '{dataset_name:String}',
+          '{function_name:String}',
+          '{id:String}',
+          '{episode_id:String}',
+          '{input:String}',
+          '{output:String}',
+          '{tool_params:String}',
+          {tags:String},
+          '{auxiliary:String}',
+          false
+        )`,
+      query_params: {
+        dataset_name: datapoint.dataset_name,
+        function_name: datapoint.function_name,
+        id: datapoint.id,
+        episode_id: datapoint.episode_id,
+        input: JSON.stringify(datapoint.input),
+        output: JSON.stringify(datapoint.output),
+        tool_params: JSON.stringify(datapoint.tool_params),
+        tags: JSON.stringify(datapoint.tags),
+        auxiliary: JSON.stringify(datapoint.auxiliary),
+      },
+    });
+  } else {
+    await clickhouseClient.query({
+      query: `
+        INSERT INTO JsonInferenceDataset (
+          dataset_name,
+          function_name,
+          id,
+          episode_id,
+          input,
+          output,
+          output_schema,
+          tags,
+          auxiliary,
+          is_deleted
+        ) VALUES (
+          '{dataset_name:String}',
+          '{function_name:String}',
+          '{id:String}',
+          '{episode_id:String}',
+          '{input:String}',
+          '{output:String}',
+          '{output_schema:String}',
+          {tags:String},
+          '{auxiliary:String}',
+          false
+        )`,
+      query_params: {
+        dataset_name: datapoint.dataset_name,
+        function_name: datapoint.function_name,
+        id: datapoint.id,
+        episode_id: datapoint.episode_id,
+        input: JSON.stringify(datapoint.input),
+        output: JSON.stringify(datapoint.output),
+        output_schema: JSON.stringify(datapoint.output_schema),
+        tags: JSON.stringify(datapoint.tags),
+        auxiliary: JSON.stringify(datapoint.auxiliary),
+      },
+    });
   }
 }

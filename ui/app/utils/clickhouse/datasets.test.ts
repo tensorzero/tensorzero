@@ -1,9 +1,17 @@
-import { DatasetQueryParamsSchema, type DatasetDetailRow } from "./datasets";
+import {
+  DatasetQueryParamsSchema,
+  type DatasetDetailRow,
+  type ParsedDatasetRow,
+  type ParsedJsonInferenceDatasetRow,
+  type ParsedChatInferenceDatasetRow,
+} from "./datasets";
 import {
   countRowsForDataset,
   getDatapoint,
   getDatasetCounts,
   getDatasetRows,
+  insertDatapoint,
+  deleteDatapoint,
 } from "./datasets.server";
 import { expect, test, describe } from "vitest";
 
@@ -429,7 +437,6 @@ describe("getDatapoint", () => {
       "foo",
       "01934fc5-ea98-71f0-8191-9fd88f34c28b",
     );
-    console.log(datapoint);
     expect(datapoint).toEqual({
       auxiliary: "",
       dataset_name: "foo",
@@ -470,5 +477,226 @@ describe("getDatapoint", () => {
       "00000000-0000-0000-0000-000000000000",
     );
     expect(datapoint).toEqual(null);
+  });
+});
+
+describe("datapoint operations", () => {
+  test("chat datapoint lifecycle - insert, get, delete", async () => {
+    const chatDatapoint: ParsedChatInferenceDatasetRow = {
+      dataset_name: "test_chat_dataset",
+      function_name: "write_haiku",
+      id: "01934fc5-ea98-71f0-8191-9fd88f34c28b",
+      episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff9",
+      input: {
+        messages: [
+          {
+            content: [{ type: "text", value: "Write a haiku about testing" }],
+            role: "user" as const,
+          },
+        ],
+      },
+      output: [
+        {
+          type: "text",
+          text: "Code flows like water\nTests catch bugs in their net now\nPeace in the program",
+        },
+      ],
+      tool_params: {},
+      tags: {},
+      auxiliary: "",
+      updated_at: new Date().toISOString(),
+      is_deleted: false,
+    };
+
+    // Test insertion
+    await insertDatapoint(chatDatapoint);
+
+    // Test retrieval
+    const retrievedDatapoint = await getDatapoint(
+      "test_chat_dataset",
+      "01934fc5-ea98-71f0-8191-9fd88f34c28b",
+    );
+    expect(retrievedDatapoint).toBeTruthy();
+    expect(retrievedDatapoint?.id).toBe(chatDatapoint.id);
+    expect(retrievedDatapoint?.function_name).toBe(chatDatapoint.function_name);
+    expect(retrievedDatapoint?.dataset_name).toBe(chatDatapoint.dataset_name);
+    expect(JSON.stringify(retrievedDatapoint?.input)).toBe(
+      JSON.stringify(chatDatapoint.input),
+    );
+
+    // Check if it's a chat inference row before accessing tool_params
+    if (retrievedDatapoint && "tool_params" in retrievedDatapoint) {
+      expect(JSON.stringify(retrievedDatapoint.output)).toBe(
+        JSON.stringify(chatDatapoint.output),
+      );
+      expect(JSON.stringify(retrievedDatapoint.tool_params)).toBe(
+        JSON.stringify(chatDatapoint.tool_params),
+      );
+    } else {
+      throw new Error("Expected chat inference row but got JSON inference row");
+    }
+
+    // Test deletion
+    await deleteDatapoint(chatDatapoint, chatDatapoint.id);
+    const deletedDatapoint = await getDatapoint(
+      "test_chat_dataset",
+      "01934fc5-ea98-71f0-8191-9fd88f34c28b",
+    );
+    expect(deletedDatapoint).toBeNull();
+  });
+
+  test("json datapoint lifecycle - insert, get, delete", async () => {
+    const jsonDatapoint: ParsedJsonInferenceDatasetRow = {
+      dataset_name: "test_json_dataset",
+      function_name: "extract_entities",
+      id: "01934fc5-ea98-71f0-8191-9fd88f34c29c",
+      episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff8",
+      input: {
+        messages: [
+          {
+            content: [
+              {
+                type: "text",
+                value: "Extract entities from: John visited Paris",
+              },
+            ],
+            role: "user" as const,
+          },
+        ],
+      },
+      output: {
+        raw: JSON.stringify({
+          entities: ["John", "Paris"],
+          types: ["PERSON", "LOCATION"],
+        }),
+        parsed: {
+          entities: ["John", "Paris"],
+          types: ["PERSON", "LOCATION"],
+        },
+      },
+      output_schema: {
+        type: "object",
+        properties: {
+          entities: { type: "array", items: { type: "string" } },
+          types: { type: "array", items: { type: "string" } },
+        },
+        required: ["entities", "types"],
+      },
+      tags: {},
+      auxiliary: "",
+      updated_at: new Date().toISOString(),
+      is_deleted: false,
+    };
+
+    // Test insertion
+    await insertDatapoint(jsonDatapoint);
+
+    // Test retrieval
+    const retrievedDatapoint = await getDatapoint(
+      "test_json_dataset",
+      "01934fc5-ea98-71f0-8191-9fd88f34c29c",
+    );
+    expect(retrievedDatapoint).toBeTruthy();
+    expect(retrievedDatapoint?.id).toBe(jsonDatapoint.id);
+    expect(retrievedDatapoint?.function_name).toBe(jsonDatapoint.function_name);
+    expect(retrievedDatapoint?.dataset_name).toBe(jsonDatapoint.dataset_name);
+    expect(JSON.stringify(retrievedDatapoint?.input)).toBe(
+      JSON.stringify(jsonDatapoint.input),
+    );
+    expect(JSON.stringify(retrievedDatapoint?.output)).toBe(
+      JSON.stringify(jsonDatapoint.output),
+    );
+
+    // Check if it's a JSON inference row before accessing output_schema
+    if (retrievedDatapoint && !("tool_params" in retrievedDatapoint)) {
+      expect(JSON.stringify(retrievedDatapoint.output_schema)).toBe(
+        JSON.stringify(jsonDatapoint.output_schema),
+      );
+    } else {
+      throw new Error("Expected JSON inference row but got chat inference row");
+    }
+
+    // Test deletion
+    await deleteDatapoint(jsonDatapoint, jsonDatapoint.id);
+    const deletedDatapoint = await getDatapoint(
+      "test_json_dataset",
+      "01934fc5-ea98-71f0-8191-9fd88f34c29c",
+    );
+    expect(deletedDatapoint).toBeNull();
+  });
+
+  test("handles non-existent datapoint retrieval", async () => {
+    const nonExistentDatapoint = await getDatapoint(
+      "non_existent_dataset",
+      "01934fc5-ea98-71f0-8191-9fd88f34c30d",
+    );
+    expect(nonExistentDatapoint).toBeNull();
+  });
+
+  test("handles duplicate insertions gracefully", async () => {
+    const chatDatapoint: ParsedChatInferenceDatasetRow = {
+      dataset_name: "test_chat_dataset",
+      function_name: "write_haiku",
+      id: "01934fc5-ea98-71f0-8191-9fd88f34c31e",
+      episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff7",
+      input: {
+        messages: [
+          {
+            content: [
+              { type: "text", value: "Write a haiku about duplicates" },
+            ],
+            role: "user" as const,
+          },
+        ],
+      },
+      output: [
+        {
+          type: "text",
+          text: "Copies everywhere\nDuplicates fill the database\nUnique keys break down",
+        },
+      ],
+      tool_params: {},
+      tags: {},
+      auxiliary: "",
+      updated_at: new Date().toISOString(),
+      is_deleted: false,
+    };
+
+    // First insertion
+    await insertDatapoint(chatDatapoint);
+
+    // Second insertion with same ID should not throw
+    await insertDatapoint(chatDatapoint);
+
+    // Cleanup
+    await deleteDatapoint(chatDatapoint, chatDatapoint.id);
+  });
+
+  test("handles deletion of non-existent datapoint", async () => {
+    const nonExistentDatapoint: ParsedChatInferenceDatasetRow = {
+      dataset_name: "non_existent_dataset",
+      function_name: "non_existent_function",
+      id: "01934fc5-ea98-71f0-8191-9fd88f34c32f",
+      episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff6",
+      input: {
+        messages: [
+          {
+            role: "user" as const,
+            content: [{ type: "text", value: "test" }],
+          },
+        ],
+      },
+      output: [{ type: "text", text: "test" }],
+      tool_params: {},
+      tags: {},
+      auxiliary: "",
+      updated_at: new Date().toISOString(),
+      is_deleted: false,
+    };
+
+    // Should not throw
+    await expect(
+      deleteDatapoint(nonExistentDatapoint, nonExistentDatapoint.id),
+    ).resolves.not.toThrow();
   });
 });
