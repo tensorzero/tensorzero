@@ -14,6 +14,7 @@ export default [
     "api/datasets/count_inserts",
     "routes/api/datasets/count_inserts.route.ts",
   ),
+  route("api/datasets/delete", "routes/api/datasets/delete.route.ts"),
   route(
     "api/function/:function_name/feedback_counts",
     "routes/api/function/$function_name/feedback_counts.route.ts",

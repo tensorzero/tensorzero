@@ -1,15 +1,13 @@
 import type { Route } from "./+types/route";
-import { data, isRouteErrorResponse } from "react-router";
+import { data, isRouteErrorResponse, Link, useNavigate } from "react-router";
 import BasicInfo from "./BasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useConfig } from "~/context/config";
-import {
-  deleteDatapoint,
-  getDatapoint,
-} from "~/utils/clickhouse/datasets.server";
+import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { VariantResponseModal } from "./VariantResponseModal";
+import { useDatapointDeleter } from "~/routes/api/datasets/delete.route";
 
 export async function loader({ params }: Route.LoaderArgs) {
   const { dataset_name, id } = params;
@@ -32,9 +30,18 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const config = useConfig();
+  const { deleteDatapoint, isDeleting, isDeleted } = useDatapointDeleter();
   const variants = Object.keys(
     config.functions[datapoint.function_name]?.variants || {},
   );
+  const navigate = useNavigate();
+  console.log(isDeleted);
+
+  useEffect(() => {
+    if (isDeleted) {
+      navigate(`/datasets/${datapoint.dataset_name}`);
+    }
+  }, [isDeleted, navigate, datapoint.dataset_name]);
 
   const onVariantSelect = (variant: string) => {
     setSelectedVariant(variant);
@@ -56,6 +63,12 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
       <h2 className="mb-4 text-2xl font-semibold">
         Datapoint{" "}
         <code className="rounded bg-gray-100 p-1 text-2xl">{datapoint.id}</code>
+        in dataset{" "}
+        <Link to={`/datasets/${datapoint.dataset_name}`}>
+          <code className="rounded bg-gray-100 p-1 text-2xl">
+            {datapoint.dataset_name}
+          </code>
+        </Link>
       </h2>
       <div className="mb-6 h-px w-full bg-gray-200"></div>
 
@@ -67,6 +80,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           isLoading: variantInferenceIsLoading,
         }}
         onDelete={handleDelete}
+        isDeleting={isDeleting}
       />
       <Input input={datapoint.input} />
       {datapoint.output && <Output output={datapoint.output} />}

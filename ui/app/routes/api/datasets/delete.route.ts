@@ -4,6 +4,7 @@ import {
   type ParsedDatasetRow,
 } from "~/utils/clickhouse/datasets";
 import { deleteDatapoint } from "~/utils/clickhouse/datasets.server";
+import { useNavigate } from "react-router";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -43,14 +44,14 @@ export async function action({ request }: ActionFunctionArgs) {
  */
 export function useDatapointDeleter() {
   const deleteFetcher = useFetcher();
+  const navigate = useNavigate();
 
-  const deleteDatapoint = (datapoint: ParsedDatasetRow) => {
+  const deleteDatapoint = async (datapoint: ParsedDatasetRow) => {
     const formData = new FormData();
 
-    // Handle each field appropriately
     Object.entries(datapoint).forEach(([key, value]) => {
       if (value === undefined) {
-        return; // Skip undefined values
+        return;
       }
 
       if (value === null) {
@@ -58,20 +59,23 @@ export function useDatapointDeleter() {
         return;
       }
 
-      // Convert objects and arrays to JSON strings
       if (typeof value === "object") {
         formData.append(key, JSON.stringify(value));
         return;
       }
 
-      // Handle primitives
       formData.append(key, String(value));
     });
 
-    deleteFetcher.submit(formData, {
-      method: "post",
-      action: "/api/datasets/delete",
-    });
+    // Use the submit promise to handle navigation after completion
+    await deleteFetcher
+      .submit(formData, {
+        method: "post",
+        action: "/api/datasets/delete",
+      })
+      .then(() => {
+        navigate(`/datasets/${datapoint.dataset_name}`, { replace: true });
+      });
   };
 
   return {
