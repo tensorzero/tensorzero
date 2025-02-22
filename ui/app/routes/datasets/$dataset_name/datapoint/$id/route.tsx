@@ -70,7 +70,6 @@ export async function loader({
       status: 404,
     });
   }
-  console.log("datapoint", datapoint);
   return {
     datapoint,
   };
