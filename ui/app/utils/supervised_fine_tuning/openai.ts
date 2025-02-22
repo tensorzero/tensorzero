@@ -11,7 +11,7 @@ import {
   type Role,
 } from "../clickhouse/common";
 import type { ParsedInferenceExample } from "../clickhouse/curation";
-import { getCuratedInferences } from "../clickhouse/curation";
+import { getCuratedInferences } from "../clickhouse/curation.server";
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { getConfig } from "../config/index.server";
 import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";

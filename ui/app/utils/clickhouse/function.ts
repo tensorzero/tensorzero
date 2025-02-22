@@ -1,7 +1,8 @@
 import z from "zod";
-import { clickhouseClient, getInferenceTableName } from "./common";
+import { getInferenceTableName } from "./common";
 import type { MetricConfig } from "../config/metric";
 import type { FunctionConfig } from "../config/function";
+import { clickhouseClient } from "./client.server";
 
 export const timeWindowUnitSchema = z.enum([
   "day",
