@@ -78,7 +78,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const config = useConfig();
 
-  // Use the fetcher directly
   const deleteFetcher = useFetcher();
 
   const handleDelete = () => {
