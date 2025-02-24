@@ -412,22 +412,27 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                         }
                         .into());
                     }
-                    system = Some(convert_openai_message_content(msg.content)?);
+                    system = Some(match convert_openai_message_content(msg.content.clone())? {
+                        InputMessageContent::Text { value } => value,
+                        InputMessageContent::RawText { value } => Value::String(value),
+                        _ => {
+                            return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                message: "System message must be a text content block".to_string(),
+                            }
+                            .into())
+                        }
+                    });
                 }
                 OpenAICompatibleMessage::User(msg) => {
                     messages.push(InputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text {
-                            value: convert_openai_message_content(msg.content)?,
-                        }],
+                        content: vec![convert_openai_message_content(msg.content)?],
                     });
                 }
                 OpenAICompatibleMessage::Assistant(msg) => {
                     let mut message_content = Vec::new();
                     if let Some(content) = msg.content {
-                        message_content.push(InputMessageContent::Text {
-                            value: convert_openai_message_content(content)?,
-                        });
+                        message_content.push(convert_openai_message_content(content)?);
                     }
                     if let Some(tool_calls) = msg.tool_calls {
                         for tool_call in tool_calls {
@@ -465,9 +470,30 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
     }
 }
 
-fn convert_openai_message_content(content: Value) -> Result<Value, Error> {
+#[derive(Deserialize, Debug)]
+#[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
+#[allow(dead_code)]
+enum OpenAICompatibleContentBlock {
+    Text(TextContent),
+    ImageUrl { image_url: Value },
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(untagged, deny_unknown_fields, rename_all = "snake_case")]
+// Two mutually exclusive modes - the standard OpenAI text, and our special TensorZero mode
+pub enum TextContent {
+    /// A normal openai text content block: `{"type": "text", "text": "Some content"}`. The `type` key comes from the parent `OpenAICompatibleContentBlock`
+    RawText { text: String },
+    /// A special TensorZero mode: `{"type": "text", "tensorzero::arguments": {"custom_key": "custom_val"}}`.
+    TensorZeroArguments {
+        #[serde(default, rename = "tensorzero::arguments")]
+        tensorzero_arguments: Value,
+    },
+}
+
+fn convert_openai_message_content(content: Value) -> Result<InputMessageContent, Error> {
     match content {
-        Value::String(s) => Ok(Value::String(s)),
+        Value::String(s) => Ok(InputMessageContent::Text {value: Value::String(s) }),
         Value::Array(a) => {
             if a.len() != 1 {
                 return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
@@ -475,9 +501,26 @@ fn convert_openai_message_content(content: Value) -> Result<Value, Error> {
                 }
                 .into());
             }
-            Ok(a.into_iter().next().ok_or_else(|| Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+
+            let val = a.into_iter().next().ok_or_else(|| Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                 message: "message content array is empty. This should never happen. Please report this bug at https://github.com/tensorzero/tensorzero/issues.".to_string(),
-            }))?)
+            }))?;
+
+            let block: Result<OpenAICompatibleContentBlock, _> = serde_json::from_value(val.clone());
+            match block {
+                Ok(OpenAICompatibleContentBlock::Text(TextContent::RawText { text })) => Ok(InputMessageContent::Text { value: Value::String(text) }),
+                Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => Ok(InputMessageContent::Text { value: tensorzero_arguments }),
+                Ok(OpenAICompatibleContentBlock::ImageUrl { image_url: _ }) => {
+                    Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                        message: "`image_url` content blocks are not currently supported".to_string(),
+                    }))
+                }
+                Err(e) => {
+                    tracing::warn!(r#"Content block `{val}` was not a valid OpenAI content block. This is deprecated - please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
+                    Ok(InputMessageContent::Text { value: val })
+
+                }
+            }
         }
         _ => Err(ErrorDetails::InvalidOpenAICompatibleRequest {
             message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
@@ -765,6 +808,7 @@ mod tests {
     use super::*;
     use axum::http::header::{HeaderName, HeaderValue};
     use serde_json::json;
+    use tracing_test::traced_test;
 
     #[test]
     fn test_try_from_openai_compatible_params() {
@@ -986,7 +1030,15 @@ mod tests {
             "city": "Tokyo",
         }]);
         let value = convert_openai_message_content(content.clone()).unwrap();
-        assert_eq!(value, content[0]);
+        assert_eq!(
+            value,
+            InputMessageContent::Text {
+                value: json!({
+                    "country": "Japan",
+                    "city": "Tokyo",
+                }),
+            }
+        );
         let content = json!({
             "country": "Japan",
             "city": "Tokyo",
@@ -1008,6 +1060,62 @@ mod tests {
                 message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
             }
         );
+
+        let arguments_block = json!([{
+            "type": "text",
+            "tensorzero::arguments": {
+                "custom_key": "custom_val"
+            }
+        }]);
+        let value = convert_openai_message_content(arguments_block).unwrap();
+        assert_eq!(
+            value,
+            InputMessageContent::Text {
+                value: json!({
+                    "custom_key": "custom_val",
+                }),
+            }
+        );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_deprecated_custom_block() {
+        let content = json!([{
+            "country": "Japan",
+            "city": "Tokyo",
+        }]);
+        let value = convert_openai_message_content(content.clone()).unwrap();
+        assert_eq!(
+            value,
+            InputMessageContent::Text {
+                value: json!({
+                    "country": "Japan",
+                    "city": "Tokyo",
+                }),
+            }
+        );
+        assert!(logs_contain(
+            r#"Content block `{"country":"Japan","city":"Tokyo"}` was not a valid OpenAI content block."#
+        ));
+
+        let other_content = json!([{
+            "type": "text",
+            "my_custom_arg": 123
+        }]);
+        let value = convert_openai_message_content(other_content.clone()).unwrap();
+        assert_eq!(
+            value,
+            InputMessageContent::Text {
+                value: json!({
+                    "type": "text",
+                    "my_custom_arg": 123
+                }),
+            }
+        );
+        assert!(logs_contain(
+            r#"Content block `{"type":"text","my_custom_arg":123}` was not a valid OpenAI content block."#
+        ));
     }
 
     #[test]
