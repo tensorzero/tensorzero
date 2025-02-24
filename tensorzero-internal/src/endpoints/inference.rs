@@ -10,6 +10,7 @@ use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
@@ -687,9 +688,8 @@ async fn write_inference(
     result: InferenceResult,
     metadata: InferenceDatabaseInsertMetadata,
 ) {
+    let mut futures: Vec<Pin<Box<dyn Future<Output = ()> + Send>>> = Vec::new();
     if config.gateway.observability.enabled.unwrap_or(true) {
-        let mut futures = Vec::new();
-
         for message in &input.messages {
             for content_block in &message.content {
                 if let ResolvedInputMessageContent::Image {
@@ -697,40 +697,42 @@ async fn write_inference(
                     storage_path,
                 } = content_block
                 {
-                    futures.push(async {
+                    futures.push(Box::pin(async {
                         if let Err(e) =
                             write_image(&config.object_store_info, raw, storage_path).await
                         {
                             tracing::error!("Failed to write image to object store: {e:?}");
                         }
-                    });
+                    }));
                 }
             }
         }
-        futures::future::join_all(futures).await;
     }
     let model_responses: Vec<serde_json::Value> = result.get_serialized_model_inferences();
-    // Write the model responses to the ModelInference table
-    for response in model_responses {
-        let _ = clickhouse_connection_info
-            .write(&[response], "ModelInference")
-            .await;
-    }
-    // Write the inference to the Inference table
-    match result {
-        InferenceResult::Chat(result) => {
-            let chat_inference = ChatInferenceDatabaseInsert::new(result, input, metadata);
+    futures.push(Box::pin(async {
+        // Write the model responses to the ModelInference table
+        for response in model_responses {
             let _ = clickhouse_connection_info
-                .write(&[chat_inference], "ChatInference")
+                .write(&[response], "ModelInference")
                 .await;
         }
-        InferenceResult::Json(result) => {
-            let json_inference = JsonInferenceDatabaseInsert::new(result, input, metadata);
-            let _ = clickhouse_connection_info
-                .write(&[json_inference], "JsonInference")
-                .await;
+        // Write the inference to the Inference table
+        match result {
+            InferenceResult::Chat(result) => {
+                let chat_inference = ChatInferenceDatabaseInsert::new(result, input.clone(), metadata);
+                let _ = clickhouse_connection_info
+                    .write(&[chat_inference], "ChatInference")
+                    .await;
+            }
+            InferenceResult::Json(result) => {
+                let json_inference = JsonInferenceDatabaseInsert::new(result, input.clone(), metadata);
+                let _ = clickhouse_connection_info
+                    .write(&[json_inference], "JsonInference")
+                    .await;
+            }
         }
-    }
+    }));
+    futures::future::join_all(futures).await;
 }
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
