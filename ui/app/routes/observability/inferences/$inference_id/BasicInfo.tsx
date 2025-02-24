@@ -7,15 +7,29 @@ import { useConfig } from "~/context/config";
 import {
   type TryWithVariantButtonProps,
   TryWithVariantButton,
-} from "./TryWithVariantButton";
+} from "~/components/inference/TryWithVariantButton";
+import { AddToDatasetButton } from "./AddToDatasetButton";
+import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
+
+const FF_ENABLE_DATASETS = process.env.TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
+
 interface BasicInfoProps {
   inference: ParsedInferenceRow;
   tryWithVariantProps: TryWithVariantButtonProps;
+  dataset_counts: DatasetCountInfo[];
+  onDatasetSelect: (
+    dataset: string,
+    output: "inference" | "demonstration" | "none",
+  ) => void;
+  hasDemonstration: boolean;
 }
 
 export default function BasicInfo({
   inference,
   tryWithVariantProps,
+  dataset_counts,
+  onDatasetSelect,
+  hasDemonstration,
 }: BasicInfoProps) {
   const config = useConfig();
   const variantType =
@@ -25,7 +39,16 @@ export default function BasicInfo({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-xl">Basic Information</CardTitle>
-        <TryWithVariantButton {...tryWithVariantProps} />
+        <div className="flex gap-2">
+          <TryWithVariantButton {...tryWithVariantProps} />
+          {FF_ENABLE_DATASETS && (
+            <AddToDatasetButton
+              dataset_counts={dataset_counts}
+              onDatasetSelect={onDatasetSelect}
+              hasDemonstration={hasDemonstration}
+            />
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         <dl className="grid grid-cols-2 gap-4">
