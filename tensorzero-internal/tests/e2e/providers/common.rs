@@ -1,12 +1,10 @@
 #![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 
-#[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
 #[cfg(feature = "e2e_tests")]
 use rand::Rng;
 use reqwest::{Client, StatusCode};
-#[cfg(feature = "e2e_tests")]
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use tensorzero_internal::{
@@ -424,6 +422,7 @@ macro_rules! generate_provider_tests {
     };
 }
 
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
     test_extra_body_with_provider_and_stream(&provider, false).await;
     test_extra_body_with_provider_and_stream(&provider, true).await;
