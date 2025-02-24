@@ -1,5 +1,4 @@
-import type { Control } from "react-hook-form";
-import type { SFTFormValues } from "./types";
+import type { Control, Path } from "react-hook-form";
 import { Config } from "~/utils/config";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import {
@@ -12,21 +11,23 @@ import {
 import { Skeleton } from "~/components/ui/skeleton";
 import { FunctionBadges } from "~/components/function/FunctionBadges";
 
-type FunctionSelectorProps = {
-  control: Control<SFTFormValues>;
+type FunctionSelectorProps<T extends Record<string, unknown>> = {
+  control: Control<T>;
+  name: Path<T>;
   inferenceCount: number | null;
   config: Config;
 };
 
-export function FunctionSelector({
+export function FunctionSelector<T extends Record<string, unknown>>({
   control,
+  name,
   inferenceCount,
   config,
-}: FunctionSelectorProps) {
+}: FunctionSelectorProps<T>) {
   return (
     <FormField
       control={control}
-      name="function"
+      name={name}
       render={({ field }) => (
         <FormItem>
           <FormLabel>Function</FormLabel>
@@ -35,7 +36,7 @@ export function FunctionSelector({
               onValueChange={(value: string) => {
                 field.onChange(value);
               }}
-              value={field.value}
+              value={field.value as string}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select a function" />
