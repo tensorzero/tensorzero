@@ -1,6 +1,7 @@
 use derive_builder::Builder;
 use futures::stream::Peekable;
 use futures::Stream;
+use image::sanitize_raw_request;
 pub use image::{Base64Image, Image, ImageKind};
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -701,23 +702,6 @@ impl ModelInferenceDatabaseInsert {
             cached: result.cached,
         }
     }
-}
-
-/// Strips out image data from the raw request, replacing it with a placeholder.
-/// This is a best-effort attempt to avoid filling up ClickHouse with image data.
-fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: String) -> String {
-    let mut i = 0;
-    for message in input_messages {
-        for content in &message.content {
-            if let ContentBlock::Image(image) = content {
-                if let Some(data) = &image.data {
-                    raw_request = raw_request.replace(data, &format!("<TENSORZERO_IMAGE_{i}>"));
-                }
-                i += 1;
-            }
-        }
-    }
-    raw_request
 }
 
 impl ProviderInferenceResponse {
@@ -2887,59 +2871,5 @@ mod tests {
             ContentBlockOutput::Thought(Thought { text }) => assert_eq!(text, "Thinking..."),
             _ => panic!("Expected thought block"),
         }
-    }
-
-    #[test]
-    fn test_sanitize_input() {
-        assert_eq!(
-            sanitize_raw_request(&[], "my-fake-input".to_string()),
-            "my-fake-input"
-        );
-
-        assert_eq!(
-            sanitize_raw_request(
-                &[
-                    RequestMessage {
-                        role: Role::User,
-                        content: vec![
-                            ContentBlock::Image(Base64Image {
-                                url: None,
-                                mime_type: ImageKind::Jpeg,
-                                data: Some("my-image-1-data".to_string()),
-                            }),
-                            ContentBlock::Image(Base64Image {
-                                url: None,
-                                mime_type: ImageKind::Jpeg,
-                                data: Some("my-image-2-data".to_string()),
-                            }),
-                            ContentBlock::Image(Base64Image {
-                                url: None,
-                                mime_type: ImageKind::Jpeg,
-                                data: Some("my-image-1-data".to_string()),
-                            }),
-                        ],
-                    },
-                    RequestMessage {
-                        role: Role::User,
-                        content: vec![
-                            ContentBlock::Image(Base64Image {
-                                url: None,
-                                mime_type: ImageKind::Jpeg,
-                                data: Some("my-image-3-data".to_string()),
-                            }),
-                            ContentBlock::Image(Base64Image {
-                                url: None,
-                                mime_type: ImageKind::Jpeg,
-                                data: Some("my-image-1-data".to_string()),
-                            })
-                        ],
-                    }
-                ],
-                "First my-image-1-data then my-image-2-data then my-image-3-data".to_string()
-            ),
-            // Each occurrence of the image data should be replaced with the first matching image content block
-            "First <TENSORZERO_IMAGE_0> then <TENSORZERO_IMAGE_1> then <TENSORZERO_IMAGE_3>"
-                .to_string()
-        );
     }
 }
