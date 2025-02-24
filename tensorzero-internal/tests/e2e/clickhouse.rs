@@ -125,11 +125,10 @@ async fn test_clickhouse_migration_manager() {
         let migrations = &migrations;
         async move {
             // All of the previous migrations should have already been run
-            for i in 0..migration_num {
-                let clean_start =
-                    clickhouse_migration_manager::run_migration((&migrations[i]).as_ref())
-                        .await
-                        .unwrap();
+            for (i, migration) in migrations.iter().enumerate().take(migration_num) {
+                let clean_start = clickhouse_migration_manager::run_migration(migration.as_ref())
+                    .await
+                    .unwrap();
                 if i == 0 {
                     // We know that the first migration was run so clean start should be false
                     assert!(!clean_start);
@@ -168,11 +167,10 @@ async fn test_clickhouse_migration_manager() {
     #[traced_test]
     async fn run_all(migrations: &[Box<dyn Migration + '_>]) {
         // Now, run all of the migrations, and verify that none of them apply
-        for i in 0..migrations.len() {
-            let clean_start =
-                clickhouse_migration_manager::run_migration((&migrations[i]).as_ref())
-                    .await
-                    .unwrap();
+        for (i, migration) in migrations.iter().enumerate() {
+            let clean_start = clickhouse_migration_manager::run_migration(migration.as_ref())
+                .await
+                .unwrap();
             if i == 0 {
                 // We know that the first migration was run so clean start should be false
                 assert!(!clean_start);
