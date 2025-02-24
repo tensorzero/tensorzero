@@ -11,6 +11,8 @@ import {
 import { AddToDatasetButton } from "./AddToDatasetButton";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 
+const FF_ENABLE_DATASETS = process.env.TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
+
 interface BasicInfoProps {
   inference: ParsedInferenceRow;
   tryWithVariantProps: TryWithVariantButtonProps;
@@ -39,11 +41,13 @@ export default function BasicInfo({
         <CardTitle className="text-xl">Basic Information</CardTitle>
         <div className="flex gap-2">
           <TryWithVariantButton {...tryWithVariantProps} />
-          <AddToDatasetButton
-            dataset_counts={dataset_counts}
-            onDatasetSelect={onDatasetSelect}
-            hasDemonstration={hasDemonstration}
-          />
+          {FF_ENABLE_DATASETS && (
+            <AddToDatasetButton
+              dataset_counts={dataset_counts}
+              onDatasetSelect={onDatasetSelect}
+              hasDemonstration={hasDemonstration}
+            />
+          )}
         </div>
       </CardHeader>
       <CardContent>

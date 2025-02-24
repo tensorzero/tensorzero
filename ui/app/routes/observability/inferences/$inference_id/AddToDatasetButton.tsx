@@ -97,7 +97,7 @@ export function AddToDatasetButton({
                 )}
               </div>
             ) : (
-              "Select or create a dataset..."
+              "Add to dataset..."
             )}
             <ChevronDown className="ml-2 h-4 w-4" />
           </Button>
@@ -105,7 +105,7 @@ export function AddToDatasetButton({
         <DropdownMenuContent className="w-80 p-0">
           <Command>
             <CommandInput
-              placeholder="Search datasets..."
+              placeholder="Enter dataset name..."
               value={inputValue}
               onValueChange={setInputValue}
               className="h-9"
@@ -128,7 +128,7 @@ export function AddToDatasetButton({
                 >
                   <div className="flex items-center">
                     <Plus className="mr-2 h-4 w-4 text-blue-500" />
-                    <span>{inputValue.trim() || "Type..."}</span>
+                    <span>{inputValue.trim() || "Start typing..."}</span>
                   </div>
                   <Badge variant="outline" className="bg-blue-50 text-blue-500">
                     Create New

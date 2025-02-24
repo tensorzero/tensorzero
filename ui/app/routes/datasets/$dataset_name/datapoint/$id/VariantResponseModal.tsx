@@ -155,8 +155,8 @@ export function VariantResponseModal({
       <DialogContent className="max-h-[90vh] sm:max-w-[1200px]">
         <DialogHeader>
           <DialogTitle>
-            Comparing Datapoint vs{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">
+            Comparing datapoint vs.{" "}
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
               {selectedVariant}
             </code>
           </DialogTitle>

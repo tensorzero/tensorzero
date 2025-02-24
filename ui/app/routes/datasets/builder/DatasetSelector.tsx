@@ -129,7 +129,9 @@ export function DatasetSelector({
                         >
                           <div className="flex items-center">
                             <Plus className="mr-2 h-4 w-4 text-blue-500" />
-                            <span>{inputValue.trim() || "Type..."}</span>
+                            <span>
+                              {inputValue.trim() || "Start typing..."}
+                            </span>
                           </div>
                           <Badge
                             variant="outline"

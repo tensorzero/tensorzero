@@ -158,11 +158,11 @@ export function VariantResponseModal({
         <DialogHeader>
           <DialogTitle>
             Comparing{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
               {originalVariant}
             </code>{" "}
-            vs{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">
+            vs.{" "}
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
               {selectedVariant}
             </code>
           </DialogTitle>
