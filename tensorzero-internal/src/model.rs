@@ -328,9 +328,8 @@ async fn stream_with_cache_write(
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(transparent)]
 pub struct ModelProvider {
-    #[serde(flatten)]
     pub config: ProviderConfig,
 }
 
