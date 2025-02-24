@@ -5,11 +5,13 @@ use futures::{stream::Peekable, Stream};
 use crate::{
     error::{Error, ErrorDetails},
     inference::types::ProviderInferenceResponseChunk,
+    model::ModelProviderRequestInfo,
     variant::chat_completion::ExtraBodyConfig,
 };
 
 pub fn inject_extra_body(
     config: Option<&ExtraBodyConfig>,
+    model_provider_data: impl Into<ModelProviderRequestInfo>,
     body: &mut serde_json::Value,
 ) -> Result<(), Error> {
     let Some(body_map) = body.as_object_mut() else {
@@ -17,7 +19,14 @@ pub fn inject_extra_body(
             message: "Body is not a map".to_string(),
         }));
     };
-    if let Some(extra_body) = config.as_ref() {
+    let model_provider: ModelProviderRequestInfo = model_provider_data.into();
+    // Write the variant extra_body first, then the model_provider extra_body.
+    // This way, the model_provider extra_body will overwrite any keys in the
+    // variant extra_body.
+    for extra_body in [config, model_provider.extra_body.as_ref()]
+        .into_iter()
+        .flatten()
+    {
         for (key, value) in extra_body.data.iter() {
             // We intentionally overwrite any existing keys in the body.
             body_map.insert(key.to_string(), value.clone());
@@ -144,15 +153,24 @@ mod tests {
     #[test]
     fn test_inject_nothing() {
         let mut body = serde_json::json!({});
-        inject_extra_body(None, &mut body).unwrap();
+        inject_extra_body(
+            None,
+            ModelProviderRequestInfo { extra_body: None },
+            &mut body,
+        )
+        .unwrap();
         assert_eq!(body, serde_json::json!({}));
     }
 
     #[test]
     fn test_inject_to_non_map() {
-        let err = inject_extra_body(None, &mut serde_json::Value::String("test".to_string()))
-            .unwrap_err()
-            .to_string();
+        let err = inject_extra_body(
+            None,
+            ModelProviderRequestInfo { extra_body: None },
+            &mut serde_json::Value::String("test".to_string()),
+        )
+        .unwrap_err()
+        .to_string();
         assert!(
             err.contains("Body is not a map"),
             "Unexpected error message: {err:?}"
@@ -178,6 +196,7 @@ mod tests {
                 .unwrap()
                 .clone(),
             }),
+            ModelProviderRequestInfo { extra_body: None },
             &mut body,
         )
         .unwrap();
@@ -185,6 +204,53 @@ mod tests {
             body,
             serde_json::json!({
                 "otherKey": "otherValue",
+                "generationConfig": {
+                    "otherNestedKey": "otherNestedValue"
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn test_inject_both() {
+        let mut body = serde_json::json!({
+            "otherKey": "otherValue",
+            "generationConfig": {
+                "temperature": 123
+            }
+        });
+        inject_extra_body(
+            Some(&ExtraBodyConfig {
+                data: serde_json::json!({
+                    "variantKey": "variantValue",
+                    "generationConfig": {
+                        "otherNestedKey": "otherNestedValue"
+                    }
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            }),
+            ModelProviderRequestInfo {
+                extra_body: Some(ExtraBodyConfig {
+                    data: serde_json::json!({
+                        "variantKey": "modelProviderOverride",
+                        "modelProviderKey": "modelProviderValue"
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+                }),
+            },
+            &mut body,
+        )
+        .unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "otherKey": "otherValue",
+                "modelProviderKey": "modelProviderValue",
+                "variantKey": "modelProviderOverride",
                 "generationConfig": {
                     "otherNestedKey": "otherNestedValue"
                 }

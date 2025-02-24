@@ -765,6 +765,7 @@ mod tests {
                 "good".into(),
                 ModelProvider {
                     config: good_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -774,6 +775,7 @@ mod tests {
                 "json_provider".into(),
                 ModelProvider {
                     config: json_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -787,6 +789,7 @@ mod tests {
                 "tool_provider".into(),
                 ModelProvider {
                     config: tool_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -796,6 +799,7 @@ mod tests {
                 "error".into(),
                 ModelProvider {
                     config: error_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -962,6 +966,7 @@ mod tests {
                 "good_provider".into(),
                 ModelProvider {
                     config: good_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1487,6 +1492,7 @@ mod tests {
                 "good_provider".into(),
                 ModelProvider {
                     config: good_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1496,6 +1502,7 @@ mod tests {
                 "error_provider".into(),
                 ModelProvider {
                     config: error_provider_config,
+                    extra_body: None,
                 },
             )]),
         };

@@ -18,7 +18,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
 use super::helpers::inject_extra_body;
 use super::openai::{
@@ -114,6 +114,7 @@ impl InferenceProvider for SGLangProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body = serde_json::to_value(SGLangRequest::new(&self.model_name, request)?)
             .map_err(|e| {
@@ -121,7 +122,7 @@ impl InferenceProvider for SGLangProvider {
                     message: format!("Error serializing SGLang request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -195,6 +196,7 @@ impl InferenceProvider for SGLangProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body = serde_json::to_value(SGLangRequest::new(&self.model_name, request)?)
             .map_err(|e| {
@@ -202,7 +204,7 @@ impl InferenceProvider for SGLangProvider {
                     message: format!("Error serializing SGLang request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),

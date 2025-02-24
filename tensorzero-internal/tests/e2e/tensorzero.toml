@@ -21,6 +21,14 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 
+[models."gpt-4o-mini-2024-07-18-extra-body"]
+routing = ["openai"]
+
+[models."gpt-4o-mini-2024-07-18-extra-body".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+extra_body = { temperature = 0.456, frequency_penalty = 1.42 }
+
 [models."gpt-4o-mini-2024-07-18-dynamic"]
 routing = ["openai"]
 
@@ -704,6 +712,13 @@ model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = { temperature = 0.123 }
+
+[functions.basic_test.variants.openai-extra-body-provider-config]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18-extra-body"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = { temperature = 0.123, max_completion_tokens = 123 }
 
 [functions.basic_test.variants.openai-o1]
 type = "chat_completion"

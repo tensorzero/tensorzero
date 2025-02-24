@@ -19,7 +19,7 @@ use crate::{
         ProviderInferenceResponse, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStreamInner, TextChunk, Usage,
     },
-    model::{build_creds_caching_default, Credential, CredentialLocation},
+    model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 
@@ -126,6 +126,7 @@ impl InferenceProvider for MistralProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body =
             serde_json::to_value(MistralRequest::new(&self.model_name, request)?).map_err(|e| {
@@ -133,7 +134,7 @@ impl InferenceProvider for MistralProvider {
                     message: format!("Error serializing Mistral request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&MISTRAL_API_BASE)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -203,6 +204,7 @@ impl InferenceProvider for MistralProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body =
             serde_json::to_value(MistralRequest::new(&self.model_name, request)?).map_err(|e| {
@@ -210,7 +212,7 @@ impl InferenceProvider for MistralProvider {
                     message: format!("Error serializing Mistral request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),

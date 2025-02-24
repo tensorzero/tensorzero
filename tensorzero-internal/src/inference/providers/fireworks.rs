@@ -17,7 +17,7 @@ use crate::{
         ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     },
-    model::{build_creds_caching_default, Credential, CredentialLocation},
+    model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
 };
 
 use super::{
@@ -130,6 +130,7 @@ impl InferenceProvider for FireworksProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body =
             serde_json::to_value(FireworksRequest::new(&self.model_name, request)).map_err(
@@ -139,7 +140,7 @@ impl InferenceProvider for FireworksProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&FIREWORKS_API_BASE)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
@@ -210,6 +211,7 @@ impl InferenceProvider for FireworksProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body =
             serde_json::to_value(FireworksRequest::new(&self.model_name, request)).map_err(
@@ -219,7 +221,7 @@ impl InferenceProvider for FireworksProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body: {e}"),

@@ -947,6 +947,7 @@ mod tests {
                             model_name: "json".into(),
                             ..Default::default()
                         }),
+                        extra_body: None,
                     },
                 )]),
             },
@@ -1037,6 +1038,7 @@ mod tests {
                                 model_name: "error".into(),
                                 ..Default::default()
                             }),
+                            extra_body: None,
                         },
                     )]),
                 },
@@ -1099,6 +1101,7 @@ mod tests {
                                 model_name: "regular".into(),
                                 ..Default::default()
                             }),
+                            extra_body: None,
                         },
                     )]),
                 },
