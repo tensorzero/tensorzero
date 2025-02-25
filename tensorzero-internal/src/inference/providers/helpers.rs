@@ -81,7 +81,7 @@ fn write_json_pointer_with_parent_creation(
                     // * 'new-key' does not already exist
                     // * <n> is an integer
                     //
-                    // We cannot create an entry for 'new-key', as it's ambiguous whether it should be an object {"n": some_value}m
+                    // We cannot create an entry for 'new-key', as it's ambiguous whether it should be an object {"n": some_value}
                     // or an array [.., some_value] with `some_value` at index `n`.
                     if parse_index(&token).is_some() {
                         return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
