@@ -467,7 +467,7 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(
-            err.contains("Error replacing extra body: `Cannot create array (index 0). This is an edge case - please report this to TensorZero` with pointer: `/new-key/0`"),
+            err.contains("TensorZero doesn't support pointing an index (0) if its container doesn't exist. We'd love to hear about your use case (& help)! Please open a GitHub Discussion: https://github.com/tensorzero/tensorzero/discussions/new` with pointer: `/new-key/0`"),
             "Unexpected error message: {err:?}"
         );
     }
