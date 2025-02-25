@@ -962,7 +962,15 @@ async fn e2e_test_best_of_n_judge_extra_body() {
                 "tools": null,
                 "toolConfig": null,
                 "generationConfig": {
-                  "temperature": 0.123,
+                    "stopSequences": null,
+                    "temperature": 0.123,
+                    "maxOutputTokens": null,
+                    "topP": null,
+                    "presencePenalty": null,
+                    "frequencyPenalty": null,
+                    "seed": null,
+                    "responseMimeType": "application/json",
+                    "responseSchema": null
                 },
                 "systemInstruction": {
                   "role": "model",
