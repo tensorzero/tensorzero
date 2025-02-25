@@ -960,7 +960,7 @@ fn anthropic_to_tensorzero_stream_message(
                 Ok(None)
             }
         }
-        GCPVertexAnthropicStreamMessage::MessageStop | GCPVertexAnthropicStreamMessage::Ping {} => {
+        GCPVertexAnthropicStreamMessage::MessageStop | GCPVertexAnthropicStreamMessage::Ping => {
             Ok(None)
         }
     }

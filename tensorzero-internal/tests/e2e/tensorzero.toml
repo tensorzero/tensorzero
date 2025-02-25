@@ -936,6 +936,14 @@ embedding_model = "text-embedding-3-small"
 k = 3
 max_tokens = 100
 
+[functions.basic_test.variants.empty_dicl_extra_body]
+type = "experimental_dynamic_in_context_learning"
+model = "gpt-4o-mini-2024-07-18"
+embedding_model = "text-embedding-3-small"
+k = 3
+max_tokens = 100
+extra_body = { temperature = 0.123 }
+
 [functions.basic_test.variants.empty_dicl_shorthand]
 type = "experimental_dynamic_in_context_learning"
 model = "gpt-4o-mini-2024-07-18"
@@ -2016,6 +2024,16 @@ candidates = ["variant0", "variant1"]
 model = "gemini-1.5-flash-001"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
+[functions.best_of_n.variants.best_of_n_variant_extra_body]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["variant0", "variant1"]
+
+[functions.best_of_n.variants.best_of_n_variant_extra_body.evaluator]
+model = "gemini-1.5-flash-001"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+extra_body = { generationConfig = { temperature = 0.123 } }
+
 [functions.best_of_n.variants.flaky_best_of_n_variant]
 type = "experimental_best_of_n_sampling"
 weight = 1
@@ -2096,6 +2114,34 @@ candidates = ["variant0", "variant1"]
 [functions.mixture_of_n.variants.mixture_of_n_variant.fuser]
 model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+
+[functions.mixture_of_n_extra_body]
+type = "chat"
+system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
+
+
+[functions.mixture_of_n_extra_body.variants.mixture_of_n_variant]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0", "variant1"]
+
+[functions.mixture_of_n_extra_body.variants.variant0]
+type = "chat_completion"
+model = "o1-2024-12-17"
+weight = 0
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n_extra_body.variants.variant1]
+type = "chat_completion"
+model = "test"
+weight = 0
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.mixture_of_n_extra_body.variants.mixture_of_n_variant.fuser]
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+extra_body = { temperature = 0.123 }
 
 [functions.mixture_of_n_json]
 type = "json"
