@@ -1056,7 +1056,7 @@ fn anthropic_to_tensorzero_stream_message(
                 Ok(None)
             }
         }
-        AnthropicStreamMessage::MessageStop | AnthropicStreamMessage::Ping {} => Ok(None),
+        AnthropicStreamMessage::MessageStop | AnthropicStreamMessage::Ping => Ok(None),
     }
 }
 
