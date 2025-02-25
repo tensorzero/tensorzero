@@ -7,6 +7,7 @@ use aws_sdk_s3::operation::get_object::GetObjectError;
 use base64::prelude::*;
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
+use object_store::path::Path;
 #[cfg(feature = "e2e_tests")]
 use rand::Rng;
 use reqwest::{Client, StatusCode};
@@ -20,8 +21,7 @@ use tensorzero::{
 use tensorzero_internal::{
     cache::CacheEnabledMode,
     inference::types::{
-        storage::StorageKind, ContentBlock, ContentBlockChatOutput, Image, ImageKind,
-        RequestMessage, Role,
+        resolved_input::ImageWithPath, storage::{StorageKind, StoragePath}, Base64Image, ContentBlock, ContentBlockChatOutput, Image, ImageKind, RequestMessage, Role, Text
     },
     tool::{ToolCall, ToolResult},
 };
@@ -901,6 +901,30 @@ pub async fn check_simple_image_inference_response(
 
     let model_inference_id = result.get("id").unwrap().as_str().unwrap();
     assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(
+        input_messages,
+        vec![
+            RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text(Text {
+                    text: "Describe the contents of the image".to_string(),
+                }), ContentBlock::Image(ImageWithPath {
+                    image: Base64Image {
+                        url: None,
+                        data: None,
+                        mime_type: ImageKind::Png,
+                    },
+                    storage_path: StoragePath {
+                        kind: kind.clone(),
+                        path: Path::parse("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
+                    }
+                })]
+            },
+        ]
+    );
 
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();

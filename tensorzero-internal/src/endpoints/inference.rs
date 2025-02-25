@@ -27,6 +27,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
+use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
     collect_chunks, Base64Image, ChatInferenceDatabaseInsert, CollectChunksArgs,
@@ -692,10 +693,10 @@ async fn write_inference(
     if config.gateway.observability.enabled.unwrap_or(true) {
         for message in &input.messages {
             for content_block in &message.content {
-                if let ResolvedInputMessageContent::Image {
+                if let ResolvedInputMessageContent::Image(ImageWithPath {
                     image: raw,
                     storage_path,
-                } = content_block
+                }) = content_block
                 {
                     futures.push(Box::pin(async {
                         if let Err(e) =

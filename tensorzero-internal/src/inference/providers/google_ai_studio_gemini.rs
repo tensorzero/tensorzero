@@ -15,6 +15,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -436,7 +437,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GeminiPart<'a>> {
                     },
                 }))
             }
-            ContentBlock::Image(image) => Ok(Some(GeminiPart::InlineData {
+            ContentBlock::Image(ImageWithPath {
+                image,
+                storage_path: _,
+            }) => Ok(Some(GeminiPart::InlineData {
                 inline_data: GeminiInlineData {
                     mime_type: image.mime_type.to_string(),
                     data: image.data()?.as_str(),

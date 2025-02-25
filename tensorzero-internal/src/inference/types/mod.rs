@@ -3,6 +3,7 @@ use futures::stream::Peekable;
 use futures::Stream;
 use image::sanitize_raw_request;
 pub use image::{Base64Image, Image, ImageKind};
+use resolved_input::ImageWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -118,10 +119,10 @@ impl InputMessageContent {
                     .clone();
                 let image = image.clone().take_or_fetch(context.client).await?;
                 let path = storage_kind.image_path(&image)?;
-                ResolvedInputMessageContent::Image {
+                ResolvedInputMessageContent::Image(ImageWithPath {
                     image,
                     storage_path: path,
-                }
+                })
             }
         })
     }
@@ -181,7 +182,7 @@ pub enum ContentBlock {
     Text(Text),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    Image(Base64Image),
+    Image(ImageWithPath),
     Thought(Thought),
 }
 

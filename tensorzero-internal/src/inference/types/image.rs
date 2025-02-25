@@ -6,7 +6,7 @@ use url::Url;
 use crate::error::{Error, ErrorDetails};
 use aws_smithy_types::base64;
 
-use super::{ContentBlock, RequestMessage};
+use super::{resolved_input::ImageWithPath, ContentBlock, RequestMessage};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -123,7 +123,11 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
     let mut i = 0;
     for message in input_messages {
         for content in &message.content {
-            if let ContentBlock::Image(image) = content {
+            if let ContentBlock::Image(ImageWithPath {
+                image,
+                storage_path: _,
+            }) = content
+            {
                 if let Some(data) = &image.data {
                     raw_request = raw_request.replace(data, &format!("<TENSORZERO_IMAGE_{i}>"));
                 }
@@ -137,7 +141,7 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
 #[cfg(test)]
 mod tests {
     use crate::inference::types::{
-        image::sanitize_raw_request, Base64Image, ContentBlock, ImageKind, RequestMessage, Role,
+        image::sanitize_raw_request, resolved_input::ImageWithPath, storage::{StorageKind, StoragePath}, Base64Image, ContentBlock, ImageKind, RequestMessage, Role
     };
 
     #[test]
@@ -153,35 +157,65 @@ mod tests {
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::Image(Base64Image {
-                                url: None,
-                                mime_type: ImageKind::Jpeg,
-                                data: Some("my-image-1-data".to_string()),
+                            ContentBlock::Image(ImageWithPath {
+                                image: Base64Image {
+                                    url: None,
+                                    mime_type: ImageKind::Jpeg,
+                                    data: Some("my-image-1-data".to_string()),
+                                },
+                                storage_path: StoragePath {
+                                    kind: StorageKind::Disabled,
+                                    path: object_store::path::Path::parse("my-image-1-path").unwrap(),
+                                },
                             }),
-                            ContentBlock::Image(Base64Image {
-                                url: None,
-                                mime_type: ImageKind::Jpeg,
-                                data: Some("my-image-2-data".to_string()),
+                            ContentBlock::Image(ImageWithPath {
+                                image: Base64Image {
+                                    url: None,
+                                    mime_type: ImageKind::Jpeg,
+                                    data: Some("my-image-2-data".to_string()),
+                                },
+                                storage_path: StoragePath {
+                                    kind: StorageKind::Disabled,
+                                    path: object_store::path::Path::parse("my-image-2-path").unwrap(),
+                                },
                             }),
-                            ContentBlock::Image(Base64Image {
-                                url: None,
-                                mime_type: ImageKind::Jpeg,
-                                data: Some("my-image-1-data".to_string()),
+                            ContentBlock::Image(ImageWithPath {
+                                image: Base64Image {
+                                    url: None,
+                                    mime_type: ImageKind::Jpeg,
+                                    data: Some("my-image-1-data".to_string()),
+                                },
+                                storage_path: StoragePath {
+                                    kind: StorageKind::Disabled,
+                                    path: object_store::path::Path::parse("my-image-1-path").unwrap(),
+                                },
                             }),
                         ],
                     },
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::Image(Base64Image {
-                                url: None,
-                                mime_type: ImageKind::Jpeg,
-                                data: Some("my-image-3-data".to_string()),
+                            ContentBlock::Image(ImageWithPath {
+                                image: Base64Image {
+                                    url: None,
+                                    mime_type: ImageKind::Jpeg,
+                                    data: Some("my-image-3-data".to_string()),
+                                },
+                                storage_path: StoragePath {
+                                    kind: StorageKind::Disabled,
+                                    path: object_store::path::Path::parse("my-image-3-path").unwrap(),
+                                },
                             }),
-                            ContentBlock::Image(Base64Image {
-                                url: None,
-                                mime_type: ImageKind::Jpeg,
-                                data: Some("my-image-1-data".to_string()),
+                            ContentBlock::Image(ImageWithPath {
+                                image: Base64Image {
+                                    url: None,
+                                    mime_type: ImageKind::Jpeg,
+                                    data: Some("my-image-1-data".to_string()),
+                                },
+                                storage_path: StoragePath {
+                                    kind: StorageKind::Disabled,
+                                    path: object_store::path::Path::parse("my-image-1-path").unwrap(),
+                                },
                             })
                         ],
                     }

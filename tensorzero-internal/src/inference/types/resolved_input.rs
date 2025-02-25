@@ -36,9 +36,12 @@ pub enum ResolvedInputMessageContent {
     RawText {
         value: String,
     },
-    Image {
-        image: Base64Image,
-        storage_path: StoragePath,
-    },
+    Image(ImageWithPath),
     // We may extend this in the future to include other types of content
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ImageWithPath {
+    pub image: Base64Image,
+    pub storage_path: StoragePath,
 }

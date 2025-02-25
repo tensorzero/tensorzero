@@ -87,11 +87,8 @@ impl ChatCompletionConfig {
                 ResolvedInputMessageContent::ToolResult(tool_result) => {
                     content.push(ContentBlock::ToolResult(tool_result.clone()));
                 }
-                ResolvedInputMessageContent::Image {
-                    image: raw,
-                    storage_path: _,
-                } => {
-                    content.push(ContentBlock::Image(raw.clone()));
+                ResolvedInputMessageContent::Image(image) => {
+                    content.push(ContentBlock::Image(image.clone()));
                 }
             }
         }
