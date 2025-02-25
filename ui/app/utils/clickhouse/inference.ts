@@ -690,6 +690,7 @@ export type ParsedModelInferenceRow = z.infer<
   typeof parsedModelInferenceRowSchema
 >;
 
+// TODO (Viraj): handle image content here before merging
 function parseModelInferenceRow(
   row: ModelInferenceRow,
 ): ParsedModelInferenceRow {
