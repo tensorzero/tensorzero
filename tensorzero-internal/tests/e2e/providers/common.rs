@@ -1,9 +1,10 @@
 #![allow(clippy::print_stdout)]
-use std::collections::HashMap;
+use std::{collections::HashMap, net::SocketAddr};
 
 use aws_config::Region;
 use aws_sdk_bedrockruntime::error::SdkError;
 use aws_sdk_s3::operation::get_object::GetObjectError;
+use axum::{routing::get, Router};
 use base64::prelude::*;
 #[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
@@ -14,6 +15,7 @@ use reqwest::{Client, StatusCode};
 #[cfg(feature = "e2e_tests")]
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
+use std::future::IntoFuture;
 use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
     InputMessage, InputMessageContent,
@@ -28,6 +30,7 @@ use tensorzero_internal::{
     },
     tool::{ToolCall, ToolResult},
 };
+use url::Url;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -170,6 +173,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_tool_use_tool_choice_required_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_required_streaming_inference_request_with_provider;
         use $crate::providers::common::test_tool_use_tool_choice_specific_inference_request_with_provider;
+        use $crate::providers::common::test_image_url_inference_with_provider_filesystem;
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
         use $crate::providers::common::test_extra_body_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_with_provider;
@@ -456,6 +460,15 @@ macro_rules! generate_provider_tests {
 
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
+        async fn test_image_url_inference_store_filesystem() {
+            let providers = $func().await.image_inference;
+            for provider in providers {
+                test_image_url_inference_with_provider_filesystem(provider).await;
+            }
+        }
+
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
         async fn test_image_inference_store_s3_compatible() {
             let providers = $func().await.image_inference;
             for provider in providers {
@@ -478,10 +491,39 @@ macro_rules! generate_provider_tests {
 pub static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
+    let temp_dir = tempfile::tempdir().unwrap();
+    println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
+    test_url_image_inference_with_provider_and_store(
+        provider,
+        StorageKind::Filesystem {
+            path: temp_dir.path().to_string_lossy().to_string(),
+        },
+        &format!(
+            r#"
+        [object_storage]
+        type = "filesystem"
+        path = "{}"
+        [functions]
+        "#,
+            temp_dir.path().to_string_lossy()
+        ),
+    )
+    .await;
+
+    // Check that image was stored in filesystem
+    let result = std::fs::read(temp_dir.path().join(
+        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+    ))
+    .unwrap();
+    assert_eq!(result, FERRIS_PNG);
+}
+
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
-    test_image_inference_with_provider_and_store(
+    test_base64_image_inference_with_provider_and_store(
         provider,
         StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -546,7 +588,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestP
         panic!("Expected ServiceError: {err:?}");
     }
 
-    test_image_inference_with_provider_and_store(
+    test_base64_image_inference_with_provider_and_store(
         provider,
         StorageKind::S3Compatible {
             bucket_name: test_bucket.to_string(),
@@ -577,8 +619,88 @@ pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestP
     assert_eq!(result.body.collect().await.unwrap().to_vec(), FERRIS_PNG);
 }
 
+async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
+    let addr = SocketAddr::from(([0, 0, 0, 0], 0));
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .unwrap_or_else(|e| panic!("Failed to bind to {addr}: {e}"));
+    let real_addr = listener.local_addr().unwrap();
+
+    let app = Router::new().route("/ferris.png", get(|| async { FERRIS_PNG.to_vec() }));
+
+    let (send, recv) = tokio::sync::oneshot::channel::<()>();
+    let shutdown_fut = async move {
+        let _ = recv.await;
+    };
+
+    tokio::spawn(
+        axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_fut)
+            .into_future(),
+    );
+
+    (real_addr, send)
+}
+
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
-pub async fn test_image_inference_with_provider_and_store(
+pub async fn test_url_image_inference_with_provider_and_store(
+    provider: E2ETestProvider,
+    kind: StorageKind,
+    config_toml: &str,
+) {
+    let episode_id = Uuid::now_v7();
+
+    // The '_shutdown_sender' will wake up the receiver on drop
+    let (server_addr, _shutdown_sender) = make_temp_image_server().await;
+    let image_url = Url::parse(&format!("http://{}/ferris.png", server_addr)).unwrap();
+
+    let client = make_embedded_gateway_with_config(config_toml).await;
+
+    for should_be_cached in [false, true] {
+        let response = client
+            .inference(ClientInferenceParams {
+                model_name: Some(provider.model_name.clone()),
+                episode_id: Some(episode_id),
+                input: Input {
+                    system: None,
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![
+                            InputMessageContent::Text {
+                                value: "Describe the contents of the image".to_string().into(),
+                            },
+                            InputMessageContent::Image(Image::Url { url: image_url.clone() }),
+                        ],
+                    }],
+                },
+                cache_options: CacheParamsOptions {
+                    enabled: CacheEnabledMode::On,
+                    max_age_s: Some(10),
+                },
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        let InferenceOutput::NonStreaming(response) = response else {
+            panic!("Expected non-streaming inference response");
+        };
+
+        check_url_image_response(
+            response,
+            Some(episode_id),
+            &provider,
+            should_be_cached,
+            &kind,
+            &image_url,
+        )
+        .await;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+}
+
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+pub async fn test_base64_image_inference_with_provider_and_store(
     provider: E2ETestProvider,
     kind: StorageKind,
     config_toml: &str,
@@ -622,7 +744,7 @@ pub async fn test_image_inference_with_provider_and_store(
             panic!("Expected non-streaming inference response");
         };
 
-        check_simple_image_inference_response(
+        check_base64_image_response(
             response,
             Some(episode_id),
             &provider,
@@ -802,7 +924,7 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
 }
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
-pub async fn check_simple_image_inference_response(
+pub async fn check_base64_image_response(
     response: InferenceResponse,
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
@@ -917,6 +1039,159 @@ pub async fn check_simple_image_inference_response(
                 }), ContentBlock::Image(ImageWithPath {
                     image: Base64Image {
                         url: None,
+                        data: None,
+                        mime_type: ImageKind::Png,
+                    },
+                    storage_path: StoragePath {
+                        kind: kind.clone(),
+                        path: Path::parse("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
+                    }
+                })]
+            },
+        ]
+    );
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(
+        raw_request.contains("<TENSORZERO_IMAGE_0>"),
+        "Unexpected raw_request: {raw_request}"
+    );
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
+    assert_eq!(
+        result.get("cached").unwrap().as_bool().unwrap(),
+        should_be_cached
+    );
+}
+
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+pub async fn check_url_image_response(
+    response: InferenceResponse,
+    episode_id: Option<Uuid>,
+    provider: &E2ETestProvider,
+    should_be_cached: bool,
+    kind: &StorageKind,
+    image_url: &Url,
+) {
+    let inference_id = response.inference_id();
+
+    let episode_id_response = response.episode_id();
+    if let Some(episode_id) = episode_id {
+        assert_eq!(episode_id_response, episode_id);
+    }
+
+    let InferenceResponse::Chat(response) = response else {
+        panic!("Expected chat inference response");
+    };
+
+    let content = response.content;
+    assert_eq!(content.len(), 1);
+    let content_block = content.first().unwrap();
+    let ContentBlockChatOutput::Text(text) = content_block else {
+        panic!("Expected text content block: {content_block:?}");
+    };
+    let content = &text.text;
+    assert!(
+        content.to_lowercase().contains("cartoon") || content.to_lowercase().contains("crab"),
+        "Content should contain 'cartoon' or 'crab': {content}"
+    );
+
+    let usage = response.usage;
+    let input_tokens = usage.input_tokens;
+    let output_tokens = usage.output_tokens;
+    if should_be_cached {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check if ClickHouse is ok - ChatInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ChatInference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "tensorzero::default");
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    if let Some(episode_id) = episode_id {
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+
+    let kind_json = serde_json::to_value(kind).unwrap();
+
+    let correct_input = json!({
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "value": "Describe the contents of the image"},
+                    {
+                        "type": "image",
+                        "image": {
+                            "url": image_url.to_string(),
+                            "mime_type": "image/png",
+                        },
+                        "storage_path": {
+                            "kind": kind_json,
+                            "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                        },
+                    }
+                ]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(
+        input_messages,
+        vec![
+            RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text(Text {
+                    text: "Describe the contents of the image".to_string(),
+                }), ContentBlock::Image(ImageWithPath {
+                    image: Base64Image {
+                        url: Some(image_url.clone()),
                         data: None,
                         mime_type: ImageKind::Png,
                     },
