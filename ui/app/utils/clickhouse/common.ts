@@ -45,7 +45,7 @@ export const toolResultContentSchema = z
 export type ToolResultContent = z.infer<typeof toolResultContentSchema>;
 
 export const base64ImageSchema = z.object({
-  url: z.string().optional(),
+  url: z.string().nullable(),
   mime_type: z.string(),
 });
 export type Base64Image = z.infer<typeof base64ImageSchema>;
@@ -121,6 +121,7 @@ export const contentBlockSchema = z.discriminatedUnion("type", [
   textContentSchema,
   toolCallContentSchema,
   toolResultContentSchema,
+  imageContentSchema,
 ]);
 export type ContentBlock = z.infer<typeof contentBlockSchema>;
 

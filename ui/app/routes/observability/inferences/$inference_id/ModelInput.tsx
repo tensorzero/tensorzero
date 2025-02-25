@@ -4,6 +4,7 @@ import type {
   Input,
   RequestMessage,
 } from "~/utils/clickhouse/common";
+import { SkeletonImage } from "./SkeletonImage";
 
 interface InputProps {
   input_messages: RequestMessage[];
@@ -45,6 +46,11 @@ function MessageContent({ content }: { content: ContentBlock[] }) {
                 <pre className="mt-1 text-sm">{block.result}</pre>
               </div>
             );
+          case "image":
+            // We don't currently support image content in the UI
+            // See this discussion for the blocking issue:
+            // https://github.com/tensorzero/tensorzero/discussions/1133
+            return <SkeletonImage key={blockIndex} />;
         }
       })}
     </div>

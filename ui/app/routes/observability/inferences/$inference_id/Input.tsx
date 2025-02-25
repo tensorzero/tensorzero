@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import type { Input, InputMessage } from "~/utils/clickhouse/common";
+import { SkeletonImage } from "./SkeletonImage";
 
 interface InputProps {
   input: Input;
@@ -40,6 +41,11 @@ function MessageContent({ content }: { content: InputMessage["content"] }) {
                 <pre className="mt-1 text-sm">{block.result}</pre>
               </div>
             );
+          case "image":
+            // We don't currently support image content in the UI
+            // See this discussion for the blocking issue:
+            // https://github.com/tensorzero/tensorzero/discussions/1133
+            return <SkeletonImage key={index} />;
         }
       })}
     </div>
