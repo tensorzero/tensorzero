@@ -31,7 +31,7 @@ pub fn inject_extra_body(
 }
 
 // Copied from serde_json (MIT-licensed): https://github.com/serde-rs/json/blob/400eaa977f1f0a1c9ad5e35d634ed2226bf1218c/src/value/mod.rs#L259
-// This accepts positive integers, rejecting integethers with a leading plus or extra leading zero.
+// This accepts positive integers, rejecting integers with a leading plus or extra leading zero.
 // We use this to parse integers according to the JSON pointer spec
 fn parse_index(s: &str) -> Option<usize> {
     if s.starts_with('+') || (s.starts_with('0') && s.len() != 1) {
