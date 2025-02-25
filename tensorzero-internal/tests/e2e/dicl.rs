@@ -27,6 +27,11 @@ pub async fn test_dicl_inference_request_no_examples_empty_dicl() {
     test_dicl_inference_request_no_examples("empty_dicl").await;
 }
 
+#[tokio::test]
+pub async fn test_dicl_inference_request_no_examples_empty_dicl_extra_body() {
+    test_dicl_inference_request_no_examples("empty_dicl_extra_body").await;
+}
+
 // This model is identical to `empty_dicl`, but it specified the embedding model
 // using shorthand
 #[tokio::test]
@@ -183,6 +188,17 @@ pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
                     .as_str()
                     .unwrap();
                 assert!(raw_response.to_lowercase().contains("tokyo"));
+
+                if dicl_variant_name == "empty_dicl_extra_body" {
+                    let raw_request = model_inference
+                        .get("raw_request")
+                        .unwrap()
+                        .as_str()
+                        .unwrap();
+                    let raw_request: Value = serde_json::from_str(raw_request).unwrap();
+                    let temperature = raw_request.get("temperature").unwrap().as_f64().unwrap();
+                    assert_eq!(temperature, 0.123);
+                }
             }
             "openai::text-embedding-3-small" | "text-embedding-3-small" => {
                 // The embedding call should not generate any output tokens

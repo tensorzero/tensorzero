@@ -626,7 +626,7 @@ impl EvaluatorConfig {
                 json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
-                extra_body: None,
+                extra_body: self.inner.extra_body.as_ref(),
             },
             skipped_indices,
         ))

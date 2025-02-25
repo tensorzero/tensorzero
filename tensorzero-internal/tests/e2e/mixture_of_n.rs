@@ -436,3 +436,144 @@ async fn e2e_test_mixture_of_n_json_real_judge() {
             .collect();
     assert_eq!(model_names, expected_model_names);
 }
+
+#[tokio::test]
+async fn e2e_test_mixture_of_n_extra_body() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "mixture_of_n_extra_body",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Please write me a sentence about the anime character Megumin."
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+
+    // Check the ModelInference Table
+    let results = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 3);
+
+    // Collect model names
+    let mut model_names = std::collections::HashSet::new();
+
+    for result in results {
+        let id = result.get("id").unwrap().as_str().unwrap();
+        let _ = Uuid::parse_str(id).unwrap();
+        let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+        let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+        assert_eq!(inference_id_result, inference_id);
+
+        // Collect model_name
+        let model_name = result.get("model_name").unwrap().as_str().unwrap();
+        model_names.insert(model_name.to_string());
+
+        // Check that all expected fields are present
+        assert!(result.get("model_provider_name").is_some());
+        assert!(result.get("raw_request").is_some());
+        assert!(result.get("raw_response").is_some());
+        assert!(result.get("input_tokens").is_some());
+        assert!(result.get("output_tokens").is_some());
+        assert!(result.get("response_time_ms").is_some());
+        assert!(result.get("ttft_ms").is_some());
+
+        // Check that the judge model gets 'temperature' injected from 'fuser.extra_body'
+        if model_name == "gpt-4o-mini-2024-07-18" {
+            let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+            let mut raw_request: Value = serde_json::from_str(raw_request).unwrap();
+
+            // This message depends on the particular output of the candidate model, so just check that
+            // it has the expected prefix.
+            let candidate_msg = raw_request
+                .get_mut("messages")
+                .unwrap()
+                .as_array_mut()
+                .unwrap()
+                .pop()
+                .unwrap();
+            assert!(
+                candidate_msg
+                    .get("content")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .contains("Here are the candidate answers"),
+                "Unexpected candidate msg: {candidate_msg:?}"
+            );
+
+            let expected_request = json!({
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You have been provided with a set of responses from various models to the following problem:\n------\nYou are a helpful and friendly assistant named AskJeeves\n------\nYour task is to synthesize these responses into a single, high-quality response. It is crucial to critically evaluate the information provided in these responses, recognizing that some of it may be biased or incorrect. Your response should not simply replicate the given answers but should offer a refined, accurate, and comprehensive reply to the instruction and take the best from all the responses. Ensure your response is well-structured, coherent, and adheres to the highest standards of accuracy and reliability.  Below will be: first, any messages leading up to this point, and then, a final message containing the set of candidate responses."
+                },
+                {
+                  "role": "user",
+                  "content": "Please write me a sentence about the anime character Megumin."
+                },
+              ],
+              "model": "gpt-4o-mini-2024-07-18",
+              "stream": false,
+              "response_format": {
+                "type": "text"
+              },
+              "temperature": 0.123
+            });
+            assert_eq!(raw_request, expected_request);
+        // Check that the other model does not get 'temperature' injected from 'fuser.extra_body'
+        } else if model_name == "o1-2024-12-17" {
+            let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+            let raw_request: Value = serde_json::from_str(raw_request).unwrap();
+            let expected_request = json!({
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You are a helpful and friendly assistant named AskJeeves"
+                },
+                {
+                  "role": "user",
+                  "content": "Please write me a sentence about the anime character Megumin."
+                },
+              ],
+              "model": "o1-2024-12-17",
+              "stream": false,
+              "response_format": {
+                "type": "text"
+              }
+            });
+            assert_eq!(raw_request, expected_request);
+        }
+    }
+    // Check that all expected model names are present
+    let expected_model_names: std::collections::HashSet<String> =
+        ["test", "o1-2024-12-17", "gpt-4o-mini-2024-07-18"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+    assert_eq!(model_names, expected_model_names);
+}
