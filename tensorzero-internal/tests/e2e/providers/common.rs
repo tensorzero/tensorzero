@@ -505,7 +505,8 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
 
-    // Check the ModelInference Table
+    // Check the ModelInference Table. We don't check the ChatInference table, since we only care about the contents
+    // of the raw request sent to the model provider.
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
