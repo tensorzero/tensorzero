@@ -15,6 +15,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
     Latency, ModelInferenceRequestJsonMode, Role, Text,
@@ -508,7 +509,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<AnthropicMessageContent<'a>> {
                     }],
                 }))
             }
-            ContentBlock::Image(image) => Ok(Some(AnthropicMessageContent::Image {
+            ContentBlock::Image(ImageWithPath {
+                image,
+                storage_path: _,
+            }) => Ok(Some(AnthropicMessageContent::Image {
                 source: AnthropicImageSource {
                     r#type: AnthropicImageType::Base64,
                     media_type: image.mime_type,

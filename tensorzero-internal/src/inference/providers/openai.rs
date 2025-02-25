@@ -24,6 +24,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
+use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
@@ -1057,7 +1058,10 @@ pub(super) fn tensorzero_to_openai_messages(
                 });
                 messages.push(message);
             }
-            ContentBlock::Image(image) => {
+            ContentBlock::Image(ImageWithPath {
+                image,
+                storage_path: _,
+            }) => {
                 messages.push(OpenAIRequestMessage::User(OpenAIUserRequestMessage {
                     content: vec![OpenAIUserContent::ImageUrl {
                         image_url: OpenAIImageUrl {

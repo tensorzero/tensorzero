@@ -28,17 +28,16 @@ pub struct ResolvedInputMessage {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ResolvedInputMessageContent {
-    Text {
-        value: Value,
-    },
+    Text { value: Value },
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    RawText {
-        value: String,
-    },
-    Image {
-        image: Base64Image,
-        storage_path: StoragePath,
-    },
+    RawText { value: String },
+    Image(ImageWithPath),
     // We may extend this in the future to include other types of content
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ImageWithPath {
+    pub image: Base64Image,
+    pub storage_path: StoragePath,
 }
