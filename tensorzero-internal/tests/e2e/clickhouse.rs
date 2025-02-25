@@ -130,7 +130,7 @@ async fn test_clickhouse_migration_manager() {
                     .await
                     .unwrap();
                 if i == 0 {
-                    // We know that the first migration was run so clean start should be false
+                    // We know that the first migration was run in a previous test, so clean start should be false
                     assert!(!clean_start);
                 }
                 let name = migrations[i].name();
@@ -172,7 +172,7 @@ async fn test_clickhouse_migration_manager() {
                 .await
                 .unwrap();
             if i == 0 {
-                // We know that the first migration was run so clean start should be false
+                // We know that the first migration was run in a previous test, so clean start should be false
                 assert!(!clean_start);
             }
             let name = migrations[i].name();
