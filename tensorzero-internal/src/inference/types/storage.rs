@@ -11,7 +11,7 @@ pub enum StorageKind {
     S3Compatible { bucket_name: String, region: String },
     Filesystem { path: String },
     // This must be set explicitly in `tensorzero.toml` to allow image requests to succeed
-    // By default, requests will fail (we'll have a `None` for the outer `ObjectStoreDat`)
+    // By default, requests will fail (we'll have a `None` for the outer `ObjectStoreData`)
     Disabled,
 }
 
