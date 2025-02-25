@@ -21,7 +21,10 @@ use tensorzero::{
 use tensorzero_internal::{
     cache::CacheEnabledMode,
     inference::types::{
-        resolved_input::ImageWithPath, storage::{StorageKind, StoragePath}, Base64Image, ContentBlock, ContentBlockChatOutput, Image, ImageKind, RequestMessage, Role, Text
+        resolved_input::ImageWithPath,
+        storage::{StorageKind, StoragePath},
+        Base64Image, ContentBlock, ContentBlockChatOutput, Image, ImageKind, RequestMessage, Role,
+        Text,
     },
     tool::{ToolCall, ToolResult},
 };

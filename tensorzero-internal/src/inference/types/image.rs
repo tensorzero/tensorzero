@@ -141,7 +141,10 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
 #[cfg(test)]
 mod tests {
     use crate::inference::types::{
-        image::sanitize_raw_request, resolved_input::ImageWithPath, storage::{StorageKind, StoragePath}, Base64Image, ContentBlock, ImageKind, RequestMessage, Role
+        image::sanitize_raw_request,
+        resolved_input::ImageWithPath,
+        storage::{StorageKind, StoragePath},
+        Base64Image, ContentBlock, ImageKind, RequestMessage, Role,
     };
 
     #[test]
@@ -165,7 +168,8 @@ mod tests {
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-1-path").unwrap(),
+                                    path: object_store::path::Path::parse("my-image-1-path")
+                                        .unwrap(),
                                 },
                             }),
                             ContentBlock::Image(ImageWithPath {
@@ -176,7 +180,8 @@ mod tests {
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-2-path").unwrap(),
+                                    path: object_store::path::Path::parse("my-image-2-path")
+                                        .unwrap(),
                                 },
                             }),
                             ContentBlock::Image(ImageWithPath {
@@ -187,7 +192,8 @@ mod tests {
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-1-path").unwrap(),
+                                    path: object_store::path::Path::parse("my-image-1-path")
+                                        .unwrap(),
                                 },
                             }),
                         ],
@@ -203,7 +209,8 @@ mod tests {
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-3-path").unwrap(),
+                                    path: object_store::path::Path::parse("my-image-3-path")
+                                        .unwrap(),
                                 },
                             }),
                             ContentBlock::Image(ImageWithPath {
@@ -214,7 +221,8 @@ mod tests {
                                 },
                                 storage_path: StoragePath {
                                     kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-1-path").unwrap(),
+                                    path: object_store::path::Path::parse("my-image-1-path")
+                                        .unwrap(),
                                 },
                             })
                         ],
