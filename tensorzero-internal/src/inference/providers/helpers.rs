@@ -31,6 +31,8 @@ pub fn inject_extra_body(
 }
 
 // Copied from serde_json (MIT-licensed): https://github.com/serde-rs/json/blob/400eaa977f1f0a1c9ad5e35d634ed2226bf1218c/src/value/mod.rs#L259
+// This accepts positive integers, rejecting integethers with a leading plus or extra leading zero.
+// We use this to parse integers according to the JSON pointer spec
 fn parse_index(s: &str) -> Option<usize> {
     if s.starts_with('+') || (s.starts_with('0') && s.len() != 1) {
         return None;
@@ -71,14 +73,25 @@ fn write_json_pointer_with_parent_creation(
     for token in components {
         match value {
             Value::Object(map) => match map.entry(token.clone()) {
+                // Move inside an object if the current pointer component is a valid key
                 Entry::Occupied(occupied) => value = occupied.into_mut(),
                 Entry::Vacant(vacant) => {
+                    // Edge case - we reject json paths like `/existing-key/new-key/<n>`, where:
+                    // * 'existing-key' already exists in the object
+                    // * 'new-key' does not already exist
+                    // * <n> is an integer
+                    //
+                    // We cannot create an entry for 'new-key', as it's ambiguous whether it should be an object {"n": some_value}m
+                    // or an array [.., some_value] with `some_value` at index `n`.
                     if parse_index(&token).is_some() {
                         return Err(Error::new(ErrorDetails::ExtraBodyReplacement {
-                        message: format!("Cannot create array (index {token}). This is an edge case - please report this to TensorZero"),
+                        message: format!("TensorZero doesn't support pointing an index ({token}) if its container doesn't exist. We'd love to hear about your use case (& help)! Please open a GitHub Discussion: https://github.com/tensorzero/tensorzero/discussions/new"),
                         pointer: pointer.to_string(),
                         }));
                     } else {
+                        // For non-integer keys, create a new object. This allows writing things like
+                        // `/generationConfig/temperature`, which will create a `generationConfig` object
+                        // if we don't already have `generationConfig` as a key in the object.
                         value = vacant.insert(Value::Object(Map::new()));
                     }
                 }
