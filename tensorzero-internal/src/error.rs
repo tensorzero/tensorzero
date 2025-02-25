@@ -471,7 +471,10 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Invalid inference target: {message}")
             }
             ErrorDetails::ExtraBodyReplacement { message, pointer } => {
-                write!(f, "Error replacing extra body: `{message}` with pointer: `{pointer}`")
+                write!(
+                    f,
+                    "Error replacing extra body: `{message}` with pointer: `{pointer}`"
+                )
             }
             ErrorDetails::ApiKeyMissing { provider_name } => {
                 write!(f, "API key missing for provider: {}", provider_name)
