@@ -669,7 +669,9 @@ pub async fn test_url_image_inference_with_provider_and_store(
                             InputMessageContent::Text {
                                 value: "Describe the contents of the image".to_string().into(),
                             },
-                            InputMessageContent::Image(Image::Url { url: image_url.clone() }),
+                            InputMessageContent::Image(Image::Url {
+                                url: image_url.clone(),
+                            }),
                         ],
                     }],
                 },
