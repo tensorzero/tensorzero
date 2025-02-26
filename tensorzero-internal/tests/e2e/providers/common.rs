@@ -157,7 +157,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
         use $crate::providers::common::test_image_inference_with_provider_filesystem;
-        use $crate::providers::common::test_image_inference_with_provider_s3_compatible;
+        use $crate::providers::common::test_image_inference_with_provider_amazon_s3;
         use $crate::providers::common::test_dynamic_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_parallel_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_parallel_tool_use_streaming_inference_request_with_provider;
@@ -472,10 +472,10 @@ macro_rules! generate_provider_tests {
 
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
-        async fn test_image_inference_store_s3_compatible() {
+        async fn test_image_inference_store_amazon_s3() {
             let providers = $func().await.image_inference;
             for provider in providers {
-                test_image_inference_with_provider_s3_compatible(provider).await;
+                test_image_inference_with_provider_amazon_s3(provider).await;
             }
         }
 
@@ -528,7 +528,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
     test_base64_image_inference_with_provider_and_store(
         provider,
-        StorageKind::Filesystem {
+        &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
         },
         &format!(
@@ -553,10 +553,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
 }
 
 #[cfg(feature = "e2e_tests")]
-pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestProvider) {
-    use rand::distributions::Alphanumeric;
-    use rand::distributions::DistString;
-
+pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvider) {
     let test_bucket = "tensorzero-e2e-test-images";
     let test_bucket_region = "us-east-1";
     let config = aws_config::load_from_env()
@@ -567,17 +564,55 @@ pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestP
 
     let client = aws_sdk_s3::Client::new(&config);
 
+    use rand::distributions::Alphanumeric;
+    use rand::distributions::DistString;
+
     let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
     prefix += "-";
 
+    test_image_inference_with_provider_s3_compatible(
+        provider,
+        &StorageKind::S3Compatible {
+            bucket_name: Some(test_bucket.to_string()),
+            region: Some("us-east-1".to_string()),
+            prefix: prefix.clone(),
+            endpoint: None,
+        },
+        &client,
+        &format!(
+            r#"
+    [object_storage]
+    type = "s3_compatible"
+    region = "us-east-1"
+    bucket_name = "{test_bucket}"
+    prefix = "{prefix}"
+    
+    [functions]
+    "#
+        ),
+        &test_bucket,
+        &prefix,
+    )
+    .await;
+}
+
+#[cfg(feature = "e2e_tests")]
+pub async fn test_image_inference_with_provider_s3_compatible(
+    provider: E2ETestProvider,
+    storage_kind: &StorageKind,
+    client: &aws_sdk_s3::Client,
+    toml: &str,
+    bucket_name: &str,
+    prefix: &str,
+) {
     let expected_key =
         format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
 
     // Check that object is deleted
     let err = client
         .get_object()
+        .bucket(bucket_name)
         .key(&expected_key)
-        .bucket(test_bucket)
         .send()
         .await
         .expect_err("Image should not exist in s3 after deletion");
@@ -592,32 +627,13 @@ pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestP
         panic!("Expected ServiceError: {err:?}");
     }
 
-    test_base64_image_inference_with_provider_and_store(
-        provider,
-        StorageKind::S3Compatible {
-            bucket_name: test_bucket.to_string(),
-            region: "us-east-1".to_string(),
-            prefix: prefix.clone(),
-        },
-        &format!(
-            r#"
-        [object_storage]
-        type = "s3_compatible"
-        region = "us-east-1"
-        bucket_name = "{test_bucket}"
-        prefix = "{prefix}"
-        
-        [functions]
-        "#
-        ),
-        &prefix,
-    )
-    .await;
+    test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, &prefix)
+        .await;
 
     let result = client
         .get_object()
+        .bucket(bucket_name)
         .key(&expected_key)
-        .bucket(test_bucket)
         .send()
         .await
         .expect("Failed to get image from S3-compatible store");
@@ -627,7 +643,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestP
     client
         .delete_object()
         .key(&expected_key)
-        .bucket(test_bucket)
+        .bucket(bucket_name)
         .send()
         .await
         .unwrap();
@@ -718,7 +734,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_base64_image_inference_with_provider_and_store(
     provider: E2ETestProvider,
-    kind: StorageKind,
+    kind: &StorageKind,
     config_toml: &str,
     prefix: &str,
 ) {
@@ -1027,7 +1043,7 @@ pub async fn check_base64_image_response(
                         },
                         "storage_path": {
                             "kind": kind_json,
-                            "path": format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png")
+                            "path": format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                         },
                     }
                 ]
