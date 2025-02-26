@@ -82,7 +82,6 @@ tracing-subscriber = { version = "0.3.18", features = [
     "fmt",
     "json",
 ] }
-typeid = "1.0.2"
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 
