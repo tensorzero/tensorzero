@@ -43,7 +43,7 @@ backon = { version = "1.2.0", features = ["tokio-sleep"] }
 blake3 = "1.5.5"
 bytes = "1.6.1"
 derive_builder = "0.20.0"
-futures = { workspace = true}
+futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.13.0"
@@ -65,7 +65,7 @@ rand = "0.8.5"
 reqwest = { workspace = true }
 reqwest-eventsource = { workspace = true }
 secrecy = { workspace = true }
-serde = { workspace = true}
+serde = { workspace = true }
 serde_json = { workspace = true }
 serde_path_to_error = "0.1.16"
 sha2 = "0.10.8"
@@ -73,7 +73,7 @@ strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.3"
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
-toml = "0.8.15"
+toml = { workspace = true }
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.18", features = [
     "env-filter",
@@ -86,6 +86,6 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.10.1"
-tracing-test = { workspace = true}
-tensorzero = { path = "../clients/rust"}
+tracing-test = { workspace = true }
+tensorzero = { path = "../clients/rust" }
 paste = "1.0.15"
