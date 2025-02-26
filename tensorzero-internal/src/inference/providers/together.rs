@@ -139,11 +139,13 @@ impl InferenceProvider for TogetherProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body =
-            serde_json::to_value(TogetherRequest::new(&self.model_name, request)?).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing Together request: {e}"),
-                })
-            })?;
+            serde_json::to_value(TogetherRequest::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing Together request: {e}"),
+                    })
+                },
+            )?;
         inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&TOGETHER_API_BASE)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -216,11 +218,13 @@ impl InferenceProvider for TogetherProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body =
-            serde_json::to_value(TogetherRequest::new(&self.model_name, request)?).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing request: {e}"),
-                })
-            })?;
+            serde_json::to_value(TogetherRequest::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing request: {e}"),
+                    })
+                },
+            )?;
         inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
