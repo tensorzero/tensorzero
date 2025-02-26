@@ -1,3 +1,4 @@
+import { SkeletonImage } from "~/components/inference/SkeletonImage";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import type {
   ContentBlock,
@@ -45,6 +46,8 @@ function MessageContent({ content }: { content: ContentBlock[] }) {
                 <pre className="mt-1 text-sm">{block.result}</pre>
               </div>
             );
+          case "image":
+            return <SkeletonImage />;
         }
       })}
     </div>
