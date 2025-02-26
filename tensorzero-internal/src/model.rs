@@ -54,7 +54,7 @@ use serde::Deserialize;
 #[serde(deny_unknown_fields)]
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
-    pub providers: HashMap<Arc<str>, ProviderConfig>, // provider name => provider config
+    pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
 }
 
 pub struct StreamResponse {
@@ -124,11 +124,12 @@ impl ModelConfig {
                     return Ok(cache_lookup);
                 }
             }
-            let provider_config = self.providers.get(provider_name).ok_or_else(|| {
+            let provider = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
                     provider_name: provider_name.to_string(),
                 })
             })?;
+            let provider_config = &provider.config;
             let response = provider_config
                 .infer(request, clients.http_client, clients.credentials)
                 .instrument(span!(
@@ -195,11 +196,12 @@ impl ModelConfig {
                 }
             }
 
-            let provider_config = self.providers.get(provider_name).ok_or_else(|| {
+            let provider = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
                     provider_name: provider_name.to_string(),
                 })
             })?;
+            let provider_config = &provider.config;
             let response = provider_config
                 .infer_stream(request, clients.http_client, clients.credentials)
                 .instrument(span!(
@@ -257,11 +259,12 @@ impl ModelConfig {
     ) -> Result<StartBatchModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
-            let provider_config = self.providers.get(provider_name).ok_or_else(|| {
+            let provider = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
                     provider_name: provider_name.to_string(),
                 })
             })?;
+            let provider_config = &provider.config;
             let response = provider_config
                 .start_batch_inference(requests, client, api_keys)
                 .instrument(span!(
@@ -323,6 +326,13 @@ async fn stream_with_cache_write(
         }
     }) as ProviderInferenceResponseStreamInner).peekable())
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(transparent)]
+pub struct ModelProvider {
+    pub config: ProviderConfig,
+}
+
 #[derive(Debug)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
@@ -1152,7 +1162,12 @@ impl ShorthandModelConfig for ModelConfig {
         };
         Ok(ModelConfig {
             routing: vec![provider_type.to_string().into()],
-            providers: HashMap::from([(provider_type.to_string().into(), provider_config)]),
+            providers: HashMap::from([(
+                provider_type.to_string().into(),
+                ModelProvider {
+                    config: provider_config,
+                },
+            )]),
         })
     }
 
@@ -1243,7 +1258,12 @@ mod tests {
         });
         let model_config = ModelConfig {
             routing: vec!["good_provider".into()],
-            providers: HashMap::from([("good_provider".into(), good_provider_config)]),
+            providers: HashMap::from([(
+                "good_provider".into(),
+                ModelProvider {
+                    config: good_provider_config,
+                },
+            )]),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -1279,6 +1299,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let model_name = "test model";
         let response = model_config
@@ -1299,7 +1320,12 @@ mod tests {
         // Try inferring the bad model
         let model_config = ModelConfig {
             routing: vec!["error".into()],
-            providers: HashMap::from([("error".into(), bad_provider_config)]),
+            providers: HashMap::from([(
+                "error".into(),
+                ModelProvider {
+                    config: bad_provider_config,
+                },
+            )]),
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -1365,6 +1391,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let model_config = ModelConfig {
@@ -1373,8 +1400,18 @@ mod tests {
                 "good_provider".to_string().into(),
             ],
             providers: HashMap::from([
-                ("error_provider".to_string().into(), bad_provider_config),
-                ("good_provider".to_string().into(), good_provider_config),
+                (
+                    "error_provider".to_string().into(),
+                    ModelProvider {
+                        config: bad_provider_config,
+                    },
+                ),
+                (
+                    "good_provider".to_string().into(),
+                    ModelProvider {
+                        config: good_provider_config,
+                    },
+                ),
             ]),
         };
 
@@ -1423,12 +1460,18 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         // Test good model
         let model_config = ModelConfig {
             routing: vec!["good_provider".to_string().into()],
-            providers: HashMap::from([("good_provider".to_string().into(), good_provider_config)]),
+            providers: HashMap::from([(
+                "good_provider".to_string().into(),
+                ModelProvider {
+                    config: good_provider_config,
+                },
+            )]),
         };
         let StreamResponse {
             mut stream,
@@ -1486,7 +1529,12 @@ mod tests {
         // Test bad model
         let model_config = ModelConfig {
             routing: vec!["error".to_string().into()],
-            providers: HashMap::from([("error".to_string().into(), bad_provider_config)]),
+            providers: HashMap::from([(
+                "error".to_string().into(),
+                ModelProvider {
+                    config: bad_provider_config,
+                },
+            )]),
         };
         let response = model_config
             .infer_stream(
@@ -1556,14 +1604,25 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         // Test fallback
         let model_config = ModelConfig {
             routing: vec!["error_provider".into(), "good_provider".into()],
             providers: HashMap::from([
-                ("error_provider".to_string().into(), bad_provider_config),
-                ("good_provider".to_string().into(), good_provider_config),
+                (
+                    "error_provider".to_string().into(),
+                    ModelProvider {
+                        config: bad_provider_config,
+                    },
+                ),
+                (
+                    "good_provider".to_string().into(),
+                    ModelProvider {
+                        config: good_provider_config,
+                    },
+                ),
             ]),
         };
         let StreamResponse {
@@ -1628,7 +1687,12 @@ mod tests {
         });
         let model_config = ModelConfig {
             routing: vec!["model".into()],
-            providers: HashMap::from([("model".into(), provider_config)]),
+            providers: HashMap::from([(
+                "model".into(),
+                ModelProvider {
+                    config: provider_config,
+                },
+            )]),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -1663,6 +1727,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let model_name = "test model";
         let error = model_config
@@ -1724,7 +1789,12 @@ mod tests {
         });
         let model_config = ModelConfig {
             routing: vec!["model".to_string().into()],
-            providers: HashMap::from([("model".to_string().into(), provider_config)]),
+            providers: HashMap::from([(
+                "model".to_string().into(),
+                ModelProvider {
+                    config: provider_config,
+                },
+            )]),
         };
         let tool_config = ToolCallConfig {
             tools_available: vec![],
@@ -1759,6 +1829,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let error = model_config
             .infer(&request, &clients, model_name)
@@ -1813,7 +1884,7 @@ mod tests {
             .unwrap()
             .expect("Missing dummy model");
         assert_eq!(model_config.routing, vec!["dummy".into()]);
-        let provider_config = model_config.providers.get("dummy").unwrap();
+        let provider_config = &model_config.providers.get("dummy").unwrap().config;
         match provider_config {
             ProviderConfig::Dummy(provider) => assert_eq!(&*provider.model_name, "gpt-4o"),
             _ => panic!("Expected Dummy provider"),
@@ -1834,7 +1905,12 @@ mod tests {
             ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap());
         let anthropic_model_config = ModelConfig {
             routing: vec!["anthropic".into()],
-            providers: HashMap::from([("anthropic".into(), anthropic_provider_config)]),
+            providers: HashMap::from([(
+                "anthropic".into(),
+                ModelProvider {
+                    config: anthropic_provider_config,
+                },
+            )]),
         };
         let model_table: ModelTable = HashMap::from([("claude".into(), anthropic_model_config)])
             .try_into()

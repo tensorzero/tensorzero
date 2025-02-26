@@ -817,7 +817,7 @@ async def test_async_dynamic_credentials(async_client):
 
 def test_sync_error():
     with pytest.raises(Exception) as exc_info:
-        with TensorZeroGateway("http://localhost:3000"):
+        with TensorZeroGateway.build_http(gateway_url="http://localhost:3000"):
             raise Exception("My error")
     assert str(exc_info.value) == "My error"
 
@@ -825,7 +825,9 @@ def test_sync_error():
 @pytest.mark.asyncio
 async def test_async_error():
     with pytest.raises(Exception) as exc_info:
-        async with AsyncTensorZeroGateway("http://localhost:3000"):
+        async with await AsyncTensorZeroGateway.build_http(
+            gateway_url="http://localhost:3000"
+        ):
             raise Exception("My error")
     assert str(exc_info.value) == "My error"
 
@@ -1690,8 +1692,8 @@ async def test_async_err_in_stream(async_client):
 
 @pytest.mark.asyncio
 async def test_async_timeout():
-    async with AsyncTensorZeroGateway(
-        "http://localhost:3000", timeout=1
+    async with await AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000", timeout=1
     ) as async_client:
         with pytest.raises(TensorZeroError):
             await async_client.inference(
@@ -1702,10 +1704,18 @@ async def test_async_timeout():
 
 
 def test_sync_timeout():
-    with TensorZeroGateway("http://localhost:3000", timeout=1) as sync_client:
+    with TensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000", timeout=1
+    ) as sync_client:
         with pytest.raises(TensorZeroError):
             sync_client.inference(
                 function_name="basic_test",
                 variant_name="slow",
                 input={"messages": [{"role": "user", "content": "Hello"}]},
             )
+
+
+def test_uuid7_import():
+    from tensorzero.util import uuid7
+
+    assert uuid7() is not None

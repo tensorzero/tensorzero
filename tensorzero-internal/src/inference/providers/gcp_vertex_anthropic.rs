@@ -28,7 +28,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use super::gcp_vertex_gemini::{default_api_key_location, GCPVertexCredentials};
-use super::helpers::peek_first_chunk;
+use super::helpers::{inject_extra_body, peek_first_chunk};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
@@ -83,7 +83,13 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = GCPVertexAnthropicRequestBody::new(request)?;
+        let mut request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
+            .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing GCP Vertex Anthropic request: {e}"),
+            })
+        })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let api_key = self
             .credentials
             .get_api_key(&self.audience, dynamic_api_keys)?;
@@ -139,7 +145,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             let response_code = res.status();
             let error_body = res.json::<GCPVertexAnthropicError>().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing response: {e}"),
+                    message: format!("Error parsing response: {e:?}"),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -156,7 +162,13 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = GCPVertexAnthropicRequestBody::new(request)?;
+        let mut request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
+            .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing GCP Vertex Anthropic request: {e}"),
+            })
+        })?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
@@ -682,7 +694,7 @@ struct GCPVertexAnthropicResponseWithMetadata<'a> {
     response: GCPVertexAnthropicResponse,
     raw_response: String,
     latency: Latency,
-    request: GCPVertexAnthropicRequestBody<'a>,
+    request: serde_json::Value,
     function_type: &'a FunctionType,
     json_mode: &'a ModelInferenceRequestJsonMode,
     generic_request: &'a ModelInferenceRequest<'a>,
@@ -945,7 +957,7 @@ fn anthropic_to_tensorzero_stream_message(
                 Ok(None)
             }
         }
-        GCPVertexAnthropicStreamMessage::MessageStop | GCPVertexAnthropicStreamMessage::Ping {} => {
+        GCPVertexAnthropicStreamMessage::MessageStop | GCPVertexAnthropicStreamMessage::Ping => {
             Ok(None)
         }
     }
@@ -1157,6 +1169,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
         let details = anthropic_request_body.unwrap_err().get_owned_details();
@@ -1193,6 +1206,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1246,6 +1260,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1309,6 +1324,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
@@ -1676,6 +1692,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
@@ -1694,7 +1711,7 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
             generic_request: &generic_request,
@@ -1755,6 +1772,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
@@ -1772,7 +1790,7 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
             generic_request: &generic_request,
@@ -1843,6 +1861,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
@@ -1860,7 +1879,7 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
             generic_request: &generic_request,

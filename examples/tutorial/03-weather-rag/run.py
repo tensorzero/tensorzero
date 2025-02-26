@@ -1,6 +1,6 @@
 from tensorzero import TensorZeroGateway, ToolCall
 
-with TensorZeroGateway("http://localhost:3000") as client:
+with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
     query_result = client.inference(
         function_name="generate_weather_query",
         # This is the first inference request in an episode so we don't need to provide an episode_id

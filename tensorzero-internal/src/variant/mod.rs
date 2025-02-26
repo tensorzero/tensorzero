@@ -1,5 +1,6 @@
 use backon::ExponentialBuilder;
 use backon::Retryable;
+use chat_completion::ExtraBodyConfig;
 use futures::StreamExt;
 use itertools::izip;
 use serde::Deserialize;
@@ -388,6 +389,7 @@ impl Variant for VariantConfig {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn prepare_model_inference_request<'a, 'request>(
     messages: Vec<RequestMessage>,
     system: Option<String>,
@@ -396,6 +398,7 @@ fn prepare_model_inference_request<'a, 'request>(
     stream: bool,
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
+    extra_body: Option<&'request ExtraBodyConfig>,
 ) -> Result<ModelInferenceRequest<'request>, Error>
 where
     'a: 'request,
@@ -424,6 +427,7 @@ where
                 json_mode: json_mode.unwrap_or(JsonMode::Off).into(),
                 function_type: FunctionType::Chat,
                 output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
+                extra_body,
             }
         }
         FunctionConfig::Json(json_config) => {
@@ -457,6 +461,7 @@ where
                 json_mode: json_mode.unwrap_or(JsonMode::Strict).into(),
                 function_type: FunctionType::Json,
                 output_schema,
+                extra_body,
             }
         }
     })
@@ -604,7 +609,7 @@ mod tests {
     };
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::tests::get_test_template_config;
-    use crate::model::ProviderConfig;
+    use crate::model::{ModelProvider, ProviderConfig};
     use crate::tool::{ToolCallConfig, ToolChoice};
     use reqwest::Client;
     use serde_json::json;
@@ -683,6 +688,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            None,
         )
         .unwrap();
 
@@ -730,6 +736,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            None,
         )
         .unwrap();
 
@@ -774,6 +781,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            None,
         )
         .unwrap();
 
@@ -796,6 +804,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            None,
         )
         .unwrap();
 
@@ -814,6 +823,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
+            None,
         )
         .unwrap();
 
@@ -883,6 +893,7 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
+            extra_body: None,
         };
 
         // Create a dummy provider config with the desired model name
@@ -894,7 +905,12 @@ mod tests {
         // Create a model config with the dummy provider
         let model_config = ModelConfig {
             routing: vec![model_name.into()],
-            providers: HashMap::from([(model_name.into(), dummy_provider_config)]),
+            providers: HashMap::from([(
+                model_name.into(),
+                ModelProvider {
+                    config: dummy_provider_config,
+                },
+            )]),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -979,6 +995,7 @@ mod tests {
             output_schema: Some(&output_schema),
             tool_config: None,
             function_type: FunctionType::Json,
+            extra_body: None,
         };
 
         // Create a dummy provider config with model_name "json" to trigger JSON response
@@ -989,7 +1006,12 @@ mod tests {
 
         let model_config_json = ModelConfig {
             routing: vec![model_name_json.into()],
-            providers: HashMap::from([(model_name_json.into(), dummy_provider_config_json)]),
+            providers: HashMap::from([(
+                model_name_json.into(),
+                ModelProvider {
+                    config: dummy_provider_config_json,
+                },
+            )]),
         };
 
         // Create the arguments struct
@@ -1036,7 +1058,12 @@ mod tests {
 
         let error_model_config = ModelConfig {
             routing: vec![error_model_name.into()],
-            providers: HashMap::from([(error_model_name.into(), error_provider_config)]),
+            providers: HashMap::from([(
+                error_model_name.into(),
+                ModelProvider {
+                    config: error_provider_config,
+                },
+            )]),
         };
 
         // Create the arguments struct
@@ -1124,6 +1151,7 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
+            extra_body: None,
         };
 
         // Create a dummy provider config with the error model name
@@ -1142,8 +1170,18 @@ mod tests {
         let model_config = ModelConfig {
             routing: vec![error_model_name.into(), model_name.into()],
             providers: HashMap::from([
-                (error_model_name.into(), error_provider_config),
-                (model_name.into(), dummy_provider_config),
+                (
+                    error_model_name.into(),
+                    ModelProvider {
+                        config: error_provider_config,
+                    },
+                ),
+                (
+                    model_name.into(),
+                    ModelProvider {
+                        config: dummy_provider_config,
+                    },
+                ),
             ]),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
@@ -1231,7 +1269,12 @@ mod tests {
 
         let model_config = Box::leak(Box::new(ModelConfig {
             routing: vec!["good_provider".into()],
-            providers: HashMap::from([("good_provider".into(), dummy_provider_config)]),
+            providers: HashMap::from([(
+                "good_provider".into(),
+                ModelProvider {
+                    config: dummy_provider_config,
+                },
+            )]),
         }));
 
         // Prepare the model inference request
@@ -1250,6 +1293,7 @@ mod tests {
             seed: None,
             tool_config: None,
             function_type: FunctionType::Chat,
+            extra_body: None,
         };
 
         // Initialize inference parameters
@@ -1369,6 +1413,7 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
+            extra_body: None,
         };
 
         // Create a dummy provider config with the error model name
@@ -1387,8 +1432,18 @@ mod tests {
         let model_config = Box::leak(Box::new(ModelConfig {
             routing: vec![error_model_name.into(), model_name.into()],
             providers: HashMap::from([
-                (error_model_name.into(), error_provider_config),
-                (model_name.into(), dummy_provider_config),
+                (
+                    error_model_name.into(),
+                    ModelProvider {
+                        config: error_provider_config,
+                    },
+                ),
+                (
+                    model_name.into(),
+                    ModelProvider {
+                        config: dummy_provider_config,
+                    },
+                ),
             ]),
         }));
         let retry_config = RetryConfig::default();

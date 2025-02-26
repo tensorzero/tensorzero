@@ -50,7 +50,7 @@ fn default_timeout() -> f64 {
 #[serde(deny_unknown_fields)]
 pub struct EvaluatorConfig {
     #[serde(flatten)]
-    inner: ChatCompletionConfig,
+    pub inner: ChatCompletionConfig,
 }
 
 lazy_static! {
@@ -626,6 +626,7 @@ impl EvaluatorConfig {
                 json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
+                extra_body: self.inner.extra_body.as_ref(),
             },
             skipped_indices,
         ))
@@ -666,7 +667,7 @@ mod tests {
             types::{ChatInferenceResult, JsonInferenceResult, Latency},
         },
         minijinja_util::tests::get_test_template_config,
-        model::{ModelConfig, ProviderConfig},
+        model::{ModelConfig, ModelProvider, ProviderConfig},
     };
 
     use super::*;
@@ -1115,10 +1116,12 @@ mod tests {
                 routing: vec!["best_of_n_1".into()],
                 providers: HashMap::from([(
                     "best_of_n_1".into(),
-                    ProviderConfig::Dummy(DummyProvider {
-                        model_name: "best_of_n_1".into(),
-                        ..Default::default()
-                    }),
+                    ModelProvider {
+                        config: ProviderConfig::Dummy(DummyProvider {
+                            model_name: "best_of_n_1".into(),
+                            ..Default::default()
+                        }),
+                    },
                 )]),
             },
         )]))
@@ -1203,10 +1206,12 @@ mod tests {
                     routing: vec!["error".into()],
                     providers: HashMap::from([(
                         "error".into(),
-                        ProviderConfig::Dummy(DummyProvider {
-                            model_name: "error".into(),
-                            ..Default::default()
-                        }),
+                        ModelProvider {
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "error".into(),
+                                ..Default::default()
+                            }),
+                        },
                     )]),
                 },
             );
@@ -1262,10 +1267,12 @@ mod tests {
                     routing: vec!["regular".into()],
                     providers: HashMap::from([(
                         "regular".into(),
-                        ProviderConfig::Dummy(DummyProvider {
-                            model_name: "regular".into(),
-                            ..Default::default()
-                        }),
+                        ModelProvider {
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "regular".into(),
+                                ..Default::default()
+                            }),
+                        },
                     )]),
                 },
             );
@@ -1338,10 +1345,12 @@ mod tests {
                 routing: vec!["best_of_n_big".into()],
                 providers: HashMap::from([(
                     "best_of_n_big".into(),
-                    ProviderConfig::Dummy(DummyProvider {
-                        model_name: "best_of_n_big".into(),
-                        ..Default::default()
-                    }),
+                    ModelProvider {
+                        config: ProviderConfig::Dummy(DummyProvider {
+                            model_name: "best_of_n_big".into(),
+                            ..Default::default()
+                        }),
+                    },
                 )]),
             },
         );

@@ -15,7 +15,7 @@ import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import { useFetcher } from "react-router";
 import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
 import type { ContentBlockOutput } from "~/utils/clickhouse/common";
-import { OutputContent } from "./Output";
+import { OutputContent } from "~/components/inference/Output";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
 
@@ -158,11 +158,11 @@ export function VariantResponseModal({
         <DialogHeader>
           <DialogTitle>
             Comparing{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
               {originalVariant}
             </code>{" "}
-            vs{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">
+            vs.{" "}
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
               {selectedVariant}
             </code>
           </DialogTitle>

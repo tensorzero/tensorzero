@@ -128,19 +128,19 @@ jobs:
           uvx ruff@0.9.0 format --check .
 
       - name: "Python: TensorZero Client: Install dependencies"
-        working-directory: clients/python
+        working-directory: clients/python-deprecated
         run: |
           uv venv
           uv pip sync requirements.txt
 
       - name: "Python: TensorZero Client: pyright"
-        working-directory: clients/python
+        working-directory: clients/python-deprecated
         run: |
           uv pip install pyright
           uv run pyright
 
       - name: "Python: TensorZero Client: pytest"
-        working-directory: clients/python
+        working-directory: clients/python-deprecated
         run: |
           uv run pytest
 

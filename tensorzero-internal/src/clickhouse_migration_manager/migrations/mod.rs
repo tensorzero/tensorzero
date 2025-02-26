@@ -4,19 +4,17 @@ use crate::{
 };
 
 pub mod migration_0000;
-// pub mod migration_0001;
 pub mod migration_0002;
 pub mod migration_0003;
 pub mod migration_0004;
 pub mod migration_0005;
 pub mod migration_0006;
-// pub mod migration_0007;
 pub mod migration_0008;
 pub mod migration_0009;
-// pub mod migration_0010;
 pub mod migration_0011;
-pub mod migration_0012;
 pub mod migration_0013;
+pub mod migration_0014;
+pub mod migration_0015;
 
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails
@@ -104,4 +102,19 @@ async fn get_column_type(
         .into()),
         Ok(response) => Ok(response.trim().to_string()),
     }
+}
+
+async fn table_is_nonempty(
+    clickhouse: &ClickHouseConnectionInfo,
+    table: &str,
+    migration_id: &str,
+) -> Result<bool, Error> {
+    let query = format!("SELECT COUNT() FROM {} FORMAT CSV", table);
+    let result = clickhouse.run_query(query, None).await?;
+    Ok(result.trim().parse::<i64>().map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseMigration {
+            id: migration_id.to_string(),
+            message: e.to_string(),
+        })
+    })? > 0)
 }

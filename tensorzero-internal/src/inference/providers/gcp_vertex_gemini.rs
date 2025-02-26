@@ -28,6 +28,8 @@ use crate::inference::types::{
 use crate::model::{build_creds_caching_default_with_fn, Credential, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
+use super::helpers::inject_extra_body;
+
 const PROVIDER_NAME: &str = "GCP Vertex Gemini";
 const PROVIDER_TYPE: &str = "gcp_vertex_gemini";
 
@@ -261,8 +263,15 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body: GCPVertexGeminiRequest =
-            GCPVertexGeminiRequest::new(request, &self.model_id)?;
+        let mut request_body =
+            serde_json::to_value(GCPVertexGeminiRequest::new(request, &self.model_id)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing GCP Vertex Gemini request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let api_key = self
             .credentials
             .get_api_key(&self.audience, dynamic_api_keys)?;
@@ -332,8 +341,15 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body: GCPVertexGeminiRequest =
-            GCPVertexGeminiRequest::new(request, &self.model_id)?;
+        let mut request_body =
+            serde_json::to_value(GCPVertexGeminiRequest::new(request, &self.model_id)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing GCP Vertex Gemini request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -951,7 +967,7 @@ struct GCPVertexGeminiResponseWithMetadata<'a> {
     response: GCPVertexGeminiResponse,
     raw_response: String,
     latency: Latency,
-    request: GCPVertexGeminiRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -1336,6 +1352,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
         let details = result.unwrap_err().get_owned_details();
@@ -1372,6 +1389,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
         let request = result.unwrap();
@@ -1421,6 +1439,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
+            extra_body: None,
         };
         // JSON schema should be supported for Gemini Pro models
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-1.5-pro-001");
@@ -1487,6 +1506,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
+            extra_body: None,
         };
         // JSON mode should be supported for Gemini Flash models but without a schema
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-flash");
@@ -1584,6 +1604,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let request_body = GCPVertexGeminiRequest {
             contents: vec![],
@@ -1597,7 +1618,7 @@ mod tests {
         let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         };
@@ -1663,6 +1684,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let request_body = GCPVertexGeminiRequest {
             contents: vec![],
@@ -1675,7 +1697,7 @@ mod tests {
         let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         };
@@ -1761,7 +1783,7 @@ mod tests {
         let response_with_latency = GCPVertexGeminiResponseWithMetadata {
             response,
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         };
@@ -1831,6 +1853,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-1.5-pro-001");
         let tools = tools.unwrap();
@@ -1873,6 +1896,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-1.5-flash-001");
         let tools = tools.unwrap();

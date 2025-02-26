@@ -1,5 +1,10 @@
 import z from "zod";
-import { type TableBounds, TableBoundsSchema } from "./common";
+import {
+  type ContentBlockOutput,
+  type JsonInferenceOutput,
+  type TableBounds,
+  TableBoundsSchema,
+} from "./common";
 import {
   contentBlockOutputSchema,
   contentBlockSchema,
@@ -10,7 +15,7 @@ import {
 } from "./common";
 import { data } from "react-router";
 import type { FunctionConfig } from "../config/function";
-import { clickhouseClient } from "./common";
+import { clickhouseClient } from "./client.server";
 
 export const inferenceByIdRowSchema = z
   .object({
@@ -571,12 +576,22 @@ export const parsedInferenceRowSchema = z.discriminatedUnion("function_type", [
 
 export type ParsedInferenceRow = z.infer<typeof parsedInferenceRowSchema>;
 
+export function parseInferenceOutput(
+  output: string,
+): ContentBlockOutput[] | JsonInferenceOutput {
+  const parsed = JSON.parse(output);
+  if (Array.isArray(parsed)) {
+    return z.array(contentBlockOutputSchema).parse(parsed);
+  }
+  return jsonInferenceOutputSchema.parse(parsed);
+}
+
 function parseInferenceRow(row: InferenceRow): ParsedInferenceRow {
   if (row.function_type === "chat") {
     return {
       ...row,
       input: inputSchema.parse(JSON.parse(row.input)),
-      output: z.array(contentBlockOutputSchema).parse(JSON.parse(row.output)),
+      output: parseInferenceOutput(row.output) as ContentBlockOutput[],
       inference_params: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.inference_params)),
@@ -591,7 +606,7 @@ function parseInferenceRow(row: InferenceRow): ParsedInferenceRow {
     return {
       ...row,
       input: inputSchema.parse(JSON.parse(row.input)),
-      output: jsonInferenceOutputSchema.parse(JSON.parse(row.output)),
+      output: parseInferenceOutput(row.output) as JsonInferenceOutput,
       inference_params: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.inference_params)),

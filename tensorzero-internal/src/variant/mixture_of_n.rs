@@ -45,7 +45,7 @@ fn default_timeout() -> f64 {
 #[serde(deny_unknown_fields)]
 pub struct FuserConfig {
     #[serde(flatten)]
-    inner: ChatCompletionConfig,
+    pub inner: ChatCompletionConfig,
 }
 
 impl Variant for MixtureOfNConfig {
@@ -486,6 +486,7 @@ impl FuserConfig {
             false,
             inference_params,
             self.inner.json_mode,
+            self.inner.extra_body.as_ref(),
         )?;
         Ok((model_inference_request, included_indices))
     }
@@ -512,7 +513,7 @@ mod tests {
         },
         jsonschema_util::JSONSchemaFromPath,
         minijinja_util::tests::get_test_template_config,
-        model::{ModelConfig, ProviderConfig},
+        model::{ModelConfig, ModelProvider, ProviderConfig},
         tool::{ToolCallConfig, ToolChoice},
     };
 
@@ -941,10 +942,12 @@ mod tests {
                 routing: vec!["json".into()],
                 providers: HashMap::from([(
                     "json".into(),
-                    ProviderConfig::Dummy(DummyProvider {
-                        model_name: "json".into(),
-                        ..Default::default()
-                    }),
+                    ModelProvider {
+                        config: ProviderConfig::Dummy(DummyProvider {
+                            model_name: "json".into(),
+                            ..Default::default()
+                        }),
+                    },
                 )]),
             },
         )]))
@@ -1029,10 +1032,12 @@ mod tests {
                     routing: vec!["error".into()],
                     providers: HashMap::from([(
                         "error".into(),
-                        ProviderConfig::Dummy(DummyProvider {
-                            model_name: "error".into(),
-                            ..Default::default()
-                        }),
+                        ModelProvider {
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "error".into(),
+                                ..Default::default()
+                            }),
+                        },
                     )]),
                 },
             );
@@ -1089,10 +1094,12 @@ mod tests {
                     routing: vec!["regular".into()],
                     providers: HashMap::from([(
                         "regular".into(),
-                        ProviderConfig::Dummy(DummyProvider {
-                            model_name: "regular".into(),
-                            ..Default::default()
-                        }),
+                        ModelProvider {
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "regular".into(),
+                                ..Default::default()
+                            }),
+                        },
                     )]),
                 },
             );
