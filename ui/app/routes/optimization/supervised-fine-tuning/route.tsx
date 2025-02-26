@@ -17,6 +17,7 @@ import type { Route } from "./+types/route";
 import FineTuningStatus from "./FineTuningStatus";
 import { SFTResult } from "./SFTResult";
 import { SFTForm } from "./SFTForm";
+import { PageHeader } from "~/components/layout/PageHeader";
 
 export const meta: MetaFunction = () => {
   return [
@@ -94,7 +95,10 @@ export default function SupervisedFineTuning({
   const config = useConfig();
   if (loaderData.status === "error") {
     return (
-      <div className="text-sm text-red-500">Error: {loaderData.error}</div>
+      <div className="container mx-auto px-4 pb-8">
+        <PageHeader headline="Supervised Fine-Tuning" />
+        <div className="text-sm text-red-500">Error: {loaderData.error}</div>
+      </div>
     );
   }
   const status = loaderData;
@@ -126,10 +130,9 @@ export default function SupervisedFineTuning({
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 pb-8">
+      <PageHeader headline="Supervised Fine-Tuning" />
       <main>
-        <h2 className="mb-4 text-2xl font-semibold">Supervised Fine-Tuning</h2>
-        <div className="mb-6 h-px w-full bg-gray-200"></div>
         {status.status === "idle" && (
           <SFTForm
             config={config}

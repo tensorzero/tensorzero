@@ -20,6 +20,7 @@ import {
 import { Tooltip } from "~/components/ui/tooltip";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import PageButtons from "~/components/utils/PageButtons";
+import { PageHeader } from "~/components/layout/PageHeader";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { episode_id } = params;
@@ -145,14 +146,10 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     feedback_bounds.first_id === bottomFeedback.id;
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h2 className="mb-4 text-2xl font-semibold">
-        Episode{" "}
-        <code className="rounded bg-gray-100 p-1 text-2xl">{episode_id}</code>
-      </h2>
-      <div className="mb-6 h-px w-full bg-gray-200"></div>
+    <div className="container mx-auto px-4 pb-8">
+      <PageHeader headline={`Episode ${episode_id}`} />
 
-      <div>
+      <div className="pb-8 pt-4">
         <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">
           Inferences
           <Badge variant="secondary">Count: {num_inferences}</Badge>
@@ -167,7 +164,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         />
       </div>
 
-      <div className="mt-8">
+      <div className="pb-8 pt-4">
         <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">
           Feedback
           <TooltipProvider>
