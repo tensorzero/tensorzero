@@ -610,7 +610,7 @@ mod tests {
     };
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::tests::get_test_template_config;
-    use crate::model::ProviderConfig;
+    use crate::model::{ModelProvider, ProviderConfig};
     use crate::tool::{ToolCallConfig, ToolChoice};
     use reqwest::Client;
     use serde_json::json;
@@ -906,7 +906,12 @@ mod tests {
         // Create a model config with the dummy provider
         let model_config = ModelConfig {
             routing: vec![model_name.into()],
-            providers: HashMap::from([(model_name.into(), dummy_provider_config)]),
+            providers: HashMap::from([(
+                model_name.into(),
+                ModelProvider {
+                    config: dummy_provider_config,
+                },
+            )]),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
 
@@ -1002,7 +1007,12 @@ mod tests {
 
         let model_config_json = ModelConfig {
             routing: vec![model_name_json.into()],
-            providers: HashMap::from([(model_name_json.into(), dummy_provider_config_json)]),
+            providers: HashMap::from([(
+                model_name_json.into(),
+                ModelProvider {
+                    config: dummy_provider_config_json,
+                },
+            )]),
         };
 
         // Create the arguments struct
@@ -1049,7 +1059,12 @@ mod tests {
 
         let error_model_config = ModelConfig {
             routing: vec![error_model_name.into()],
-            providers: HashMap::from([(error_model_name.into(), error_provider_config)]),
+            providers: HashMap::from([(
+                error_model_name.into(),
+                ModelProvider {
+                    config: error_provider_config,
+                },
+            )]),
         };
 
         // Create the arguments struct
@@ -1156,8 +1171,18 @@ mod tests {
         let model_config = ModelConfig {
             routing: vec![error_model_name.into(), model_name.into()],
             providers: HashMap::from([
-                (error_model_name.into(), error_provider_config),
-                (model_name.into(), dummy_provider_config),
+                (
+                    error_model_name.into(),
+                    ModelProvider {
+                        config: error_provider_config,
+                    },
+                ),
+                (
+                    model_name.into(),
+                    ModelProvider {
+                        config: dummy_provider_config,
+                    },
+                ),
             ]),
         };
         let retry_config = Box::leak(Box::new(RetryConfig::default()));
@@ -1245,7 +1270,12 @@ mod tests {
 
         let model_config = Box::leak(Box::new(ModelConfig {
             routing: vec!["good_provider".into()],
-            providers: HashMap::from([("good_provider".into(), dummy_provider_config)]),
+            providers: HashMap::from([(
+                "good_provider".into(),
+                ModelProvider {
+                    config: dummy_provider_config,
+                },
+            )]),
         }));
 
         // Prepare the model inference request
@@ -1403,8 +1433,18 @@ mod tests {
         let model_config = Box::leak(Box::new(ModelConfig {
             routing: vec![error_model_name.into(), model_name.into()],
             providers: HashMap::from([
-                (error_model_name.into(), error_provider_config),
-                (model_name.into(), dummy_provider_config),
+                (
+                    error_model_name.into(),
+                    ModelProvider {
+                        config: error_provider_config,
+                    },
+                ),
+                (
+                    model_name.into(),
+                    ModelProvider {
+                        config: dummy_provider_config,
+                    },
+                ),
             ]),
         }));
         let retry_config = RetryConfig::default();

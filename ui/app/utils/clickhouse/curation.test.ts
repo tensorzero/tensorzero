@@ -1,7 +1,10 @@
-import { countFeedbacksForMetric } from "./curation";
+import { countFeedbacksForMetric } from "./curation.server";
 
 import { expect, test } from "vitest";
-import { countCuratedInferences, getCuratedInferences } from "./curation";
+import {
+  countCuratedInferences,
+  getCuratedInferences,
+} from "./curation.server";
 
 // Test boolean metrics
 test("countCuratedInferences for boolean metrics", async () => {

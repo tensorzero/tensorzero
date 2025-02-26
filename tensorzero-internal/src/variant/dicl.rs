@@ -25,6 +25,7 @@ use crate::{
     minijinja_util::TemplateConfig,
 };
 
+use super::chat_completion::ExtraBodyConfig;
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
     InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, RetryConfig, Variant,
@@ -48,6 +49,7 @@ pub struct DiclConfig {
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
     pub json_mode: Option<JsonMode>,
+    pub extra_body: Option<ExtraBodyConfig>,
     pub retries: RetryConfig,
 }
 
@@ -67,6 +69,8 @@ pub struct UninitializedDiclConfig {
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
     pub json_mode: Option<JsonMode>,
+    #[serde(default)]
+    pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
     pub retries: RetryConfig,
 }
@@ -485,7 +489,7 @@ impl DiclConfig {
             stream,
             inference_params,
             self.json_mode,
-            None,
+            self.extra_body.as_ref(),
         )
     }
 }
@@ -571,6 +575,7 @@ impl UninitializedDiclConfig {
             seed: self.seed,
             json_mode: self.json_mode,
             retries: self.retries,
+            extra_body: self.extra_body,
         })
     }
 }

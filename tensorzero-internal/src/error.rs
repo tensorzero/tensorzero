@@ -253,6 +253,10 @@ pub enum ErrorDetails {
     Serialization {
         message: String,
     },
+    ExtraBodyReplacement {
+        message: String,
+        pointer: String,
+    },
     StreamError {
         source: Box<Error>,
     },
@@ -310,6 +314,7 @@ impl ErrorDetails {
             ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::AppState { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreUnconfigured { .. } => tracing::Level::ERROR,
+            ErrorDetails::ExtraBodyReplacement { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => tracing::Level::WARN,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
             ErrorDetails::UnsupportedContentBlockType { .. } => tracing::Level::WARN,
@@ -385,6 +390,7 @@ impl ErrorDetails {
         match self {
             ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::ExtraBodyReplacement { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BadCredentialsPreInference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::BatchInputValidation { .. } => StatusCode::BAD_REQUEST,
@@ -509,6 +515,12 @@ impl std::fmt::Display for ErrorDetails {
                 write!(
                     f,
                     "Unsupported content block type `{content_block_type}` for provider `{provider_type}`",
+                )
+            }
+            ErrorDetails::ExtraBodyReplacement { message, pointer } => {
+                write!(
+                    f,
+                    "Error replacing extra body: `{message}` with pointer: `{pointer}`"
                 )
             }
             ErrorDetails::ApiKeyMissing { provider_name } => {
