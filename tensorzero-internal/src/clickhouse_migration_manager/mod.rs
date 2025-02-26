@@ -83,15 +83,12 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
 /// Returns Err(e) if the migration fails to apply.
 /// Returns Ok(false) if the migration should not apply.
 /// Returns Ok(true) if the migration succeeds.
-pub async fn run_migration(migration: &impl Migration) -> Result<bool, Error> {
+pub async fn run_migration(migration: &(impl Migration + ?Sized)) -> Result<bool, Error> {
     migration.can_apply().await?;
 
     if migration.should_apply().await? {
         // Get the migration name (e.g. `Migration0000`)
-        let migration_name = std::any::type_name_of_val(&migration)
-            .split("::")
-            .last()
-            .unwrap_or("Unknown migration");
+        let migration_name = migration.name();
 
         tracing::info!("Applying migration: {migration_name}");
 

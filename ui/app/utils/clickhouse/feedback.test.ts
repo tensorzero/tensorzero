@@ -8,7 +8,6 @@ import {
   type BooleanMetricFeedbackRow,
   type CommentFeedbackRow,
   type FeedbackRow,
-  type FloatMetricFeedbackRow,
 } from "./feedback";
 
 test("queryCommentFeedbackByTargetId", async () => {
@@ -150,7 +149,7 @@ test("queryFeedbackByTargetId", async () => {
     before: secondPage[secondPage.length - 1].id,
     page_size,
   });
-  expect(thirdPage).toHaveLength(8);
+  expect(thirdPage).toHaveLength(9);
 
   // Check that all pages are sorted by id in descending order
   const checkSorting = (feedback: FeedbackRow[]) => {
@@ -163,10 +162,12 @@ test("queryFeedbackByTargetId", async () => {
   checkSorting(secondPage);
   checkSorting(thirdPage);
 
-  // The last element should be a float metric
-  const lastElement = thirdPage[thirdPage.length - 1] as FloatMetricFeedbackRow;
-  expect(lastElement.metric_name).toBe("num_questions");
-  expect(lastElement.value).toBe(5);
+  // The last element should be a boolean metric (as it is the one that was overwritten)
+  const lastElement = thirdPage[
+    thirdPage.length - 1
+  ] as BooleanMetricFeedbackRow;
+  expect(lastElement.metric_name).toBe("solved");
+  expect(lastElement.value).toBe(false);
 
   // The first element should be a boolean metric
   const firstElement = firstPage[0] as BooleanMetricFeedbackRow;
@@ -174,7 +175,7 @@ test("queryFeedbackByTargetId", async () => {
   expect(firstElement.value).toBe(true);
 
   // Check total number of items
-  expect(firstPage.length + secondPage.length + thirdPage.length).toBe(28);
+  expect(firstPage.length + secondPage.length + thirdPage.length).toBe(29);
 
   const emptyFeedback = await queryFeedbackByTargetId({
     target_id: "01942e26-4693-7e80-8591-47b98e25d711",
@@ -203,7 +204,7 @@ test("queryFeedbackByTargetId", async () => {
     before: secondBackwardPage[secondBackwardPage.length - 1].id,
     page_size,
   });
-  expect(thirdBackwardPage).toHaveLength(7);
+  expect(thirdBackwardPage).toHaveLength(8);
 
   // Check that backward pages are sorted by id in descending order
   checkSorting(firstBackwardPage);
@@ -215,7 +216,7 @@ test("queryFeedbackByTargetId", async () => {
     firstBackwardPage.length +
       secondBackwardPage.length +
       thirdBackwardPage.length,
-  ).toBe(27);
+  ).toBe(28);
 });
 
 describe("queryMetricsWithFeedback", () => {

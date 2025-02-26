@@ -25,7 +25,13 @@ use super::{
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct ExtraBodyConfig {
-    pub data: serde_json::Map<String, Value>,
+    pub data: Vec<ExtraBodyReplacement>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ExtraBodyReplacement {
+    pub pointer: String,
+    pub value: Value,
 }
 
 #[derive(Debug, Default, Deserialize)]
