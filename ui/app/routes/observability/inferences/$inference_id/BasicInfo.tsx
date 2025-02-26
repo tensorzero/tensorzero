@@ -11,7 +11,8 @@ import {
 import { AddToDatasetButton } from "./AddToDatasetButton";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 
-const FF_ENABLE_DATASETS = process.env.TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
+const FF_ENABLE_DATASETS =
+  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
 
 interface BasicInfoProps {
   inference: ParsedInferenceRow;
