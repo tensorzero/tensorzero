@@ -12,11 +12,11 @@ use tokio::time::{timeout, Duration};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
-use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
+use crate::inference::types::{ContentBlockOutput, ResolvedInput};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::model::ModelTable;
 use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
@@ -24,7 +24,7 @@ use crate::{
     endpoints::inference::InferenceParams,
     error::Error,
     function::FunctionConfig,
-    inference::types::{InferenceResult, InferenceResultStream, Input},
+    inference::types::{InferenceResult, InferenceResultStream},
     minijinja_util::TemplateConfig,
     variant::chat_completion::ChatCompletionConfig,
 };
@@ -79,7 +79,7 @@ lazy_static! {
 impl Variant for BestOfNSamplingConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -101,7 +101,7 @@ impl Variant for BestOfNSamplingConfig {
 
     async fn infer_stream<'request>(
         &self,
-        _input: &Input,
+        _input: &ResolvedInput,
         _models: &'request InferenceModels<'_>,
         _function: &FunctionConfig,
         _inference_config: &'request InferenceConfig<'static, 'request>,
@@ -167,7 +167,7 @@ impl Variant for BestOfNSamplingConfig {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _input: &[Input],
+        _input: &[ResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a, 'a>],
@@ -182,7 +182,7 @@ impl BestOfNSamplingConfig {
     /// Infer each candidate variant concurrently and return the results.
     async fn infer_candidates<'a, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -256,7 +256,7 @@ impl BestOfNSamplingConfig {
     /// we randomly select one of the candidates.
     async fn select_best_candidate<'a, 'request>(
         &'a self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &ModelTable,
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
@@ -342,7 +342,7 @@ impl BestOfNSamplingConfig {
 ///  * Return the index and the model inference result.
 async fn inner_select_best_candidate<'a, 'request>(
     evaluator: &'a EvaluatorConfig,
-    input: &'request Input,
+    input: &'request ResolvedInput,
     models: &'a ModelTable,
     inference_config: &'request InferenceConfig<'a, 'request>,
     clients: &'request InferenceClients<'request>,
@@ -559,7 +559,7 @@ impl EvaluatorConfig {
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
     fn prepare_request(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         inference_config: &InferenceConfig<'_, '_>,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
@@ -1138,7 +1138,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
         };
-        let input = Input {
+        let input = ResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1217,7 +1217,7 @@ mod tests {
             );
             ModelTable::try_from(map).expect("Failed to create model table")
         };
-        let input = Input {
+        let input = ResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1278,7 +1278,7 @@ mod tests {
             );
             ModelTable::try_from(map).expect("Failed to create model table")
         };
-        let input = Input {
+        let input = ResolvedInput {
             system: None,
             messages: vec![],
         };

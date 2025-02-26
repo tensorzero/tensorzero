@@ -362,7 +362,7 @@ struct TGIRequest<'a> {
 impl<'a> TGIRequest<'a> {
     pub fn new(
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<TGIRequest<'a>, Error> {
         // TGI doesn't support JSON mode at all (only through tools [https://huggingface.co/docs/text-generation-inference/en/conceptual/guidance])
         // So we log a warning and ignore the JSON mode
@@ -378,7 +378,7 @@ impl<'a> TGIRequest<'a> {
             false => None,
         };
 
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_openai_messages(request)?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 

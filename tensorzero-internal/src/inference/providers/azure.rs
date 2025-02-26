@@ -120,7 +120,7 @@ impl InferenceProvider for AzureProvider {
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let mut request_body = serde_json::to_value(AzureRequest::new(request)).map_err(|e| {
+        let mut request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing Azure request: {e}"),
             })
@@ -196,7 +196,7 @@ impl InferenceProvider for AzureProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body = serde_json::to_value(AzureRequest::new(request)).map_err(|e| {
+        let mut request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing Azure request: {e}"),
             })
@@ -341,11 +341,11 @@ struct AzureRequest<'a> {
 }
 
 impl<'a> AzureRequest<'a> {
-    pub fn new(request: &'a ModelInferenceRequest) -> AzureRequest<'a> {
+    pub fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
         let response_format = AzureResponseFormat::new(&request.json_mode, request.output_schema);
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_openai_messages(request)?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
-        AzureRequest {
+        Ok(AzureRequest {
             messages,
             temperature: request.temperature,
             top_p: request.top_p,
@@ -357,7 +357,7 @@ impl<'a> AzureRequest<'a> {
             seed: request.seed,
             tools,
             tool_choice: tool_choice.map(AzureToolChoice::from),
-        }
+        })
     }
 }
 
@@ -506,7 +506,7 @@ mod tests {
             extra_body: None,
         };
 
-        let azure_request = AzureRequest::new(&request_with_tools);
+        let azure_request = AzureRequest::new(&request_with_tools).unwrap();
 
         assert_eq!(azure_request.messages.len(), 1);
         assert_eq!(azure_request.temperature, Some(0.5));
@@ -551,7 +551,7 @@ mod tests {
             extra_body: None,
         };
 
-        let azure_request = AzureRequest::new(&request_with_tools);
+        let azure_request = AzureRequest::new(&request_with_tools).unwrap();
 
         assert_eq!(azure_request.messages.len(), 2);
         assert_eq!(azure_request.temperature, Some(0.5));
@@ -699,7 +699,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: serde_json::to_value(AzureRequest::new(&generic_request)).unwrap(),
+            request: serde_json::to_value(AzureRequest::new(&generic_request).unwrap()).unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =

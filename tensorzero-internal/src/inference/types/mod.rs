@@ -1,12 +1,16 @@
 use derive_builder::Builder;
 use futures::stream::Peekable;
 use futures::Stream;
+use image::sanitize_raw_request;
+pub use image::{Base64Image, Image, ImageKind};
+use resolved_input::ImageWithPath;
+pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::{
     borrow::Cow,
     collections::HashMap,
-    fmt,
+    fmt::{self},
     pin::Pin,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -14,7 +18,8 @@ use std::{
 use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
-use crate::{cache::CacheData, variant::chat_completion::ExtraBodyConfig};
+use crate::variant::chat_completion::ExtraBodyConfig;
+use crate::{cache::CacheData, config_parser::ObjectStoreInfo};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{
     endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceIds},
@@ -29,6 +34,9 @@ use crate::{
 use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInsert};
 
 pub mod batch;
+pub mod image;
+pub mod resolved_input;
+pub mod storage;
 
 /*
  * Data flow in TensorZero
@@ -47,6 +55,79 @@ pub struct Input {
     pub messages: Vec<InputMessage>,
 }
 
+pub struct FetchContext<'a> {
+    pub client: &'a reqwest::Client,
+    pub object_store_info: &'a Option<ObjectStoreInfo>,
+}
+
+impl Input {
+    /// Resolves any nested network resources in the input.
+    /// Currently, this resolves input image urls into base64-encoded images.
+    pub async fn resolve(&self, context: &FetchContext<'_>) -> Result<ResolvedInput, Error> {
+        let messages = futures::future::try_join_all(
+            self.messages.iter().map(|message| message.resolve(context)),
+        )
+        .await?;
+        Ok(ResolvedInput {
+            system: self.system.clone(),
+            messages,
+        })
+    }
+}
+
+impl InputMessage {
+    pub async fn resolve(&self, context: &FetchContext<'_>) -> Result<ResolvedInputMessage, Error> {
+        let content = futures::future::try_join_all(
+            self.content.iter().map(|content| content.resolve(context)),
+        )
+        .await?;
+        Ok(ResolvedInputMessage {
+            role: self.role,
+            content,
+        })
+    }
+}
+
+impl InputMessageContent {
+    pub async fn resolve(
+        &self,
+        context: &FetchContext<'_>,
+    ) -> Result<ResolvedInputMessageContent, Error> {
+        Ok(match self {
+            InputMessageContent::Text { value } => ResolvedInputMessageContent::Text {
+                value: value.clone(),
+            },
+            InputMessageContent::ToolCall(tool_call) => {
+                ResolvedInputMessageContent::ToolCall(tool_call.clone())
+            }
+            InputMessageContent::ToolResult(tool_result) => {
+                ResolvedInputMessageContent::ToolResult(tool_result.clone())
+            }
+            InputMessageContent::RawText { value } => ResolvedInputMessageContent::RawText {
+                value: value.clone(),
+            },
+            InputMessageContent::Image(image) => {
+                let storage_kind = context
+                    .object_store_info
+                    .as_ref()
+                    .ok_or_else(|| {
+                        Error::new(ErrorDetails::ObjectStoreUnconfigured {
+                            block_type: "image".to_string(),
+                        })
+                    })?
+                    .kind
+                    .clone();
+                let image = image.clone().take_or_fetch(context.client).await?;
+                let path = storage_kind.image_path(&image)?;
+                ResolvedInputMessageContent::Image(ImageWithPath {
+                    image,
+                    storage_path: path,
+                })
+            }
+        })
+    }
+}
+
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -63,6 +144,7 @@ pub enum InputMessageContent {
     ToolCall(ToolCall),
     ToolResult(ToolResult),
     RawText { value: String },
+    Image(Image),
     // We may extend this in the future to include other types of content
 }
 
@@ -100,6 +182,7 @@ pub enum ContentBlock {
     Text(Text),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
+    Image(ImageWithPath),
     Thought(Thought),
 }
 
@@ -350,13 +433,13 @@ pub enum InferenceResultChunk {
 /// For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and ModelInferenceDatabaseInserts,
 /// which are written to ClickHouse tables of the same name asynchronously.
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct ChatInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: Input,
+    pub input: ResolvedInput,
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
@@ -365,13 +448,13 @@ pub struct ChatInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct JsonInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-    pub input: Input,
+    pub input: ResolvedInput,
     pub output: JsonInferenceOutput,
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u32>,
@@ -413,6 +496,15 @@ impl From<String> for InputMessageContent {
     }
 }
 
+#[cfg(test)]
+impl From<String> for ResolvedInputMessageContent {
+    fn from(text: String) -> Self {
+        ResolvedInputMessageContent::Text {
+            value: Value::String(text),
+        }
+    }
+}
+
 #[cfg(any(test, feature = "e2e_tests"))]
 impl From<String> for ContentBlockChatOutput {
     fn from(text: String) -> Self {
@@ -423,6 +515,12 @@ impl From<String> for ContentBlockChatOutput {
 impl From<Value> for InputMessageContent {
     fn from(value: Value) -> Self {
         InputMessageContent::Text { value }
+    }
+}
+
+impl From<Value> for ResolvedInputMessageContent {
+    fn from(value: Value) -> Self {
+        ResolvedInputMessageContent::Text { value }
     }
 }
 
@@ -617,13 +715,14 @@ impl ProviderInferenceResponse {
         usage: Usage,
         latency: Latency,
     ) -> Self {
+        let sanitized_raw_request = sanitize_raw_request(&input_messages, raw_request);
         Self {
             id: Uuid::now_v7(),
             created: current_timestamp(),
             output,
             system,
             input_messages,
-            raw_request,
+            raw_request: sanitized_raw_request,
             raw_response,
             usage,
             latency,
@@ -772,7 +871,7 @@ pub async fn parse_chat_output(
 impl ChatInferenceDatabaseInsert {
     pub fn new(
         chat_result: ChatInferenceResult,
-        input: Input,
+        input: ResolvedInput,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata
@@ -800,7 +899,7 @@ impl ChatInferenceDatabaseInsert {
 impl JsonInferenceDatabaseInsert {
     pub fn new(
         json_result: JsonInferenceResult,
-        input: Input,
+        input: ResolvedInput,
         metadata: InferenceDatabaseInsertMetadata,
     ) -> Self {
         let processing_time_ms = metadata
