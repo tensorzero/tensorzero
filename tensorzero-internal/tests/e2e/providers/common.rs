@@ -6,7 +6,6 @@ use aws_sdk_bedrockruntime::error::SdkError;
 use aws_sdk_s3::operation::get_object::GetObjectError;
 use axum::{routing::get, Router};
 use base64::prelude::*;
-#[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
 use object_store::path::Path;
 #[cfg(feature = "e2e_tests")]
