@@ -64,6 +64,8 @@ impl ObjectStoreInfo {
             StorageKind::S3Compatible {
                 bucket_name,
                 region,
+                #[cfg(feature = "e2e_tests")]
+                prefix: _,
             } => Some(Arc::new(
                 AmazonS3Builder::from_env()
                     .with_region(region)
