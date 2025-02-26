@@ -8,10 +8,12 @@ use crate::endpoints::inference::{InferenceClients, InferenceModels, InferencePa
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream, Input,
-    InputMessageContent, ModelInferenceRequest, RequestMessage, Role,
+    batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
+    ModelInferenceRequest, RequestMessage, Role,
 };
-use crate::inference::types::{InferenceResult, InputMessage};
+use crate::inference::types::{
+    InferenceResult, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
+};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
@@ -61,7 +63,7 @@ impl ChatCompletionConfig {
     pub fn prepare_request_message(
         &self,
         templates: &TemplateConfig,
-        message: &InputMessage,
+        message: &ResolvedInputMessage,
     ) -> Result<RequestMessage, Error> {
         let template_path = match message.role {
             Role::User => self.user_template.as_ref(),
@@ -70,7 +72,7 @@ impl ChatCompletionConfig {
         let mut content = Vec::new();
         for block in message.content.iter() {
             match block {
-                InputMessageContent::Text { value: text } => {
+                ResolvedInputMessageContent::Text { value: text } => {
                     let text_content= match template_path {
                         Some(template_path) => templates.template_message(
                             template_path.to_str().ok_or_else(|| Error::new(ErrorDetails::InvalidTemplatePath))?,
@@ -80,19 +82,23 @@ impl ChatCompletionConfig {
                     };
                     content.push(text_content.into());
                 }
-                InputMessageContent::RawText { value: text } => {
+                ResolvedInputMessageContent::RawText { value: text } => {
                     content.push(text.clone().into());
                 }
                 // The following two clones are probably removable.
                 // We will need to implement a ToolCallRef type or something so that we can avoid cloning the ToolCall and ToolResult.
-                InputMessageContent::ToolCall(tool_call) => {
+                ResolvedInputMessageContent::ToolCall(tool_call) => {
                     content.push(ContentBlock::ToolCall(tool_call.clone()));
                 }
-                InputMessageContent::ToolResult(tool_result) => {
+                ResolvedInputMessageContent::ToolResult(tool_result) => {
                     content.push(ContentBlock::ToolResult(tool_result.clone()));
+                }
+                ResolvedInputMessageContent::Image(image) => {
+                    content.push(ContentBlock::Image(image.clone()));
                 }
             }
         }
+
         Ok(RequestMessage {
             role: message.role,
             content,
@@ -127,7 +133,7 @@ impl ChatCompletionConfig {
 
     fn prepare_request<'a, 'request>(
         &'a self,
-        input: &Input,
+        input: &ResolvedInput,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'a, 'request>,
         stream: bool,
@@ -167,7 +173,7 @@ impl ChatCompletionConfig {
 impl Variant for ChatCompletionConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -202,7 +208,7 @@ impl Variant for ChatCompletionConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -320,7 +326,7 @@ impl Variant for ChatCompletionConfig {
 
     async fn start_batch_inference<'a>(
         &'a self,
-        inputs: &[Input],
+        inputs: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_configs: &'a [InferenceConfig<'a, 'a>],
@@ -446,7 +452,7 @@ mod tests {
         };
 
         // Test case 1: Regular user message
-        let input_message = InputMessage {
+        let input_message = ResolvedInputMessage {
             role: Role::User,
             content: vec!["Hello, how are you?".to_string().into()],
         };
@@ -464,7 +470,7 @@ mod tests {
         }
 
         // Test case 2: Assistant message
-        let input_message = InputMessage {
+        let input_message = ResolvedInputMessage {
             role: Role::Assistant,
             content: vec!["I'm doing well, thank you!".to_string().into()],
         };
@@ -484,7 +490,7 @@ mod tests {
             _ => panic!("Expected Assistant message"),
         }
         // Test case 3: Invalid JSON input
-        let input_message = InputMessage {
+        let input_message = ResolvedInputMessage {
             role: Role::User,
             content: vec![json!({"invalid": "json"}).into()],
         };
@@ -509,7 +515,7 @@ mod tests {
         };
 
         // Test case 4: Assistant message with template
-        let input_message = InputMessage {
+        let input_message = ResolvedInputMessage {
             role: Role::Assistant,
             content: vec![json!({"reason": "it's against my ethical guidelines"}).into()],
         };
@@ -530,7 +536,7 @@ mod tests {
         }
 
         // Test case 5: User message with template
-        let input_message = InputMessage {
+        let input_message = ResolvedInputMessage {
             role: Role::User,
             content: vec![json!({"name": "John", "age": 30}).into()],
         };
@@ -551,7 +557,7 @@ mod tests {
         }
 
         // Test case 6: User message with bad input (missing required field)
-        let input_message = InputMessage {
+        let input_message = ResolvedInputMessage {
             role: Role::User,
             content: vec![json!({"name": "Alice"}).into()], // Missing "age" field
         };
@@ -564,7 +570,7 @@ mod tests {
             _ => panic!("Expected MiniJinjaTemplateRender error"),
         }
         // Test case 7: User message with string content when template is provided
-        let input_message = InputMessage {
+        let input_message = ResolvedInputMessage {
             role: Role::User,
             content: vec!["This is a plain string".to_string().into()],
         };
@@ -592,7 +598,7 @@ mod tests {
         };
 
         // Test case 8: assistant message with null input and filled out template
-        let input_message = InputMessage {
+        let input_message = ResolvedInputMessage {
             role: Role::Assistant,
             content: vec![Value::Null.into()],
         };
@@ -613,7 +619,7 @@ mod tests {
         }
 
         // Test case 9: User message with null input and filled out template
-        let input_message = InputMessage {
+        let input_message = ResolvedInputMessage {
             role: Role::User,
             content: vec![Value::Null.into()],
         };
@@ -810,11 +816,11 @@ mod tests {
             )]),
         };
         // Test case 1: invalid message (String passed when template required)
-        let messages = vec![InputMessage {
+        let messages = vec![ResolvedInputMessage {
             role: Role::User,
             content: vec!["Hello".to_string().into()],
         }];
-        let input = Input {
+        let input = ResolvedInput {
             system: Some(Value::String("Hello".to_string())),
             messages,
         };
@@ -856,11 +862,11 @@ mod tests {
 
         // Test case 2: invalid model in request
         let inference_params = InferenceParams::default();
-        let messages = vec![InputMessage {
+        let messages = vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![json!({"name": "Luke", "age": 20}).into()],
         }];
-        let input = Input {
+        let input = ResolvedInput {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
@@ -1044,9 +1050,9 @@ mod tests {
             weight: 1.0,
             ..Default::default()
         };
-        let input = Input {
+        let input = ResolvedInput {
             system: None,
-            messages: vec![InputMessage {
+            messages: vec![ResolvedInputMessage {
                 role: Role::User,
                 content: vec!["What is the weather in Brooklyn?".to_string().into()],
             }],
@@ -1185,11 +1191,11 @@ mod tests {
             }
             _ => panic!("Expected Json inference response"),
         }
-        let messages = vec![InputMessage {
+        let messages = vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![json!({"name": "Luke", "age": 20}).into()],
         }];
-        let input = Input {
+        let input = ResolvedInput {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
@@ -1514,11 +1520,11 @@ mod tests {
         };
         // Test case 1: Model inference fails because of model issues
         let inference_params = InferenceParams::default();
-        let messages = vec![InputMessage {
+        let messages = vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![json!({"name": "Luke", "age": 20}).into()],
         }];
-        let input = Input {
+        let input = ResolvedInput {
             system: Some(json!({"assistant_name": "R2-D2"})),
             messages,
         };
@@ -1670,7 +1676,7 @@ mod tests {
     #[tokio::test]
     async fn test_prepare_request_params() {
         // We won't vary these parameters in this test
-        let input = Input {
+        let input = ResolvedInput {
             system: None,
             messages: vec![],
         };

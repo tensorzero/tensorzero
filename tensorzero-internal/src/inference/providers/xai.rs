@@ -302,7 +302,7 @@ struct XAIRequest<'a> {
 impl<'a> XAIRequest<'a> {
     pub fn new(
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<XAIRequest<'a>, Error> {
         let ModelInferenceRequest {
             temperature,
@@ -327,7 +327,7 @@ impl<'a> XAIRequest<'a> {
             request.output_schema,
         ));
 
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_openai_messages(request)?;
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         Ok(XAIRequest {

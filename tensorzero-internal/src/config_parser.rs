@@ -1,3 +1,6 @@
+use object_store::aws::AmazonS3Builder;
+use object_store::local::LocalFileSystem;
+use object_store::ObjectStore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -7,6 +10,7 @@ use tracing::instrument;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
+use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable};
@@ -30,13 +34,57 @@ pub struct Config<'c> {
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub templates: TemplateConfig<'c>,
+    pub object_store_info: Option<ObjectStoreInfo>,
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,
     pub debug: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct ObjectStoreInfo {
+    // This will be `None` if we have `StorageKind::Disabled`
+    pub object_store: Option<Arc<dyn ObjectStore>>,
+    pub kind: StorageKind,
+}
+
+impl ObjectStoreInfo {
+    fn new(config: Option<StorageKind>) -> Result<Option<Self>, Error> {
+        let Some(config) = config else {
+            return Ok(None);
+        };
+
+        let object_store: Option<Arc<dyn ObjectStore>> = match &config {
+            StorageKind::Filesystem { path } => Some(Arc::new(LocalFileSystem::new_with_prefix(path).map_err(|e| Error::new(ErrorDetails::Config {
+                message: format!("Failed to create filesystem object store for path: {path}: {e}"),
+            }))?)),
+            StorageKind::S3Compatible {
+                bucket_name,
+                region,
+            } => Some(Arc::new(
+                AmazonS3Builder::from_env()
+                    .with_region(region)
+                    .with_bucket_name(bucket_name)
+                    // Uses the S3 'If-Match' and 'If-None-Match' headers to implement condition put
+                    .with_conditional_put(object_store::aws::S3ConditionalPut::ETagMatch)
+                    .build()
+                    .map_err(|e| Error::new(ErrorDetails::Config {
+                        message: format!("Failed to create S3 object store for bucket: {bucket_name} in region: {region}: {e}"),
+                    }))?),
+            ),
+            StorageKind::Disabled => {
+                None
+            }
+        };
+
+        Ok(Some(Self {
+            object_store,
+            kind: config,
+        }))
+    }
 }
 
 /// Note: This struct and the impl below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag
@@ -69,6 +117,7 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
             (false, Some(enabled)) => Some(enabled),
             (false, None) => None,
         };
+
         Ok(Self {
             bind_address: config.bind_address,
             observability: ObservabilityConfig {
@@ -175,6 +224,8 @@ impl<'c> Config<'c> {
             })
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
+        let object_store_info = ObjectStoreInfo::new(config.object_storage)?;
+
         let mut config = Config {
             gateway,
             models: config.models,
@@ -183,6 +234,7 @@ impl<'c> Config<'c> {
             metrics: config.metrics,
             tools,
             templates,
+            object_store_info,
         };
 
         // Initialize the templates
@@ -359,6 +411,8 @@ struct UninitializedConfig {
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
+    #[serde(default)]
+    pub object_storage: Option<StorageKind>,
 }
 
 impl UninitializedConfig {

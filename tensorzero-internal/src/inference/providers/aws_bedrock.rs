@@ -686,6 +686,10 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
 
                 Ok(Some(BedrockContentBlock::ToolResult(tool_result_block)))
             }
+            ContentBlock::Image(_) => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                content_block_type: "image".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+            })),
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
             // output of a chat completion is used as an input to another model inference,

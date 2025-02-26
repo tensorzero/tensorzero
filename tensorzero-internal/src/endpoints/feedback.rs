@@ -633,6 +633,7 @@ mod tests {
             functions: HashMap::new(),
             tools: HashMap::new(),
             templates: TemplateConfig::new(),
+            object_store_info: None,
         };
         let inference_id = Uuid::now_v7();
         let metadata =
@@ -755,6 +756,7 @@ mod tests {
             functions: HashMap::new(),
             tools: HashMap::new(),
             templates: TemplateConfig::new(),
+            object_store_info: None,
         };
         let episode_id = Uuid::now_v7();
         let metadata =
@@ -787,6 +789,7 @@ mod tests {
             functions: HashMap::new(),
             tools: HashMap::new(),
             templates: TemplateConfig::new(),
+            object_store_info: None,
         };
         let inference_id = Uuid::now_v7();
         let metadata_err =
@@ -810,6 +813,7 @@ mod tests {
             functions: HashMap::new(),
             tools: HashMap::new(),
             templates: TemplateConfig::new(),
+            object_store_info: None,
         });
         let app_state_data = get_unit_test_app_state_data(config, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
@@ -844,6 +848,7 @@ mod tests {
             functions: HashMap::new(),
             tools: HashMap::new(),
             templates: TemplateConfig::new(),
+            object_store_info: None,
         });
         let app_state_data = get_unit_test_app_state_data(config, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
@@ -911,6 +916,7 @@ mod tests {
             functions: HashMap::new(),
             tools: HashMap::new(),
             templates: TemplateConfig::new(),
+            object_store_info: None,
         });
         let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(4.5);
@@ -977,6 +983,7 @@ mod tests {
             functions: HashMap::new(),
             tools: HashMap::new(),
             templates: TemplateConfig::new(),
+            object_store_info: None,
         });
         let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(true);
