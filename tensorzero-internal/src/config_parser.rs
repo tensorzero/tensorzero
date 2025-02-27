@@ -2085,6 +2085,10 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     async fn test_config_load_invalid_s3_creds() {
+        // Set invalid crendetials (tests are isolated per-process)
+        // to make sure that the write fails quickly.
+        std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
         let tempfile = NamedTempFile::new().unwrap();
         write!(
             &tempfile,
