@@ -7,7 +7,7 @@ use tracing::instrument;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::evals::{
-    EvalConfig, EvaluatorConfig, LLMJudgeConfig, LLMJudgeOutputType,
+    get_llm_judge_function_name, EvalConfig, EvaluatorConfig, LLMJudgeConfig, LLMJudgeOutputType,
     LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT, LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT,
     LLM_JUDGE_SYSTEM_SCHEMA_TEXT, LLM_JUDGE_USER_SCHEMA_TEXT,
 };
@@ -34,6 +34,7 @@ pub struct Config<'c> {
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
+    pub evals: HashMap<String, Arc<EvalConfig>>, // eval name => eval config TODO(Viraj): do we need the arc here?
     pub templates: TemplateConfig<'c>,
 }
 
@@ -170,17 +171,24 @@ impl<'c> Config<'c> {
             .map(|(name, config)| config.load(&name, &base_path).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
 
-        let evals = config
-            .evals
-            .into_iter()
-            .map(|(name, config)| {
-                config
-                    .load(&functions, &base_path)
-                    .map(|c| (name, Arc::new(c)))
-            })
-            .collect::<Result<HashMap<String, Arc<EvalConfig>>, Error>>()?;
-
-        // TODO (Viraj): insert the new functions from the evals into the functions map
+        let mut evals = HashMap::new();
+        for (name, config) in config.evals {
+            let (eval_config, eval_function_configs) =
+                config.load(&functions, &base_path, &name)?;
+            evals.insert(name, Arc::new(eval_config));
+            for (eval_function_name, eval_function_config) in eval_function_configs {
+                if functions.contains_key(&eval_function_name) {
+                    return Err(ErrorDetails::Config {
+                        message: format!(
+                            "Duplicate evaluator function name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
+                            eval_function_name
+                        ),
+                    }
+                    .into());
+                }
+                functions.insert(eval_function_name, eval_function_config);
+            }
+        }
 
         let tools = config
             .tools
@@ -199,6 +207,7 @@ impl<'c> Config<'c> {
             functions,
             metrics: config.metrics,
             tools,
+            evals,
             templates,
         };
 
@@ -643,7 +652,7 @@ impl UninitializedEvalConfig {
         functions: &HashMap<String, Arc<FunctionConfig>>,
         base_path: P,
         eval_name: &str,
-    ) -> Result<EvalConfig, Error> {
+    ) -> Result<(EvalConfig, HashMap<String, Arc<FunctionConfig>>), Error> {
         if !functions.contains_key(&self.function_name) {
             return Err(ErrorDetails::Config {
                 message: format!(
@@ -653,18 +662,52 @@ impl UninitializedEvalConfig {
             }
             .into());
         }
-        let evaluators = self
+        // Eval names cannot have "::" in them since we use it as a delimiter
+        if eval_name.contains("::") {
+            return Err(ErrorDetails::Config {
+                message: format!(
+                    "Eval names cannot contain \"::\" (referenced in `[evals.{eval_name}]`)"
+                ),
+            }
+            .into());
+        }
+        let evaluator_results = self
             .evaluators
             .into_iter()
-            .map(|(name, config)| config.load(base_path, eval_name, &name).map(|c| (name, c)))
-            .collect::<Result<HashMap<_, _>, Error>>()?;
-        Ok(EvalConfig {
-            evaluators,
-            dataset_name: self.dataset_name,
-            function_name: self.function_name,
-        })
+            .map(|(name, config)| {
+                config
+                    .load(&base_path, eval_name, &name)
+                    .map(|(eval_config, func_config)| (name, eval_config, func_config))
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+
+        // Create HashMaps from the results
+        let mut evaluators = HashMap::new();
+        let mut function_configs = HashMap::new();
+
+        for (evaluator_name, evaluator_config, function_config) in evaluator_results {
+            // Add to evaluators map
+            evaluators.insert(evaluator_name.clone(), evaluator_config);
+
+            // Add to function_configs map if Some
+            if let Some(config) = function_config {
+                function_configs.insert(
+                    get_llm_judge_function_name(eval_name, &evaluator_name),
+                    Arc::new(config),
+                );
+            }
+        }
+        Ok((
+            EvalConfig {
+                evaluators,
+                dataset_name: self.dataset_name,
+                function_name: self.function_name,
+            },
+            function_configs,
+        ))
     }
 }
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum UninitializedEvaluatorConfig {
@@ -683,17 +726,26 @@ struct UninitializedLLMJudgeConfig {
 impl UninitializedEvaluatorConfig {
     pub fn load<P: AsRef<Path>>(
         self,
-        base_path: P,
+        base_path: &P,
         eval_name: &str,
         evaluator_name: &str,
     ) -> Result<(EvaluatorConfig, Option<FunctionConfig>), Error> {
+        // Evaluator names cannot have "::" in them since we use it as a delimiter in our function names later on
+        if evaluator_name.contains("::") {
+            return Err(ErrorDetails::Config {
+                message: format!(
+                    "Evaluator names cannot contain \"::\" (referenced in `[evals.{eval_name}.{evaluator_name}]`)"
+                ),
+            }
+            .into());
+        }
         match self {
             UninitializedEvaluatorConfig::ExactMatch => Ok((EvaluatorConfig::ExactMatch, None)),
             UninitializedEvaluatorConfig::LLMJudge(params) => {
                 let variants = params
                     .variants
                     .into_iter()
-                    .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
+                    .map(|(name, variant)| variant.load(base_path).map(|v| (name, v)))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 let nonzero_weights = variants
                     .iter()

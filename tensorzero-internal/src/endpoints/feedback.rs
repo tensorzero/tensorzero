@@ -604,12 +604,9 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    use crate::config_parser::{Config, GatewayConfig, MetricConfig, MetricConfigOptimize};
-    use crate::embeddings::EmbeddingModelTable;
+    use crate::config_parser::{Config, MetricConfig, MetricConfigOptimize};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::JSONSchemaFromPath;
-    use crate::minijinja_util::TemplateConfig;
-    use crate::model::ModelTable;
     use crate::testing::get_unit_test_app_state_data;
     use crate::tool::{ToolCallOutput, ToolChoice};
 
@@ -626,13 +623,8 @@ mod tests {
             },
         );
         let config = Config {
-            gateway: GatewayConfig::default(),
-            models: ModelTable::default(),
-            embedding_models: EmbeddingModelTable::default(),
             metrics,
-            functions: HashMap::new(),
-            tools: HashMap::new(),
-            templates: TemplateConfig::new(),
+            ..Default::default()
         };
         let inference_id = Uuid::now_v7();
         let metadata =
@@ -748,13 +740,8 @@ mod tests {
         let mut metrics = HashMap::new();
         metrics.insert("test_metric".to_string(), metric_config);
         let config = Config {
-            gateway: GatewayConfig::default(),
-            models: ModelTable::default(),
-            embedding_models: EmbeddingModelTable::default(),
             metrics,
-            functions: HashMap::new(),
-            tools: HashMap::new(),
-            templates: TemplateConfig::new(),
+            ..Default::default()
         };
         let episode_id = Uuid::now_v7();
         let metadata =
@@ -780,13 +767,8 @@ mod tests {
     async fn test_feedback_missing_metric() {
         let metrics = HashMap::new();
         let config = Config {
-            gateway: GatewayConfig::default(),
-            models: ModelTable::default(),
-            embedding_models: EmbeddingModelTable::default(),
             metrics,
-            functions: HashMap::new(),
-            tools: HashMap::new(),
-            templates: TemplateConfig::new(),
+            ..Default::default()
         };
         let inference_id = Uuid::now_v7();
         let metadata_err =
@@ -803,13 +785,7 @@ mod tests {
     #[tokio::test]
     async fn test_feedback_handler_comment() {
         let config = Arc::new(Config {
-            gateway: GatewayConfig::default(),
-            models: ModelTable::default(),
-            embedding_models: EmbeddingModelTable::default(),
-            metrics: HashMap::new(),
-            functions: HashMap::new(),
-            tools: HashMap::new(),
-            templates: TemplateConfig::new(),
+            ..Default::default()
         });
         let app_state_data = get_unit_test_app_state_data(config, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
@@ -837,13 +813,7 @@ mod tests {
     #[tokio::test]
     async fn test_feedback_handler_demonstration() {
         let config = Arc::new(Config {
-            gateway: GatewayConfig::default(),
-            models: ModelTable::default(),
-            embedding_models: EmbeddingModelTable::default(),
-            metrics: HashMap::new(),
-            functions: HashMap::new(),
-            tools: HashMap::new(),
-            templates: TemplateConfig::new(),
+            ..Default::default()
         });
         let app_state_data = get_unit_test_app_state_data(config, true);
         let timestamp = uuid::Timestamp::from_unix_time(1579751960, 0, 0, 0);
@@ -904,13 +874,8 @@ mod tests {
             },
         );
         let config = Arc::new(Config {
-            gateway: GatewayConfig::default(),
-            models: ModelTable::default(),
-            embedding_models: EmbeddingModelTable::default(),
             metrics,
-            functions: HashMap::new(),
-            tools: HashMap::new(),
-            templates: TemplateConfig::new(),
+            ..Default::default()
         });
         let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(4.5);
@@ -970,13 +935,8 @@ mod tests {
             },
         );
         let config = Arc::new(Config {
-            gateway: GatewayConfig::default(),
-            models: ModelTable::default(),
-            embedding_models: EmbeddingModelTable::default(),
             metrics,
-            functions: HashMap::new(),
-            tools: HashMap::new(),
-            templates: TemplateConfig::new(),
+            ..Default::default()
         });
         let app_state_data = get_unit_test_app_state_data(config.clone(), true);
         let value = json!(true);
