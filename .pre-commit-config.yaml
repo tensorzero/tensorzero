@@ -97,6 +97,7 @@ repos:
       - id: ruff
         args: ["--extend-select", "I", "--fix"]
       - id: ruff-format
+
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.391
     hooks:
@@ -114,3 +115,10 @@ repos:
         args: ["--project", "clients/openai-python/pyrightconfig.json"]
         additional_dependencies:
           - openai
+
+      - id: pyright
+        name: "pyright: recipes"
+        files: ^recipes/
+        args: ["--project", "recipes/pyrightconfig.json"]
+        additional_dependencies:
+          - tiktoken
