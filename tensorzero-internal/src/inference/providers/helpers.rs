@@ -313,6 +313,9 @@ mod tests {
         );
     }
 
+    // Tests that we inject fields in the correct order when `extra_body`
+    // is set at both the variant and model provider level. Keys set in the
+    // model provider should override keys set in the variant
     #[test]
     fn test_inject_both() {
         let mut body = serde_json::json!({

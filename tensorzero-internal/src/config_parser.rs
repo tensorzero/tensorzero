@@ -1776,9 +1776,6 @@ mod tests {
         type = "dummy"
         my_bad_key = "foo"
         "#;
-        env::set_var("OPENAI_API_KEY", "sk-something");
-        env::set_var("ANTHROPIC_API_KEY", "sk-something");
-        env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
 
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
