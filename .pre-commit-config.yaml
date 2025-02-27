@@ -118,4 +118,8 @@ repos:
         files: ^recipes/
         args: ["--project", "recipes/pyrightconfig.json"]
         additional_dependencies:
+          - clickhouse-connect
+          - pandas
+          - pandas-stubs
+          - tensorzero
           - tiktoken
