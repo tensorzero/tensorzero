@@ -27,8 +27,8 @@ export function getTotalInferenceUsage(
   return model_inferences.reduce(
     (acc, curr) => {
       return {
-        input_tokens: acc.input_tokens + curr.input_tokens,
-        output_tokens: acc.output_tokens + curr.output_tokens,
+        input_tokens: acc.input_tokens + (curr.input_tokens ?? 0),
+        output_tokens: acc.output_tokens + (curr.output_tokens ?? 0),
       };
     },
     { input_tokens: 0, output_tokens: 0 },

@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 
 use reqwest::Client;
@@ -64,6 +65,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials,
     }];
 
+    let image_providers = vec![E2ETestProvider {
+        variant_name: "openai".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
+
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "openai".to_string(),
@@ -115,11 +123,110 @@ async fn get_providers() -> E2ETestProviders {
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: standard_without_o1.clone(),
         json_mode_inference: json_providers.clone(),
+        image_inference: image_providers.clone(),
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
         #[cfg(feature = "batch_tests")]
         supports_batch_inference: true,
     }
+}
+
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+pub async fn test_provider_config_extra_body() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "openai-extra-body-provider-config",
+        "episode_id": episode_id,
+        "params": {
+            "chat_completion": {
+                "temperature": 9000
+            }
+        },
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check if ClickHouse is ok - ChatInference Table
+    let clickhouse = get_clickhouse().await;
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request_val: serde_json::Value = serde_json::from_str::<Value>(raw_request).unwrap();
+
+    // This is set in both the variant and model provider extra_body, and
+    // so the model provider should win
+    assert_eq!(
+        raw_request_val
+            .get("temperature")
+            .unwrap()
+            .as_f64()
+            .expect("Temperature is not a number"),
+        0.456
+    );
+
+    // This is only set in the variant extra_body
+    assert_eq!(
+        raw_request_val
+            .get("max_completion_tokens")
+            .unwrap()
+            .as_u64()
+            .expect("max_completion_tokens is not a number"),
+        123
+    );
+
+    // This is only set in the model provider extra_body
+    assert_eq!(
+        raw_request_val
+            .get("frequency_penalty")
+            .unwrap()
+            .as_f64()
+            .expect("frequency_penalty is not a number"),
+        1.42
+    );
 }
 
 // Tests using 'model_name' with a shorthand model

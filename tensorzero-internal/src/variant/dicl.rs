@@ -5,9 +5,12 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 
+use crate::config_parser::LoadableConfig;
+use crate::config_parser::PathWithContents;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::ContentBlock;
+use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
@@ -77,7 +80,7 @@ pub struct UninitializedDiclConfig {
 impl Variant for DiclConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -143,7 +146,7 @@ impl Variant for DiclConfig {
 
     async fn infer_stream<'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -249,13 +252,13 @@ impl Variant for DiclConfig {
         Ok(())
     }
 
-    fn get_all_template_paths(&self) -> Vec<&PathBuf> {
+    fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         vec![]
     }
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _input: &[Input],
+        _input: &[ResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a, 'a>],
@@ -295,7 +298,7 @@ struct RawExample {
 impl DiclConfig {
     async fn retrieve_relevant_examples<'a>(
         &'a self,
-        input: &Input,
+        input: &ResolvedInput,
         embedding_models: &'a EmbeddingModelTable,
         clients: &InferenceClients<'_>,
         function_name: &str,
@@ -430,7 +433,7 @@ impl DiclConfig {
         Ok(messages)
     }
 
-    fn prepare_input_message(&self, input: &Input) -> Result<RequestMessage, Error> {
+    fn prepare_input_message(&self, input: &ResolvedInput) -> Result<RequestMessage, Error> {
         let content = vec![serde_json::to_string(&input)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
@@ -449,7 +452,7 @@ impl DiclConfig {
 
     fn prepare_request<'a, 'request>(
         &'a self,
-        input: &Input,
+        input: &ResolvedInput,
         examples: &[Example],
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'a, 'request>,
@@ -543,11 +546,11 @@ fn parse_raw_examples(
     Ok(examples)
 }
 
-impl UninitializedDiclConfig {
+impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
     /// Since the system instructions are optional and may be a path to a file,
     /// we need to load them here so that we can use the base_path to resolve
     /// any relative paths.
-    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<DiclConfig, Error> {
+    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<DiclConfig, Error> {
         let system_instructions = match self.system_instructions {
             Some(path) => {
                 let path = base_path.as_ref().join(path);
@@ -584,7 +587,10 @@ mod tests {
     use super::*;
     use crate::{
         function::{FunctionConfigChat, FunctionConfigJson},
-        inference::types::{InputMessage, InputMessageContent, Role, Text},
+        inference::types::{
+            InputMessage, InputMessageContent, ResolvedInputMessage, ResolvedInputMessageContent,
+            Role, Text,
+        },
         tool::{ToolCall, ToolCallOutput},
     };
     use serde_json::json;
@@ -697,25 +703,25 @@ mod tests {
         let dicl_config = DiclConfig::default();
 
         // Mock Input data
-        let input_data = Input {
+        let input_data = ResolvedInput {
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
             messages: vec![
-                InputMessage {
+                ResolvedInputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text {
+                        ResolvedInputMessageContent::Text {
                             value: json!("Hello, assistant!"),
                         },
-                        InputMessageContent::ToolCall(ToolCall {
+                        ResolvedInputMessageContent::ToolCall(ToolCall {
                             id: "tool_call_1".to_string(),
                             name: "search_tool".to_string(),
                             arguments: "{\"query\": \"rust programming\"}".to_string(),
                         }),
                     ],
                 },
-                InputMessage {
+                ResolvedInputMessage {
                     role: Role::Assistant,
-                    content: vec![InputMessageContent::Text {
+                    content: vec![ResolvedInputMessageContent::Text {
                         value: json!("Here are the search results for rust programming."),
                     }],
                 },

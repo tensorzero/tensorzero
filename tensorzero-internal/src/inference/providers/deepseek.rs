@@ -23,7 +23,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
 };
-use crate::model::{Credential, CredentialLocation};
+use crate::model::{Credential, CredentialLocation, ModelProvider};
 use crate::tool::ToolCallChunk;
 
 use super::helpers::inject_extra_body;
@@ -125,6 +125,7 @@ impl InferenceProvider for DeepSeekProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body =
             serde_json::to_value(DeepSeekRequest::new(&self.model_name, request)?).map_err(
@@ -134,7 +135,7 @@ impl InferenceProvider for DeepSeekProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&DEEPSEEK_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -207,6 +208,7 @@ impl InferenceProvider for DeepSeekProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body =
             serde_json::to_value(DeepSeekRequest::new(&self.model_name, request)?).map_err(
@@ -216,7 +218,7 @@ impl InferenceProvider for DeepSeekProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
@@ -323,7 +325,7 @@ struct DeepSeekRequest<'a> {
 impl<'a> DeepSeekRequest<'a> {
     pub fn new(
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<DeepSeekRequest<'a>, Error> {
         let ModelInferenceRequest {
             temperature,
@@ -352,7 +354,7 @@ impl<'a> DeepSeekRequest<'a> {
         // NOTE: as mentioned by the DeepSeek team here: https://github.com/deepseek-ai/DeepSeek-R1?tab=readme-ov-file#usage-recommendations
         // the R1 series of models does not perform well with the system prompt. As we move towards first-class support for reasoning models we should check
         // if a model is an R1 model and if so, remove the system prompt from the request and instead put it in the first user message.
-        let messages = prepare_deepseek_messages(request, model);
+        let messages = prepare_deepseek_messages(request, model)?;
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
 
@@ -582,14 +584,13 @@ struct DeepSeekResponse {
 }
 
 pub(super) fn prepare_deepseek_messages<'a>(
-    request: &'a ModelInferenceRequest,
+    request: &'a ModelInferenceRequest<'_>,
     model_name: &'a str,
-) -> Vec<OpenAIRequestMessage<'a>> {
-    let mut messages: Vec<OpenAIRequestMessage> = request
-        .messages
-        .iter()
-        .flat_map(tensorzero_to_openai_messages)
-        .collect();
+) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
+    let mut messages = Vec::with_capacity(request.messages.len());
+    for message in request.messages.iter() {
+        messages.extend(tensorzero_to_openai_messages(message)?);
+    }
     // If this is an R1 model, prepend the system message as the first user message instead of using it as a system message
     if model_name.to_lowercase().contains("reasoner") {
         if let Some(system) = request.system.as_deref() {
@@ -610,7 +611,7 @@ pub(super) fn prepare_deepseek_messages<'a>(
         messages.insert(0, system_msg);
     }
     messages = coalesce_consecutive_messages(messages);
-    messages
+    Ok(messages)
 }
 
 struct DeepSeekResponseWithMetadata<'a> {
@@ -1003,13 +1004,13 @@ mod tests {
             extra_body: None,
         };
 
-        let messages = prepare_deepseek_messages(&request, "deepseek-chat");
+        let messages = prepare_deepseek_messages(&request, "deepseek-chat").unwrap();
         assert_eq!(messages.len(), 2);
         assert!(matches!(messages[0], OpenAIRequestMessage::System(_)));
         assert!(matches!(messages[1], OpenAIRequestMessage::User(_)));
 
         // Test case 2: Reasoner model with system message
-        let messages = prepare_deepseek_messages(&request, "deepseek-reasoner");
+        let messages = prepare_deepseek_messages(&request, "deepseek-reasoner").unwrap();
         assert_eq!(messages.len(), 1);
         match &messages[0] {
             OpenAIRequestMessage::User(user_msg) => {
@@ -1050,7 +1051,7 @@ mod tests {
             extra_body: None,
         };
 
-        let messages = prepare_deepseek_messages(&request_no_system, "deepseek-chat");
+        let messages = prepare_deepseek_messages(&request_no_system, "deepseek-chat").unwrap();
         assert_eq!(messages.len(), 1);
         assert!(matches!(messages[0], OpenAIRequestMessage::User(_)));
 
@@ -1086,7 +1087,7 @@ mod tests {
             extra_body: None,
         };
 
-        let messages = prepare_deepseek_messages(&request_multiple, "deepseek-chat");
+        let messages = prepare_deepseek_messages(&request_multiple, "deepseek-chat").unwrap();
         assert_eq!(messages.len(), 4);
         assert!(matches!(messages[0], OpenAIRequestMessage::System(_)));
         assert!(matches!(messages[1], OpenAIRequestMessage::User(_)));

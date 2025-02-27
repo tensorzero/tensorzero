@@ -36,6 +36,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, TextChunk, Usage,
 };
+use crate::model::{ModelProvider, ModelProviderRequestInfo};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 use crate::variant::chat_completion::ExtraBodyConfig;
 
@@ -92,6 +93,7 @@ struct WithRawRequest<T, E, S, F: FnOnce() -> Result<String, Error>> {
 fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
     mut bedrock_request: CustomizableOperation<T, E, S>,
     request: &ModelInferenceRequest<'_>,
+    model_provider: &ModelProvider,
 ) -> WithRawRequest<T, E, S, impl FnOnce() -> Result<String, Error>> {
     let raw_request = Arc::new(Mutex::new(None));
     let extra_body = request.extra_body.cloned();
@@ -102,6 +104,7 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
         /// After the request is executed, we use this to retrieve the raw request.
         raw_request: Arc<Mutex<Option<String>>>,
         extra_body: Option<ExtraBodyConfig>,
+        model_provider_info: ModelProviderRequestInfo,
     }
     impl Intercept for TensorZeroInterceptor {
         fn name(&self) -> &'static str {
@@ -126,7 +129,11 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
                     message: format!("Failed to deserialize AWS Bedrock request body: {e}"),
                 })
             })?;
-            inject_extra_body(self.extra_body.as_ref(), &mut body_json)?;
+            inject_extra_body(
+                self.extra_body.as_ref(),
+                self.model_provider_info.clone(),
+                &mut body_json,
+            )?;
             let raw_request = serde_json::to_string(&body_json).map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!("Failed to serialize AWS Bedrock request body: {e}"),
@@ -156,6 +163,7 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
     let interceptor = TensorZeroInterceptor {
         raw_request: raw_request.clone(),
         extra_body,
+        model_provider_info: model_provider.into(),
     };
 
     bedrock_request = bedrock_request.interceptor(interceptor);
@@ -187,6 +195,7 @@ impl InferenceProvider for AWSBedrockProvider {
         request: &'a ModelInferenceRequest<'_>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         // TODO (#55): add support for guardrails and additional fields
 
@@ -261,7 +270,7 @@ impl InferenceProvider for AWSBedrockProvider {
         let WithRawRequest {
             bedrock_request,
             get_raw_request,
-        } = attach_interceptor(bedrock_request.customize(), request);
+        } = attach_interceptor(bedrock_request.customize(), request, model_provider);
 
         let start_time = Instant::now();
         let output = bedrock_request.send().await.map_err(|e| {
@@ -300,6 +309,7 @@ impl InferenceProvider for AWSBedrockProvider {
         request: &'a ModelInferenceRequest<'_>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         // TODO (#55): add support for guardrails and additional fields
 
@@ -371,7 +381,7 @@ impl InferenceProvider for AWSBedrockProvider {
         let WithRawRequest {
             bedrock_request,
             get_raw_request,
-        } = attach_interceptor(bedrock_request.customize(), request);
+        } = attach_interceptor(bedrock_request.customize(), request, model_provider);
 
         let start_time = Instant::now();
         let stream = bedrock_request.send().await.map_err(|e| {
@@ -676,6 +686,10 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
 
                 Ok(Some(BedrockContentBlock::ToolResult(tool_result_block)))
             }
+            ContentBlock::Image(_) => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                content_block_type: "image".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+            })),
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
             // output of a chat completion is used as an input to another model inference,

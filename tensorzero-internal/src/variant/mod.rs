@@ -6,12 +6,12 @@ use itertools::izip;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::config_parser::PathWithContents;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -19,8 +19,9 @@ use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
+use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
-    FunctionType, InferenceResultChunk, InferenceResultStream, Input, ModelInferenceRequest,
+    FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
@@ -120,7 +121,7 @@ pub struct ModelUsedInfo {
 pub trait Variant {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -130,7 +131,7 @@ pub trait Variant {
 
     async fn infer_stream<'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'_>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -148,11 +149,11 @@ pub trait Variant {
         variant_name: &str,
     ) -> Result<(), Error>;
 
-    fn get_all_template_paths(&self) -> Vec<&PathBuf>;
+    fn get_all_template_paths(&self) -> Vec<&PathWithContents>;
 
     async fn start_batch_inference<'a>(
         &'a self,
-        input: &[Input],
+        input: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_configs: &'a [InferenceConfig<'a, 'a>],
@@ -179,7 +180,7 @@ impl Variant for VariantConfig {
     )]
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -245,7 +246,7 @@ impl Variant for VariantConfig {
     )]
     async fn infer_stream<'a, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -307,7 +308,7 @@ impl Variant for VariantConfig {
     #[instrument(skip_all, fields(variant_name = %inference_configs.first().map(|x| x.variant_name.unwrap_or("")).unwrap_or("")))]
     async fn start_batch_inference<'a>(
         &'a self,
-        inputs: &[Input],
+        inputs: &[ResolvedInput],
         models: &'a InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_configs: &'a [InferenceConfig<'a, 'a>],
@@ -379,7 +380,7 @@ impl Variant for VariantConfig {
         }
     }
 
-    fn get_all_template_paths(&self) -> Vec<&PathBuf> {
+    fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         match self {
             VariantConfig::ChatCompletion(params) => params.get_all_template_paths(),
             VariantConfig::BestOfNSampling(params) => params.get_all_template_paths(),
@@ -909,6 +910,7 @@ mod tests {
                 model_name.into(),
                 ModelProvider {
                     config: dummy_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1010,6 +1012,7 @@ mod tests {
                 model_name_json.into(),
                 ModelProvider {
                     config: dummy_provider_config_json,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1062,6 +1065,7 @@ mod tests {
                 error_model_name.into(),
                 ModelProvider {
                     config: error_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1174,12 +1178,14 @@ mod tests {
                     error_model_name.into(),
                     ModelProvider {
                         config: error_provider_config,
+                        extra_body: None,
                     },
                 ),
                 (
                     model_name.into(),
                     ModelProvider {
                         config: dummy_provider_config,
+                        extra_body: None,
                     },
                 ),
             ]),
@@ -1273,6 +1279,7 @@ mod tests {
                 "good_provider".into(),
                 ModelProvider {
                     config: dummy_provider_config,
+                    extra_body: None,
                 },
             )]),
         }));
@@ -1436,12 +1443,14 @@ mod tests {
                     error_model_name.into(),
                     ModelProvider {
                         config: error_provider_config,
+                        extra_body: None,
                     },
                 ),
                 (
                     model_name.into(),
                     ModelProvider {
                         config: dummy_provider_config,
+                        extra_body: None,
                     },
                 ),
             ]),

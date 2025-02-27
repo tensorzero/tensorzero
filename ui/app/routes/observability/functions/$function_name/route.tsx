@@ -27,6 +27,7 @@ import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import FunctionVariantTable from "./FunctionVariantTable";
+import { PageHeader } from "~/components/layout/PageHeader";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -181,59 +182,57 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h2 className="mb-4 text-2xl font-semibold">
-        Function{" "}
-        <code className="rounded bg-gray-100 p-1 text-2xl">
-          {function_name}
-        </code>
-      </h2>
-      <div className="mb-6 h-px w-full bg-gray-200"></div>
-      <BasicInfo functionConfig={function_config} />
-      <div className="mb-6 h-px w-full bg-gray-200"></div>
-      <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">
-        Variants
-      </h3>
-      <FunctionVariantTable
-        variant_counts={variant_counts}
-        function_name={function_name}
-      />
-      <div className="mb-6 h-px w-full bg-gray-200"></div>
-      <MetricSelector
-        metricsWithFeedback={metricsWithFeedback}
-        selectedMetric={metric_name || ""}
-        onMetricChange={handleMetricChange}
-      />
-      {variant_performances && (
-        <div className="mt-6">
-          <VariantPerformance
-            variant_performances={variant_performances}
-            metric_name={metric_name}
-            time_granularity={time_granularity}
-            onTimeGranularityChange={handleTimeGranularityChange}
+    <div className="container mx-auto px-4 pb-8">
+      <PageHeader headline={`Function ${function_name}`} />
+      <div className="flex flex-col gap-12">
+        <BasicInfo functionConfig={function_config} />
+
+        <div className="flex flex-col gap-3">
+          <h3 className="text-xl font-medium">Variants</h3>
+          <FunctionVariantTable
+            variant_counts={variant_counts}
+            function_name={function_name}
           />
         </div>
-      )}
-      <div className="mt-6">
-        <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">
-          Inferences
-          <Badge variant="secondary">Count: {num_inferences}</Badge>
-        </h3>
-        {inferences.length > 0 ? (
-          <>
-            <FunctionInferenceTable inferences={inferences} />
-            <PageButtons
-              onPreviousPage={handlePreviousInferencePage}
-              onNextPage={handleNextInferencePage}
-              disablePrevious={disablePreviousInferencePage}
-              disableNext={disableNextInferencePage}
+
+        <div className="flex flex-col gap-3">
+          <h3 className="text-xl font-medium">Metric</h3>
+          <MetricSelector
+            metricsWithFeedback={metricsWithFeedback}
+            selectedMetric={metric_name || ""}
+            onMetricChange={handleMetricChange}
+          />
+          {variant_performances && (
+            <VariantPerformance
+              variant_performances={variant_performances}
+              metric_name={metric_name}
+              time_granularity={time_granularity}
+              onTimeGranularityChange={handleTimeGranularityChange}
             />
-          </>
-        ) : (
-          <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
-            No inferences found
-          </div>
-        )}
+          )}
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <h3 className="flex items-center gap-2 text-xl font-medium">
+            Inferences
+            <Badge variant="secondary">Count: {num_inferences}</Badge>
+          </h3>
+          {inferences.length > 0 ? (
+            <>
+              <FunctionInferenceTable inferences={inferences} />
+              <PageButtons
+                onPreviousPage={handlePreviousInferencePage}
+                onNextPage={handleNextInferencePage}
+                disablePrevious={disablePreviousInferencePage}
+                disableNext={disableNextInferencePage}
+              />
+            </>
+          ) : (
+            <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
+              No inferences found
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

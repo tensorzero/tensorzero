@@ -4,7 +4,10 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use serde_json::{json, Value};
 use tokio::sync::OnceCell;
+use url::Url;
 use uuid::Uuid;
+
+use crate::inference::types::storage::StoragePath;
 
 /// Controls whether to include raw request/response details in error output
 ///
@@ -88,6 +91,10 @@ pub enum ErrorDetails {
     BatchNotFound {
         id: Uuid,
     },
+    BadImageFetch {
+        url: Url,
+        message: String,
+    },
     Cache {
         message: String,
     },
@@ -109,6 +116,9 @@ pub enum ErrorDetails {
     },
     Config {
         message: String,
+    },
+    ObjectStoreUnconfigured {
+        block_type: String,
     },
     DynamicJsonSchema {
         message: String,
@@ -138,6 +148,10 @@ pub enum ErrorDetails {
         provider_type: String,
         raw_request: Option<String>,
         raw_response: Option<String>,
+    },
+    ObjectStoreWrite {
+        message: String,
+        path: StoragePath,
     },
     InternalError {
         message: String,
@@ -283,6 +297,10 @@ pub enum ErrorDetails {
     UnsupportedVariantForBatchInference {
         variant_name: Option<String>,
     },
+    UnsupportedContentBlockType {
+        content_block_type: String,
+        provider_type: String,
+    },
     UuidInFuture {
         raw_uuid: String,
     },
@@ -299,17 +317,21 @@ impl ErrorDetails {
             ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
             ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::AppState { .. } => tracing::Level::ERROR,
+            ErrorDetails::ObjectStoreUnconfigured { .. } => tracing::Level::ERROR,
             ErrorDetails::ExtraBodyReplacement { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => tracing::Level::WARN,
             ErrorDetails::BadCredentialsPreInference { .. } => tracing::Level::ERROR,
+            ErrorDetails::UnsupportedContentBlockType { .. } => tracing::Level::WARN,
             ErrorDetails::BatchInputValidation { .. } => tracing::Level::WARN,
             ErrorDetails::BatchNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::Cache { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
+            ErrorDetails::BadImageFetch { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
+            ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
@@ -384,15 +406,18 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseDeserialization { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseMigration { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ClickHouseQuery { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ObjectStoreWrite { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceClient { status_code, .. } => {
                 status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
             }
+            ErrorDetails::BadImageFetch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
@@ -401,6 +426,7 @@ impl ErrorDetails {
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidBaseUrl { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::UnsupportedContentBlockType { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidBatchParams { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -473,8 +499,29 @@ impl std::fmt::Display for ErrorDetails {
                         .join("\n")
                 )
             }
+            ErrorDetails::ObjectStoreWrite { message, path } => {
+                write!(
+                    f,
+                    "Error writing to object store: `{message}`. Path: {path:?}"
+                )
+            }
             ErrorDetails::InvalidInferenceTarget { message } => {
                 write!(f, "Invalid inference target: {message}")
+            }
+            ErrorDetails::BadImageFetch { url, message } => {
+                write!(f, "Error fetching image from {}: {message}", url)
+            }
+            ErrorDetails::ObjectStoreUnconfigured { block_type } => {
+                write!(f, "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block")
+            }
+            ErrorDetails::UnsupportedContentBlockType {
+                content_block_type,
+                provider_type,
+            } => {
+                write!(
+                    f,
+                    "Unsupported content block type `{content_block_type}` for provider `{provider_type}`",
+                )
             }
             ErrorDetails::ExtraBodyReplacement { message, pointer } => {
                 write!(

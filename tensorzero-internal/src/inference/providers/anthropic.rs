@@ -15,16 +15,17 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
     Latency, ModelInferenceRequestJsonMode, Role, Text,
 };
 use crate::inference::types::{
-    ContentBlockOutput, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ContentBlockOutput, ImageKind, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Usage,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
 use super::helpers::{inject_extra_body, peek_first_chunk};
@@ -125,6 +126,7 @@ impl InferenceProvider for AnthropicProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body =
             serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
@@ -134,7 +136,7 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let res = http_client
@@ -218,6 +220,7 @@ impl InferenceProvider for AnthropicProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body =
             serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
@@ -227,7 +230,7 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
@@ -438,6 +441,9 @@ enum AnthropicMessageContent<'a> {
     Text {
         text: &'a str,
     },
+    Image {
+        source: AnthropicImageSource,
+    },
     ToolResult {
         tool_use_id: &'a str,
         content: Vec<AnthropicMessageContent<'a>>,
@@ -447,6 +453,20 @@ enum AnthropicMessageContent<'a> {
         name: &'a str,
         input: Value,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct AnthropicImageSource {
+    r#type: AnthropicImageType,
+    media_type: ImageKind,
+    data: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum AnthropicImageType {
+    Base64,
 }
 
 impl<'a> TryFrom<&'a ContentBlock> for Option<AnthropicMessageContent<'a>> {
@@ -491,6 +511,16 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<AnthropicMessageContent<'a>> {
                     }],
                 }))
             }
+            ContentBlock::Image(ImageWithPath {
+                image,
+                storage_path: _,
+            }) => Ok(Some(AnthropicMessageContent::Image {
+                source: AnthropicImageSource {
+                    r#type: AnthropicImageType::Base64,
+                    media_type: image.mime_type,
+                    data: image.data()?.clone(),
+                },
+            })),
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
             // output of a chat completion is used as an input to another model inference,

@@ -25,7 +25,9 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
-use crate::model::{build_creds_caching_default_with_fn, Credential, CredentialLocation};
+use crate::model::{
+    build_creds_caching_default_with_fn, Credential, CredentialLocation, ModelProvider,
+};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::helpers::inject_extra_body;
@@ -262,6 +264,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body =
             serde_json::to_value(GCPVertexGeminiRequest::new(request, &self.model_id)?).map_err(
@@ -271,7 +274,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let api_key = self
             .credentials
             .get_api_key(&self.audience, dynamic_api_keys)?;
@@ -340,6 +343,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body =
             serde_json::to_value(GCPVertexGeminiRequest::new(request, &self.model_id)?).map_err(
@@ -349,7 +353,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -560,6 +564,11 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GCPVertexGeminiContentPart<'a>> {
                     },
                 }))
             }
+            ContentBlock::Image(_) => Err(ErrorDetails::UnsupportedContentBlockType {
+                content_block_type: "image".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+            }
+            .into()),
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
             // output of a chat completion is used as an input to another model inference,

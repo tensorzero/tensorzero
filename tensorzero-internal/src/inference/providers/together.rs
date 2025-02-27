@@ -14,7 +14,7 @@ use crate::inference::types::{
     Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::ToolChoice;
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -136,14 +136,17 @@ impl InferenceProvider for TogetherProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body =
-            serde_json::to_value(TogetherRequest::new(&self.model_name, request)).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing Together request: {e}"),
-                })
-            })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+            serde_json::to_value(TogetherRequest::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing Together request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&TOGETHER_API_BASE)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -212,14 +215,17 @@ impl InferenceProvider for TogetherProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body =
-            serde_json::to_value(TogetherRequest::new(&self.model_name, request)).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Error serializing request: {e}"),
-                })
-            })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+            serde_json::to_value(TogetherRequest::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -316,7 +322,10 @@ struct TogetherRequest<'a> {
 }
 
 impl<'a> TogetherRequest<'a> {
-    pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> TogetherRequest<'a> {
+    pub fn new(
+        model: &'a str,
+        request: &'a ModelInferenceRequest<'_>,
+    ) -> Result<TogetherRequest<'a>, Error> {
         let response_format = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 Some(TogetherResponseFormat::JsonObject {
@@ -325,7 +334,7 @@ impl<'a> TogetherRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages = prepare_together_messages(request);
+        let messages = prepare_together_messages(request)?;
 
         // NOTE: Together AI doesn't seem to support `tool_choice="none"`, so we simply don't include the `tools` field if that's the case
         let tool_choice = request
@@ -338,7 +347,7 @@ impl<'a> TogetherRequest<'a> {
             _ => prepare_openai_tools(request),
         };
 
-        TogetherRequest {
+        Ok(TogetherRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -352,22 +361,22 @@ impl<'a> TogetherRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
-        }
+        })
     }
 }
 
 pub(super) fn prepare_together_messages<'a>(
-    request: &'a ModelInferenceRequest,
-) -> Vec<OpenAIRequestMessage<'a>> {
-    let mut messages: Vec<OpenAIRequestMessage> = request
-        .messages
-        .iter()
-        .flat_map(tensorzero_to_openai_messages)
-        .collect();
+    request: &'a ModelInferenceRequest<'_>,
+) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
+    let mut messages = Vec::with_capacity(request.messages.len());
+    for message in request.messages.iter() {
+        messages.extend(tensorzero_to_openai_messages(message)?);
+    }
+
     if let Some(system_msg) = tensorzero_to_together_system_message(request.system.as_deref()) {
         messages.insert(0, system_msg);
     }
-    messages
+    Ok(messages)
 }
 
 fn tensorzero_to_together_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
@@ -848,7 +857,7 @@ mod tests {
         };
 
         let together_request =
-            TogetherRequest::new("togethercomputer/llama-v3-8b", &request_with_tools);
+            TogetherRequest::new("togethercomputer/llama-v3-8b", &request_with_tools).unwrap();
 
         assert_eq!(together_request.model, "togethercomputer/llama-v3-8b");
         assert_eq!(together_request.messages.len(), 1);
@@ -951,8 +960,10 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: serde_json::to_value(TogetherRequest::new("test-model", &generic_request))
-                .unwrap(),
+            request: serde_json::to_value(
+                TogetherRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap(),
             generic_request: &generic_request,
             parse_think_blocks: true,
         };
@@ -995,8 +1006,10 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: serde_json::to_value(TogetherRequest::new("test-model", &generic_request))
-                .unwrap(),
+            request: serde_json::to_value(
+                TogetherRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap(),
             generic_request: &generic_request,
             parse_think_blocks: true,
         };
@@ -1036,8 +1049,10 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: serde_json::to_value(TogetherRequest::new("test-model", &generic_request))
-                .unwrap(),
+            request: serde_json::to_value(
+                TogetherRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap(),
             generic_request: &generic_request,
             parse_think_blocks: true,
         };

@@ -15,6 +15,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -24,7 +25,7 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
@@ -138,13 +139,14 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing Gemini request: {e}"),
             })
         })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut url = self.request_url.clone();
@@ -213,13 +215,14 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing Gemini request: {e}"),
             })
         })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -354,7 +357,10 @@ enum GeminiPart<'a> {
     Text {
         text: &'a str,
     },
-    // TODO (if needed): InlineData { inline_data: Blob },
+    InlineData {
+        #[serde(rename = "inline_data")]
+        inline_data: GeminiInlineData<'a>,
+    },
     // TODO (if needed): FileData { file_data: FileData },
     FunctionCall {
         function_call: GeminiFunctionCall<'a>,
@@ -364,6 +370,12 @@ enum GeminiPart<'a> {
     },
     // TODO (if needed): ExecutableCode [docs](https://ai.google.dev/api/caching#ExecutableCode)
     // TODO (if needed): ExecutableCodeResult [docs](https://ai.google.dev/api/caching#CodeExecutionResult)
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+struct GeminiInlineData<'a> {
+    mime_type: String,
+    data: &'a str,
 }
 
 impl<'a> TryFrom<&'a ContentBlock> for Option<GeminiPart<'a>> {
@@ -427,6 +439,16 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GeminiPart<'a>> {
                     },
                 }))
             }
+            ContentBlock::Image(ImageWithPath {
+                image,
+                storage_path: _,
+            }) => Ok(Some(GeminiPart::InlineData {
+                inline_data: GeminiInlineData {
+                    mime_type: image.mime_type.to_string(),
+                    data: image.data()?.as_str(),
+                },
+            })),
+
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
             // output of a chat completion is used as an input to another model inference,

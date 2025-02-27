@@ -18,7 +18,7 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
 use super::helpers::inject_extra_body;
 use super::openai::{
@@ -119,6 +119,7 @@ impl InferenceProvider for XAIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request)?)
             .map_err(|e| {
@@ -126,7 +127,7 @@ impl InferenceProvider for XAIProvider {
                     message: format!("Error serializing xAI request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -199,8 +200,15 @@ impl InferenceProvider for XAIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = XAIRequest::new(&self.model_name, request)?;
+        let mut request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing xAI request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
@@ -294,7 +302,7 @@ struct XAIRequest<'a> {
 impl<'a> XAIRequest<'a> {
     pub fn new(
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<XAIRequest<'a>, Error> {
         let ModelInferenceRequest {
             temperature,
@@ -319,7 +327,7 @@ impl<'a> XAIRequest<'a> {
             request.output_schema,
         ));
 
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_openai_messages(request)?;
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         Ok(XAIRequest {

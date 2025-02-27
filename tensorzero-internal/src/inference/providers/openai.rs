@@ -24,6 +24,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
+use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
@@ -32,7 +33,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
     TextChunk, Usage,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::inference::providers::helpers::inject_extra_body;
@@ -131,6 +132,7 @@ impl InferenceProvider for OpenAIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body = serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
             .map_err(|e| {
@@ -138,7 +140,7 @@ impl InferenceProvider for OpenAIProvider {
                     message: format!("Error serializing OpenAI request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -212,6 +214,7 @@ impl InferenceProvider for OpenAIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body = serde_json::to_value(OpenAIRequest::new(&self.model_name, request)?)
             .map_err(|e| {
@@ -219,7 +222,7 @@ impl InferenceProvider for OpenAIProvider {
                     message: format!("Error serializing OpenAI request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -267,13 +270,12 @@ impl InferenceProvider for OpenAIProvider {
             self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
             None,
         )?;
-        let batch_requests: Result<Vec<OpenAIBatchFileInput>, Error> = requests
-            .iter()
-            .map(|request| {
-                OpenAIBatchFileInput::new(request.inference_id, &self.model_name, request)
-            })
-            .collect();
-        let batch_requests = batch_requests?;
+        let mut batch_requests = Vec::with_capacity(requests.len());
+        for request in requests {
+            batch_requests.push(
+                OpenAIBatchFileInput::new(request.inference_id, &self.model_name, request).await?,
+            );
+        }
         let raw_requests: Result<Vec<String>, serde_json::Error> = batch_requests
             .iter()
             .map(|b| serde_json::to_string(&b.body))
@@ -836,6 +838,13 @@ where
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAIUserContent<'a> {
     Text { text: Cow<'a, str> },
+    ImageUrl { image_url: OpenAIImageUrl },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct OpenAIImageUrl {
+    pub url: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -894,6 +903,7 @@ impl OpenAIRequestMessage<'_> {
             OpenAIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
             OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenAIUserContent::Text { text } => text.to_lowercase().contains(value),
+                OpenAIUserContent::ImageUrl { .. } => false,
             }),
             OpenAIRequestMessage::Assistant(msg) => msg
                 .content
@@ -905,13 +915,12 @@ impl OpenAIRequestMessage<'_> {
 }
 
 pub(super) fn prepare_openai_messages<'a>(
-    request: &'a ModelInferenceRequest,
-) -> Vec<OpenAIRequestMessage<'a>> {
-    let mut messages: Vec<OpenAIRequestMessage> = request
-        .messages
-        .iter()
-        .flat_map(tensorzero_to_openai_messages)
-        .collect();
+    request: &'a ModelInferenceRequest<'_>,
+) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
+    let mut messages = Vec::with_capacity(request.messages.len());
+    for message in request.messages.iter() {
+        messages.extend(tensorzero_to_openai_messages(message)?);
+    }
     if let Some(system_msg) = tensorzero_to_openai_system_message(
         request.system.as_deref(),
         &request.json_mode,
@@ -919,7 +928,7 @@ pub(super) fn prepare_openai_messages<'a>(
     ) {
         messages.insert(0, system_msg);
     }
-    messages
+    Ok(messages)
 }
 
 /// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
@@ -1000,9 +1009,12 @@ pub(super) fn tensorzero_to_openai_system_message<'a>(
     }
 }
 
+// This function returns a `Result` because of the `image.data()` - if
+// we incorrectly pass in a deserialized `Base64Image` (which will
+// have no image data), we'll produce an error.
 pub(super) fn tensorzero_to_openai_messages(
     message: &RequestMessage,
-) -> Vec<OpenAIRequestMessage<'_>> {
+) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
     let mut messages = Vec::new();
 
     for block in message.content.iter() {
@@ -1048,6 +1060,20 @@ pub(super) fn tensorzero_to_openai_messages(
                 });
                 messages.push(message);
             }
+            ContentBlock::Image(ImageWithPath {
+                image,
+                storage_path: _,
+            }) => {
+                messages.push(OpenAIRequestMessage::User(OpenAIUserRequestMessage {
+                    content: vec![OpenAIUserContent::ImageUrl {
+                        image_url: OpenAIImageUrl {
+                            // This will only produce an error if we pass in a bad
+                            // `Base64Image` (with missing image data)
+                            url: format!("data:{};base64,{}", image.mime_type, image.data()?),
+                        },
+                    }],
+                }));
+            }
             ContentBlock::Thought(_thought) => {
                 // We don't support thought blocks being passed in from a request.
                 // These are only possible to be passed in in the scenario where the
@@ -1058,7 +1084,7 @@ pub(super) fn tensorzero_to_openai_messages(
         }
     }
 
-    messages
+    Ok(messages)
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -1263,7 +1289,7 @@ struct OpenAIRequest<'a> {
 impl<'a> OpenAIRequest<'a> {
     pub fn new(
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<OpenAIRequest<'a>, Error> {
         let response_format = Some(OpenAIResponseFormat::new(
             &request.json_mode,
@@ -1276,7 +1302,7 @@ impl<'a> OpenAIRequest<'a> {
             }),
             false => None,
         };
-        let mut messages = prepare_openai_messages(request);
+        let mut messages = prepare_openai_messages(request)?;
 
         let (tools, tool_choice, mut parallel_tool_calls) = prepare_openai_tools(request);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
@@ -1324,10 +1350,10 @@ struct OpenAIBatchFileInput<'a> {
 }
 
 impl<'a> OpenAIBatchFileInput<'a> {
-    fn new(
+    async fn new(
         inference_id: Uuid,
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<Self, Error> {
         let body = OpenAIRequest::new(model, request)?;
         Ok(Self {
@@ -2614,7 +2640,7 @@ mod tests {
             role: Role::User,
             content: vec!["Hello".to_string().into()],
         };
-        let openai_messages = tensorzero_to_openai_messages(&simple_request_message);
+        let openai_messages = tensorzero_to_openai_messages(&simple_request_message).unwrap();
         assert_eq!(openai_messages.len(), 1);
         match &openai_messages[0] {
             OpenAIRequestMessage::User(content) => {
@@ -2636,7 +2662,7 @@ mod tests {
                 "How are you?".to_string().into(),
             ],
         };
-        let openai_messages = tensorzero_to_openai_messages(&multi_block_message);
+        let openai_messages = tensorzero_to_openai_messages(&multi_block_message).unwrap();
         assert_eq!(openai_messages.len(), 2);
         match &openai_messages[0] {
             OpenAIRequestMessage::User(content) => {
@@ -2673,7 +2699,7 @@ mod tests {
             role: Role::User,
             content: vec!["Hello".to_string().into(), tool_block],
         };
-        let openai_messages = tensorzero_to_openai_messages(&multi_block_message);
+        let openai_messages = tensorzero_to_openai_messages(&multi_block_message).unwrap();
         assert_eq!(openai_messages.len(), 2);
         match &openai_messages[0] {
             OpenAIRequestMessage::User(content) => {

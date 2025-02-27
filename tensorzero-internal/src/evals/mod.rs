@@ -10,6 +10,7 @@ use std::{
 use serde::Deserialize;
 
 use crate::{
+    config_parser::PathWithContents,
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
     jsonschema_util::JSONSchemaFromPath,
@@ -197,9 +198,12 @@ impl UninitializedEvaluatorConfig {
                     .count();
                 if nonzero_weights != 1 {
                     // TODO (Viraj): test this
-                    tracing::warn!(
-                        "Warning: we recommend setting up evals with exactly 1 variant with a nonzero weight. Eval `{eval_name}.{evaluator_name}` has {nonzero_weights} variants with nonzero weights."
-                    );
+                    return Err(ErrorDetails::Config {
+                        message: format!(
+                            "Evaluator `{evaluator_name}` in `[evals.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."
+                        ),
+                    }
+                    .into());
                 }
                 let system_schema_value = serde_json::from_str(LLM_JUDGE_SYSTEM_SCHEMA_TEXT)
                     .map_err(|e| {
@@ -297,19 +301,38 @@ impl UninitializedLLMJudgeVariantConfig {
                     system_instructions = system_instructions,
                     output_type = output_type
                 );
-                let variant_config = VariantConfig::ChatCompletion(ChatCompletionConfig {
+                let system_template = PathWithContents {
+                    // Not a real path but this is used as the handle everywhere as the content is already provided below
+                    path: PathBuf::from(format!(
+                        "tensorzero::llm_judge::{eval_name}::{evaluator_name}::system"
+                    )),
+                    contents: templated_system_instructions,
+                };
+                Ok(VariantConfig::ChatCompletion(ChatCompletionConfig {
                     weight: if params.active { 1.0 } else { 0.0 },
                     model: params.model,
-                });
-                todo!()
+                    system_template: Some(system_template),
+                    user_template: None,
+                    assistant_template: None,
+                    temperature: params.temperature,
+                    top_p: params.top_p,
+                    max_tokens: params.max_tokens,
+                    presence_penalty: params.presence_penalty,
+                    frequency_penalty: params.frequency_penalty,
+                    seed: params.seed,
+                    json_mode: Some(params.json_mode),
+                    retries: params.retries,
+                    extra_body: params.extra_body,
+                }))
             }
         }
     }
 }
 
-const SYSTEM_INSTRUCTIONS_KEY: &str = "you are a very helpful assistant {system_instructions}";
-
-fn read_system_instructions<P: AsRef<Path>>(path: P, base_path: &P) -> Result<String, Error> {
+fn read_system_instructions<P1: AsRef<Path>, P2: AsRef<Path>>(
+    path: P1,
+    base_path: &P2,
+) -> Result<String, Error> {
     let path = base_path.as_ref().join(path);
     let file = File::open(&path).map_err(|e| {
         Error::new(ErrorDetails::FileRead {

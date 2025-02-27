@@ -38,7 +38,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Usage,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::ToolCall;
 
 const PROVIDER_NAME: &str = "TGI";
@@ -122,6 +122,7 @@ impl InferenceProvider for TGIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         // TGI doesn't care about this field, so we can hardcode it to "tgi"
         let model_name = PROVIDER_TYPE.to_string();
@@ -131,7 +132,7 @@ impl InferenceProvider for TGIProvider {
                     message: format!("Error serializing TGI request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -208,6 +209,7 @@ impl InferenceProvider for TGIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let model_name = PROVIDER_NAME.to_lowercase().clone();
         let mut request_body = serde_json::to_value(TGIRequest::new(&model_name, request)?)
@@ -216,7 +218,7 @@ impl InferenceProvider for TGIProvider {
                     message: format!("Error serializing TGI request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         // TGI integration does not support tools in streaming mode
         if request_body.get("tools").is_some() {
             return Err(ErrorDetails::InvalidTool {
@@ -362,7 +364,7 @@ struct TGIRequest<'a> {
 impl<'a> TGIRequest<'a> {
     pub fn new(
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<TGIRequest<'a>, Error> {
         // TGI doesn't support JSON mode at all (only through tools [https://huggingface.co/docs/text-generation-inference/en/conceptual/guidance])
         // So we log a warning and ignore the JSON mode
@@ -378,7 +380,7 @@ impl<'a> TGIRequest<'a> {
             false => None,
         };
 
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_openai_messages(request)?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 

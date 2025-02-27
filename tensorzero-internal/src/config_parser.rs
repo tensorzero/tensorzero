@@ -1,3 +1,6 @@
+use object_store::aws::AmazonS3Builder;
+use object_store::local::LocalFileSystem;
+use object_store::ObjectStore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -8,6 +11,7 @@ use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::evals::{EvalConfig, UninitializedEvalConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
+use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable};
@@ -16,10 +20,10 @@ use crate::tool::{
     ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
     IMPLICIT_TOOL_NAME,
 };
-use crate::variant::best_of_n_sampling::BestOfNSamplingConfig;
-use crate::variant::chat_completion::ChatCompletionConfig;
+use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
+use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
-use crate::variant::mixture_of_n::MixtureOfNConfig;
+use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig};
 
 #[derive(Debug, Default)]
@@ -32,13 +36,59 @@ pub struct Config<'c> {
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub evals: HashMap<String, Arc<EvalConfig>>, // eval name => eval config TODO(Viraj): do we need the arc here?
     pub templates: TemplateConfig<'c>,
+    pub object_store_info: Option<ObjectStoreInfo>,
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,
     pub debug: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct ObjectStoreInfo {
+    // This will be `None` if we have `StorageKind::Disabled`
+    pub object_store: Option<Arc<dyn ObjectStore>>,
+    pub kind: StorageKind,
+}
+
+impl ObjectStoreInfo {
+    fn new(config: Option<StorageKind>) -> Result<Option<Self>, Error> {
+        let Some(config) = config else {
+            return Ok(None);
+        };
+
+        let object_store: Option<Arc<dyn ObjectStore>> = match &config {
+            StorageKind::Filesystem { path } => Some(Arc::new(LocalFileSystem::new_with_prefix(path).map_err(|e| Error::new(ErrorDetails::Config {
+                message: format!("Failed to create filesystem object store for path: {path}: {e}"),
+            }))?)),
+            StorageKind::S3Compatible {
+                bucket_name,
+                region,
+                #[cfg(feature = "e2e_tests")]
+                prefix: _,
+            } => Some(Arc::new(
+                AmazonS3Builder::from_env()
+                    .with_region(region)
+                    .with_bucket_name(bucket_name)
+                    // Uses the S3 'If-Match' and 'If-None-Match' headers to implement condition put
+                    .with_conditional_put(object_store::aws::S3ConditionalPut::ETagMatch)
+                    .build()
+                    .map_err(|e| Error::new(ErrorDetails::Config {
+                        message: format!("Failed to create S3 object store for bucket: {bucket_name} in region: {region}: {e}"),
+                    }))?),
+            ),
+            StorageKind::Disabled => {
+                None
+            }
+        };
+
+        Ok(Some(Self {
+            object_store,
+            kind: config,
+        }))
+    }
 }
 
 /// Note: This struct and the impl below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag
@@ -71,6 +121,7 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
             (false, Some(enabled)) => Some(enabled),
             (false, None) => None,
         };
+
         Ok(Self {
             bind_address: config.bind_address,
             observability: ObservabilityConfig {
@@ -155,38 +206,22 @@ impl<'c> Config<'c> {
     }
 
     fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config<'c>, Error> {
-        let config = UninitializedConfig::try_from(table)?;
+        let uninitialized_config = UninitializedConfig::try_from(table)?;
 
-        let gateway = config.gateway.unwrap_or_default().try_into()?;
+        let gateway = uninitialized_config
+            .gateway
+            .unwrap_or_default()
+            .try_into()?;
 
         let templates = TemplateConfig::new();
 
-        let mut functions = config
+        let functions = uninitialized_config
             .functions
             .into_iter()
             .map(|(name, config)| config.load(&name, &base_path).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
 
-        let mut evals = HashMap::new();
-        for (name, config) in config.evals {
-            let (eval_config, eval_function_configs) =
-                config.load(&functions, &base_path, &name)?;
-            evals.insert(name, Arc::new(eval_config));
-            for (eval_function_name, eval_function_config) in eval_function_configs {
-                if functions.contains_key(&eval_function_name) {
-                    return Err(ErrorDetails::Config {
-                        message: format!(
-                            "Duplicate evaluator function name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
-                            eval_function_name
-                        ),
-                    }
-                    .into());
-                }
-                functions.insert(eval_function_name, eval_function_config);
-            }
-        }
-
-        let tools = config
+        let tools = uninitialized_config
             .tools
             .into_iter()
             .map(|(name, config)| {
@@ -196,23 +231,49 @@ impl<'c> Config<'c> {
             })
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
+        let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
+
         let mut config = Config {
             gateway,
-            models: config.models,
-            embedding_models: config.embedding_models,
+            models: uninitialized_config.models,
+            embedding_models: uninitialized_config.embedding_models,
             functions,
-            metrics: config.metrics,
+            metrics: uninitialized_config.metrics,
             tools,
-            evals,
+            evals: HashMap::new(),
             templates,
+            object_store_info,
         };
 
         // Initialize the templates
-        let template_paths = config.get_templates(&base_path);
+        let template_paths = config.get_templates();
         config.templates.initialize(template_paths)?;
 
         // Validate the config
         config.validate()?;
+
+        // We add the evals after validation since we will be writing tensorzero:: functions to the functions map
+        let mut evals = HashMap::new();
+        for (name, eval_config) in uninitialized_config.evals {
+            let (eval_config, eval_function_configs) =
+                eval_config.load(&config.functions, &base_path, &name)?;
+            evals.insert(name, Arc::new(eval_config));
+            for (eval_function_name, eval_function_config) in eval_function_configs {
+                if config.functions.contains_key(&eval_function_name) {
+                    return Err(ErrorDetails::Config {
+                        message: format!(
+                            "Duplicate evaluator function name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
+                            eval_function_name
+                        ),
+                    }
+                    .into());
+                }
+                config
+                    .functions
+                    .insert(eval_function_name, eval_function_config);
+            }
+        }
+        config.evals = evals;
 
         Ok(config)
     }
@@ -343,7 +404,7 @@ impl<'c> Config<'c> {
     /// The HashMap returned is a mapping from the path as given in the TOML file
     /// (relative to the directory containing the TOML file) to the path on the filesystem.
     /// The former path is used as the name of the template for retrieval by variants later.
-    pub fn get_templates<P: AsRef<Path>>(&self, base_path: P) -> HashMap<String, PathBuf> {
+    pub fn get_templates(&self) -> HashMap<String, String> {
         let mut templates = HashMap::new();
 
         for function in self.functions.values() {
@@ -351,14 +412,19 @@ impl<'c> Config<'c> {
                 let variant_template_paths = variant.get_all_template_paths();
                 for path in variant_template_paths {
                     templates.insert(
-                        path.to_string_lossy().to_string(),
-                        base_path.as_ref().join(path),
+                        path.path.to_string_lossy().to_string(),
+                        path.contents.clone(),
                     );
                 }
             }
         }
         templates
     }
+}
+
+/// A trait for loading configs with a base path
+pub trait LoadableConfig<T> {
+    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<T, Error>;
 }
 
 /// This struct is used to deserialize the TOML config file
@@ -383,6 +449,7 @@ struct UninitializedConfig {
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
     #[serde(default)]
     pub evals: HashMap<String, UninitializedEvalConfig>, // eval name => eval config
+    pub object_storage: Option<StorageKind>,
 }
 
 impl UninitializedConfig {
@@ -585,28 +652,30 @@ impl UninitializedFunctionConfig {
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub enum UninitializedVariantConfig {
-    ChatCompletion(ChatCompletionConfig),
+    ChatCompletion(UninitializedChatCompletionConfig),
     #[serde(rename = "experimental_best_of_n_sampling")]
-    BestOfNSampling(BestOfNSamplingConfig),
+    BestOfNSampling(UninitializedBestOfNSamplingConfig),
     #[serde(rename = "experimental_dynamic_in_context_learning")]
     Dicl(UninitializedDiclConfig),
     #[serde(rename = "experimental_mixture_of_n")]
-    MixtureOfN(MixtureOfNConfig),
+    MixtureOfN(UninitializedMixtureOfNConfig),
 }
 
 impl UninitializedVariantConfig {
     pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<VariantConfig, Error> {
         match self {
             UninitializedVariantConfig::ChatCompletion(params) => {
-                Ok(VariantConfig::ChatCompletion(params))
+                Ok(VariantConfig::ChatCompletion(params.load(base_path)?))
             }
             UninitializedVariantConfig::BestOfNSampling(params) => {
-                Ok(VariantConfig::BestOfNSampling(params))
+                Ok(VariantConfig::BestOfNSampling(params.load(base_path)?))
             }
             UninitializedVariantConfig::Dicl(params) => {
                 Ok(VariantConfig::Dicl(params.load(base_path)?))
             }
-            UninitializedVariantConfig::MixtureOfN(params) => Ok(VariantConfig::MixtureOfN(params)),
+            UninitializedVariantConfig::MixtureOfN(params) => {
+                Ok(VariantConfig::MixtureOfN(params.load(base_path)?))
+            }
         }
     }
 }
@@ -632,6 +701,32 @@ impl UninitializedToolConfig {
             parameters,
             strict: self.strict,
         })
+    }
+}
+
+#[derive(Debug)]
+pub struct PathWithContents {
+    pub path: PathBuf,
+    pub contents: String,
+}
+
+impl PathWithContents {
+    pub fn from_path<P: AsRef<Path>>(path: PathBuf, base_path: Option<P>) -> Result<Self, Error> {
+        let full_path = if let Some(base_path) = base_path.as_ref() {
+            &base_path.as_ref().join(&path)
+        } else {
+            &path
+        };
+        let contents = std::fs::read_to_string(full_path).map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Failed to read file at {}: {}",
+                    full_path.to_string_lossy(),
+                    e
+                ),
+            })
+        })?;
+        Ok(Self { path, contents })
     }
 }
 
@@ -1370,6 +1465,24 @@ mod tests {
         );
     }
 
+    /// Ensure that the config validation fails when a variant has a template that does not exist
+    #[test]
+    fn test_config_validate_variant_template_nonexistent() {
+        let mut config = get_sample_valid_config();
+        config["functions"]["generate_draft"]["variants"]["openai_promptA"]["system_template"] =
+            "nonexistent_template".into();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+
+        assert_eq!(
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message: "Failed to read file at nonexistent_template: No such file or directory (os error 2)".to_string()
+            }
+            .into()
+        );
+    }
+
     /// Ensure that the config validation fails when a function has a tool that does not exist in the tools section
     #[test]
     fn test_config_validate_function_nonexistent_tool() {
@@ -1619,75 +1732,100 @@ mod tests {
             Config::load_from_toml(config_table, PathBuf::new()).expect("Failed to load config");
 
         // Get all templates
-        let templates = config.get_templates(PathBuf::from("/base/path"));
+        let templates = config.get_templates();
 
         // Check if all expected templates are present
         assert_eq!(
             templates
                 .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-            ))
+            Some(
+                &include_str!(
+                    "../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+                )
+                .to_string()
+            )
         );
         assert_eq!(
             templates
                 .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-            ))
+            Some(
+                &include_str!(
+                    "../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+                )
+                .to_string()
+            )
         );
         assert_eq!(
             templates.get(
                 "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
             ),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
-            ))
+            Some(
+                &include_str!(
+                "../fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
+            )
+                .to_string()
+            )
         );
         assert_eq!(
             templates.get(
                 "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
             ),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
-            ))
+            Some(
+                &include_str!(
+                "../fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
+            )
+                .to_string()
+            )
         );
         assert_eq!(
             templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
-            ))
+            Some(&include_str!(
+                "../fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
+            ).to_string()
+            )
         );
         assert_eq!(
             templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
-            ))
+            Some(&include_str!(
+                "../fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
+            ).to_string()
+            )
         );
         assert_eq!(
             templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
-            ))
+            Some(&include_str!(
+                "../fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
+            ).to_string()
+            )
         );
         assert_eq!(
             templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
-            ))
+            Some(&include_str!(
+                "../fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
+            ).to_string()
+            )
         );
         assert_eq!(
             templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
-            ))
+            Some(&include_str!(
+                "../fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
+            ).to_string()
+            )
         );
         assert_eq!(
             templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
-            ))
+            Some(&include_str!(
+                "../fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
+            ).to_string()
+            )
         );
+
+        assert_eq!(
+            templates.get("tensorzero::llm_judge::eval1::llm_judge_bool::system"),
+            Some(&"hi".to_string())
+        );
+
+        println!("template keys: {:?}", templates.keys());
 
         // Check the total number of templates
         assert_eq!(templates.len(), 10);
@@ -1725,6 +1863,36 @@ mod tests {
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         Config::load_from_toml(config, base_path.clone()).expect("Failed to load config");
+    }
+
+    #[test]
+    fn test_model_provider_unknown_field() {
+        let config_str = r#"
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                  GENERAL                                   │
+        # └────────────────────────────────────────────────────────────────────────────┘
+
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+        [functions]
+
+        [models.my-model]
+        routing = ["dummy"]
+
+        [models.my-model.providers.dummy]
+        type = "dummy"
+        my_bad_key = "foo"
+        "#;
+
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .expect_err("Config should fail to load");
+        assert!(
+            err.to_string().contains("unknown field `my_bad_key`"),
+            "Unexpected error: {err:?}"
+        );
     }
 
     /// Get a sample valid config for testing
@@ -1920,9 +2088,10 @@ mod tests {
 
         [evals.eval1.evaluators.llm_judge_bool.variants.openai_promptA]
         type = "chat_completion"
-        weight = 1.0
+        active = true
         model = "anthropic::claude-3.5-sonnet"
         system_instructions = "fixtures/config/evals/eval1/llm_judge_bool/system_instructions.txt"
+        json_mode = "implicit_tool"
 
         "#;
         env::set_var("OPENAI_API_KEY", "sk-something");
