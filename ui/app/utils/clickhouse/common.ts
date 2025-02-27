@@ -1,31 +1,6 @@
 import { z } from "zod";
 import type { FunctionConfig } from "../config/function";
 
-import { createClient } from "@clickhouse/client";
-
-export const clickhouseClient = createClient({
-  url:
-    process.env.TENSORZERO_CLICKHOUSE_URL ??
-    (() => {
-      if (process.env.CLICKHOUSE_URL) {
-        console.warn(
-          'Deprecation Warning: The environment variable "CLICKHOUSE_URL" has been renamed to "TENSORZERO_CLICKHOUSE_URL" and will be removed in a future version. Please update your environment to use "TENSORZERO_CLICKHOUSE_URL" instead.',
-        );
-        return process.env.CLICKHOUSE_URL;
-      }
-      return undefined;
-    })(),
-});
-
-export async function checkClickHouseConnection(): Promise<boolean> {
-  try {
-    const result = await clickhouseClient.ping();
-    return result.success;
-  } catch {
-    return false;
-  }
-}
-
 export const roleSchema = z.enum(["user", "assistant"]);
 export type Role = z.infer<typeof roleSchema>;
 
@@ -69,11 +44,53 @@ export const toolResultContentSchema = z
   .strict();
 export type ToolResultContent = z.infer<typeof toolResultContentSchema>;
 
+export const base64ImageSchema = z.object({
+  url: z.string().nullable(),
+  mime_type: z.string(),
+});
+export type Base64Image = z.infer<typeof base64ImageSchema>;
+
+export const storageKindSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("s3_compatible"),
+      bucket_name: z.string(),
+      region: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("filesystem"),
+      path: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("disabled"),
+    })
+    .strict(),
+]);
+export type StorageKind = z.infer<typeof storageKindSchema>;
+
+export const storagePathSchema = z.object({
+  kind: storageKindSchema,
+  path: z.string(),
+});
+export type StoragePath = z.infer<typeof storagePathSchema>;
+
+export const imageContentSchema = z.object({
+  type: z.literal("image"),
+  image: base64ImageSchema,
+  storage_path: storagePathSchema,
+});
+export type ImageContent = z.infer<typeof imageContentSchema>;
+
 // Types for input to TensorZero
 export const inputMessageContentSchema = z.discriminatedUnion("type", [
   textInputSchema,
   toolCallContentSchema,
   toolResultContentSchema,
+  imageContentSchema,
 ]);
 export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
 
@@ -104,6 +121,7 @@ export const contentBlockSchema = z.discriminatedUnion("type", [
   textContentSchema,
   toolCallContentSchema,
   toolResultContentSchema,
+  imageContentSchema,
 ]);
 export type ContentBlock = z.infer<typeof contentBlockSchema>;
 

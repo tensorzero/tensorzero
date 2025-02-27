@@ -1,7 +1,7 @@
 //! This module defines several serialization/deserialization helpers that we use to convert
 //! between Python classes and the corresponding Rust types in the Rust `tensorzero` client.
 
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 use pyo3::{exceptions::PyValueError, intern, prelude::*, sync::GILOnceCell, types::PyDict};
 use tensorzero_rust::{FeedbackResponse, InferenceResponse, InferenceResponseChunk, Tool};
@@ -69,7 +69,7 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
 
 // Converts a Python dictionary to json with `json.dumps`,
 /// then deserializes to a Rust type via serde
-pub fn deserialize_from_json<'a, T: serde::de::DeserializeOwned>(
+pub fn deserialize_from_pydict<'a, T: serde::de::DeserializeOwned>(
     py: Python<'a>,
     dict: &Bound<'a, PyAny>,
 ) -> PyResult<T> {
@@ -82,8 +82,8 @@ pub fn deserialize_from_json<'a, T: serde::de::DeserializeOwned>(
         .get(py)
         .expect("JSON_DUMPS was not initialized")
         .call(py, (dict,), Some(&kwargs))?;
-    let json_str: &str = json_str_obj.extract(py)?;
-    let val = serde_json::from_str::<T>(json_str);
+    let json_str: Cow<'_, str> = json_str_obj.extract(py)?;
+    let val = serde_json::from_str::<T>(json_str.as_ref());
     match val {
         Ok(val) => Ok(val),
         Err(e) => Err(tensorzero_internal_error(
@@ -104,7 +104,7 @@ pub fn python_uuid_to_uuid(
     // We could try to be more clever and extract the UUID bytes from Python, but for now
     // we just stringify and re-parse.
     Ok(if let Some(val) = val {
-        Some(Uuid::parse_str(val.str()?.to_str()?).map_err(|e| {
+        Some(Uuid::parse_str(&val.str()?.to_cow()?).map_err(|e| {
             PyValueError::new_err(format!("Failed to parse {param_name} as UUID: {e:?}"))
         })?)
     } else {
@@ -131,7 +131,7 @@ pub fn parse_tool(py: Python<'_>, key_vals: HashMap<String, Bound<'_, PyAny>>) -
     } else {
         false
     };
-    let tool_params: serde_json::Value = deserialize_from_json(py, params)?;
+    let tool_params: serde_json::Value = deserialize_from_pydict(py, params)?;
     Ok(Tool {
         name: name.extract()?,
         description: description.extract()?,

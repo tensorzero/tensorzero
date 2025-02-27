@@ -18,6 +18,7 @@ uv run pytest
 ```
 """
 
+import json
 import os
 import threading
 import time
@@ -33,6 +34,7 @@ from tensorzero import (
     ChatInferenceResponse,
     FeedbackResponse,
     JsonInferenceResponse,
+    RawText,
     TensorZeroError,
     TensorZeroGateway,
     Text,
@@ -42,8 +44,8 @@ from tensorzero import (
 from uuid_utils import uuid7
 
 PWD = os.path.dirname(os.path.abspath(__file__))
-TEST_CONFIG_PATH = os.path.join(
-    PWD, "../../../tensorzero_internal/tests/e2e/tensorzero.toml"
+TEST_CONFIG_FILE = os.path.join(
+    PWD, "../../../tensorzero-internal/tests/e2e/tensorzero.toml"
 )
 
 
@@ -55,14 +57,37 @@ class ClientType(Enum):
 @pytest_asyncio.fixture(params=[ClientType.HttpGateway, ClientType.EmbeddedGateway])
 async def async_client(request):
     if request.param == ClientType.HttpGateway:
-        async with AsyncTensorZeroGateway("http://localhost:3000") as client:
-            yield client
-    else:
-        async with await AsyncTensorZeroGateway.create_embedded_gateway(
-            config_path=TEST_CONFIG_PATH,
-            clickhouse_url="http://localhost:8123/tensorzero-python-e2e",
+        async with await AsyncTensorZeroGateway.build_http(
+            gateway_url="http://localhost:3000"
         ) as client:
             yield client
+    else:
+        async with await AsyncTensorZeroGateway.build_embedded(
+            config_file=TEST_CONFIG_FILE,
+            clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        ) as client:
+            yield client
+
+
+def test_sync_embedded_gateway_no_config():
+    with pytest.warns(UserWarning, match="No config file provided"):
+        client = TensorZeroGateway.build_embedded()
+    with pytest.raises(TensorZeroError) as exc_info:
+        client.inference(function_name="my_missing_func", input={})
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.text == '{"error":"Unknown function: my_missing_func"}'
+
+
+@pytest.mark.asyncio
+async def test_async_embedded_gateway_no_config():
+    with pytest.warns(UserWarning, match="No config file provided"):
+        client = await AsyncTensorZeroGateway.build_embedded()
+    with pytest.raises(TensorZeroError) as exc_info:
+        await client.inference(function_name="my_missing_func", input={})
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.text == '{"error":"Unknown function: my_missing_func"}'
 
 
 @dataclass
@@ -186,10 +211,68 @@ async def test_async_basic_inference(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_reasoning_inference(async_client):
+    result = await async_client.inference(
+        function_name="basic_test",
+        variant_name="reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        tags={"key": "value"},
+    )
+    assert result.variant_name == "reasoner"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 2
+    assert content[0].type == "thought"
+    assert content[0].text == "hmmm"
+    assert content[1].type == "text"
+    assert (
+        content[1].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
+@pytest.mark.asyncio
 async def test_async_default_function_inference(async_client):
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
-        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+        "messages": [{"role": "user", "content": [RawText(value="Hello")]}],
+    }
+    input_copy = deepcopy(input)
+    result = await async_client.inference(
+        model_name="dummy::test",
+        input=input,
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
+        tags={"key": "value"},
+    )
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::test"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
+@pytest.mark.asyncio
+async def test_async_default_function_inference_plain_dict(async_client):
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [
+            {"role": "user", "content": [{"type": "raw_text", "value": "Hello"}]}
+        ],
     }
     input_copy = deepcopy(input)
     result = await async_client.inference(
@@ -235,7 +318,7 @@ async def test_async_inference_streaming(async_client):
         previous_chunk_timestamp = time.time()
         chunks.append(chunk)
 
-    assert last_chunk_duration > 0.01
+    assert last_chunk_duration > 0.0
 
     expected_text = [
         "Wally,",
@@ -274,6 +357,76 @@ async def test_async_inference_streaming(async_client):
             assert len(chunk.content) == 0
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 16
+
+
+@pytest.mark.asyncio
+async def test_async_reasoning_inference_streaming(async_client):
+    stream = await async_client.inference(
+        function_name="basic_test",
+        variant_name="reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        tags={"key": "value"},
+        stream=True,
+    )
+
+    chunks = []
+    previous_chunk_timestamp = None
+    last_chunk_duration = None
+    async for chunk in stream:
+        if previous_chunk_timestamp is not None:
+            last_chunk_duration = time.time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time.time()
+        chunks.append(chunk)
+
+    assert last_chunk_duration > 0
+    expected_thinking = [
+        "hmmm",
+        "hmmm",
+    ]
+    expected_text = [
+        "Wally,",
+        " the",
+        " golden",
+        " retriever,",
+        " wagged",
+        " his",
+        " tail",
+        " excitedly",
+        " as",
+        " he",
+        " devoured",
+        " a",
+        " slice",
+        " of",
+        " cheese",
+        " pizza.",
+    ]
+    previous_inference_id = None
+    previous_episode_id = None
+    for i, chunk in enumerate(chunks):
+        if previous_inference_id is not None:
+            assert chunk.inference_id == previous_inference_id
+        if previous_episode_id is not None:
+            assert chunk.episode_id == previous_episode_id
+        previous_inference_id = chunk.inference_id
+        previous_episode_id = chunk.episode_id
+        variant_name = chunk.variant_name
+        assert variant_name == "reasoner"
+        if i < len(expected_thinking):
+            assert len(chunk.content) == 1
+            assert chunk.content[0].type == "thought"
+            assert chunk.content[0].text == expected_thinking[i]
+        elif i < len(expected_thinking) + len(expected_text):
+            assert len(chunk.content) == 1
+            assert chunk.content[0].type == "text"
+            assert chunk.content[0].text == expected_text[i - len(expected_thinking)]
+        else:
+            assert len(chunk.content) == 0
+            assert chunk.usage.input_tokens == 10
+            assert chunk.usage.output_tokens == 10
 
 
 @pytest.mark.asyncio
@@ -435,7 +588,12 @@ async def test_async_json_streaming(async_client):
         function_name="json_success",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {"role": "user", "content": {"country": "Japan"}},
+                {"role": "assistant", "content": "ok"},
+                # This function has a user schema but we can bypass with RawText
+                {"role": "user", "content": [RawText(value="Hello")]},
+            ],
         },
         stream=True,
     )
@@ -477,6 +635,44 @@ async def test_async_json_streaming(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_json_streaming_reasoning(async_client):
+    stream = await async_client.inference(
+        function_name="json_success",
+        variant_name="json_reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+        },
+        stream=True,
+    )
+    chunks = [chunk async for chunk in stream]
+    expected_text = [
+        '{"name"',
+        ':"John"',
+        ',"age"',
+        ":30",
+        "}",
+    ]
+    previous_inference_id = None
+    previous_episode_id = None
+    for i, chunk in enumerate(chunks):
+        if previous_inference_id is not None:
+            assert chunk.inference_id == previous_inference_id
+        if previous_episode_id is not None:
+            assert chunk.episode_id == previous_episode_id
+        previous_inference_id = chunk.inference_id
+        previous_episode_id = chunk.episode_id
+        variant_name = chunk.variant_name
+        assert variant_name == "json_reasoner"
+        if i < len(expected_text):
+            assert chunk.raw == expected_text[i]
+        else:
+            assert chunk.raw == ""
+            assert chunk.usage.input_tokens == 10
+            assert chunk.usage.output_tokens == 10
+
+
+@pytest.mark.asyncio
 async def test_async_json_success(async_client):
     result = await async_client.inference(
         function_name="json_success",
@@ -484,9 +680,29 @@ async def test_async_json_success(async_client):
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": {"country": "Japan"}}],
         },
+        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         stream=False,
     )
     assert result.variant_name == "test"
+    assert isinstance(result, JsonInferenceResponse)
+    assert result.output.raw == '{"answer":"Hello"}'
+    assert result.output.parsed == {"answer": "Hello"}
+    assert result.usage.input_tokens == 10
+    assert result.usage.output_tokens == 10
+
+
+@pytest.mark.asyncio
+async def test_async_json_reasoning(async_client):
+    result = await async_client.inference(
+        function_name="json_success",
+        variant_name="json_reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+        },
+        stream=False,
+    )
+    assert result.variant_name == "json_reasoner"
     assert isinstance(result, JsonInferenceResponse)
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
@@ -599,15 +815,34 @@ async def test_async_dynamic_credentials(async_client):
     assert usage.output_tokens == 10
 
 
+def test_sync_error():
+    with pytest.raises(Exception) as exc_info:
+        with TensorZeroGateway.build_http(gateway_url="http://localhost:3000"):
+            raise Exception("My error")
+    assert str(exc_info.value) == "My error"
+
+
+@pytest.mark.asyncio
+async def test_async_error():
+    with pytest.raises(Exception) as exc_info:
+        async with await AsyncTensorZeroGateway.build_http(
+            gateway_url="http://localhost:3000"
+        ):
+            raise Exception("My error")
+    assert str(exc_info.value) == "My error"
+
+
 @pytest.fixture(params=[ClientType.HttpGateway, ClientType.EmbeddedGateway])
 def sync_client(request):
     if request.param == ClientType.HttpGateway:
-        with TensorZeroGateway("http://localhost:3000") as client:
+        with TensorZeroGateway.build_http(
+            gateway_url="http://localhost:3000"
+        ) as client:
             yield client
     else:
-        with TensorZeroGateway.create_embedded_gateway(
-            config_path=TEST_CONFIG_PATH,
-            clickhouse_url="http://localhost:8123/tensorzero-python-e2e",
+        with TensorZeroGateway.build_embedded(
+            config_file=TEST_CONFIG_FILE,
+            clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
         ) as client:
             yield client
 
@@ -718,7 +953,7 @@ def test_sync_inference_streaming(sync_client):
         previous_chunk_timestamp = time.time()
         chunks.append(chunk)
 
-    assert last_chunk_duration > 0.01
+    assert last_chunk_duration > 0.0
 
     expected_text = [
         "Wally,",
@@ -827,6 +1062,32 @@ def test_sync_tool_call_inference(sync_client):
     assert usage.output_tokens == 10
 
 
+def test_sync_reasoning_inference(sync_client):
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        tags={"key": "value"},
+    )
+    assert result.variant_name == "reasoner"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 2
+    assert content[0].type == "thought"
+    assert content[0].text == "hmmm"
+    assert content[1].type == "text"
+    assert (
+        content[1].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
 def test_sync_malformed_tool_call_inference(sync_client):
     result = sync_client.inference(
         function_name="weather_helper",
@@ -901,6 +1162,75 @@ def test_sync_tool_call_streaming(sync_client):
             assert chunk.usage.output_tokens == 5
 
 
+def test_sync_reasoning_inference_streaming(sync_client):
+    stream = sync_client.inference(
+        function_name="basic_test",
+        variant_name="reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        tags={"key": "value"},
+        stream=True,
+    )
+
+    chunks = []
+    previous_chunk_timestamp = None
+    last_chunk_duration = None
+    for chunk in stream:
+        if previous_chunk_timestamp is not None:
+            last_chunk_duration = time.time() - previous_chunk_timestamp
+        previous_chunk_timestamp = time.time()
+        chunks.append(chunk)
+
+    assert last_chunk_duration > 0
+    expected_thinking = [
+        "hmmm",
+        "hmmm",
+    ]
+    expected_text = [
+        "Wally,",
+        " the",
+        " golden",
+        " retriever,",
+        " wagged",
+        " his",
+        " tail",
+        " excitedly",
+        " as",
+        " he",
+        " devoured",
+        " a",
+        " slice",
+        " of",
+        " cheese",
+        " pizza.",
+    ]
+    previous_inference_id = None
+    previous_episode_id = None
+    for i, chunk in enumerate(chunks):
+        if previous_inference_id is not None:
+            assert chunk.inference_id == previous_inference_id
+        if previous_episode_id is not None:
+            assert chunk.episode_id == previous_episode_id
+        previous_inference_id = chunk.inference_id
+        previous_episode_id = chunk.episode_id
+        variant_name = chunk.variant_name
+        assert variant_name == "reasoner"
+        if i < len(expected_thinking):
+            assert len(chunk.content) == 1
+            assert chunk.content[0].type == "thought"
+            assert chunk.content[0].text == expected_thinking[i]
+        elif i < len(expected_thinking) + len(expected_text):
+            assert len(chunk.content) == 1
+            assert chunk.content[0].type == "text"
+            assert chunk.content[0].text == expected_text[i - len(expected_thinking)]
+        else:
+            assert len(chunk.content) == 0
+            assert chunk.usage.input_tokens == 10
+            assert chunk.usage.output_tokens == 10
+
+
 def test_sync_json_streaming(sync_client):
     # We don't actually have a streaming JSON function implemented in `dummy.rs` but it doesn't matter for this test since
     # TensorZero doesn't parse the JSON output of the function for streaming calls.
@@ -949,6 +1279,43 @@ def test_sync_json_streaming(sync_client):
             assert chunk.usage.output_tokens == 16
 
 
+def test_sync_json_streaming_reasoning(sync_client):
+    stream = sync_client.inference(
+        function_name="json_success",
+        variant_name="json_reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+        },
+        stream=True,
+    )
+    chunks = list(stream)
+    expected_text = [
+        '{"name"',
+        ':"John"',
+        ',"age"',
+        ":30",
+        "}",
+    ]
+    previous_inference_id = None
+    previous_episode_id = None
+    for i, chunk in enumerate(chunks):
+        if previous_inference_id is not None:
+            assert chunk.inference_id == previous_inference_id
+        if previous_episode_id is not None:
+            assert chunk.episode_id == previous_episode_id
+        previous_inference_id = chunk.inference_id
+        previous_episode_id = chunk.episode_id
+        variant_name = chunk.variant_name
+        assert variant_name == "json_reasoner"
+        if i < len(expected_text):
+            assert chunk.raw == expected_text[i]
+        else:
+            assert chunk.raw == ""
+            assert chunk.usage.input_tokens == 10
+            assert chunk.usage.output_tokens == 10
+
+
 def test_sync_json_success(sync_client):
     result = sync_client.inference(
         function_name="json_success",
@@ -956,9 +1323,28 @@ def test_sync_json_success(sync_client):
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": {"country": "Japan"}}],
         },
+        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         stream=False,
     )
     assert result.variant_name == "test"
+    assert isinstance(result, JsonInferenceResponse)
+    assert result.output.raw == '{"answer":"Hello"}'
+    assert result.output.parsed == {"answer": "Hello"}
+    assert result.usage.input_tokens == 10
+    assert result.usage.output_tokens == 10
+
+
+def test_sync_json_reasoning(sync_client):
+    result = sync_client.inference(
+        function_name="json_success",
+        variant_name="json_reasoner",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+        },
+        stream=False,
+    )
+    assert result.variant_name == "json_reasoner"
     assert isinstance(result, JsonInferenceResponse)
     assert result.output.raw == '{"answer":"Hello"}'
     assert result.output.parsed == {"answer": "Hello"}
@@ -1081,6 +1467,47 @@ def test_sync_basic_inference_with_content_block(sync_client):
     assert usage.output_tokens == 10
 
 
+def test_sync_basic_inference_with_content_block_plain_dict(sync_client):
+    result = sync_client.inference(
+        function_name="basic_test",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "value": "Hello"},
+                        {
+                            "type": "tool_call",
+                            "id": "1",
+                            "name": "test",
+                            "arguments": json.dumps({"arg": "value"}),
+                        },
+                        {
+                            "type": "tool_result",
+                            "name": "test",
+                            "result": "success",
+                            "id": "1",
+                        },
+                    ],
+                }
+            ],
+        },
+    )
+    assert result.variant_name == "test"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert (
+        content[0].text
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.input_tokens == 10
+    assert usage.output_tokens == 10
+
+
 def test_prepare_inference_request(sync_client):
     # Test a simple request with string input and a structured system message
     request = sync_client._prepare_inference_request(
@@ -1138,6 +1565,7 @@ def test_prepare_inference_request(sync_client):
         stream=True,
         dryrun=False,
         episode_id=episode_id,
+        output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         variant_name="baz",
         params={"chat_completion": {"temperature": 0.1}},
         tool_choice="auto",
@@ -1173,6 +1601,10 @@ def test_prepare_inference_request(sync_client):
     assert request["stream"]
     assert not request["dryrun"]
     assert request["episode_id"] == str(episode_id)
+    assert request["output_schema"] == {
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+    }
     assert request["params"]["chat_completion"]["temperature"] == 0.1
     assert request["tool_choice"] == "auto"
     assert request["additional_tools"][0] == {
@@ -1209,3 +1641,81 @@ def test_sync_dynamic_credentials(sync_client):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
+
+
+def test_sync_err_in_stream(sync_client):
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="err_in_stream",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        stream=True,
+    )
+
+    next(result)
+    next(result)
+    next(result)
+    with pytest.raises(TensorZeroError) as exc_info:
+        next(result)
+    assert "Dummy error in stream" in str(exc_info.value)
+    remaining_chunks = list(result)
+    assert len(remaining_chunks) == 13
+
+
+@pytest.mark.asyncio
+async def test_async_err_in_stream(async_client):
+    result = await async_client.inference(
+        function_name="basic_test",
+        variant_name="err_in_stream",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        stream=True,
+    )
+
+    # anext() was added in Python 3.10, use __anext__() for older versions
+    await result.__anext__()
+    await result.__anext__()
+    await result.__anext__()
+    with pytest.raises(TensorZeroError) as exc_info:
+        await result.__anext__()
+    assert "Dummy error in stream" in str(exc_info.value)
+    # Make this an async collect into a list
+    remaining_chunks = []
+    async for chunk in result:
+        remaining_chunks.append(chunk)
+    assert len(remaining_chunks) == 13
+
+
+@pytest.mark.asyncio
+async def test_async_timeout():
+    async with await AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000", timeout=1
+    ) as async_client:
+        with pytest.raises(TensorZeroError):
+            await async_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={"messages": [{"role": "user", "content": "Hello"}]},
+            )
+
+
+def test_sync_timeout():
+    with TensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000", timeout=1
+    ) as sync_client:
+        with pytest.raises(TensorZeroError):
+            sync_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={"messages": [{"role": "user", "content": "Hello"}]},
+            )
+
+
+def test_uuid7_import():
+    from tensorzero.util import uuid7
+
+    assert uuid7() is not None

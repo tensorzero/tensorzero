@@ -14,12 +14,7 @@ The format is `YYYY.MM.PATCH` (e.g. `2025.01.0`, `2025.01.1`).
 
 ## Python Client
 
-From `clients/python`, run:
-
-```bash
-uv build
-uv publish --token $PYPI_TOKEN
-```
+The Python client is published to PyPI via GitHub Actions automatically when a new release is made.
 
 ## Gateway Docker Container
 
@@ -44,7 +39,7 @@ DOCKER_BUILDKIT=1 docker buildx build \
   --attest type=provenance,mode=max \
   --attest type=sbom \
   --push \
-  gateway/
+  .
 ```
 
 > [!IMPORTANT]

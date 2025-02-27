@@ -25,7 +25,8 @@ from uuid import UUID
 
 import pytest
 import pytest_asyncio
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, BadRequestError
+from pydantic import BaseModel, ValidationError
 from tensorzero.util import uuid7
 
 
@@ -38,7 +39,7 @@ async def async_client():
 
 
 @pytest.mark.asyncio
-async def test_async_basic_inference(async_client):
+async def test_async_basic_inference_old_model_format(async_client):
     messages = [
         {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
         {"role": "user", "content": "Hello"},
@@ -47,7 +48,7 @@ async def test_async_basic_inference(async_client):
     result = await async_client.chat.completions.create(
         extra_headers={"episode_id": str(uuid7())},
         messages=messages,
-        model="tensorzero::basic_test",
+        model="tensorzero::function_name::basic_test",
         temperature=0.4,
     )
     # Verify IDs are valid UUIDs
@@ -64,6 +65,55 @@ async def test_async_basic_inference(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_basic_inference(async_client):
+    messages = [
+        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {"role": "user", "content": "Hello"},
+    ]
+
+    result = await async_client.chat.completions.create(
+        extra_headers={"episode_id": str(uuid7())},
+        messages=messages,
+        model="tensorzero::function_name::basic_test",
+        temperature=0.4,
+    )
+    # Verify IDs are valid UUIDs
+    UUID(result.id)  # Will raise ValueError if invalid
+    UUID(result.episode_id)  # Will raise ValueError if invalid
+    assert (
+        result.choices[0].message.content
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.prompt_tokens == 10
+    assert usage.completion_tokens == 10
+    assert usage.total_tokens == 20
+
+
+class DummyModel(BaseModel):
+    name: str
+
+
+@pytest.mark.asyncio
+async def test_async_basic_inference_json_schema(async_client):
+    messages = [
+        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {"role": "user", "content": "Hello"},
+    ]
+
+    with pytest.raises(ValidationError) as exc_info:
+        await async_client.beta.chat.completions.parse(
+            extra_headers={"episode_id": str(uuid7())},
+            messages=messages,
+            model="tensorzero::function_name::basic_test",
+            temperature=0.4,
+            response_format=DummyModel,
+        )
+
+    assert "Megumin gleefully" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
 async def test_async_inference_streaming(async_client):
     start_time = time()
     messages = [
@@ -73,7 +123,7 @@ async def test_async_inference_streaming(async_client):
     stream = await async_client.chat.completions.create(
         extra_headers={"episode_id": str(uuid7())},
         messages=messages,
-        model="tensorzero::basic_test",
+        model="tensorzero::function_name::basic_test",
         stream=True,
         max_tokens=300,
         seed=69,
@@ -138,7 +188,7 @@ async def test_async_inference_streaming_nonexistent_function(async_client):
                 "episode_id": str(uuid7()),
             },
             messages=messages,
-            model="tensorzero::does_not_exist",
+            model="tensorzero::function_name::does_not_exist",
         )
     assert exc_info.value.status_code == 404
     assert (
@@ -160,12 +210,12 @@ async def test_async_inference_streaming_missing_function(async_client):
                 "episode_id": str(uuid7()),
             },
             messages=messages,
-            model="tensorzero::",
+            model="tensorzero::function_name::",
         )
     assert exc_info.value.status_code == 400
     assert (
         str(exc_info.value)
-        == "Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: function_name (passed in model field after \"tensorzero::\") cannot be empty'}"
+        == "Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: function_name (passed in model field after \"tensorzero::function_name::\") cannot be empty'}"
     )
 
 
@@ -187,7 +237,7 @@ async def test_async_inference_streaming_malformed_function(async_client):
     assert exc_info.value.status_code == 400
     assert (
         str(exc_info.value)
-        == "Error code: 400 - {'error': \"Invalid request to OpenAI-compatible endpoint: model name must start with 'tensorzero::'\"}"
+        == "Error code: 400 - {'error': 'Invalid request to OpenAI-compatible endpoint: `model` field must start with `tensorzero::function_name::` or `tensorzero::model_name::`. For example, `tensorzero::function_name::my_function` for a function `my_function` defined in your config, `tensorzero::model_name::my_model` for a model `my_model` defined in your config, or default functions like `tensorzero::model_name::openai::gpt-4o-mini`.'}"
     )
 
 
@@ -218,7 +268,7 @@ async def test_async_inference_streaming_malformed_input(async_client):
         await async_client.chat.completions.create(
             extra_headers={"episode_id": str(uuid7())},
             messages=messages,
-            model="tensorzero::basic_test",
+            model="tensorzero::function_name::basic_test",
             stream=True,
         )
     assert exc_info.value.status_code == 400
@@ -240,7 +290,7 @@ async def test_async_tool_call_inference(async_client):
     result = await async_client.chat.completions.create(
         extra_headers={"episode_id": str(uuid7())},
         messages=messages,
-        model="tensorzero::weather_helper",
+        model="tensorzero::function_name::weather_helper",
         top_p=0.5,
     )
     assert result.model == "variant"
@@ -272,7 +322,7 @@ async def test_async_malformed_tool_call_inference(async_client):
             "variant_name": "bad_tool",
         },
         messages=messages,
-        model="tensorzero::weather_helper",
+        model="tensorzero::function_name::weather_helper",
         presence_penalty=0.5,
     )
     assert result.model == "bad_tool"
@@ -301,7 +351,7 @@ async def test_async_tool_call_streaming(async_client):
     stream = await async_client.chat.completions.create(
         extra_headers={"episode_id": str(uuid7())},
         messages=messages,
-        model="tensorzero::weather_helper",
+        model="tensorzero::function_name::weather_helper",
         stream=True,
     )
     chunks = [chunk async for chunk in stream]
@@ -349,7 +399,7 @@ async def test_async_json_streaming(async_client):
     stream = await async_client.chat.completions.create(
         extra_headers={"episode_id": str(uuid7())},
         messages=messages,
-        model="tensorzero::json_success",
+        model="tensorzero::function_name::json_success",
         stream=True,
     )
     chunks = [chunk async for chunk in stream]
@@ -391,6 +441,39 @@ async def test_async_json_streaming(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_json_success_non_deprecated(async_client):
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+            ],
+        },
+    ]
+    episode_id = str(uuid7())
+    result = await async_client.chat.completions.create(
+        extra_headers={"episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::function_name::json_success",
+    )
+    assert result.model == "test"
+    assert result.episode_id == episode_id
+    assert result.choices[0].message.content == '{"answer":"Hello"}'
+    assert result.choices[0].message.tool_calls is None
+    assert result.usage.prompt_tokens == 10
+    assert result.usage.completion_tokens == 10
+
+
+@pytest.mark.asyncio
 async def test_async_json_success(async_client):
     messages = [
         {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
@@ -400,7 +483,7 @@ async def test_async_json_success(async_client):
     result = await async_client.chat.completions.create(
         extra_headers={"episode_id": episode_id},
         messages=messages,
-        model="tensorzero::json_success",
+        model="tensorzero::function_name::json_success",
     )
     assert result.model == "test"
     assert result.episode_id == episode_id
@@ -408,6 +491,33 @@ async def test_async_json_success(async_client):
     assert result.choices[0].message.tool_calls is None
     assert result.usage.prompt_tokens == 10
     assert result.usage.completion_tokens == 10
+
+
+@pytest.mark.asyncio
+async def test_async_json_invalid_system(async_client):
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/image.jpg"},
+                }
+            ],
+        },
+        {"role": "user", "content": [{"country": "Japan"}]},
+    ]
+    episode_id = str(uuid7())
+    with pytest.raises(BadRequestError) as exc_info:
+        await async_client.chat.completions.create(
+            extra_headers={"episode_id": episode_id},
+            messages=messages,
+            model="tensorzero::function_name::json_success",
+        )
+    assert (
+        "Invalid request to OpenAI-compatible endpoint: `image_url` content blocks are not currently supported"
+        in str(exc_info.value)
+    )
 
 
 @pytest.mark.asyncio
@@ -419,7 +529,7 @@ async def test_async_json_failure(async_client):
     result = await async_client.chat.completions.create(
         extra_headers={"episode_id": str(uuid7())},
         messages=messages,
-        model="tensorzero::json_fail",
+        model="tensorzero::function_name::json_fail",
     )
     assert result.model == "test"
     assert (
@@ -473,7 +583,7 @@ async def test_dynamic_tool_use_inference_openai(async_client):
             "variant_name": "openai",
         },
         messages=messages,
-        model="tensorzero::basic_test",
+        model="tensorzero::function_name::basic_test",
         tools=tools,
     )
     assert result.model == "openai"
@@ -513,8 +623,8 @@ async def test_dynamic_json_mode_inference_openai(async_client):
             "variant_name": "openai",
         },
         messages=messages,
-        model="tensorzero::dynamic_json",
-        response_format={"type": "json_schema", "schema": output_schema},
+        model="tensorzero::function_name::dynamic_json",
+        response_format={"type": "json_schema", "json_schema": output_schema},
     )
     assert result.model == "openai"
     assert result.episode_id == episode_id

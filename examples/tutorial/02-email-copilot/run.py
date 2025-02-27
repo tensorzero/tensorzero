@@ -1,6 +1,6 @@
 from tensorzero import TensorZeroGateway
 
-with TensorZeroGateway("http://localhost:3000") as client:
+with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
     inference_result = client.inference(
         function_name="draft_email",
         input={

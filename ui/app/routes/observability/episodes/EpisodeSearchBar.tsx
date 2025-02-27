@@ -29,7 +29,7 @@ export default function EpisodeSearchBar() {
   });
 
   const onSubmit = (data: FormValues) => {
-    navigate(`/observability/episode/${data.episodeId}`);
+    navigate(`/observability/episodes/${data.episodeId}`);
     form.reset();
   };
 

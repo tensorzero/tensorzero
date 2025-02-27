@@ -1,17 +1,15 @@
 [target.'cfg(not(target_arch = "wasm32"))']
 rustflags = [
-    "-C",
-    "target-cpu=native",
     "--cfg",
     "aws_sdk_unstable",  # needed for aws-smithy-types + serde-(de)serialize
 ]
 
 
 [alias]
-test-unit = "nextest run --lib --bins --profile unit"
-test-e2e = "nextest run -p tensorzero_internal --test e2e --features e2e_tests"
-test-all = "nextest run -p tensorzero_internal --features e2e_tests"
-test-batch = "nextest run -p tensorzero_internal --features batch_tests"
+test-unit = "nextest run --lib --bins"
+test-e2e = "nextest run --test e2e --features e2e_tests"
+test-all = "nextest run --features e2e_tests"
+test-batch = "nextest run --features batch_tests"
 
-run-e2e = "run --bin gateway --features e2e_tests -- tensorzero_internal/tests/e2e/tensorzero.toml"
+run-e2e = "run --bin gateway --features e2e_tests -- tensorzero-internal/tests/e2e/tensorzero.toml"
 watch-e2e = "watch -x run-e2e"

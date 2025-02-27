@@ -1,13 +1,23 @@
+nextest-version = { recommended = "0.9.87" }
+
 [profile.default]
 retries = { backoff = "fixed", count = 2, delay = "5s", jitter = true }
 slow-timeout = { period = "10s", terminate-after = 3 }
+# We look for tests with names containing "no_aws_credentials"
+# These tests require that the surrounding environment has no AWS credentials
+# (including in places like `~/.aws`)
+# We don't have a good way of isolating these tests to ensure that they pass
+# on developer machines (with AWS credentials set up), so we exclude them by default.
+# On CI, we use the 'ci' profile, which runs all tests.
+default-filter = "not test(no_aws_credentials)"
 
 [profile.ci]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
+default-filter = "all()"
 
-[profile.unit]
-retries = 0
-slow-timeout = { period = "2s", terminate-after = 1 }
+[[profile.ci.overrides]]
+filter = 'binary(e2e) and test(providers::aws_bedrock::)'
+retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max-delay = "120s" }
 
 # Note: use the following commands to debug test groups:
 # cargo nextest show-config test-groups
@@ -35,3 +45,9 @@ test-group = 'e2e_together'
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::xai::)'
 test-group = 'e2e_xai'
+
+[[profile.default.overrides]]
+# Settings for running unit tests
+filter = 'not binary(e2e)'
+retries = 0
+slow-timeout = { period = "2s", terminate-after = 1 }

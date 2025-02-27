@@ -11,7 +11,7 @@ import {
   type Role,
 } from "../clickhouse/common";
 import type { ParsedInferenceExample } from "../clickhouse/curation";
-import { getCuratedInferences } from "../clickhouse/curation";
+import { getCuratedInferences } from "../clickhouse/curation.server";
 import { get_template_env, type ChatCompletionConfig } from "../config/variant";
 import { getConfig } from "../config/index.server";
 import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
@@ -303,6 +303,10 @@ export function content_block_to_openai_message(
         tool_call_id: content.id,
         content: content.result,
       };
+    case "image":
+      throw new Error(
+        "Image content is not supported for OpenAI fine-tuning. We have an open issue for this feature at https://github.com/tensorzero/tensorzero/issues/1132.",
+      );
   }
 }
 

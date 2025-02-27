@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use tensorzero_internal::{
     config_parser::Config,
     error::ErrorDetails,
-    gateway_util::{setup_clickhouse, AppStateData},
+    gateway_util::{setup_clickhouse, setup_http_client, AppStateData},
 };
 use thiserror::Error;
 use tokio_stream::StreamExt;
@@ -83,7 +83,7 @@ pub struct TensorZeroInternalError(#[from] tensorzero_internal::error::Error);
 #[non_exhaustive]
 pub enum ClientBuilderError {
     #[error(
-        "Missing config - you must call `with_config_path` before calling `build` in EmbeddedGateway mode"
+        "Missing config - you must call `with_config_file` before calling `build` in EmbeddedGateway mode"
     )]
     MissingConfig,
     #[error(
@@ -96,6 +96,8 @@ pub enum ClientBuilderError {
     Clickhouse(TensorZeroError),
     #[error("Failed to parse config: {0}")]
     ConfigParsing(TensorZeroError),
+    #[error("Failed to build HTTP client: {0}")]
+    HTTPClientBuild(TensorZeroError),
 }
 
 /// Controls how a `Client` is run
@@ -105,7 +107,7 @@ pub enum ClientBuilderMode {
     /// In EmbeddedGateway mode, we run an embedded gateway using a config file.
     /// We do not launch an HTTP server - we only make outgoing HTTP requests to model providers and to ClickHouse.
     EmbeddedGateway {
-        config_path: PathBuf,
+        config_file: Option<PathBuf>,
         clickhouse_url: Option<String>,
     },
 }
@@ -133,22 +135,40 @@ impl ClientBuilder {
         match &self.mode {
             ClientBuilderMode::HTTPGateway { .. } => self.build_http(),
             ClientBuilderMode::EmbeddedGateway {
-                config_path,
+                config_file,
                 clickhouse_url,
             } => {
-                let config = Arc::new(Config::load_from_path(config_path).map_err(|e| {
-                    ClientBuilderError::ConfigParsing(TensorZeroError::Other { source: e.into() })
-                })?);
-                let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url.clone())
-                    .await
-                    .map_err(|e| {
-                        ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
-                    })?;
+                let config = if let Some(config_file) = config_file {
+                    Arc::new(Config::load_from_path(config_file).map_err(|e| {
+                        ClientBuilderError::ConfigParsing(TensorZeroError::Other {
+                            source: e.into(),
+                        })
+                    })?)
+                } else {
+                    Arc::new(Config::default())
+                };
+                let clickhouse_connection_info =
+                    setup_clickhouse(&config, clickhouse_url.clone(), true)
+                        .await
+                        .map_err(|e| {
+                            ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                                source: e.into(),
+                            })
+                        })?;
+                let http_client = if let Some(http_client) = self.http_client {
+                    http_client
+                } else {
+                    setup_http_client().map_err(|e| {
+                        ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
+                            source: e.into(),
+                        })
+                    })?
+                };
                 Ok(Client {
                     mode: ClientMode::EmbeddedGateway(EmbeddedGateway {
                         state: AppStateData {
                             config,
-                            http_client: self.http_client.unwrap_or_default(),
+                            http_client,
                             clickhouse_connection_info,
                         },
                     }),
@@ -367,14 +387,27 @@ impl Client {
                             if message.data == "[DONE]" {
                                 break;
                             }
-                            let data: InferenceResponseChunk =
-                                serde_json::from_str(&message.data).map_err(|e| {
+                            let json: serde_json::Value = serde_json::from_str(&message.data).map_err(|e| {
+                                tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                                    message: format!("Error deserializing inference response chunk: {e:?}"),
+                                })
+                            })?;
+                            if let Some(err) = json.get("error") {
+                                yield Err(tensorzero_internal::error::Error::new(ErrorDetails::StreamError {
+                                    source: Box::new(tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
+                                        message: format!("Stream produced an error: {err:?}")
+                                    }))
+                                }));
+                            } else {
+                                let data: InferenceResponseChunk =
+                                serde_json::from_value(json).map_err(|e| {
                                     tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
-                                        message: format!("Error deserializing inference response chunk: {e:?}"),
+                                        message: format!("Error deserializing json value as InferenceResponseChunk: {e:?}"),
                                     })
                                 })?;
+                                yield Ok(data);
+                            }
 
-                            yield Ok(data);
                         }
                     }
                 }
@@ -401,15 +434,16 @@ pub use tensorzero_internal::observability;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tracing_test::traced_test;
 
     #[tokio::test]
     #[ignore] // TODO - set an environment variable, or create a new config with dummy credentials
     async fn test_missing_clickhouse() {
         // This config file requires ClickHouse, so it should fail if no ClickHouse URL is provided
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: PathBuf::from(
+            config_file: Some(PathBuf::from(
                 "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
-            ),
+            )),
             clickhouse_url: None,
         })
         .build()
@@ -420,5 +454,24 @@ mod tests {
             err.to_string().contains("Missing ClickHouse URL"),
             "Bad error message: {err_msg}"
         );
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_log_no_clickhouse() {
+        // Default observability and no ClickHouse URL
+        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(PathBuf::from(
+                "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
+            )),
+            clickhouse_url: None,
+        })
+        .build()
+        .await
+        .expect("Failed to build client");
+        assert!(!logs_contain(
+            "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
+        ));
+        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."));
     }
 }

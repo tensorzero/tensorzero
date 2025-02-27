@@ -53,7 +53,8 @@ def test_double_feedback_query() -> None:
     """
     client.query(query)
     # Sleep to ensure the first feedback is recorded with a different timestamp
-    sleep(0.2)
+    # Since the granularity of the timestamp is 1 second, we need to sleep for more than 1 second
+    sleep(1.1)
 
     # Insert a second feedback for the inference
     second_feedback = {

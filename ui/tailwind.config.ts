@@ -24,8 +24,20 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       colors: {
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        background: {
+          DEFAULT: "hsl(var(--background-primary))",
+          primary: "hsl(var(--background-primary))",
+          secondary: "hsl(var(--background-secondary))",
+          tertiary: "hsl(var(--background-tertiary))",
+          muted: "hsl(var(--background-muted))",
+        },
+        foreground: {
+          DEFAULT: "hsl(var(--foreground-primary))",
+          primary: "hsl(var(--foreground-primary))",
+          secondary: "hsl(var(--foreground-secondary))",
+          tertiary: "hsl(var(--foreground-tertiary))",
+          muted: "hsl(var(--foreground-muted))",
+        },
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
