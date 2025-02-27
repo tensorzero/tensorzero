@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 
+use crate::config_parser::LoadableConfig;
+use crate::config_parser::PathWithContents;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::ContentBlock;
@@ -250,7 +252,7 @@ impl Variant for DiclConfig {
         Ok(())
     }
 
-    fn get_all_template_paths(&self) -> Vec<&PathBuf> {
+    fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         vec![]
     }
 
@@ -544,11 +546,11 @@ fn parse_raw_examples(
     Ok(examples)
 }
 
-impl UninitializedDiclConfig {
+impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
     /// Since the system instructions are optional and may be a path to a file,
     /// we need to load them here so that we can use the base_path to resolve
     /// any relative paths.
-    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<DiclConfig, Error> {
+    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<DiclConfig, Error> {
         let system_instructions = match self.system_instructions {
             Some(path) => {
                 let path = base_path.as_ref().join(path);

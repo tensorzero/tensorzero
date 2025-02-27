@@ -1,7 +1,6 @@
 use minijinja::{Environment, UndefinedBehavior};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use crate::error::{Error, ErrorDetails};
 
@@ -19,22 +18,15 @@ impl TemplateConfig<'_> {
 
     /// Initializes the TemplateConfig with the given templates, given as a map from template names
     /// to template paths.
-    pub fn initialize(&mut self, template_paths: HashMap<String, PathBuf>) -> Result<(), Error> {
+    pub fn initialize(&mut self, template_paths: HashMap<String, String>) -> Result<(), Error> {
         self.env.set_undefined_behavior(UndefinedBehavior::Strict);
 
-        for (template_name, path) in template_paths {
-            let template_content = std::fs::read_to_string(&path).map_err(|e| {
-                Error::new(ErrorDetails::MiniJinjaTemplate {
-                    template_name: path.display().to_string(),
-                    message: format!("Failed to read template file: {}", e),
-                })
-            })?;
-
+        for (template_name, template_content) in template_paths {
             self.env
-                .add_template_owned(template_name, template_content)
+                .add_template_owned(template_name.clone(), template_content)
                 .map_err(|e| {
                     Error::new(ErrorDetails::MiniJinjaTemplate {
-                        template_name: path.display().to_string(),
+                        template_name,
                         message: format!("Failed to add template: {}", e),
                     })
                 })?;
@@ -178,8 +170,6 @@ const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r#"Here are the candidate answers (w
 pub(crate) mod tests {
     use super::*;
     use serde_json::json;
-    use std::io::Write;
-    use tempfile::NamedTempFile;
 
     #[test]
     fn test_template_good() {
@@ -229,31 +219,12 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_template_nonexistent_file() {
-        let nonexistent_path = PathBuf::from("nonexistent_file.txt");
-        let mut template_config = TemplateConfig::new();
-        let template_paths =
-            HashMap::from([("nonexistent_file".to_string(), nonexistent_path.clone())]);
-        let result = template_config.initialize(template_paths);
-        assert_eq!(
-            result.unwrap_err(),
-            Error::new(ErrorDetails::MiniJinjaTemplate {
-                template_name: nonexistent_path.display().to_string(),
-                message: "Failed to read template file: No such file or directory (os error 2)"
-                    .to_string(),
-            })
-        );
-    }
-
-    #[test]
     fn test_template_malformed_template() {
         let malformed_template = "{{ unclosed_bracket";
-        let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
-        write!(temp_file, "{}", malformed_template).expect("Failed to write to temp file");
         let mut template_config = TemplateConfig::new();
         let template_paths = HashMap::from([(
             "malformed_template".to_string(),
-            temp_file.path().to_path_buf(),
+            malformed_template.to_string(),
         )]);
         let result = template_config.initialize(template_paths);
         assert!(result
@@ -284,72 +255,60 @@ pub(crate) mod tests {
         let mut templates = HashMap::new();
 
         // Template 1
-        let template1 = "hello, {{name}}!";
-        let temp_file1 = create_temp_file(template1);
-        templates.insert("greeting".to_string(), temp_file1.path().to_path_buf());
+        templates.insert("greeting".to_string(), "hello, {{name}}!".to_string());
 
         // Template 2
-        let template2 = "Hello, {{ name }}! You are {{ age }} years old.";
-        let temp_file2 = create_temp_file(template2);
         templates.insert(
             "greeting_with_age".to_string(),
-            temp_file2.path().to_path_buf(),
+            "Hello, {{ name }}! You are {{ age }} years old.".to_string(),
         );
 
         // System template
-        let system_template = "You are a helpful and friendly assistant named {{ assistant_name }}";
-        let temp_file3 = create_temp_file(system_template);
-        templates.insert("system".to_string(), temp_file3.path().to_path_buf());
+        templates.insert(
+            "system".to_string(),
+            "You are a helpful and friendly assistant named {{ assistant_name }}".to_string(),
+        );
 
         // Filled in system template
-        let system_template = "You are a helpful and friendly assistant named ChatGPT";
-        let temp_file4 = create_temp_file(system_template);
-        templates.insert("system_filled".to_string(), temp_file4.path().to_path_buf());
+        templates.insert(
+            "system_filled".to_string(),
+            "You are a helpful and friendly assistant named ChatGPT".to_string(),
+        );
 
         // Assistant Template
-        let assistant_template = "I'm sorry but I can't help you with that because of {{ reason }}";
-        let temp_file5 = create_temp_file(assistant_template);
-        templates.insert("assistant".to_string(), temp_file5.path().to_path_buf());
+        templates.insert(
+            "assistant".to_string(),
+            "I'm sorry but I can't help you with that because of {{ reason }}".to_string(),
+        );
 
         // Filled in assistant template
-        let assistant_template = "I'm sorry but I can't help you with that because of it's against my ethical guidelines";
-        let temp_file6 = create_temp_file(assistant_template);
         templates.insert(
             "assistant_filled".to_string(),
-            temp_file6.path().to_path_buf(),
+            "I'm sorry but I can't help you with that because of it's against my ethical guidelines".to_string(),
         );
 
         // Filled in user template
-        let user_template = "What's the capital of Japan?";
-        let temp_file7 = create_temp_file(user_template);
-        templates.insert("user_filled".to_string(), temp_file7.path().to_path_buf());
+        templates.insert(
+            "user_filled".to_string(),
+            "What's the capital of Japan?".to_string(),
+        );
 
         // Template with tojson filter
-        let user_template = "Hello, {{ input | tojson }}";
-        let temp_file8 = create_temp_file(user_template);
         templates.insert(
             "user_with_tojson".to_string(),
-            temp_file8.path().to_path_buf(),
+            "Hello, {{ input | tojson }}".to_string(),
         );
 
         // Template with join filter
-        let user_template = "Hello, {{ input | join(', ') }}!";
-        let temp_file9 = create_temp_file(user_template);
         templates.insert(
             "user_with_join".to_string(),
-            temp_file9.path().to_path_buf(),
+            "Hello, {{ input | join(', ') }}!".to_string(),
         );
 
         // Initialize templates
         let mut template_config = TemplateConfig::new();
-        let _ = template_config.initialize(templates.clone());
+        let _ = template_config.initialize(templates);
         template_config
-    }
-
-    fn create_temp_file(content: &str) -> NamedTempFile {
-        let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
-        write!(temp_file, "{}", content).expect("Failed to write to temp file");
-        temp_file
     }
 
     #[test]
