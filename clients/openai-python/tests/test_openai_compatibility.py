@@ -19,7 +19,9 @@ uv run pytest
 ```
 """
 
+import base64
 import json
+from os import path
 from time import time
 from uuid import UUID
 
@@ -633,3 +635,63 @@ async def test_dynamic_json_mode_inference_openai(async_client):
     assert result.choices[0].message.tool_calls is None
     assert result.usage.prompt_tokens > 50
     assert result.usage.completion_tokens > 0
+
+
+@pytest.mark.asyncio
+async def test_async_multi_block_image_url(async_client):
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Output exactly two words describing the image",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png"
+                    },
+                },
+            ],
+        },
+    ]
+    episode_id = str(uuid7())
+    result = await async_client.chat.completions.create(
+        extra_headers={"episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::model_name::openai::gpt-4o-mini",
+    )
+    assert "crab" in result.choices[0].message.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_async_multi_block_image_base64(async_client):
+    basepath = path.dirname(__file__)
+    with open(
+        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/ferris.png", "rb"
+    ) as f:
+        ferris_png = base64.b64encode(f.read()).decode("ascii")
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Output exactly two words describing the image",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{ferris_png}"},
+                },
+            ],
+        },
+    ]
+    episode_id = str(uuid7())
+    result = await async_client.chat.completions.create(
+        extra_headers={"episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::model_name::openai::gpt-4o-mini",
+    )
+    assert "crab" in result.choices[0].message.content.lower()
