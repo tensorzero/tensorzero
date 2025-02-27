@@ -534,7 +534,6 @@ async fn poll_batch_inference(
             })
         })?;
     model_provider
-        .config
         .poll_batch_inference(batch_request, &http_client, credentials)
         .await
 }

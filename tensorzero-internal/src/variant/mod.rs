@@ -910,6 +910,7 @@ mod tests {
                 model_name.into(),
                 ModelProvider {
                     config: dummy_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1011,6 +1012,7 @@ mod tests {
                 model_name_json.into(),
                 ModelProvider {
                     config: dummy_provider_config_json,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1063,6 +1065,7 @@ mod tests {
                 error_model_name.into(),
                 ModelProvider {
                     config: error_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1175,12 +1178,14 @@ mod tests {
                     error_model_name.into(),
                     ModelProvider {
                         config: error_provider_config,
+                        extra_body: None,
                     },
                 ),
                 (
                     model_name.into(),
                     ModelProvider {
                         config: dummy_provider_config,
+                        extra_body: None,
                     },
                 ),
             ]),
@@ -1274,6 +1279,7 @@ mod tests {
                 "good_provider".into(),
                 ModelProvider {
                     config: dummy_provider_config,
+                    extra_body: None,
                 },
             )]),
         }));
@@ -1437,12 +1443,14 @@ mod tests {
                     error_model_name.into(),
                     ModelProvider {
                         config: error_provider_config,
+                        extra_body: None,
                     },
                 ),
                 (
                     model_name.into(),
                     ModelProvider {
                         config: dummy_provider_config,
+                        extra_body: None,
                     },
                 ),
             ]),

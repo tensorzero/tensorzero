@@ -25,7 +25,7 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
@@ -139,13 +139,14 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing Gemini request: {e}"),
             })
         })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut url = self.request_url.clone();
@@ -214,13 +215,14 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body = serde_json::to_value(GeminiRequest::new(request)?).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing Gemini request: {e}"),
             })
         })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),

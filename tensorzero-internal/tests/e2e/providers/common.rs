@@ -9,13 +9,11 @@ use aws_sdk_bedrockruntime::error::SdkError;
 use aws_sdk_s3::operation::get_object::GetObjectError;
 use axum::{routing::get, Router};
 use base64::prelude::*;
-#[cfg(feature = "e2e_tests")]
 use futures::StreamExt;
 use object_store::path::Path;
 #[cfg(feature = "e2e_tests")]
 use rand::Rng;
 use reqwest::{Client, StatusCode};
-#[cfg(feature = "e2e_tests")]
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use std::future::IntoFuture;
@@ -776,6 +774,12 @@ pub async fn test_base64_image_inference_with_provider_and_store(
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
+    test_extra_body_with_provider_and_stream(&provider, false).await;
+    test_extra_body_with_provider_and_stream(&provider, true).await;
+}
+
+#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider, stream: bool) {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -784,7 +788,7 @@ pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
         "episode_id": episode_id,
         "params": {
             "chat_completion": {
-            //    "temperature": 9000
+                "temperature": 9000
             }
         },
         "input":
@@ -796,25 +800,54 @@ pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
                     "content": "What is the name of the capital city of Japan?"
                 }
             ]},
-        "stream": false,
+        "stream": stream,
         "tags": {"foo": "bar"},
     });
 
-    let response = Client::new()
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
+    let inference_id = if stream {
+        let mut event_source = Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .eventsource()
+            .unwrap();
 
-    // Check that the API response is ok
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
+        let mut chunks = vec![];
+        let mut found_done_chunk = false;
+        while let Some(event) = event_source.next().await {
+            let event = event.unwrap();
+            match event {
+                Event::Open => continue,
+                Event::Message(message) => {
+                    if message.data == "[DONE]" {
+                        found_done_chunk = true;
+                        break;
+                    }
+                    chunks.push(message.data);
+                }
+            }
+        }
+        assert!(found_done_chunk);
 
-    println!("API response: {response_json:#?}");
+        let response_json = serde_json::from_str::<Value>(&chunks[0]).unwrap();
+        let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+        Uuid::parse_str(inference_id).unwrap()
+    } else {
+        let response = Client::new()
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .send()
+            .await
+            .unwrap();
 
-    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id = Uuid::parse_str(inference_id).unwrap();
+        // Check that the API response is ok
+        assert_eq!(response.status(), StatusCode::OK);
+        let response_json = response.json::<Value>().await.unwrap();
+
+        println!("API response: {response_json:#?}");
+
+        let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+        Uuid::parse_str(inference_id).unwrap()
+    };
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -822,7 +855,8 @@ pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
     // Check if ClickHouse is ok - ChatInference Table
     let clickhouse = get_clickhouse().await;
 
-    // Check the ModelInference Table
+    // Check the ModelInference Table. We don't check the ChatInference table, since we only care about the contents
+    // of the raw request sent to the model provider.
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
