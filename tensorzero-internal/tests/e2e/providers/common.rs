@@ -590,7 +590,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     [functions]
     "#
         ),
-        &test_bucket,
+        test_bucket,
         &prefix,
     )
     .await;
@@ -627,8 +627,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(
         panic!("Expected ServiceError: {err:?}");
     }
 
-    test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, &prefix)
-        .await;
+    test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix).await;
 
     let result = client
         .get_object()
@@ -782,7 +781,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
             Some(episode_id),
             &provider,
             should_be_cached,
-            &kind,
+            kind,
             prefix,
         )
         .await;

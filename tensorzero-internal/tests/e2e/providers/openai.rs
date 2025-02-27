@@ -929,7 +929,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     [functions]
     "#
         ),
-        &test_bucket,
+        test_bucket,
         &prefix,
     )
     .await;
