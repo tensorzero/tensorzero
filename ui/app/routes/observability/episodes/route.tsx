@@ -46,7 +46,6 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
       <div className="container mx-auto px-4 pb-8">
         <PageHeader headline="Episodes" count={totalCount} />
         <EpisodeSearchBar />
-        <div className="my-6 h-px w-full bg-gray-200"></div>
         <div className="py-8 text-center text-gray-500">No episodes found</div>
       </div>
     );
@@ -79,7 +78,6 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
     <div className="container mx-auto px-4 pb-8">
       <PageHeader headline="Episodes" count={totalCount} />
       <EpisodeSearchBar />
-      <div className="my-6 h-px w-full bg-gray-200"></div>
       <EpisodesTable episodes={episodes} />
       <PageButtons
         onPreviousPage={handlePreviousPage}

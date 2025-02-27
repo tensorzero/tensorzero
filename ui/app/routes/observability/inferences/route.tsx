@@ -48,7 +48,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       <div className="container mx-auto px-4 pb-8">
         <PageHeader headline="Inferences" count={totalInferences} />
         <InferenceSearchBar />
-        <div className="my-6 h-px w-full bg-gray-200"></div>
         <div className="py-8 text-center text-gray-500">
           No inferences found
         </div>
@@ -80,7 +79,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     <div className="container mx-auto px-4 pb-8">
       <PageHeader headline="Inferences" count={totalInferences} />
       <InferenceSearchBar />
-      <div className="my-6 h-px w-full bg-gray-200"></div>
       <InferencesTable inferences={inferences} />
       <PageButtons
         onPreviousPage={handlePreviousPage}
