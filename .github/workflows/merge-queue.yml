@@ -137,7 +137,7 @@ jobs:
       - name: "Python: TensorZero Client: pyright"
         working-directory: clients/python-deprecated
         run: |
-          uv pip install pyright
+          uv pip install pyright==1.1.394
           uv run pyright
 
       - name: "Python: TensorZero Client: pytest"
@@ -154,7 +154,7 @@ jobs:
       - name: "Python: PyO3 Client: pyright"
         working-directory: clients/python-pyo3
         run: |
-          uv pip install pyright
+          uv pip install pyright==1.1.394
           uv run pyright
 
       - name: "Python: PyO3 Client: stubtest"
@@ -176,7 +176,7 @@ jobs:
       - name: "Python: OpenAI Client: pyright"
         working-directory: clients/openai-python
         run: |
-          uv pip install pyright
+          uv pip install pyright==1.1.394
           uv run pyright
 
       - name: "Python: OpenAI Client: pytest"
@@ -193,7 +193,7 @@ jobs:
       - name: "Python: Recipes: pyright"
         working-directory: recipes/tests
         run: |
-          uv pip install pyright
+          uv pip install pyright==1.1.394
           uv run pyright
 
       - name: "Python: Recipes: pytest"
