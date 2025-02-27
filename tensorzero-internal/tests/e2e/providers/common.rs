@@ -1,8 +1,11 @@
 #![allow(clippy::print_stdout)]
 use std::{collections::HashMap, net::SocketAddr};
 
+#[cfg(feature = "e2e_tests")]
 use aws_config::Region;
+#[cfg(feature = "e2e_tests")]
 use aws_sdk_bedrockruntime::error::SdkError;
+#[cfg(feature = "e2e_tests")]
 use aws_sdk_s3::operation::get_object::GetObjectError;
 use axum::{routing::get, Router};
 use base64::prelude::*;
@@ -537,6 +540,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
         "#,
             temp_dir.path().to_string_lossy()
         ),
+        "",
     )
     .await;
 
@@ -548,8 +552,11 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
     assert_eq!(result, FERRIS_PNG);
 }
 
-#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+#[cfg(feature = "e2e_tests")]
 pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestProvider) {
+    use rand::distributions::Alphanumeric;
+    use rand::distributions::DistString;
+
     let test_bucket = "tensorzero-e2e-test-images";
     let test_bucket_region = "us-east-1";
     let config = aws_config::load_from_env()
@@ -557,22 +564,19 @@ pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestP
         .to_builder()
         .region(Region::new(test_bucket_region))
         .build();
+
     let client = aws_sdk_s3::Client::new(&config);
 
+    let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
+    prefix += "-";
+
     let expected_key =
-        "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png";
-    client
-        .delete_object()
-        .key(expected_key)
-        .bucket(test_bucket)
-        .send()
-        .await
-        .unwrap();
+        format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
 
     // Check that object is deleted
     let err = client
         .get_object()
-        .key(expected_key)
+        .key(&expected_key)
         .bucket(test_bucket)
         .send()
         .await
@@ -593,6 +597,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestP
         StorageKind::S3Compatible {
             bucket_name: test_bucket.to_string(),
             region: "us-east-1".to_string(),
+            prefix: prefix.clone(),
         },
         &format!(
             r#"
@@ -600,23 +605,32 @@ pub async fn test_image_inference_with_provider_s3_compatible(provider: E2ETestP
         type = "s3_compatible"
         region = "us-east-1"
         bucket_name = "{test_bucket}"
+        prefix = "{prefix}"
         
         [functions]
         "#
         ),
+        &prefix,
     )
     .await;
 
-    // Check that image was stored in bucket
     let result = client
         .get_object()
-        .key(expected_key)
+        .key(&expected_key)
         .bucket(test_bucket)
         .send()
         .await
-        .expect("Failed to get image from s3");
+        .expect("Failed to get image from S3-compatible store");
 
     assert_eq!(result.body.collect().await.unwrap().to_vec(), FERRIS_PNG);
+
+    client
+        .delete_object()
+        .key(&expected_key)
+        .bucket(test_bucket)
+        .send()
+        .await
+        .unwrap();
 }
 
 async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
@@ -706,6 +720,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     provider: E2ETestProvider,
     kind: StorageKind,
     config_toml: &str,
+    prefix: &str,
 ) {
     let episode_id = Uuid::now_v7();
 
@@ -752,6 +767,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
             &provider,
             should_be_cached,
             &kind,
+            prefix,
         )
         .await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -932,6 +948,7 @@ pub async fn check_base64_image_response(
     provider: &E2ETestProvider,
     should_be_cached: bool,
     kind: &StorageKind,
+    prefix: &str,
 ) {
     let inference_id = response.inference_id();
 
@@ -1010,7 +1027,7 @@ pub async fn check_base64_image_response(
                         },
                         "storage_path": {
                             "kind": kind_json,
-                            "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                            "path": format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png")
                         },
                     }
                 ]
@@ -1046,7 +1063,7 @@ pub async fn check_base64_image_response(
                     },
                     storage_path: StoragePath {
                         kind: kind.clone(),
-                        path: Path::parse("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
+                        path: Path::parse(format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png")).unwrap(),
                     }
                 })]
             },
