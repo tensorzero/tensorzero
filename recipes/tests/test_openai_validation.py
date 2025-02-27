@@ -12,6 +12,7 @@ def test_estimate_prompt_length() -> None:
         {"role": "assistant", "content": "Hi there! How can I help you today?"},
     ]
 
+    # Note: @GabrielBianconi confirmed that the OpenAI Playground returns 23 tokens for this prompt on 2025-02-27
     assert estimate_prompt_length(messages_within_limit) == 23
 
     # Test case where the total tokens exceed the limit
