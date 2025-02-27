@@ -6,11 +6,7 @@ use tracing::instrument;
 
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
-use crate::evals::{
-    get_llm_judge_function_name, EvalConfig, EvaluatorConfig, LLMJudgeConfig, LLMJudgeOutputType,
-    LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT, LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT,
-    LLM_JUDGE_SYSTEM_SCHEMA_TEXT, LLM_JUDGE_USER_SCHEMA_TEXT,
-};
+use crate::evals::{EvalConfig, UninitializedEvalConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
@@ -636,175 +632,6 @@ impl UninitializedToolConfig {
             parameters,
             strict: self.strict,
         })
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UninitializedEvalConfig {
-    evaluators: HashMap<String, UninitializedEvaluatorConfig>,
-    dataset_name: String,
-    function_name: String,
-}
-
-impl UninitializedEvalConfig {
-    pub fn load<P: AsRef<Path>>(
-        self,
-        functions: &HashMap<String, Arc<FunctionConfig>>,
-        base_path: P,
-        eval_name: &str,
-    ) -> Result<(EvalConfig, HashMap<String, Arc<FunctionConfig>>), Error> {
-        if !functions.contains_key(&self.function_name) {
-            return Err(ErrorDetails::Config {
-                message: format!(
-                    "Function `{}` not found (referenced in `[evals.{eval_name}]`)",
-                    self.function_name
-                ),
-            }
-            .into());
-        }
-        // Eval names cannot have "::" in them since we use it as a delimiter
-        if eval_name.contains("::") {
-            return Err(ErrorDetails::Config {
-                message: format!(
-                    "Eval names cannot contain \"::\" (referenced in `[evals.{eval_name}]`)"
-                ),
-            }
-            .into());
-        }
-        let evaluator_results = self
-            .evaluators
-            .into_iter()
-            .map(|(name, config)| {
-                config
-                    .load(&base_path, eval_name, &name)
-                    .map(|(eval_config, func_config)| (name, eval_config, func_config))
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
-
-        // Create HashMaps from the results
-        let mut evaluators = HashMap::new();
-        let mut function_configs = HashMap::new();
-
-        for (evaluator_name, evaluator_config, function_config) in evaluator_results {
-            // Add to evaluators map
-            evaluators.insert(evaluator_name.clone(), evaluator_config);
-
-            // Add to function_configs map if Some
-            if let Some(config) = function_config {
-                function_configs.insert(
-                    get_llm_judge_function_name(eval_name, &evaluator_name),
-                    Arc::new(config),
-                );
-            }
-        }
-        Ok((
-            EvalConfig {
-                evaluators,
-                dataset_name: self.dataset_name,
-                function_name: self.function_name,
-            },
-            function_configs,
-        ))
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum UninitializedEvaluatorConfig {
-    ExactMatch,
-    #[serde(rename = "llm_judge")]
-    LLMJudge(UninitializedLLMJudgeConfig),
-}
-
-#[derive(Debug, Deserialize)]
-struct UninitializedLLMJudgeConfig {
-    variants: HashMap<String, UninitializedVariantConfig>,
-    output_type: LLMJudgeOutputType,
-    include_datapoint_output: bool,
-}
-
-impl UninitializedEvaluatorConfig {
-    pub fn load<P: AsRef<Path>>(
-        self,
-        base_path: &P,
-        eval_name: &str,
-        evaluator_name: &str,
-    ) -> Result<(EvaluatorConfig, Option<FunctionConfig>), Error> {
-        // Evaluator names cannot have "::" in them since we use it as a delimiter in our function names later on
-        if evaluator_name.contains("::") {
-            return Err(ErrorDetails::Config {
-                message: format!(
-                    "Evaluator names cannot contain \"::\" (referenced in `[evals.{eval_name}.{evaluator_name}]`)"
-                ),
-            }
-            .into());
-        }
-        match self {
-            UninitializedEvaluatorConfig::ExactMatch => Ok((EvaluatorConfig::ExactMatch, None)),
-            UninitializedEvaluatorConfig::LLMJudge(params) => {
-                let variants = params
-                    .variants
-                    .into_iter()
-                    .map(|(name, variant)| variant.load(base_path).map(|v| (name, v)))
-                    .collect::<Result<HashMap<_, _>, Error>>()?;
-                let nonzero_weights = variants
-                    .iter()
-                    .filter(|(_, variant)| variant.weight() > 0.0)
-                    .count();
-                if nonzero_weights != 1 {
-                    // TODO (Viraj): test this
-                    tracing::warn!(
-                        "Warning: we recommend setting up evals with exactly 1 variant with a nonzero weight. Eval `{eval_name}.{evaluator_name}` has {nonzero_weights} variants with nonzero weights."
-                    );
-                }
-                let system_schema_value = serde_json::from_str(LLM_JUDGE_SYSTEM_SCHEMA_TEXT)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::JsonSchema {
-                            message: format!("Failed to parse LLM judge system schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
-                        })
-                    })?;
-                let user_schema_value = serde_json::from_str(LLM_JUDGE_USER_SCHEMA_TEXT)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::JsonSchema {
-                            message: format!("Failed to parse LLM judge user schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
-                        })
-                    })?;
-                let output_schema_str = match params.output_type {
-                    LLMJudgeOutputType::Float => LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT,
-                    LLMJudgeOutputType::Boolean => LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT,
-                };
-                let output_schema_value = serde_json::from_str(output_schema_str)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::JsonSchema {
-                            message: format!("Failed to parse LLM judge output schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
-                        })
-                    })?;
-                let output_schema = JSONSchemaFromPath::from_value(&output_schema_value)?;
-                let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig {
-                    parameters: output_schema.clone(),
-                });
-                let implicit_tool_call_config = ToolCallConfig {
-                    tools_available: vec![implicit_tool],
-                    tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
-                    parallel_tool_calls: false,
-                };
-                let function_config = FunctionConfig::Json(FunctionConfigJson {
-                    variants,
-                    system_schema: Some(JSONSchemaFromPath::from_value(&system_schema_value)?),
-                    user_schema: Some(JSONSchemaFromPath::from_value(&user_schema_value)?),
-                    assistant_schema: None,
-                    output_schema,
-                    implicit_tool_call_config,
-                });
-                Ok((
-                    EvaluatorConfig::LLMJudge(LLMJudgeConfig {
-                        output_type: params.output_type,
-                        include_datapoint_output: params.include_datapoint_output,
-                    }),
-                    Some(function_config),
-                ))
-            }
-        }
     }
 }
 
@@ -2074,6 +1901,29 @@ mod tests {
         [tools.get_temperature]
         description = "Get the weather for a given location"
         parameters = "fixtures/config/tools/get_temperature.json"
+
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                   EVALS                                    │
+        # └────────────────────────────────────────────────────────────────────────────┘
+        [evals.eval1]
+        dataset_name = "dataset1"
+        function_name = "generate_draft"
+
+        [evals.eval1.evaluators.em_evaluator]
+        type = "exact_match"
+
+        [evals.eval1.evaluators.llm_judge_bool]
+        type = "llm_judge"
+        output_type = "boolean"
+        optimize = "min"
+        include_datapoint_output = false
+
+        [evals.eval1.evaluators.llm_judge_bool.variants.openai_promptA]
+        type = "chat_completion"
+        weight = 1.0
+        model = "anthropic::claude-3.5-sonnet"
+        system_instructions = "fixtures/config/evals/eval1/llm_judge_bool/system_instructions.txt"
+
         "#;
         env::set_var("OPENAI_API_KEY", "sk-something");
         env::set_var("ANTHROPIC_API_KEY", "sk-something");
