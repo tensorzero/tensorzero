@@ -1736,88 +1736,86 @@ mod tests {
 
         // Check if all expected templates are present
         assert_eq!(
-            templates
-                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
-            Some(
-                &include_str!(
-                    "../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-                )
-                .to_string()
+            *templates
+                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja")
+                .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
             )
+            .to_string()
         );
         assert_eq!(
-            templates
-                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
-            Some(
-                &include_str!(
-                    "../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-                )
-                .to_string()
+            *templates
+                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja")
+                .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
             )
+            .to_string()
         );
         assert_eq!(
-            templates.get(
-                "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
-            ),
-            Some(
-                &include_str!(
+            *templates
+                .get(
+                    "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
+                )
+                .unwrap(),
+            include_str!(
                 "../fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
             )
-                .to_string()
-            )
+            .to_string()
         );
         assert_eq!(
-            templates.get(
-                "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
-            ),
-            Some(
-                &include_str!(
+            *templates
+                .get(
+                    "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
+                )
+                .unwrap(),
+            include_str!(
                 "../fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
             )
-                .to_string()
-            )
+            .to_string()
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"),
-            Some(&include_str!(
+            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja")
+            .unwrap(),
+            include_str!(
                 "../fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
             ).to_string()
-            )
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"),
-            Some(&include_str!(
+            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja")
+            .unwrap(),
+            include_str!(
                 "../fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
             ).to_string()
-            )
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"),
-            Some(&include_str!(
+            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja")
+            .unwrap(),
+            include_str!(
                 "../fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
             ).to_string()
-            )
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"),
-            Some(&include_str!(
+            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja")
+            .unwrap(),
+            include_str!(
                 "../fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
             ).to_string()
-            )
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"),
-            Some(&include_str!(
+            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja")
+            .unwrap(),
+            include_str!(
                 "../fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
             ).to_string()
-            )
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"),
-            Some(&include_str!(
+            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja")
+            .unwrap(),
+            include_str!(
                 "../fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
             ).to_string()
-            )
         );
 
         assert_eq!(
