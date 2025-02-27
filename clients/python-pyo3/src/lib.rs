@@ -134,12 +134,18 @@ impl StreamWrapper {
 #[pymethods]
 impl BaseTensorZeroGateway {
     #[new]
-    #[pyo3(signature = (base_url, *, timeout=None))]
-    fn new(py: Python<'_>, base_url: &str, timeout: Option<u64>) -> PyResult<Self> {
+    #[pyo3(signature = (base_url, *, timeout=None, verbose_errors=false))]
+    fn new(
+        py: Python<'_>,
+        base_url: &str,
+        timeout: Option<u64>,
+        verbose_errors: bool,
+    ) -> PyResult<Self> {
         let mut client_builder = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
             url: Url::parse(base_url)
                 .map_err(|e| PyValueError::new_err(format!("Failed to parse base_url: {e:?}")))?,
-        });
+        })
+        .with_verbose_errors(verbose_errors);
         if let Some(timeout) = timeout {
             let http_client = reqwest::Client::builder()
                 .timeout(Duration::from_secs(timeout))
@@ -351,21 +357,26 @@ impl TensorZeroGateway {
         timeout: Option<u64>,
     ) -> PyResult<(Self, BaseTensorZeroGateway)> {
         tracing::warn!("TensorZeroGateway.__init__ is deprecated. Use TensorZeroGateway.build_http or TensorZeroGateway.build_embedded instead.");
-        Ok((Self {}, BaseTensorZeroGateway::new(py, base_url, timeout)?))
+        Ok((
+            Self {},
+            BaseTensorZeroGateway::new(py, base_url, timeout, false)?,
+        ))
     }
 
     #[classmethod]
-    #[pyo3(signature = (*, gateway_url, timeout=None))]
+    #[pyo3(signature = (*, gateway_url, timeout=None, verbose_errors=false))]
     /// Initialize the TensorZero client, using the HTTP gateway.
     /// :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
+    /// :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
     /// :return: A `TensorZeroGateway` instance configured to use the HTTP gateway.
     fn build_http(
         cls: &Bound<'_, PyType>,
         gateway_url: &str,
         timeout: Option<u64>,
+        verbose_errors: bool,
     ) -> PyResult<Py<TensorZeroGateway>> {
-        let client = BaseTensorZeroGateway::new(cls.py(), gateway_url, timeout)?;
+        let client = BaseTensorZeroGateway::new(cls.py(), gateway_url, timeout, verbose_errors)?;
         let instance = PyClassInitializer::from(client).add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
     }
@@ -591,20 +602,29 @@ impl AsyncTensorZeroGateway {
         timeout: Option<u64>,
     ) -> PyResult<(Self, BaseTensorZeroGateway)> {
         tracing::warn!("AsyncTensorZeroGateway.__init__ is deprecated. Use AsyncTensorZeroGateway.build_http or AsyncTensorZeroGateway.build_embedded instead.");
-        Ok((Self {}, BaseTensorZeroGateway::new(py, base_url, timeout)?))
+        Ok((
+            Self {},
+            BaseTensorZeroGateway::new(py, base_url, timeout, false)?,
+        ))
     }
 
     #[classmethod]
-    #[pyo3(signature = (*, gateway_url, timeout=None))]
+    #[pyo3(signature = (*, gateway_url, timeout=None, verbose_errors=false))]
+    /// Initialize the TensorZero client, using the HTTP gateway.
+    /// :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+    /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
+    /// :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
+    /// :return: An `AsyncTensorZeroGateway` instance configured to use the HTTP gateway.
     fn build_http<'a>(
         cls: &Bound<'a, PyType>,
         gateway_url: &str,
         timeout: Option<u64>,
+        verbose_errors: bool,
     ) -> PyResult<Bound<'a, PyAny>> {
         let gateway_url = gateway_url.to_string();
         pyo3_async_runtimes::tokio::future_into_py(cls.py(), async move {
             Python::with_gil(|py| {
-                let client = BaseTensorZeroGateway::new(py, &gateway_url, timeout)?;
+                let client = BaseTensorZeroGateway::new(py, &gateway_url, timeout, verbose_errors)?;
                 let instance =
                     PyClassInitializer::from(client).add_subclass(AsyncTensorZeroGateway {});
                 Py::new(py, instance)
