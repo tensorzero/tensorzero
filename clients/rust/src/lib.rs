@@ -139,11 +139,15 @@ impl ClientBuilder {
                 clickhouse_url,
             } => {
                 let config = if let Some(config_file) = config_file {
-                    Arc::new(Config::load_from_path(config_file).map_err(|e| {
-                        ClientBuilderError::ConfigParsing(TensorZeroError::Other {
-                            source: e.into(),
-                        })
-                    })?)
+                    Arc::new(
+                        Config::load_and_verify_from_path(config_file)
+                            .await
+                            .map_err(|e| {
+                                ClientBuilderError::ConfigParsing(TensorZeroError::Other {
+                                    source: e.into(),
+                                })
+                            })?,
+                    )
                 } else {
                     Arc::new(Config::default())
                 };

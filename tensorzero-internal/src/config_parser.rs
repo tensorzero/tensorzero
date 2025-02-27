@@ -1,6 +1,6 @@
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
-use object_store::ObjectStore;
+use object_store::{ObjectStore, PutPayload};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -86,6 +86,20 @@ impl ObjectStoreInfo {
             object_store,
             kind: config,
         }))
+    }
+
+    /// Verifies that the object store is configured correctly by writing an empty file to it.
+    pub async fn verify(&self) -> Result<(), Error> {
+        if let Some(store) = &self.object_store {
+            tracing::info!("Verifying that [object_storage] is configured correctly (writing .tensorzero-validate)");
+            store.put(&object_store::path::Path::from(".tensorzero-validate"), PutPayload::new())
+                .await
+                .map_err(|e| Error::new(ErrorDetails::Config {
+                    message: format!("Failed to write `.tensorzero-validate` to object store. Check that your credentials are configured correctly: {e:?}"),
+                }))?;
+            tracing::info!("Successfully wrote .tensorzero-validate to object store");
+        }
+        Ok(())
     }
 }
 
@@ -178,7 +192,7 @@ impl std::fmt::Display for MetricConfigLevel {
 }
 
 impl<'c> Config<'c> {
-    pub fn load_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
+    pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
         let config_table = match UninitializedConfig::read_toml_config(config_path)? {
             Some(table) => table,
             None => {
@@ -200,6 +214,11 @@ impl<'c> Config<'c> {
             }
         };
         let config = Self::load_from_toml(config_table, base_path)?;
+
+        if let Some(object_store) = &config.object_store_info {
+            object_store.verify().await?;
+        }
+
         Ok(config)
     }
 
@@ -670,6 +689,8 @@ impl UninitializedToolConfig {
 #[cfg(test)]
 mod tests {
 
+    use std::io::Write;
+    use tempfile::NamedTempFile;
     use tracing_test::traced_test;
 
     use super::*;
@@ -2049,13 +2070,39 @@ mod tests {
     }
 
     #[traced_test]
-    #[test]
-    fn test_config_load_no_config_file() {
-        let err = Config::load_from_path(Path::new("nonexistent.toml"))
+    #[tokio::test]
+    async fn test_config_load_no_config_file() {
+        let err = Config::load_and_verify_from_path(Path::new("nonexistent.toml"))
+            .await
             .unwrap_err()
             .to_string();
         assert!(
             err.contains("Config file not found"),
+            "Unexpected error message: {err}"
+        );
+    }
+
+    #[traced_test]
+    #[tokio::test]
+    async fn test_config_load_invalid_s3_creds() {
+        let tempfile = NamedTempFile::new().unwrap();
+        write!(
+            &tempfile,
+            r#"
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+            
+            [functions]"#
+        )
+        .unwrap();
+        let err = Config::load_and_verify_from_path(tempfile.path())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Failed to write `.tensorzero-validate` to object store."),
             "Unexpected error message: {err}"
         );
     }

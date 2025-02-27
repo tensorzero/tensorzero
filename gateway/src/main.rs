@@ -53,7 +53,11 @@ async fn main() {
     let config_path = args.config_file.or(args.tensorzero_toml);
 
     let config = if let Some(path) = &config_path {
-        Arc::new(Config::load_from_path(Path::new(&path)).expect_pretty("Failed to load config"))
+        Arc::new(
+            Config::load_and_verify_from_path(Path::new(&path))
+                .await
+                .expect_pretty("Failed to load config"),
+        )
     } else {
         tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
         Arc::new(Config::default())
