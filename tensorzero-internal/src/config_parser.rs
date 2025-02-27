@@ -1819,14 +1819,14 @@ mod tests {
         );
 
         assert_eq!(
-            templates.get("tensorzero::llm_judge::eval1::llm_judge_bool::system"),
-            Some(&"hi".to_string())
+            *templates
+                .get("tensorzero::llm_judge::eval1::llm_judge_bool::system")
+                .unwrap(),
+            "You are an expert evaluator.\n\nReturn True if there is NSFW content in this generation.\n\n\nOutput Type: boolean\n".to_string(),
         );
 
-        println!("template keys: {:?}", templates.keys());
-
         // Check the total number of templates
-        assert_eq!(templates.len(), 10);
+        assert_eq!(templates.len(), 11);
     }
 
     #[test]
