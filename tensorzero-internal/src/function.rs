@@ -1,5 +1,6 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::instrument;
@@ -10,7 +11,7 @@ use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
     ChatInferenceResult, ContentBlockOutput, InferenceResult, Input, InputMessageContent,
-    JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, Usage,
+    JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, TextKind, Usage,
 };
 use crate::jsonschema_util::{JSONSchemaFromPath, JsonSchemaRef};
 use crate::minijinja_util::TemplateConfig;
@@ -323,11 +324,11 @@ fn validate_all_text_input(
     }?;
     for (index, message) in input.messages.iter().enumerate() {
         // Only for Text blocks, not RawText blocks since we don't validate those
-        let mut content: Option<&Value> = None;
+        let mut content: Option<Cow<'_, Value>> = None;
         let mut text_seen = false;
         for block in message.content.iter() {
             match block {
-                InputMessageContent::Text { value } => {
+                InputMessageContent::Text(kind) => {
                     // Throw an error if we have multiple text blocks in a message
                     if text_seen {
                         return Err(Error::new(ErrorDetails::InvalidMessage {
@@ -336,7 +337,11 @@ fn validate_all_text_input(
                             ),
                         }));
                     }
-                    content = Some(value);
+                    content = Some(match kind {
+                        TextKind::Arguments { arguments } => Cow::Borrowed(arguments),
+                        TextKind::Text { text } => Cow::Owned(Value::String(text.clone())),
+                        TextKind::LegacyValue { value } => Cow::Borrowed(value),
+                    });
                     text_seen = true;
                 }
                 InputMessageContent::RawText { .. } => {
@@ -356,12 +361,12 @@ fn validate_all_text_input(
         if let Some(content) = content {
             match &message.role {
                 Role::Assistant => validate_single_message(
-                    content,
+                    &content,
                     assistant_schema,
                     Some((index, &message.role)),
                 )?,
                 Role::User => {
-                    validate_single_message(content, user_schema, Some((index, &message.role)))?
+                    validate_single_message(&content, user_schema, Some((index, &message.role)))?
                 }
             }
         }
@@ -568,7 +573,9 @@ mod tests {
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![json!({ "name": "assistant name" }).into()],
+                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    arguments: json!({ "name": "assistant name" }),
+                })],
             },
         ];
         let input = Input {
@@ -711,7 +718,9 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec![json!({ "name": "user name" }).into()],
+                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    arguments: json!({ "name": "user name" }),
+                })],
             },
             InputMessage {
                 role: Role::Assistant,
@@ -772,7 +781,9 @@ mod tests {
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![json!({ "name": "assistant name" }).into()],
+                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    arguments: json!({ "name": "assistant name" }),
+                })],
             },
         ];
         let input = Input {
@@ -835,11 +846,15 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec![json!({ "name": "user name" }).into()],
+                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    arguments: json!({ "name": "user name" }),
+                })],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![json!({ "name": "assistant name" }).into()],
+                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    arguments: json!({ "name": "assistant name" }),
+                })],
             },
         ];
 
@@ -946,7 +961,9 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![
-                    json!({ "name": "user name" }).into(),
+                    InputMessageContent::Text(TextKind::Arguments {
+                        arguments: json!({ "name": "user name" }),
+                    }),
                     InputMessageContent::RawText {
                         value: "raw text".to_string(),
                     },
@@ -954,7 +971,9 @@ mod tests {
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![json!({ "name": "assistant name" }).into()],
+                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    arguments: json!({ "name": "assistant name" }),
+                })],
             },
         ];
 
@@ -1014,11 +1033,15 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec![json!({ "name": "user name" }).into()],
+                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    arguments: json!({ "name": "user name" }),
+                })],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![json!({ "name": "assistant name" }).into()],
+                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    arguments: json!({ "name": "assistant name" }),
+                })],
             },
         ];
 
@@ -1144,7 +1167,9 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec![json!({ "name": "user name" }).into()],
+                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    arguments: json!({ "name": "user name" }),
+                })],
             },
             InputMessage {
                 role: Role::Assistant,
@@ -1208,7 +1233,9 @@ mod tests {
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![json!({ "name": "assistant name" }).into()],
+                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    arguments: json!({ "name": "assistant name" }),
+                })],
             },
         ];
         let input = Input {
@@ -1266,11 +1293,15 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec![json!({ "name": "user name" }).into()],
+                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    arguments: json!({ "name": "user name" }),
+                })],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![json!({ "name": "assistant name" }).into()],
+                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    arguments: json!({ "name": "assistant name" }),
+                })],
             },
         ];
 

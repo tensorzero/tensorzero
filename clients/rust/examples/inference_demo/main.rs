@@ -70,7 +70,9 @@ async fn main() {
             input: Input {
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text { value: input }],
+                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                        arguments: input,
+                    })],
                 }],
                 ..Default::default()
             },
