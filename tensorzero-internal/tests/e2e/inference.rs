@@ -1588,7 +1588,7 @@ pub async fn test_raw_text(client: tensorzero::Client) {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "raw_text", "value": "This is not the normal input"}]
+                "content": [{"type": "text", "value": "This is not the normal input"}]
             }
         ]
     });

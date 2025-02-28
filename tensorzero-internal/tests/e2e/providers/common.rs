@@ -1899,7 +1899,7 @@ pub async fn check_inference_params_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "raw_text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
