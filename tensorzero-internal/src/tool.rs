@@ -519,6 +519,17 @@ impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
     }
 }
 
+/// For use in initializing JSON functions
+/// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments
+pub fn create_implicit_tool_call_config(schema: JSONSchemaFromPath) -> ToolCallConfig {
+    let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig { parameters: schema });
+    ToolCallConfig {
+        tools_available: vec![implicit_tool],
+        tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
+        parallel_tool_calls: false,
+    }
+}
+
 mod tests {
     use super::*;
     use lazy_static::lazy_static;

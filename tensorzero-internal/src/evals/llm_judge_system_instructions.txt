@@ -1,0 +1,3 @@
+{system_instructions}
+
+Output Type: {output_type}
