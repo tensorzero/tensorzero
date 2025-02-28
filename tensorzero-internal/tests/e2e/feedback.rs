@@ -4,7 +4,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
@@ -987,11 +987,10 @@ async fn test_fast_inference_then_feedback() {
                         system: Some(json!({"assistant_name": "Alfred Pennyworth"})),
                         messages: vec![tensorzero::InputMessage {
                             role: Role::User,
-                            content: vec![tensorzero::InputMessageContent::Text {
-                                value: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
+                            content: vec![tensorzero::InputMessageContent::Text(TextKind::Text {
+                                text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
                                     .to_string()
-                                    .into(),
-                            }],
+                            })],
                         }],
                     },
                     stream: Some(false),

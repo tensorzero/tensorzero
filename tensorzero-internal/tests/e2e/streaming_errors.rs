@@ -4,6 +4,7 @@ use tensorzero::{
     Client, ClientInferenceParams, InferenceOutput, InferenceResponseChunk, Input, InputMessage,
     InputMessageContent, Role,
 };
+use tensorzero_internal::inference::types::TextKind;
 
 use crate::{
     common::get_gateway_endpoint,
@@ -32,10 +33,10 @@ async fn test_client_stream_with_error(client: Client) {
                 })),
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text {
-                        value: "Please write me a sentence about Megumin making an explosion."
+                    content: vec![InputMessageContent::Text(TextKind::Text {
+                        text: "Please write me a sentence about Megumin making an explosion."
                             .into(),
-                    }],
+                    })],
                 }],
             },
             stream: Some(true),
