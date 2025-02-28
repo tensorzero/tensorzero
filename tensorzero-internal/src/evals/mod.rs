@@ -354,6 +354,8 @@ fn read_system_instructions<P1: AsRef<Path>, P2: AsRef<Path>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+    use std::sync::Arc;
 
     #[test]
     fn test_read_system_instructions() {
@@ -376,5 +378,289 @@ mod tests {
             message: "Failed to open system instructions file: No such file or directory (os error 2)".to_string(),
             file_path: "fixtures/config/evals/eval1/llm_judge_bool/nonexistent.txt".to_string(),
         });
+    }
+
+    #[test]
+    fn test_uninitialized_eval_config_load() {
+        // Setup test fixtures
+        let base_path = PathBuf::from("fixtures/config");
+        let eval_name = "test_eval";
+
+        // Prepare function configs map with a function referenced in the eval
+        let mut functions = HashMap::new();
+        let function_name = "generate_draft";
+        let function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema: create_test_schema(),
+            implicit_tool_call_config: create_test_tool_call_config(),
+        });
+        functions.insert(function_name.to_string(), Arc::new(function_config));
+
+        // Test case 1: Successful loading with exact match evaluator
+        {
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "em_evaluator".to_string(),
+                UninitializedEvaluatorConfig::ExactMatch,
+            );
+
+            let uninitialized_config = UninitializedEvalConfig {
+                evaluators,
+                dataset_name: "test_dataset".to_string(),
+                function_name: function_name.to_string(),
+            };
+
+            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            assert!(result.is_ok());
+
+            let (config, additional_functions) = result.unwrap();
+            assert_eq!(config.dataset_name, "test_dataset");
+            assert_eq!(config.function_name, function_name);
+            assert_eq!(config.evaluators.len(), 1);
+            assert!(matches!(
+                config.evaluators.get("em_evaluator").unwrap(),
+                EvaluatorConfig::ExactMatch
+            ));
+            // No additional function configs for exact match
+            assert_eq!(additional_functions.len(), 0);
+        }
+
+        // Test case 2: Successful loading with LLM judge evaluator
+        {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "test_variant".to_string(),
+                UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                    UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: true,
+                        model: Arc::from("gpt-3.5-turbo"),
+                        system_instructions: PathBuf::from(
+                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                        ),
+                        temperature: Some(0.7),
+                        top_p: None,
+                        max_tokens: Some(100),
+                        presence_penalty: None,
+                        frequency_penalty: None,
+                        seed: None,
+                        json_mode: JsonMode::ImplicitTool,
+                        retries: RetryConfig::default(),
+                        extra_body: None,
+                    },
+                ),
+            );
+
+            let llm_judge_config = UninitializedLLMJudgeConfig {
+                variants,
+                output_type: LLMJudgeOutputType::Boolean,
+                optimize: LLMJudgeOptimize::Min,
+                include_datapoint_output: false,
+            };
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "llm_judge_eval".to_string(),
+                UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
+            );
+
+            let uninitialized_config = UninitializedEvalConfig {
+                evaluators,
+                dataset_name: "test_dataset".to_string(),
+                function_name: function_name.to_string(),
+            };
+
+            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            assert!(result.is_ok());
+
+            let (config, additional_functions) = result.unwrap();
+            assert_eq!(config.evaluators.len(), 1);
+
+            // Verify LLM judge evaluator config
+            match config.evaluators.get("llm_judge_eval").unwrap() {
+                EvaluatorConfig::LLMJudge(judge_config) => {
+                    assert!(matches!(
+                        judge_config.output_type,
+                        LLMJudgeOutputType::Boolean
+                    ));
+                    assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
+                    assert!(!judge_config.include_datapoint_output);
+                }
+                _ => panic!("Expected LLMJudge evaluator config"),
+            }
+
+            // Verify additional function config was created
+            assert_eq!(additional_functions.len(), 1);
+            let function_name = get_llm_judge_function_name(eval_name, "llm_judge_eval");
+            assert!(additional_functions.contains_key(&function_name));
+
+            // Verify the function config has the correct type
+            match additional_functions[&function_name].as_ref() {
+                FunctionConfig::Json(json_config) => {
+                    assert_eq!(json_config.variants.len(), 1);
+                    assert!(json_config.variants.contains_key("test_variant"));
+                    assert!(json_config.system_schema.is_some());
+                    assert!(json_config.user_schema.is_some());
+                    assert!(json_config.output_schema.value.is_object());
+                }
+                _ => panic!("Expected Json function config"),
+            }
+        }
+
+        // Test case 3: Error when function doesn't exist
+        {
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "em_evaluator".to_string(),
+                UninitializedEvaluatorConfig::ExactMatch,
+            );
+
+            let uninitialized_config = UninitializedEvalConfig {
+                evaluators,
+                dataset_name: "test_dataset".to_string(),
+                function_name: "nonexistent_function".to_string(),
+            };
+
+            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            assert!(result.is_err());
+            assert!(matches!(
+                *result.unwrap_err().get_details(),
+                ErrorDetails::Config { .. }
+            ));
+        }
+
+        // Test case 4: Error when eval name contains "::"
+        {
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "em_evaluator".to_string(),
+                UninitializedEvaluatorConfig::ExactMatch,
+            );
+
+            let uninitialized_config = UninitializedEvalConfig {
+                evaluators,
+                dataset_name: "test_dataset".to_string(),
+                function_name: function_name.to_string(),
+            };
+
+            let result = uninitialized_config.load(&functions, &base_path, "invalid::eval::name");
+            assert!(result.is_err());
+            assert!(matches!(
+                *result.unwrap_err().get_details(),
+                ErrorDetails::Config { .. }
+            ));
+        }
+
+        // Test case 5: Error when multiple variants have non-zero weights
+        {
+            let mut test_variant1 = HashMap::new();
+            test_variant1.insert(
+                "test_variant1".to_string(),
+                UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                    UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: true, // weight = 1.0
+                        model: Arc::from("gpt-3.5-turbo"),
+                        system_instructions: PathBuf::from(
+                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                        ),
+                        temperature: Some(0.7),
+                        top_p: None,
+                        max_tokens: Some(100),
+                        presence_penalty: None,
+                        frequency_penalty: None,
+                        seed: None,
+                        json_mode: JsonMode::ImplicitTool,
+                        retries: RetryConfig::default(),
+                        extra_body: None,
+                    },
+                ),
+            );
+
+            let mut test_variant2 = HashMap::new();
+            test_variant2.insert(
+                "test_variant2".to_string(),
+                UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                    UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: true, // Another with weight = 1.0
+                        model: Arc::from("gpt-4"),
+                        system_instructions: PathBuf::from(
+                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                        ),
+                        temperature: Some(0.5),
+                        top_p: None,
+                        max_tokens: Some(200),
+                        presence_penalty: None,
+                        frequency_penalty: None,
+                        seed: None,
+                        json_mode: JsonMode::ImplicitTool,
+                        retries: RetryConfig::default(),
+                        extra_body: None,
+                    },
+                ),
+            );
+
+            // Combine the two variants
+            let mut variants = HashMap::new();
+            for (k, v) in test_variant1 {
+                variants.insert(k, v);
+            }
+            for (k, v) in test_variant2 {
+                variants.insert(k, v);
+            }
+
+            let llm_judge_config = UninitializedLLMJudgeConfig {
+                variants,
+                output_type: LLMJudgeOutputType::Boolean,
+                optimize: LLMJudgeOptimize::Min,
+                include_datapoint_output: false,
+            };
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "multiple_active_variants".to_string(),
+                UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
+            );
+
+            let uninitialized_config = UninitializedEvalConfig {
+                evaluators,
+                dataset_name: "test_dataset".to_string(),
+                function_name: function_name.to_string(),
+            };
+
+            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            assert!(result.is_err());
+            assert!(matches!(
+                *result.unwrap_err().get_details(),
+                ErrorDetails::Config { .. }
+            ));
+        }
+    }
+
+    // Helper functions for tests
+    fn create_test_schema() -> JSONSchemaFromPath {
+        let schema_value = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "result": {
+                    "type": "string"
+                }
+            },
+            "required": ["result"]
+        });
+        JSONSchemaFromPath::from_value(&schema_value).unwrap()
+    }
+
+    fn create_test_tool_call_config() -> ToolCallConfig {
+        let output_schema = create_test_schema();
+        let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig {
+            parameters: output_schema,
+        });
+        ToolCallConfig {
+            tools_available: vec![implicit_tool],
+            tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
+            parallel_tool_calls: false,
+        }
     }
 }
