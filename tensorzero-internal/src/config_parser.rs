@@ -1791,6 +1791,36 @@ mod tests {
         Config::load_from_toml(config, base_path.clone()).expect("Failed to load config");
     }
 
+    #[test]
+    fn test_model_provider_unknown_field() {
+        let config_str = r#"
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                  GENERAL                                   │
+        # └────────────────────────────────────────────────────────────────────────────┘
+
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+        [functions]
+
+        [models.my-model]
+        routing = ["dummy"]
+
+        [models.my-model.providers.dummy]
+        type = "dummy"
+        my_bad_key = "foo"
+        "#;
+
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .expect_err("Config should fail to load");
+        assert!(
+            err.to_string().contains("unknown field `my_bad_key`"),
+            "Unexpected error: {err:?}"
+        );
+    }
+
     /// Get a sample valid config for testing
     fn get_sample_valid_config() -> toml::Table {
         let config_str = r#"

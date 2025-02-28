@@ -10,8 +10,8 @@ use tensorzero_internal::{
     embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
     endpoints::inference::InferenceCredentials,
     inference::types::{
-        ContentBlock, ContentBlockChatOutput, Input, InputMessage, InputMessageContent,
-        JsonInferenceOutput, RequestMessage, Role,
+        ContentBlock, ContentBlockChatOutput, JsonInferenceOutput, RequestMessage, ResolvedInput,
+        ResolvedInputMessage, ResolvedInputMessageContent, Role,
     },
 };
 use tokio::time::sleep;
@@ -256,7 +256,7 @@ pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
 // Stick an embedding example into the database
 async fn embed_insert_example(
     clickhouse: &ClickHouseConnectionInfo,
-    input: Input,
+    input: ResolvedInput,
     output: String,
     function_name: &str,
     variant_name: &str,
@@ -320,11 +320,11 @@ pub async fn test_dicl_inference_request() {
     // Insert examples into the database
     let mut tasks = Vec::new();
 
-    let input = Input {
+    let input = ResolvedInput {
         system: Some(json!({"assistant_name": "Dr. Mehta"})),
-        messages: vec![InputMessage {
+        messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text {
                 value: json!("What is the boiling point of water?"),
             }],
         }],
@@ -340,11 +340,11 @@ pub async fn test_dicl_inference_request() {
         variant_name,
     ));
 
-    let input = Input {
+    let input = ResolvedInput {
         system: Some(json!({"assistant_name": "Pinocchio"})),
-        messages: vec![InputMessage {
+        messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text {
                 value: json!("What the capital city of India?"),
             }],
         }],
@@ -361,11 +361,11 @@ pub async fn test_dicl_inference_request() {
         variant_name,
     ));
 
-    let input = Input {
+    let input = ResolvedInput {
         system: Some(json!({"assistant_name": "Pinocchio"})),
-        messages: vec![InputMessage {
+        messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text {
                 value: json!("What is an example of a computationally hard problem?"),
             }],
         }],
@@ -384,11 +384,11 @@ pub async fn test_dicl_inference_request() {
         variant_name,
     ));
 
-    let input = Input {
+    let input = ResolvedInput {
         system: Some(json!({"assistant_name": "Pinocchio"})),
-        messages: vec![InputMessage {
+        messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text {
                 value: json!("Who wrote Lord of the Rings?"),
             }],
         }],
@@ -888,11 +888,11 @@ async fn test_dicl_json_request() {
     // Insert examples into the database
     let mut tasks = Vec::new();
 
-    let input = Input {
+    let input = ResolvedInput {
         system: Some(json!({"assistant_name": "Dr. Mehta"})),
-        messages: vec![InputMessage {
+        messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text {
                 value: json!({"country": "Canada"}),
             }],
         }],
@@ -911,11 +911,11 @@ async fn test_dicl_json_request() {
         variant_name,
     ));
 
-    let input = Input {
+    let input = ResolvedInput {
         system: Some(json!({"assistant_name": "Pinocchio"})),
-        messages: vec![InputMessage {
+        messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text {
                 value: json!({"country": "India"}),
             }],
         }],
@@ -934,11 +934,11 @@ async fn test_dicl_json_request() {
         variant_name,
     ));
 
-    let input = Input {
+    let input = ResolvedInput {
         system: Some(json!({"assistant_name": "Pinocchio"})),
-        messages: vec![InputMessage {
+        messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text {
                 value: json!({"country": "USA"}),
             }],
         }],
@@ -956,11 +956,11 @@ async fn test_dicl_json_request() {
         variant_name,
     ));
 
-    let input = Input {
+    let input = ResolvedInput {
         system: Some(json!({"assistant_name": "Pinocchio"})),
-        messages: vec![InputMessage {
+        messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text {
                 value: json!({"country": "England"}),
             }],
         }],

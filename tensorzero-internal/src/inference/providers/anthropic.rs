@@ -25,7 +25,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Usage,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
 use super::helpers::{inject_extra_body, peek_first_chunk};
@@ -126,6 +126,7 @@ impl InferenceProvider for AnthropicProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body =
             serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
@@ -135,7 +136,7 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let res = http_client
@@ -219,6 +220,7 @@ impl InferenceProvider for AnthropicProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body =
             serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
@@ -228,7 +230,7 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
