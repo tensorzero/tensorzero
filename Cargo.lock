@@ -3762,6 +3762,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "aws-config",
+ "aws-credential-types",
  "aws-sdk-bedrockruntime",
  "aws-sdk-s3",
  "aws-smithy-types",

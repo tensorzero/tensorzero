@@ -9,6 +9,7 @@ use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
+use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
 };
@@ -20,7 +21,7 @@ use crate::{
     error::{Error, ErrorDetails},
     function::FunctionConfig,
     inference::types::{
-        ContentBlockChatOutput, InferenceResult, InferenceResultStream, Input, JsonInferenceOutput,
+        ContentBlockChatOutput, InferenceResult, InferenceResultStream, JsonInferenceOutput,
     },
     minijinja_util::TemplateConfig,
 };
@@ -270,13 +271,13 @@ impl Variant for DiclConfig {
 
 #[derive(Debug, Deserialize, PartialEq)]
 struct ChatExample {
-    input: Input,
+    input: ResolvedInput,
     output: Vec<ContentBlockChatOutput>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
 struct JsonExample {
-    input: Input,
+    input: ResolvedInput,
     output: JsonInferenceOutput,
 }
 
@@ -504,11 +505,21 @@ fn parse_raw_examples(
     let mut examples = Vec::new();
     for raw_example in raw_examples {
         // Parse the `input` string into `Input`
-        let input: Input = serde_json::from_str(&raw_example.input).map_err(|e| {
+        let input: ResolvedInput = serde_json::from_str(&raw_example.input).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to parse `input`: {}", e),
             })
         })?;
+
+        for messages in &input.messages {
+            for content in &messages.content {
+                if let ResolvedInputMessageContent::Image(_) = content {
+                    return Err(Error::new(ErrorDetails::Serialization {
+                        message: "Failed to deserialize raw_example - images are not supported in dynamic in-context learning".to_string(),
+                    }));
+                }
+            }
+        }
 
         match function {
             FunctionConfig::Chat(_) => {
@@ -586,8 +597,9 @@ mod tests {
     use crate::{
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            InputMessage, InputMessageContent, ResolvedInputMessage, ResolvedInputMessageContent,
-            Role, Text,
+            resolved_input::ImageWithPath,
+            storage::{StorageKind, StoragePath},
+            Base64Image, ImageKind, ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
         },
         tool::{ToolCall, ToolCallOutput},
     };
@@ -601,18 +613,18 @@ mod tests {
         // ---------- Test with ChatExample ----------
 
         // Mock Input data
-        let input_data = Input {
+        let input_data = ResolvedInput {
             system: Some(json!({"type": "system", "content": "System message"})),
             messages: vec![
-                InputMessage {
+                ResolvedInputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text {
+                    content: vec![ResolvedInputMessageContent::Text {
                         value: json!("Hello, assistant!"),
                     }],
                 },
-                InputMessage {
+                ResolvedInputMessage {
                     role: Role::Assistant,
-                    content: vec![InputMessageContent::Text {
+                    content: vec![ResolvedInputMessageContent::Text {
                         value: json!("Hello, user!"),
                     }],
                 },
@@ -741,15 +753,15 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_raw_examples() {
+    fn test_reject_image_example() {
         // Define sample raw examples with serialized Input and Output
         let raw_examples = vec![
             RawExample {
-                input: serde_json::to_string(&Input {
+                input: serde_json::to_string(&ResolvedInput {
                     system: Some(json!({"assistant_name": "Dr. Mehta"})),
-                    messages: vec![InputMessage {
+                    messages: vec![ResolvedInputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text {
+                        content: vec![ResolvedInputMessageContent::Text {
                             value: json!("What is the boiling point of water?"),
                         }],
                     }],
@@ -761,11 +773,75 @@ mod tests {
                 .unwrap(),
             },
             RawExample {
-                input: serde_json::to_string(&Input {
+                input: serde_json::to_string(&ResolvedInput {
                     system: Some(json!({"assistant_name": "Pinocchio"})),
-                    messages: vec![InputMessage {
+                    messages: vec![ResolvedInputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text {
+                        content: vec![
+                            ResolvedInputMessageContent::Text {
+                                value: json!("What is the name of the capital city of Japan?"),
+                            },
+                            ResolvedInputMessageContent::Image(ImageWithPath {
+                                image: Base64Image {
+                                    url: None,
+                                    mime_type: ImageKind::Png,
+                                    data: Some("ABC".to_string()),
+                                },
+                                storage_path: StoragePath {
+                                    kind: StorageKind::Disabled,
+                                    path: Default::default(),
+                                },
+                            }),
+                        ],
+                    }],
+                })
+                .unwrap(),
+                output: serde_json::to_string(&vec![ContentBlockChatOutput::Text(Text {
+                    text: "Osaka (nose grows 4 inches)".to_string(),
+                })])
+                .unwrap(),
+            },
+        ];
+
+        let function = FunctionConfig::Chat(FunctionConfigChat {
+            ..Default::default()
+        });
+        // Parse the raw examples
+        let err = parse_raw_examples(raw_examples.clone(), &function)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("images are not supported in dynamic in-context learning"),
+            "Unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_parse_raw_examples() {
+        // Define sample raw examples with serialized Input and Output
+        let raw_examples = vec![
+            RawExample {
+                input: serde_json::to_string(&ResolvedInput {
+                    system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                    messages: vec![ResolvedInputMessage {
+                        role: Role::User,
+                        content: vec![ResolvedInputMessageContent::Text {
+                            value: json!("What is the boiling point of water?"),
+                        }],
+                    }],
+                })
+                .unwrap(),
+                output: serde_json::to_string(&vec![ContentBlockChatOutput::Text(Text {
+                    text: "100 degrees Celsius".to_string(),
+                })])
+                .unwrap(),
+            },
+            RawExample {
+                input: serde_json::to_string(&ResolvedInput {
+                    system: Some(json!({"assistant_name": "Pinocchio"})),
+                    messages: vec![ResolvedInputMessage {
+                        role: Role::User,
+                        content: vec![ResolvedInputMessageContent::Text {
                             value: json!("What is the name of the capital city of Japan?"),
                         }],
                     }],
@@ -803,11 +879,11 @@ mod tests {
         // Test that we can parse a JSON example too
         let json_raw_examples = vec![
             RawExample {
-                input: serde_json::to_string(&Input {
+                input: serde_json::to_string(&ResolvedInput {
                     system: Some(json!({"assistant_name": "JsonTester"})),
-                    messages: vec![InputMessage {
+                    messages: vec![ResolvedInputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text {
+                        content: vec![ResolvedInputMessageContent::Text {
                             value: json!("Provide a sample JSON response."),
                         }],
                     }],
@@ -825,11 +901,11 @@ mod tests {
                 .unwrap(),
             },
             RawExample {
-                input: serde_json::to_string(&Input {
+                input: serde_json::to_string(&ResolvedInput {
                     system: Some(json!({"assistant_name": "JsonTester"})),
-                    messages: vec![InputMessage {
+                    messages: vec![ResolvedInputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text {
+                        content: vec![ResolvedInputMessageContent::Text {
                             value: json!("Provide another JSON response."),
                         }],
                     }],

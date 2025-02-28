@@ -22,7 +22,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
-use crate::model::CredentialLocation;
+use crate::model::{CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk};
 
 const PROVIDER_NAME: &str = "Dummy";
@@ -157,6 +157,7 @@ impl InferenceProvider for DummyProvider {
         request: &'a ModelInferenceRequest<'_>,
         _http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        _model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         if self.model_name == "slow" {
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -316,6 +317,7 @@ impl InferenceProvider for DummyProvider {
         _request: &'a ModelInferenceRequest<'_>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
+        _model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         if self.model_name == "slow" {
             tokio::time::sleep(Duration::from_secs(5)).await;

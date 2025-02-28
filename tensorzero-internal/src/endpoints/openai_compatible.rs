@@ -21,6 +21,7 @@ use futures::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio_stream::StreamExt;
+use url::Url;
 use uuid::Uuid;
 
 use crate::cache::CacheParamsOptions;
@@ -30,8 +31,8 @@ use crate::endpoints::inference::{
 use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, Input, InputMessage,
-    InputMessageContent, Role, Usage,
+    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, Image, ImageKind, Input,
+    InputMessage, InputMessageContent, Role, Usage,
 };
 use crate::tool::{
     DynamicToolParams, Tool, ToolCall, ToolCallChunk, ToolCallOutput, ToolChoice, ToolResult,
@@ -412,7 +413,14 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                         }
                         .into());
                     }
-                    system = Some(match convert_openai_message_content(msg.content.clone())? {
+                    let mut system_content = convert_openai_message_content(msg.content.clone())?;
+                    if system_content.len() != 1 {
+                        return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                            message: "System message must be a single content block".to_string(),
+                        }
+                        .into());
+                    }
+                    system = Some(match system_content.remove(0) {
                         InputMessageContent::Text { value } => value,
                         InputMessageContent::RawText { value } => Value::String(value),
                         _ => {
@@ -426,13 +434,13 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                 OpenAICompatibleMessage::User(msg) => {
                     messages.push(InputMessage {
                         role: Role::User,
-                        content: vec![convert_openai_message_content(msg.content)?],
+                        content: convert_openai_message_content(msg.content)?,
                     });
                 }
                 OpenAICompatibleMessage::Assistant(msg) => {
                     let mut message_content = Vec::new();
                     if let Some(content) = msg.content {
-                        message_content.push(convert_openai_message_content(content)?);
+                        message_content.extend(convert_openai_message_content(content)?);
                     }
                     if let Some(tool_calls) = msg.tool_calls {
                         for tool_call in tool_calls {
@@ -475,7 +483,14 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
 #[allow(dead_code)]
 enum OpenAICompatibleContentBlock {
     Text(TextContent),
-    ImageUrl { image_url: Value },
+    ImageUrl { image_url: OpenAICompatibleImageUrl },
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(tag = "type", deny_unknown_fields, rename_all = "snake_case")]
+#[allow(dead_code)]
+struct OpenAICompatibleImageUrl {
+    url: Url,
 }
 
 #[derive(Deserialize, Debug)]
@@ -491,36 +506,57 @@ pub enum TextContent {
     },
 }
 
-fn convert_openai_message_content(content: Value) -> Result<InputMessageContent, Error> {
+fn parse_base64_image_data_url(url: &str) -> Result<(ImageKind, &str), Error> {
+    let Some(url) = url.strip_prefix("data:") else {
+        return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+            message: "Image data URL must start with `data:`".to_string(),
+        }));
+    };
+    let Some((mime_type, data)) = url.split_once(";base64,") else {
+        return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+            message: "Image data URL must contain a base64-encoded data part".to_string(),
+        }));
+    };
+    let image_type = match mime_type {
+        "image/jpeg" => ImageKind::Jpeg,
+        "image/png" => ImageKind::Png,
+        "image/webp" => ImageKind::WebP,
+        _ => {
+            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: format!("Unsupported content type `{mime_type}`: - only `image/jpeg`, `image/png``, and `image/webp` image data URLs are supported"),
+            }))
+        }
+    };
+    Ok((image_type, data))
+}
+
+fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageContent>, Error> {
     match content {
-        Value::String(s) => Ok(InputMessageContent::Text {value: Value::String(s) }),
+        Value::String(s) => Ok(vec![InputMessageContent::Text {value: Value::String(s) }]),
         Value::Array(a) => {
-            if a.len() != 1 {
-                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
-                }
-                .into());
+            let mut outputs = Vec::with_capacity(a.len());
+            for val in a {
+                let block = serde_json::from_value::<OpenAICompatibleContentBlock>(val.clone());
+                let output = match block {
+                    Ok(OpenAICompatibleContentBlock::Text(TextContent::RawText { text })) => InputMessageContent::Text { value: Value::String(text) },
+                    Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => InputMessageContent::Text { value: tensorzero_arguments },
+                    Ok(OpenAICompatibleContentBlock::ImageUrl { image_url }) => {
+                        if image_url.url.scheme() == "data" {
+                            let url_str = image_url.url.to_string();
+                            let (mime_type, data) = parse_base64_image_data_url(&url_str)?;
+                            InputMessageContent::Image(Image::Base64 { mime_type, data: data.to_string() })
+                        } else {
+                            InputMessageContent::Image(Image::Url { url: image_url.url })
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(r#"Content block `{val}` was not a valid OpenAI content block. This is deprecated - please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
+                        InputMessageContent::Text { value: val }
+                    }
+                };
+                outputs.push(output);
             }
-
-            let val = a.into_iter().next().ok_or_else(|| Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                message: "message content array is empty. This should never happen. Please report this bug at https://github.com/tensorzero/tensorzero/issues.".to_string(),
-            }))?;
-
-            let block: Result<OpenAICompatibleContentBlock, _> = serde_json::from_value(val.clone());
-            match block {
-                Ok(OpenAICompatibleContentBlock::Text(TextContent::RawText { text })) => Ok(InputMessageContent::Text { value: Value::String(text) }),
-                Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => Ok(InputMessageContent::Text { value: tensorzero_arguments }),
-                Ok(OpenAICompatibleContentBlock::ImageUrl { image_url: _ }) => {
-                    Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                        message: "`image_url` content blocks are not currently supported".to_string(),
-                    }))
-                }
-                Err(e) => {
-                    tracing::warn!(r#"Content block `{val}` was not a valid OpenAI content block. This is deprecated - please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
-                    Ok(InputMessageContent::Text { value: val })
-
-                }
-            }
+            Ok(outputs)
         }
         _ => Err(ErrorDetails::InvalidOpenAICompatibleRequest {
             message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
@@ -1032,12 +1068,12 @@ mod tests {
         let value = convert_openai_message_content(content.clone()).unwrap();
         assert_eq!(
             value,
-            InputMessageContent::Text {
+            vec![InputMessageContent::Text {
                 value: json!({
                     "country": "Japan",
                     "city": "Tokyo",
                 }),
-            }
+            }]
         );
         let content = json!({
             "country": "Japan",
@@ -1052,14 +1088,8 @@ mod tests {
             }
         );
         let content = json!([]);
-        let error = convert_openai_message_content(content).unwrap_err();
-        let details = error.get_owned_details();
-        assert_eq!(
-            details,
-            ErrorDetails::InvalidOpenAICompatibleRequest {
-                message: "message content must either be a string or an array of length 1 containing structured TensorZero inputs".to_string(),
-            }
-        );
+        let messages = convert_openai_message_content(content).unwrap();
+        assert_eq!(messages, vec![]);
 
         let arguments_block = json!([{
             "type": "text",
@@ -1070,11 +1100,11 @@ mod tests {
         let value = convert_openai_message_content(arguments_block).unwrap();
         assert_eq!(
             value,
-            InputMessageContent::Text {
+            vec![InputMessageContent::Text {
                 value: json!({
                     "custom_key": "custom_val",
                 }),
-            }
+            }]
         );
     }
 
@@ -1088,12 +1118,12 @@ mod tests {
         let value = convert_openai_message_content(content.clone()).unwrap();
         assert_eq!(
             value,
-            InputMessageContent::Text {
+            vec![InputMessageContent::Text {
                 value: json!({
                     "country": "Japan",
                     "city": "Tokyo",
                 }),
-            }
+            }]
         );
         assert!(logs_contain(
             r#"Content block `{"country":"Japan","city":"Tokyo"}` was not a valid OpenAI content block."#
@@ -1106,12 +1136,12 @@ mod tests {
         let value = convert_openai_message_content(other_content.clone()).unwrap();
         assert_eq!(
             value,
-            InputMessageContent::Text {
+            vec![InputMessageContent::Text {
                 value: json!({
                     "type": "text",
                     "my_custom_arg": 123
                 }),
-            }
+            }]
         );
         assert!(logs_contain(
             r#"Content block `{"type":"text","my_custom_arg":123}` was not a valid OpenAI content block."#
@@ -1239,5 +1269,28 @@ mod tests {
         assert_eq!(tool_calls[0].id, "123");
         assert_eq!(tool_calls[0].function.name, "middle_tool");
         assert_eq!(tool_calls[0].function.arguments, "{\"key\": \"value\"}");
+    }
+
+    #[test]
+    fn test_parse_base64() {
+        assert_eq!(
+            (ImageKind::Jpeg, "YWJjCg=="),
+            parse_base64_image_data_url("data:image/jpeg;base64,YWJjCg==").unwrap()
+        );
+        assert_eq!(
+            (ImageKind::Png, "YWJjCg=="),
+            parse_base64_image_data_url("data:image/png;base64,YWJjCg==").unwrap()
+        );
+        assert_eq!(
+            (ImageKind::WebP, "YWJjCg=="),
+            parse_base64_image_data_url("data:image/webp;base64,YWJjCg==").unwrap()
+        );
+        let err = parse_base64_image_data_url("data:image/svg;base64,YWJjCg==")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Unsupported content type `image/svg`"),
+            "Unexpected error message: {err}"
+        );
     }
 }

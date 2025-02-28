@@ -6,6 +6,7 @@ use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::ModelInferenceRequest;
 use crate::inference::types::PeekableProviderInferenceResponseStream;
 use crate::inference::types::ProviderInferenceResponse;
+use crate::model::ModelProvider;
 use futures::Future;
 use reqwest::Client;
 
@@ -15,6 +16,7 @@ pub trait InferenceProvider {
         request: &'a ModelInferenceRequest,
         client: &'a Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> impl Future<Output = Result<ProviderInferenceResponse, Error>> + Send + 'a;
 
     fn infer_stream<'a>(
@@ -22,6 +24,7 @@ pub trait InferenceProvider {
         request: &'a ModelInferenceRequest,
         client: &'a Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> impl Future<Output = Result<(PeekableProviderInferenceResponseStream, String), Error>> + Send + 'a;
 
     fn start_batch_inference<'a>(

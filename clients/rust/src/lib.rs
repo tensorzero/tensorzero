@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{fmt::Display, path::PathBuf, sync::Arc};
 
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use std::fmt::Debug;
@@ -55,6 +55,7 @@ struct EmbeddedGateway {
 pub struct ClientBuilder {
     mode: ClientBuilderMode,
     http_client: Option<reqwest::Client>,
+    verbose_errors: bool,
 }
 
 /// An error type representing an error from within the TensorZero gateway
@@ -73,6 +74,8 @@ pub enum TensorZeroError {
         #[source]
         source: TensorZeroInternalError,
     },
+    #[error("HTTP request timed out")]
+    RequestTimeout,
 }
 
 #[derive(Debug, Error)]
@@ -100,6 +103,22 @@ pub enum ClientBuilderError {
     HTTPClientBuild(TensorZeroError),
 }
 
+// Helper type to choose between using Debug or Display for a type
+struct DisplayOrDebug<T: Debug + Display> {
+    val: T,
+    debug: bool,
+}
+
+impl<T: Debug + Display> Display for DisplayOrDebug<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.debug {
+            write!(f, "{:?}", self.val)
+        } else {
+            write!(f, "{}", self.val)
+        }
+    }
+}
+
 /// Controls how a `Client` is run
 pub enum ClientBuilderMode {
     /// In HTTPGateway mode, we make HTTP requests to a TensorZero gateway server.
@@ -118,6 +137,7 @@ impl ClientBuilder {
         Self {
             mode,
             http_client: None,
+            verbose_errors: false,
         }
     }
 
@@ -127,6 +147,16 @@ impl ClientBuilder {
     /// In `HTTPGateway` mode, this is used for making requests to the gateway.
     pub fn with_http_client(mut self, client: reqwest::Client) -> Self {
         self.http_client = Some(client);
+        self
+    }
+
+    /// Sets whether error messages should be more verbose (more `Debug` impls are used).
+    /// This increases the chances of exposing sensitive information (e.g. model responses)
+    /// in error messages.
+    ///
+    /// This is `false` by default.
+    pub fn with_verbose_errors(mut self, verbose_errors: bool) -> Self {
+        self.verbose_errors = verbose_errors;
         self
     }
 
@@ -176,6 +206,7 @@ impl ClientBuilder {
                             clickhouse_connection_info,
                         },
                     }),
+                    verbose_errors: self.verbose_errors,
                 })
             }
         }
@@ -192,6 +223,7 @@ impl ClientBuilder {
                 base_url: url,
                 http_client: self.http_client.unwrap_or_default(),
             }),
+            verbose_errors: self.verbose_errors,
         })
     }
 }
@@ -200,6 +232,7 @@ impl ClientBuilder {
 #[derive(Debug)]
 pub struct Client {
     mode: ClientMode,
+    verbose_errors: bool,
 }
 
 impl Client {
@@ -286,7 +319,7 @@ impl Client {
                             .into(),
                         })?;
                     Ok(InferenceOutput::Streaming(
-                        Self::http_inference_stream(event_source).await?,
+                        self.http_inference_stream(event_source).await?,
                     ))
                 } else {
                     Ok(InferenceOutput::NonStreaming(
@@ -311,11 +344,23 @@ impl Client {
         &self,
         resp: Result<reqwest::Response, reqwest::Error>,
     ) -> Result<T, TensorZeroError> {
-        let resp = resp.map_err(|e| TensorZeroError::Other {
-            source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
-                message: format!("Error from server: {e}"),
-            })
-            .into(),
+        let resp = resp.map_err(|e| {
+            if e.is_timeout() {
+                TensorZeroError::RequestTimeout
+            } else {
+                TensorZeroError::Other {
+                    source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
+                        message: format!(
+                            "Error from server: {}",
+                            DisplayOrDebug {
+                                val: e,
+                                debug: self.verbose_errors,
+                            }
+                        ),
+                    })
+                    .into(),
+                }
+            }
         })?;
 
         if let Err(e) = resp.error_for_status_ref() {
@@ -325,7 +370,13 @@ impl Client {
                 status_code,
                 text,
                 source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
-                    message: format!("Request failed: {e}"),
+                    message: format!(
+                        "Request failed: {}",
+                        DisplayOrDebug {
+                            val: e,
+                            debug: self.verbose_errors,
+                        }
+                    ),
                 })
                 .into(),
             });
@@ -333,13 +384,20 @@ impl Client {
 
         resp.json().await.map_err(|e| TensorZeroError::Other {
             source: tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
-                message: format!("Error deserializing inference response: {e:?}"),
+                message: format!(
+                    "Error deserializing inference response: {}",
+                    DisplayOrDebug {
+                        val: e,
+                        debug: self.verbose_errors,
+                    }
+                ),
             })
             .into(),
         })
     }
 
     async fn http_inference_stream(
+        &self,
         event_source: EventSource,
     ) -> Result<InferenceStream, TensorZeroError> {
         let mut event_source = event_source.peekable();
@@ -372,6 +430,7 @@ impl Client {
                 .into(),
             });
         }
+        let verbose_errors = self.verbose_errors;
         Ok(Box::pin(async_stream::stream! {
             while let Some(ev) = event_source.next().await {
                 match ev {
@@ -381,7 +440,10 @@ impl Client {
                         }
                         yield Err(tensorzero_internal::error::Error::new(ErrorDetails::StreamError {
                             source: Box::new(tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
-                                message: format!("Error in streaming response: {e:?}")
+                                message: format!("Error in streaming response: {}", DisplayOrDebug {
+                                    val: e,
+                                    debug: verbose_errors,
+                                })
                             }))
                         }))
                     }
@@ -393,20 +455,29 @@ impl Client {
                             }
                             let json: serde_json::Value = serde_json::from_str(&message.data).map_err(|e| {
                                 tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
-                                    message: format!("Error deserializing inference response chunk: {e:?}"),
+                                    message: format!("Error deserializing inference response chunk: {}", DisplayOrDebug {
+                                        val: e,
+                                        debug: verbose_errors,
+                                    }),
                                 })
                             })?;
                             if let Some(err) = json.get("error") {
                                 yield Err(tensorzero_internal::error::Error::new(ErrorDetails::StreamError {
                                     source: Box::new(tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
-                                        message: format!("Stream produced an error: {err:?}")
+                                        message: format!("Stream produced an error: {}", DisplayOrDebug {
+                                            val: err,
+                                            debug: verbose_errors,
+                                        }),
                                     }))
                                 }));
                             } else {
                                 let data: InferenceResponseChunk =
                                 serde_json::from_value(json).map_err(|e| {
                                     tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
-                                        message: format!("Error deserializing json value as InferenceResponseChunk: {e:?}"),
+                                        message: format!("Error deserializing json value as InferenceResponseChunk: {}", DisplayOrDebug {
+                                            val: e,
+                                            debug: verbose_errors,
+                                        }),
                                     })
                                 })?;
                                 yield Ok(data);

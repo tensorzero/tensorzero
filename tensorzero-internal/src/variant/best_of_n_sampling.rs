@@ -1121,6 +1121,7 @@ mod tests {
                             model_name: "best_of_n_1".into(),
                             ..Default::default()
                         }),
+                        extra_body: None,
                     },
                 )]),
             },
@@ -1211,6 +1212,7 @@ mod tests {
                                 model_name: "error".into(),
                                 ..Default::default()
                             }),
+                            extra_body: None,
                         },
                     )]),
                 },
@@ -1272,6 +1274,7 @@ mod tests {
                                 model_name: "regular".into(),
                                 ..Default::default()
                             }),
+                            extra_body: None,
                         },
                     )]),
                 },
@@ -1350,6 +1353,7 @@ mod tests {
                             model_name: "best_of_n_big".into(),
                             ..Default::default()
                         }),
+                        extra_body: None,
                     },
                 )]),
             },

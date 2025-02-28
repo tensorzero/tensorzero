@@ -58,28 +58,60 @@ impl ObjectStoreInfo {
         };
 
         let object_store: Option<Arc<dyn ObjectStore>> = match &config {
-            StorageKind::Filesystem { path } => Some(Arc::new(LocalFileSystem::new_with_prefix(path).map_err(|e| Error::new(ErrorDetails::Config {
-                message: format!("Failed to create filesystem object store for path: {path}: {e}"),
-            }))?)),
+            StorageKind::Filesystem { path } => Some(Arc::new(
+                LocalFileSystem::new_with_prefix(path).map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Failed to create filesystem object store for path: {path}: {e}"
+                        ),
+                    })
+                })?,
+            )),
             StorageKind::S3Compatible {
                 bucket_name,
                 region,
+                endpoint,
                 #[cfg(feature = "e2e_tests")]
-                prefix: _,
-            } => Some(Arc::new(
-                AmazonS3Builder::from_env()
-                    .with_region(region)
-                    .with_bucket_name(bucket_name)
+                    prefix: _,
+            } => {
+                let mut builder = AmazonS3Builder::from_env()
                     // Uses the S3 'If-Match' and 'If-None-Match' headers to implement condition put
-                    .with_conditional_put(object_store::aws::S3ConditionalPut::ETagMatch)
-                    .build()
+                    .with_conditional_put(object_store::aws::S3ConditionalPut::ETagMatch);
+
+                // These env vars have the highest priority, overriding whatever was set from 'AmazonS3Builder::from_env()'
+                if let Ok(s3_access_key) = std::env::var("S3_ACCESS_KEY_ID") {
+                    let s3_secret_key = std::env::var("S3_SECRET_ACCESS_KEY").ok().ok_or_else(|| Error::new(ErrorDetails::Config {
+                        message: "S3_ACCESS_KEY_ID is set but S3_SECRET_ACCESS_KEY is not. Please set either both or none".to_string()
+                    }))?;
+                    builder = builder
+                        .with_access_key_id(s3_access_key)
+                        .with_secret_access_key(s3_secret_key);
+                }
+
+                if let Some(bucket_name) = bucket_name {
+                    builder = builder.with_bucket_name(bucket_name);
+                }
+                if let Some(region) = region {
+                    builder = builder.with_region(region);
+                }
+                if let Some(endpoint) = endpoint {
+                    builder = builder.with_endpoint(endpoint);
+                }
+
+                if let (Some(bucket_name), Some(endpoint)) = (bucket_name, endpoint) {
+                    if endpoint.ends_with(bucket_name) {
+                        tracing::warn!("S3-compatible object endpoint `{endpoint}` ends with configured bucket_name `{bucket_name}`. This may be incorrect - if the gateway fails to start, consider setting `bucket_name = null`");
+                    }
+                }
+
+                Some(Arc::new(
+                builder.build()
                     .map_err(|e| Error::new(ErrorDetails::Config {
-                        message: format!("Failed to create S3 object store for bucket: {bucket_name} in region: {region}: {e}"),
+                        message: format!("Failed to create S3-compatible object store with config `{config:?}`: {e}"),
                     }))?),
-            ),
-            StorageKind::Disabled => {
-                None
+            )
             }
+            StorageKind::Disabled => None,
         };
 
         Ok(Some(Self {
@@ -1778,6 +1810,36 @@ mod tests {
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         Config::load_from_toml(config, base_path.clone()).expect("Failed to load config");
+    }
+
+    #[test]
+    fn test_model_provider_unknown_field() {
+        let config_str = r#"
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                  GENERAL                                   │
+        # └────────────────────────────────────────────────────────────────────────────┘
+
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+        [functions]
+
+        [models.my-model]
+        routing = ["dummy"]
+
+        [models.my-model.providers.dummy]
+        type = "dummy"
+        my_bad_key = "foo"
+        "#;
+
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .expect_err("Config should fail to load");
+        assert!(
+            err.to_string().contains("unknown field `my_bad_key`"),
+            "Unexpected error: {err:?}"
+        );
     }
 
     /// Get a sample valid config for testing
