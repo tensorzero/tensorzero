@@ -197,7 +197,6 @@ impl UninitializedEvaluatorConfig {
                     .filter(|(_, variant)| variant.weight() > 0.0)
                     .count();
                 if nonzero_weights != 1 {
-                    // TODO (Viraj): test this
                     return Err(ErrorDetails::Config {
                         message: format!(
                             "Evaluator `{evaluator_name}` in `[evals.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."
@@ -553,14 +552,14 @@ mod tests {
             ));
         }
 
-        // Test case 5: Error when multiple variants have non-zero weights
+        // Test case 5: Error when multiple variants are active in LLM judge
         {
             let mut test_variant1 = HashMap::new();
             test_variant1.insert(
                 "test_variant1".to_string(),
                 UninitializedLLMJudgeVariantConfig::ChatCompletion(
                     UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: true, // weight = 1.0
+                        active: true,
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
                             "evals/eval1/llm_judge_bool/system_instructions.txt",
@@ -583,7 +582,7 @@ mod tests {
                 "test_variant2".to_string(),
                 UninitializedLLMJudgeVariantConfig::ChatCompletion(
                     UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: true, // Another with weight = 1.0
+                        active: true,
                         model: Arc::from("gpt-4"),
                         system_instructions: PathBuf::from(
                             "evals/eval1/llm_judge_bool/system_instructions.txt",
@@ -631,10 +630,12 @@ mod tests {
 
             let result = uninitialized_config.load(&functions, &base_path, eval_name);
             assert!(result.is_err());
-            assert!(matches!(
+            assert_eq!(
                 *result.unwrap_err().get_details(),
-                ErrorDetails::Config { .. }
-            ));
+                ErrorDetails::Config {
+                    message: "Evaluator `multiple_active_variants` in `[evals.test_eval]` must have exactly 1 variant that is active. Found 2 variants with nonzero weights.".to_string(),
+                }
+            );
         }
     }
 

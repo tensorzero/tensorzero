@@ -704,7 +704,7 @@ impl UninitializedToolConfig {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct PathWithContents {
     pub path: PathBuf,
     pub contents: String,
@@ -851,6 +851,39 @@ mod tests {
         assert_eq!(embedding_model.providers.len(), 1);
         let provider = embedding_model.providers.get("openai").unwrap();
         assert!(matches!(provider, EmbeddingProviderConfig::OpenAI(_)));
+
+        // Check that the function for the LLM Judge eval is added to the functions table
+        let function = config
+            .functions
+            .get("tensorzero::llm_judge::eval1::llm_judge_bool")
+            .unwrap();
+        match &**function {
+            FunctionConfig::Json(json_config) => {
+                assert_eq!(json_config.variants.len(), 1);
+                match &json_config.variants["openai_promptA"] {
+                    VariantConfig::ChatCompletion(chat_config) => {
+                        assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
+                        assert_eq!(chat_config.weight, 1.0);
+                        assert_eq!(
+                            *chat_config.system_template.as_ref().unwrap(),
+                            PathWithContents {
+                                // We don't use a real path for programmatically generated templates
+                                // Instead we use this handle and then the same in minijinja
+                                path: PathBuf::from(
+                                    "tensorzero::llm_judge::eval1::llm_judge_bool::system"
+                                ),
+                                contents:
+                                    "Return True if there is NSFW content in this generation.\n\n\nOutput Type: boolean\n"
+                                        .to_string(),
+                            }
+                        );
+                        assert_eq!(chat_config.json_mode, Some(JsonMode::ImplicitTool));
+                    }
+                    _ => panic!("Expected a chat completion variant"),
+                }
+            }
+            _ => panic!("Expected a JSON function"),
+        }
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
