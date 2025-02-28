@@ -630,6 +630,51 @@ mod tests {
                 }
             );
         }
+
+        // Test case 6: Error when evaluator name contains "::"
+        {
+            let base_path = PathBuf::from(".");
+            let eval_name = "test_eval";
+            let function_name = "test_function";
+
+            let mut functions = HashMap::new();
+            functions.insert(
+                function_name.to_string(),
+                Arc::new(FunctionConfig::Json(FunctionConfigJson {
+                    variants: HashMap::new(),
+                    output_schema: create_test_schema(),
+                    system_schema: None,
+                    user_schema: None,
+                    assistant_schema: None,
+                    implicit_tool_call_config: create_implicit_tool_call_config(
+                        create_test_schema(),
+                    ),
+                })),
+            );
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "foo::invalid_name".to_string(),
+                UninitializedEvaluatorConfig::ExactMatch,
+            );
+
+            let uninitialized_config = UninitializedEvalConfig {
+                evaluators,
+                dataset_name: "test_dataset".to_string(),
+                function_name: function_name.to_string(),
+            };
+
+            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            assert!(result.is_err());
+            assert_eq!(
+                *result.unwrap_err().get_details(),
+                ErrorDetails::Config {
+                    message:
+                        "Evaluator names cannot contain \"::\" (referenced in `[evals.test_eval.foo::invalid_name]`)"
+                            .to_string(),
+                }
+            );
+        }
     }
 
     // Helper functions for tests
