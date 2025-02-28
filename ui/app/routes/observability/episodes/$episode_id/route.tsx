@@ -10,17 +10,16 @@ import {
 } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
-import { Badge } from "~/components/ui/badge";
 import EpisodeInferenceTable from "./EpisodeInferenceTable";
-import {
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
-import { Tooltip } from "~/components/ui/tooltip";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import PageButtons from "~/components/utils/PageButtons";
-import { PageHeader } from "~/components/layout/PageHeader";
+import {
+  PageHeader,
+  PageLayout,
+  SectionLayout,
+  SectionsGroup,
+  SectionHeader,
+} from "~/components/layout/PageLayout";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { episode_id } = params;
@@ -147,52 +146,41 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="container mx-auto px-4 pb-8">
-      <PageHeader headline={`Episode ${episode_id}`} />
+      <PageLayout>
+        <PageHeader headline={`Episode ${episode_id}`} />
 
-      <div className="pb-8 pt-4">
-        <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">
-          Inferences
-          <Badge variant="secondary">Count: {num_inferences}</Badge>
-        </h3>
+        <SectionsGroup>
+          <SectionLayout>
+            <SectionHeader headline="Inferences" count={num_inferences} />
+            <EpisodeInferenceTable inferences={inferences} />
+            <PageButtons
+              onPreviousPage={handlePreviousInferencePage}
+              onNextPage={handleNextInferencePage}
+              disablePrevious={disablePreviousInferencePage}
+              disableNext={disableNextInferencePage}
+            />
+          </SectionLayout>
 
-        <EpisodeInferenceTable inferences={inferences} />
-        <PageButtons
-          onPreviousPage={handlePreviousInferencePage}
-          onNextPage={handleNextInferencePage}
-          disablePrevious={disablePreviousInferencePage}
-          disableNext={disableNextInferencePage}
-        />
-      </div>
-
-      <div className="pb-8 pt-4">
-        <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">
-          Feedback
-          <TooltipProvider>
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <Badge variant="outline" className="px-2 py-0.5 text-xs">
-                  episode
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="max-w-xs">
-                  This table only includes episode-level feedback. To see
-                  inference-level feedback, open the detail page for that
-                  inference.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <Badge variant="secondary">Count: {num_feedbacks}</Badge>
-        </h3>
-        <FeedbackTable feedback={feedbacks} />
-        <PageButtons
-          onPreviousPage={handlePreviousFeedbackPage}
-          onNextPage={handleNextFeedbackPage}
-          disablePrevious={disablePreviousFeedbackPage}
-          disableNext={disableNextFeedbackPage}
-        />
-      </div>
+          <SectionLayout>
+            <SectionHeader
+              headline="Feedback"
+              count={num_feedbacks}
+              badge={{
+                name: "episode",
+                tooltip:
+                  "This table only includes episode-level feedback. To see inference-level feedback, open the detail page for that inference.",
+              }}
+            />
+            <FeedbackTable feedback={feedbacks} />
+            <PageButtons
+              onPreviousPage={handlePreviousFeedbackPage}
+              onNextPage={handleNextFeedbackPage}
+              disablePrevious={disablePreviousFeedbackPage}
+              disableNext={disableNextFeedbackPage}
+            />
+          </SectionLayout>
+        </SectionsGroup>
+      </PageLayout>
     </div>
   );
 }

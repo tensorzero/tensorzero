@@ -10,7 +10,6 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import { Badge } from "~/components/ui/badge";
 import PageButtons from "~/components/utils/PageButtons";
 import { getConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
@@ -27,7 +26,13 @@ import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import FunctionVariantTable from "./FunctionVariantTable";
-import { PageHeader } from "~/components/layout/PageHeader";
+import {
+  PageHeader,
+  PageLayout,
+  SectionLayout,
+  SectionsGroup,
+  SectionHeader,
+} from "~/components/layout/PageLayout";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -183,57 +188,59 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="container mx-auto px-4 pb-8">
-      <PageHeader headline={`Function ${function_name}`} />
-      <div className="flex flex-col gap-12">
-        <BasicInfo functionConfig={function_config} />
+      <PageLayout>
+        <PageHeader headline={`Function ${function_name}`} />
 
-        <div className="flex flex-col gap-3">
-          <h3 className="text-xl font-medium">Variants</h3>
-          <FunctionVariantTable
-            variant_counts={variant_counts}
-            function_name={function_name}
-          />
-        </div>
+        <SectionsGroup>
+          <SectionLayout>
+            <BasicInfo functionConfig={function_config} />
+          </SectionLayout>
 
-        <div className="flex flex-col gap-3">
-          <h3 className="text-xl font-medium">Metric</h3>
-          <MetricSelector
-            metricsWithFeedback={metricsWithFeedback}
-            selectedMetric={metric_name || ""}
-            onMetricChange={handleMetricChange}
-          />
-          {variant_performances && (
-            <VariantPerformance
-              variant_performances={variant_performances}
-              metric_name={metric_name}
-              time_granularity={time_granularity}
-              onTimeGranularityChange={handleTimeGranularityChange}
+          <SectionLayout>
+            <SectionHeader headline="Variants" />
+            <FunctionVariantTable
+              variant_counts={variant_counts}
+              function_name={function_name}
             />
-          )}
-        </div>
+          </SectionLayout>
 
-        <div className="flex flex-col gap-3">
-          <h3 className="flex items-center gap-2 text-xl font-medium">
-            Inferences
-            <Badge variant="secondary">Count: {num_inferences}</Badge>
-          </h3>
-          {inferences.length > 0 ? (
-            <>
-              <FunctionInferenceTable inferences={inferences} />
-              <PageButtons
-                onPreviousPage={handlePreviousInferencePage}
-                onNextPage={handleNextInferencePage}
-                disablePrevious={disablePreviousInferencePage}
-                disableNext={disableNextInferencePage}
+          <SectionLayout>
+            <SectionHeader headline="Metric" />
+            <MetricSelector
+              metricsWithFeedback={metricsWithFeedback}
+              selectedMetric={metric_name || ""}
+              onMetricChange={handleMetricChange}
+            />
+            {variant_performances && (
+              <VariantPerformance
+                variant_performances={variant_performances}
+                metric_name={metric_name}
+                time_granularity={time_granularity}
+                onTimeGranularityChange={handleTimeGranularityChange}
               />
-            </>
-          ) : (
-            <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
-              No inferences found
-            </div>
-          )}
-        </div>
-      </div>
+            )}
+          </SectionLayout>
+
+          <SectionLayout>
+            <SectionHeader headline="Inferences" count={num_inferences} />
+            {inferences.length > 0 ? (
+              <>
+                <FunctionInferenceTable inferences={inferences} />
+                <PageButtons
+                  onPreviousPage={handlePreviousInferencePage}
+                  onNextPage={handleNextInferencePage}
+                  disablePrevious={disablePreviousInferencePage}
+                  disableNext={disableNextInferencePage}
+                />
+              </>
+            ) : (
+              <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
+                No inferences found
+              </div>
+            )}
+          </SectionLayout>
+        </SectionsGroup>
+      </PageLayout>
     </div>
   );
 }

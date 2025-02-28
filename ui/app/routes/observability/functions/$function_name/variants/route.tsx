@@ -10,7 +10,6 @@ import type { LoaderFunctionArgs } from "react-router";
 import BasicInfo from "./BasicInfo";
 import { useConfig } from "~/context/config";
 import PageButtons from "~/components/utils/PageButtons";
-import { Badge } from "~/components/ui/badge";
 import VariantInferenceTable from "./VariantInferenceTable";
 import { getConfig } from "~/utils/config/index.server";
 import {
@@ -28,7 +27,13 @@ import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
 import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
-import { PageHeader } from "~/components/layout/PageHeader";
+import {
+  PageHeader,
+  PageLayout,
+  SectionLayout,
+  SectionsGroup,
+  SectionHeader,
+} from "~/components/layout/PageLayout";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { function_name, variant_name } = params;
@@ -193,44 +198,54 @@ export default function VariantDetails() {
   };
   return (
     <div className="container mx-auto px-4 pb-8">
-      <PageHeader headline={`Variant ${variant_name}`} />
-      <BasicInfo variantConfig={variant_config} function_name={function_name} />
-      <MetricSelector
-        metricsWithFeedback={metricsWithFeedback}
-        selectedMetric={metric_name || ""}
-        onMetricChange={handleMetricChange}
-      />
-      {variant_performances && (
-        <div className="mt-6">
-          <VariantPerformance
-            variant_performances={variant_performances}
-            metric_name={metric_name}
-            time_granularity={time_granularity}
-            onTimeGranularityChange={handleTimeGranularityChange}
-          />
-        </div>
-      )}
-      <div className="mt-6">
-        <h3 className="mb-2 flex items-center gap-2 text-xl font-semibold">
-          Inferences
-          <Badge variant="secondary">Count: {num_inferences}</Badge>
-        </h3>
-        {inferences.length > 0 ? (
-          <>
-            <VariantInferenceTable inferences={inferences} />
-            <PageButtons
-              onPreviousPage={handlePreviousInferencePage}
-              onNextPage={handleNextInferencePage}
-              disablePrevious={disablePreviousInferencePage}
-              disableNext={disableNextInferencePage}
+      <PageLayout>
+        <PageHeader headline={`Variant ${variant_name}`} />
+
+        <SectionsGroup>
+          <SectionLayout>
+            <BasicInfo
+              variantConfig={variant_config}
+              function_name={function_name}
             />
-          </>
-        ) : (
-          <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
-            No inferences found
-          </div>
-        )}
-      </div>
+          </SectionLayout>
+
+          <SectionLayout>
+            <SectionHeader headline="Metric" />
+            <MetricSelector
+              metricsWithFeedback={metricsWithFeedback}
+              selectedMetric={metric_name || ""}
+              onMetricChange={handleMetricChange}
+            />
+            {variant_performances && (
+              <VariantPerformance
+                variant_performances={variant_performances}
+                metric_name={metric_name}
+                time_granularity={time_granularity}
+                onTimeGranularityChange={handleTimeGranularityChange}
+              />
+            )}
+          </SectionLayout>
+
+          <SectionLayout>
+            <SectionHeader headline="Inferences" count={num_inferences} />
+            {inferences.length > 0 ? (
+              <>
+                <VariantInferenceTable inferences={inferences} />
+                <PageButtons
+                  onPreviousPage={handlePreviousInferencePage}
+                  onNextPage={handleNextInferencePage}
+                  disablePrevious={disablePreviousInferencePage}
+                  disableNext={disableNextInferencePage}
+                />
+              </>
+            ) : (
+              <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
+                No inferences found
+              </div>
+            )}
+          </SectionLayout>
+        </SectionsGroup>
+      </PageLayout>
     </div>
   );
 }

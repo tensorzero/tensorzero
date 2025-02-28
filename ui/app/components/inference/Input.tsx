@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent } from "~/components/ui/card";
 import type { Input, InputMessage } from "~/utils/clickhouse/common";
 
 interface InputProps {
@@ -60,10 +60,7 @@ function Message({ message }: { message: InputMessage }) {
 export default function Input({ input }: InputProps) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">Input</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6 pt-6">
         {input.system && (
           <div className="rounded border border-slate-200 p-4 dark:border-slate-800">
             <div className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">
