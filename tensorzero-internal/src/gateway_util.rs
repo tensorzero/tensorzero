@@ -126,8 +126,12 @@ where
     }
 }
 
+// This is set high enough that it should never be hit for a normal model response.
+// In the future, we may want to allow overriding this at the model provider level.
+const DEFAULT_HTTP_CLIENT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
 pub fn setup_http_client() -> Result<Client, Error> {
-    let mut http_client_builder = Client::builder();
+    let mut http_client_builder = Client::builder().timeout(DEFAULT_HTTP_CLIENT_TIMEOUT);
 
     if cfg!(any(feature = "e2e_tests", feature = "batch_tests")) {
         if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
