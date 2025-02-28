@@ -1146,3 +1146,76 @@ async fn test_content_block_text_field() {
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
 }
+
+// We already test Amazon S3 with all image providers, so let's test Google Cloud Storage
+// (which is S3-compatible) with just OpenAI to save time and money.
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+pub async fn test_image_inference_with_provider_gcp_storage() {
+    use crate::providers::common::test_image_inference_with_provider_s3_compatible;
+    use aws_credential_types::Credentials;
+    use aws_sdk_s3::config::SharedCredentialsProvider;
+    use rand::distributions::Alphanumeric;
+    use rand::distributions::DistString;
+    use tensorzero_internal::inference::types::storage::StorageKind;
+
+    // We expect CI to provide our credentials in 'GCP_STORAGE_' variables
+    // (to avoid conflicting with the normal AWS credentials for bedrock)
+    let gcloud_access_key_id = std::env::var("GCP_STORAGE_ACCESS_KEY_ID").unwrap();
+    let gcloud_secret_access_key = std::env::var("GCP_STORAGE_SECRET_ACCESS_KEY").unwrap();
+
+    let credentials =
+        Credentials::from_keys(&gcloud_access_key_id, &gcloud_secret_access_key, None);
+
+    // Our S3-compatible object store checks for these variables, giving them
+    // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
+    std::env::set_var("S3_ACCESS_KEY_ID", gcloud_access_key_id);
+    std::env::set_var("S3_SECRET_ACCESS_KEY", gcloud_secret_access_key);
+
+    let provider = E2ETestProvider {
+        variant_name: "openai".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    };
+
+    let endpoint = "https://storage.googleapis.com".to_string();
+
+    let test_bucket = "tensorzero-e2e-tests";
+    let config = aws_config::load_from_env()
+        .await
+        .to_builder()
+        .credentials_provider(SharedCredentialsProvider::new(credentials))
+        .endpoint_url(&endpoint)
+        .build();
+
+    let client = aws_sdk_s3::Client::new(&config);
+
+    let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
+    prefix += "-";
+
+    test_image_inference_with_provider_s3_compatible(
+        provider,
+        &StorageKind::S3Compatible {
+            bucket_name: Some(test_bucket.to_string()),
+            region: None,
+            prefix: prefix.clone(),
+            endpoint: Some(endpoint.clone()),
+        },
+        &client,
+        &format!(
+            r#"
+    [object_storage]
+    type = "s3_compatible"
+    endpoint = "{endpoint}"
+    bucket_name = "{test_bucket}"
+    prefix = "{prefix}"
+    
+    [functions]
+    "#
+        ),
+        test_bucket,
+        &prefix,
+    )
+    .await;
+}
