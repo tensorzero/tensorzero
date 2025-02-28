@@ -1,0 +1,29 @@
+services:
+  s3service:
+    image: quay.io/minio/minio
+    ports:
+      - "8000:9000"
+    environment:
+      - "MINIO_ROOT_USER=tensorzero-root"
+      - "MINIO_ROOT_PASSWORD=tensorzero-root"
+    command: server /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 1s
+      timeout: 5s
+      retries: 5
+
+  createbuckets:
+    image: quay.io/minio/mc
+    depends_on:
+      s3service:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set tensorzero-minio http://s3service:9000 tensorzero-root tensorzero-root;
+      /usr/bin/mc mb tensorzero-minio/tensorzero-e2e-tests;
+      /usr/bin/mc admin user add tensorzero-minio tensorzero tensorzero;
+      /usr/bin/mc admin policy attach tensorzero-minio readwrite --user tensorzero;
+      /usr/bin/mc policy set public tensorzero-minio/tensorzero-e2e-tests;
+      exit 0;
+      "
