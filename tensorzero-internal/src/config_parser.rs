@@ -19,10 +19,10 @@ use crate::tool::{
     ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
     IMPLICIT_TOOL_NAME,
 };
-use crate::variant::best_of_n_sampling::BestOfNSamplingConfig;
-use crate::variant::chat_completion::ChatCompletionConfig;
+use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
+use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
-use crate::variant::mixture_of_n::MixtureOfNConfig;
+use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig};
 
 #[derive(Debug, Default)]
@@ -291,7 +291,7 @@ impl<'c> Config<'c> {
         };
 
         // Initialize the templates
-        let template_paths = config.get_templates(&base_path);
+        let template_paths = config.get_templates();
         config.templates.initialize(template_paths)?;
 
         // Validate the config
@@ -426,7 +426,7 @@ impl<'c> Config<'c> {
     /// The HashMap returned is a mapping from the path as given in the TOML file
     /// (relative to the directory containing the TOML file) to the path on the filesystem.
     /// The former path is used as the name of the template for retrieval by variants later.
-    pub fn get_templates<P: AsRef<Path>>(&self, base_path: P) -> HashMap<String, PathBuf> {
+    pub fn get_templates(&self) -> HashMap<String, String> {
         let mut templates = HashMap::new();
 
         for function in self.functions.values() {
@@ -434,14 +434,19 @@ impl<'c> Config<'c> {
                 let variant_template_paths = variant.get_all_template_paths();
                 for path in variant_template_paths {
                     templates.insert(
-                        path.to_string_lossy().to_string(),
-                        base_path.as_ref().join(path),
+                        path.path.to_string_lossy().to_string(),
+                        path.contents.clone(),
                     );
                 }
             }
         }
         templates
     }
+}
+
+/// A trait for loading configs with a base path
+pub trait LoadableConfig<T> {
+    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<T, Error>;
 }
 
 /// This struct is used to deserialize the TOML config file
@@ -668,28 +673,30 @@ impl UninitializedFunctionConfig {
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub enum UninitializedVariantConfig {
-    ChatCompletion(ChatCompletionConfig),
+    ChatCompletion(UninitializedChatCompletionConfig),
     #[serde(rename = "experimental_best_of_n_sampling")]
-    BestOfNSampling(BestOfNSamplingConfig),
+    BestOfNSampling(UninitializedBestOfNSamplingConfig),
     #[serde(rename = "experimental_dynamic_in_context_learning")]
     Dicl(UninitializedDiclConfig),
     #[serde(rename = "experimental_mixture_of_n")]
-    MixtureOfN(MixtureOfNConfig),
+    MixtureOfN(UninitializedMixtureOfNConfig),
 }
 
 impl UninitializedVariantConfig {
     pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<VariantConfig, Error> {
         match self {
             UninitializedVariantConfig::ChatCompletion(params) => {
-                Ok(VariantConfig::ChatCompletion(params))
+                Ok(VariantConfig::ChatCompletion(params.load(base_path)?))
             }
             UninitializedVariantConfig::BestOfNSampling(params) => {
-                Ok(VariantConfig::BestOfNSampling(params))
+                Ok(VariantConfig::BestOfNSampling(params.load(base_path)?))
             }
             UninitializedVariantConfig::Dicl(params) => {
                 Ok(VariantConfig::Dicl(params.load(base_path)?))
             }
-            UninitializedVariantConfig::MixtureOfN(params) => Ok(VariantConfig::MixtureOfN(params)),
+            UninitializedVariantConfig::MixtureOfN(params) => {
+                Ok(VariantConfig::MixtureOfN(params.load(base_path)?))
+            }
         }
     }
 }
@@ -715,6 +722,32 @@ impl UninitializedToolConfig {
             parameters,
             strict: self.strict,
         })
+    }
+}
+
+#[derive(Debug)]
+pub struct PathWithContents {
+    pub path: PathBuf,
+    pub contents: String,
+}
+
+impl PathWithContents {
+    pub fn from_path<P: AsRef<Path>>(path: PathBuf, base_path: Option<P>) -> Result<Self, Error> {
+        let full_path = if let Some(base_path) = base_path.as_ref() {
+            &base_path.as_ref().join(&path)
+        } else {
+            &path
+        };
+        let contents = std::fs::read_to_string(full_path).map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Failed to read file at {}: {}",
+                    full_path.to_string_lossy(),
+                    e
+                ),
+            })
+        })?;
+        Ok(Self { path, contents })
     }
 }
 
@@ -1455,6 +1488,24 @@ mod tests {
         );
     }
 
+    /// Ensure that the config validation fails when a variant has a template that does not exist
+    #[test]
+    fn test_config_validate_variant_template_nonexistent() {
+        let mut config = get_sample_valid_config();
+        config["functions"]["generate_draft"]["variants"]["openai_promptA"]["system_template"] =
+            "nonexistent_template".into();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+
+        assert_eq!(
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message: "Failed to read file at nonexistent_template: No such file or directory (os error 2)".to_string()
+            }
+            .into()
+        );
+    }
+
     /// Ensure that the config validation fails when a function has a tool that does not exist in the tools section
     #[test]
     fn test_config_validate_function_nonexistent_tool() {
@@ -1704,74 +1755,90 @@ mod tests {
             Config::load_from_toml(config_table, PathBuf::new()).expect("Failed to load config");
 
         // Get all templates
-        let templates = config.get_templates(PathBuf::from("/base/path"));
+        let templates = config.get_templates();
 
         // Check if all expected templates are present
         assert_eq!(
-            templates
-                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-            ))
+            *templates
+                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja")
+                .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+            )
+            .to_string()
         );
         assert_eq!(
-            templates
-                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-            ))
+            *templates
+                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja")
+                .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+            )
+            .to_string()
         );
         assert_eq!(
-            templates.get(
-                "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
-            ),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
-            ))
+            *templates
+                .get(
+                    "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
+                )
+                .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
+            )
+            .to_string()
         );
         assert_eq!(
-            templates.get(
-                "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
-            ),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
-            ))
+            *templates
+                .get(
+                    "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
+                )
+                .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
+            )
+            .to_string()
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
-            ))
+            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
+            ).to_string()
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
-            ))
+            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
+            ).to_string()
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
-            ))
+            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
+            ).to_string()
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
-            ))
+            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
+            ).to_string()
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
-            ))
+            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
+            ).to_string()
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
-            ))
+            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
+            ).to_string()
         );
 
         // Check the total number of templates
