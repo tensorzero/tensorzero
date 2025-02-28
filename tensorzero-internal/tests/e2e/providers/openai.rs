@@ -1034,7 +1034,6 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     .await;
 }
 
-
 // Tests using `{"type": "text", "text": "Some string"}` as input
 #[tokio::test]
 async fn test_content_block_text_field() {

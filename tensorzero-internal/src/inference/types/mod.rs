@@ -571,7 +571,7 @@ impl<'de> Deserialize<'de> for InputMessage {
             }
             // TODO - do we want to explicitly deprecate this?
             ContentHelper::Object(object) => {
-                tracing::warn!("Deprecation warning - passing in an object for ")
+                tracing::warn!("Deprecation warning - passing in an object for `content` is deprecated. Please use an array of content blocks instead.");
                 vec![InputMessageContent::Text(TextKind::LegacyValue {
                     value: Value::Object(object),
                 })]
