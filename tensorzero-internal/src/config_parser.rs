@@ -1,6 +1,6 @@
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
-use object_store::ObjectStore;
+use object_store::{ObjectStore, PutPayload};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -57,34 +57,80 @@ impl ObjectStoreInfo {
         };
 
         let object_store: Option<Arc<dyn ObjectStore>> = match &config {
-            StorageKind::Filesystem { path } => Some(Arc::new(LocalFileSystem::new_with_prefix(path).map_err(|e| Error::new(ErrorDetails::Config {
-                message: format!("Failed to create filesystem object store for path: {path}: {e}"),
-            }))?)),
+            StorageKind::Filesystem { path } => Some(Arc::new(
+                LocalFileSystem::new_with_prefix(path).map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Failed to create filesystem object store for path: {path}: {e}"
+                        ),
+                    })
+                })?,
+            )),
             StorageKind::S3Compatible {
                 bucket_name,
                 region,
+                endpoint,
                 #[cfg(feature = "e2e_tests")]
-                prefix: _,
-            } => Some(Arc::new(
-                AmazonS3Builder::from_env()
-                    .with_region(region)
-                    .with_bucket_name(bucket_name)
+                    prefix: _,
+            } => {
+                let mut builder = AmazonS3Builder::from_env()
                     // Uses the S3 'If-Match' and 'If-None-Match' headers to implement condition put
-                    .with_conditional_put(object_store::aws::S3ConditionalPut::ETagMatch)
-                    .build()
+                    .with_conditional_put(object_store::aws::S3ConditionalPut::ETagMatch);
+
+                // These env vars have the highest priority, overriding whatever was set from 'AmazonS3Builder::from_env()'
+                if let Ok(s3_access_key) = std::env::var("S3_ACCESS_KEY_ID") {
+                    let s3_secret_key = std::env::var("S3_SECRET_ACCESS_KEY").ok().ok_or_else(|| Error::new(ErrorDetails::Config {
+                        message: "S3_ACCESS_KEY_ID is set but S3_SECRET_ACCESS_KEY is not. Please set either both or none".to_string()
+                    }))?;
+                    builder = builder
+                        .with_access_key_id(s3_access_key)
+                        .with_secret_access_key(s3_secret_key);
+                }
+
+                if let Some(bucket_name) = bucket_name {
+                    builder = builder.with_bucket_name(bucket_name);
+                }
+                if let Some(region) = region {
+                    builder = builder.with_region(region);
+                }
+                if let Some(endpoint) = endpoint {
+                    builder = builder.with_endpoint(endpoint);
+                }
+
+                if let (Some(bucket_name), Some(endpoint)) = (bucket_name, endpoint) {
+                    if endpoint.ends_with(bucket_name) {
+                        tracing::warn!("S3-compatible object endpoint `{endpoint}` ends with configured bucket_name `{bucket_name}`. This may be incorrect - if the gateway fails to start, consider setting `bucket_name = null`");
+                    }
+                }
+
+                Some(Arc::new(
+                builder.build()
                     .map_err(|e| Error::new(ErrorDetails::Config {
-                        message: format!("Failed to create S3 object store for bucket: {bucket_name} in region: {region}: {e}"),
+                        message: format!("Failed to create S3-compatible object store with config `{config:?}`: {e}"),
                     }))?),
-            ),
-            StorageKind::Disabled => {
-                None
+            )
             }
+            StorageKind::Disabled => None,
         };
 
         Ok(Some(Self {
             object_store,
             kind: config,
         }))
+    }
+
+    /// Verifies that the object store is configured correctly by writing an empty file to it.
+    pub async fn verify(&self) -> Result<(), Error> {
+        if let Some(store) = &self.object_store {
+            tracing::info!("Verifying that [object_storage] is configured correctly (writing .tensorzero-validate)");
+            store.put(&object_store::path::Path::from(".tensorzero-validate"), PutPayload::new())
+                .await
+                .map_err(|e| Error::new(ErrorDetails::Config {
+                    message: format!("Failed to write `.tensorzero-validate` to object store. Check that your credentials are configured correctly: {e:?}"),
+                }))?;
+            tracing::info!("Successfully wrote .tensorzero-validate to object store");
+        }
+        Ok(())
     }
 }
 
@@ -177,7 +223,7 @@ impl std::fmt::Display for MetricConfigLevel {
 }
 
 impl<'c> Config<'c> {
-    pub fn load_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
+    pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
         let config_table = match UninitializedConfig::read_toml_config(config_path)? {
             Some(table) => table,
             None => {
@@ -199,6 +245,11 @@ impl<'c> Config<'c> {
             }
         };
         let config = Self::load_from_toml(config_table, base_path)?;
+
+        if let Some(object_store) = &config.object_store_info {
+            object_store.verify().await?;
+        }
+
         Ok(config)
     }
 
@@ -724,6 +775,8 @@ impl PathWithContents {
 #[cfg(test)]
 mod tests {
 
+    use std::io::Write;
+    use tempfile::NamedTempFile;
     use tracing_test::traced_test;
 
     use super::*;
@@ -1878,12 +1931,12 @@ mod tests {
             ).to_string()
         );
         assert_eq!(
-            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja")
-            .unwrap(),
-            include_str!(
-                "../fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
-            ).to_string()
-        );
+                    *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja")
+                    .unwrap(),
+                    include_str!(
+                        "../fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
+                    ).to_string()
+                );
 
         assert_eq!(
             *templates
@@ -2079,13 +2132,43 @@ mod tests {
     }
 
     #[traced_test]
-    #[test]
-    fn test_config_load_no_config_file() {
-        let err = Config::load_from_path(Path::new("nonexistent.toml"))
+    #[tokio::test]
+    async fn test_config_load_no_config_file() {
+        let err = Config::load_and_verify_from_path(Path::new("nonexistent.toml"))
+            .await
             .unwrap_err()
             .to_string();
         assert!(
             err.contains("Config file not found"),
+            "Unexpected error message: {err}"
+        );
+    }
+
+    #[traced_test]
+    #[tokio::test]
+    async fn test_config_load_invalid_s3_creds() {
+        // Set invalid credentials (tests are isolated per-process)
+        // to make sure that the write fails quickly.
+        std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+        let tempfile = NamedTempFile::new().unwrap();
+        write!(
+            &tempfile,
+            r#"
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+
+            [functions]"#
+        )
+        .unwrap();
+        let err = Config::load_and_verify_from_path(tempfile.path())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Failed to write `.tensorzero-validate` to object store."),
             "Unexpected error message: {err}"
         );
     }
