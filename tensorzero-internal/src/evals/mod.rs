@@ -14,7 +14,7 @@ use crate::{
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
     jsonschema_util::JSONSchemaFromPath,
-    tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig, IMPLICIT_TOOL_NAME},
+    tool::create_implicit_tool_call_config,
     variant::{
         chat_completion::{ChatCompletionConfig, ExtraBodyConfig},
         JsonMode, RetryConfig, VariantConfig,
@@ -227,15 +227,8 @@ impl UninitializedEvaluatorConfig {
                         })
                     })?;
                 let output_schema = JSONSchemaFromPath::from_value(&output_schema_value)?;
-                // TODO (Viraj): deduplicate this code
-                let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig {
-                    parameters: output_schema.clone(),
-                });
-                let implicit_tool_call_config = ToolCallConfig {
-                    tools_available: vec![implicit_tool],
-                    tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
-                    parallel_tool_calls: false,
-                };
+                let implicit_tool_call_config =
+                    create_implicit_tool_call_config(output_schema.clone());
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     system_schema: Some(JSONSchemaFromPath::from_value(&system_schema_value)?),
@@ -394,7 +387,7 @@ mod tests {
             user_schema: None,
             assistant_schema: None,
             output_schema: create_test_schema(),
-            implicit_tool_call_config: create_test_tool_call_config(),
+            implicit_tool_call_config: create_implicit_tool_call_config(create_test_schema()),
         });
         functions.insert(function_name.to_string(), Arc::new(function_config));
 
@@ -651,17 +644,5 @@ mod tests {
             "required": ["result"]
         });
         JSONSchemaFromPath::from_value(&schema_value).unwrap()
-    }
-
-    fn create_test_tool_call_config() -> ToolCallConfig {
-        let output_schema = create_test_schema();
-        let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig {
-            parameters: output_schema,
-        });
-        ToolCallConfig {
-            tools_available: vec![implicit_tool],
-            tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
-            parallel_tool_calls: false,
-        }
     }
 }

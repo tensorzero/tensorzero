@@ -16,10 +16,7 @@ use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable};
 use crate::model_table::{CowNoClone, ShorthandModelConfig};
-use crate::tool::{
-    ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
-    IMPLICIT_TOOL_NAME,
-};
+use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
@@ -34,7 +31,7 @@ pub struct Config<'c> {
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
-    pub evals: HashMap<String, Arc<EvalConfig>>, // eval name => eval config TODO(Viraj): do we need the arc here?
+    pub evals: HashMap<String, EvalConfig>,    // eval name => eval config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
 }
@@ -257,7 +254,7 @@ impl<'c> Config<'c> {
         for (name, eval_config) in uninitialized_config.evals {
             let (eval_config, eval_function_configs) =
                 eval_config.load(&config.functions, &base_path, &name)?;
-            evals.insert(name, Arc::new(eval_config));
+            evals.insert(name, eval_config);
             for (eval_function_name, eval_function_config) in eval_function_configs {
                 if config.functions.contains_key(&eval_function_name) {
                     return Err(ErrorDetails::Config {
@@ -592,14 +589,8 @@ impl UninitializedFunctionConfig {
                     Some(path) => JSONSchemaFromPath::new(path, base_path.as_ref())?,
                     None => JSONSchemaFromPath::default(),
                 };
-                let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig {
-                    parameters: output_schema.clone(),
-                });
-                let implicit_tool_call_config = ToolCallConfig {
-                    tools_available: vec![implicit_tool],
-                    tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
-                    parallel_tool_calls: false,
-                };
+                let implicit_tool_call_config =
+                    create_implicit_tool_call_config(output_schema.clone());
                 let variants = params
                     .variants
                     .into_iter()
