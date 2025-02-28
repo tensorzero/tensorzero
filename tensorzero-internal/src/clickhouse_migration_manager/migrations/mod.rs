@@ -104,6 +104,7 @@ async fn get_column_type(
     }
 }
 
+#[allow(dead_code)]
 async fn table_is_nonempty(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,

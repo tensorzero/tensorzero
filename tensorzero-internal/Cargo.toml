@@ -42,6 +42,7 @@ axum = { workspace = true }
 backon = { version = "1.2.0", features = ["tokio-sleep"] }
 blake3 = "1.5.5"
 bytes = "1.6.1"
+chrono = { version = "0.4.40", features = ["serde"] }
 derive_builder = "0.20.0"
 futures = { workspace = true }
 futures-core = "0.3.30"
