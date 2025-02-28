@@ -122,9 +122,9 @@ impl InputMessageContent {
                 tracing::warn!(
                     r#"Deprecation warning: `{{"type": "raw_text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` instead."#
                 );
-                ResolvedInputMessageContent::Text(TextKind::Text {
-                    text: value.clone(),
-                })
+                ResolvedInputMessageContent::Text {
+                    value: Value::String(value.clone()),
+                }
             }
             InputMessageContent::Image(image) => {
                 let storage_kind = context
@@ -171,9 +171,9 @@ pub enum InputMessageContent {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum TextKind {
-    LegacyValue { value: Value },
     Text { text: String },
     Arguments { arguments: Value },
+    LegacyValue { value: Value },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
