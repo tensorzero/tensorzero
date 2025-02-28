@@ -6,11 +6,13 @@ use serde_json::{map::Entry, Map, Value};
 use crate::{
     error::{Error, ErrorDetails},
     inference::types::ProviderInferenceResponseChunk,
+    model::ModelProviderRequestInfo,
     variant::chat_completion::ExtraBodyConfig,
 };
 
 pub fn inject_extra_body(
     config: Option<&ExtraBodyConfig>,
+    model_provider_data: impl Into<ModelProviderRequestInfo>,
     body: &mut serde_json::Value,
 ) -> Result<(), Error> {
     if !body.is_object() {
@@ -18,7 +20,14 @@ pub fn inject_extra_body(
             message: "Body is not a map".to_string(),
         }));
     }
-    if let Some(extra_body) = config.as_ref() {
+    let model_provider: ModelProviderRequestInfo = model_provider_data.into();
+    // Write the variant extra_body first, then the model_provider extra_body.
+    // This way, the model_provider extra_body will overwrite any keys in the
+    // variant extra_body.
+    for extra_body in [config, model_provider.extra_body.as_ref()]
+        .into_iter()
+        .flatten()
+    {
         for replacement in &extra_body.data {
             write_json_pointer_with_parent_creation(
                 body,
@@ -241,15 +250,24 @@ mod tests {
     #[test]
     fn test_inject_nothing() {
         let mut body = serde_json::json!({});
-        inject_extra_body(None, &mut body).unwrap();
+        inject_extra_body(
+            None,
+            ModelProviderRequestInfo { extra_body: None },
+            &mut body,
+        )
+        .unwrap();
         assert_eq!(body, serde_json::json!({}));
     }
 
     #[test]
     fn test_inject_to_non_map() {
-        let err = inject_extra_body(None, &mut serde_json::Value::String("test".to_string()))
-            .unwrap_err()
-            .to_string();
+        let err = inject_extra_body(
+            None,
+            ModelProviderRequestInfo { extra_body: None },
+            &mut serde_json::Value::String("test".to_string()),
+        )
+        .unwrap_err()
+        .to_string();
         assert!(
             err.contains("Body is not a map"),
             "Unexpected error message: {err:?}"
@@ -279,6 +297,7 @@ mod tests {
                     },
                 ],
             }),
+            ModelProviderRequestInfo { extra_body: None },
             &mut body,
         )
         .unwrap();
@@ -289,6 +308,61 @@ mod tests {
                 "generationConfig": {
                     "otherNestedKey": "otherNestedValue",
                     "temperature": 0.123
+                }
+            })
+        );
+    }
+
+    // Tests that we inject fields in the correct order when `extra_body`
+    // is set at both the variant and model provider level. Keys set in the
+    // model provider should override keys set in the variant
+    #[test]
+    fn test_inject_both() {
+        let mut body = serde_json::json!({
+            "otherKey": "otherValue",
+            "generationConfig": {
+                "temperature": 123
+            }
+        });
+        inject_extra_body(
+            Some(&ExtraBodyConfig {
+                data: vec![
+                    ExtraBodyReplacement {
+                        pointer: "/generationConfig/otherNestedKey".to_string(),
+                        value: Value::String("otherNestedValue".to_string()),
+                    },
+                    ExtraBodyReplacement {
+                        pointer: "/variantKey".to_string(),
+                        value: Value::String("variantValue".to_string()),
+                    },
+                ],
+            }),
+            ModelProviderRequestInfo {
+                extra_body: Some(ExtraBodyConfig {
+                    data: vec![
+                        ExtraBodyReplacement {
+                            pointer: "/variantKey".to_string(),
+                            value: Value::String("modelProviderOverride".to_string()),
+                        },
+                        ExtraBodyReplacement {
+                            pointer: "/modelProviderKey".to_string(),
+                            value: Value::String("modelProviderValue".to_string()),
+                        },
+                    ],
+                }),
+            },
+            &mut body,
+        )
+        .unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "otherKey": "otherValue",
+                "modelProviderKey": "modelProviderValue",
+                "variantKey": "modelProviderOverride",
+                "generationConfig": {
+                    "temperature": 123,
+                    "otherNestedKey": "otherNestedValue"
                 }
             })
         );

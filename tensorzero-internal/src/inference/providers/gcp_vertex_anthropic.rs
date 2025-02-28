@@ -23,6 +23,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
+use crate::model::ModelProvider;
 use crate::model::{build_creds_caching_default_with_fn, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -82,6 +83,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
             .map_err(|e| {
@@ -89,7 +91,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 message: format!("Error serializing GCP Vertex Anthropic request: {e}"),
             })
         })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let api_key = self
             .credentials
             .get_api_key(&self.audience, dynamic_api_keys)?;
@@ -161,6 +163,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let mut request_body = serde_json::to_value(GCPVertexAnthropicRequestBody::new(request)?)
             .map_err(|e| {
@@ -168,7 +171,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 message: format!("Error serializing GCP Vertex Anthropic request: {e}"),
             })
         })?;
-        inject_extra_body(request.extra_body, &mut request_body)?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),

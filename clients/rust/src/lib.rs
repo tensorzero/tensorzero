@@ -74,6 +74,8 @@ pub enum TensorZeroError {
         #[source]
         source: TensorZeroInternalError,
     },
+    #[error("HTTP request timed out")]
+    RequestTimeout,
 }
 
 #[derive(Debug, Error)]
@@ -338,17 +340,23 @@ impl Client {
         &self,
         resp: Result<reqwest::Response, reqwest::Error>,
     ) -> Result<T, TensorZeroError> {
-        let resp = resp.map_err(|e| TensorZeroError::Other {
-            source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
-                message: format!(
-                    "Error from server: {}",
-                    DisplayOrDebug {
-                        val: e,
-                        debug: self.verbose_errors,
-                    }
-                ),
-            })
-            .into(),
+        let resp = resp.map_err(|e| {
+            if e.is_timeout() {
+                TensorZeroError::RequestTimeout
+            } else {
+                TensorZeroError::Other {
+                    source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
+                        message: format!(
+                            "Error from server: {}",
+                            DisplayOrDebug {
+                                val: e,
+                                debug: self.verbose_errors,
+                            }
+                        ),
+                    })
+                    .into(),
+                }
+            }
         })?;
 
         if let Err(e) = resp.error_for_status_ref() {

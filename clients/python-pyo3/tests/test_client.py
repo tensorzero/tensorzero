@@ -1694,26 +1694,35 @@ async def test_async_err_in_stream(async_client):
 @pytest.mark.asyncio
 async def test_async_timeout():
     async with await AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000", timeout=1
+        gateway_url="http://localhost:3000",
+        timeout=1,
     ) as async_client:
-        with pytest.raises(TensorZeroError):
+        with pytest.raises(TensorZeroInternalError) as exc_info:
             await async_client.inference(
                 function_name="basic_test",
                 variant_name="slow",
-                input={"messages": [{"role": "user", "content": "Hello"}]},
+                input={
+                    "system": {"assistant_name": "TensorZero bot"},
+                    "messages": [{"role": "user", "content": "Hello"}],
+                },
             )
+        assert "HTTP request timed out" in str(exc_info.value)
 
 
 def test_sync_timeout():
     with TensorZeroGateway.build_http(
         gateway_url="http://localhost:3000", timeout=1
     ) as sync_client:
-        with pytest.raises(TensorZeroError):
+        with pytest.raises(TensorZeroInternalError) as exc_info:
             sync_client.inference(
                 function_name="basic_test",
                 variant_name="slow",
-                input={"messages": [{"role": "user", "content": "Hello"}]},
+                input={
+                    "system": {"assistant_name": "TensorZero bot"},
+                    "messages": [{"role": "user", "content": "Hello"}],
+                },
             )
+        assert "HTTP request timed out" in str(exc_info.value)
 
 
 @pytest.mark.asyncio

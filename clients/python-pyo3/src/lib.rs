@@ -865,6 +865,7 @@ fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyResult<PyErr> {
             source: _,
         } => tensorzero_error(py, status_code, text),
         TensorZeroError::Other { source } => tensorzero_internal_error(py, &source.to_string()),
+        TensorZeroError::RequestTimeout => tensorzero_internal_error(py, &e.to_string()),
         // Required due to the `#[non_exhaustive]` attribute on `TensorZeroError` - we want to force
         // downstream consumers to handle all possible error types, but the compiler also requires us
         // to do this (since our python bindings are in a different crate from the Rust client.)
