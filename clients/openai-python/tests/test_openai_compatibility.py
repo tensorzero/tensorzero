@@ -517,7 +517,7 @@ async def test_async_json_invalid_system(async_client):
             model="tensorzero::function_name::json_success",
         )
     assert (
-        "Invalid request to OpenAI-compatible endpoint: `image_url` content blocks are not currently supported"
+        "Invalid request to OpenAI-compatible endpoint: System message must be a text content block"
         in str(exc_info.value)
     )
 
