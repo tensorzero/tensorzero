@@ -160,11 +160,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Documentation className="h-4 w-4" />
-                  {state === "expanded" && (
-                    <span>
-                      Documentation <sup>↗</sup>
-                    </span>
-                  )}
+                  {state === "expanded" && <span>Documentation ↗</span>}
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

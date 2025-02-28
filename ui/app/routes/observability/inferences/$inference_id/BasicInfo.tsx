@@ -1,6 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Code } from "~/components/ui/code";
-import { Badge } from "~/components/ui/badge";
 import { Link } from "react-router";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import { useConfig } from "~/context/config";
@@ -70,9 +69,7 @@ export default function BasicInfo({
                 <Code>{inference.variant_name}</Code>
               </Link>
             </dd>
-            <Badge variant="outline" className="bg-blue-200">
-              {variantType}
-            </Badge>
+            <Code>{variantType}</Code>
           </div>
           <div>
             <dt className="text-lg font-semibold">Episode ID</dt>

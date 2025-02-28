@@ -207,7 +207,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   return (
     <div className="container mx-auto px-4 pb-8">
       <PageLayout>
-        <PageHeader headline={`Inference ${inference.id}`} />
+        <PageHeader heading="Inference" name={inference.id} />
 
         <SectionsGroup>
           <SectionLayout>
@@ -225,18 +225,18 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           </SectionLayout>
 
           <SectionLayout>
-            <SectionHeader headline="Input" />
+            <SectionHeader heading="Input" />
             <Input input={inference.input} />
           </SectionLayout>
 
           <SectionLayout>
-            <SectionHeader headline="Output" />
+            <SectionHeader heading="Output" />
             <Output output={inference.output} />
           </SectionLayout>
 
           <SectionLayout>
             <SectionHeader
-              headline="Feedback"
+              heading="Feedback"
               count={num_feedbacks}
               badge={{
                 name: "inference",
@@ -254,33 +254,33 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           </SectionLayout>
 
           <SectionLayout>
-            <SectionHeader headline="Inference Parameters" />
+            <SectionHeader heading="Inference Parameters" />
             <ParameterCard parameters={inference.inference_params} />
           </SectionLayout>
 
           {inference.function_type === "chat" && (
             <SectionLayout>
-              <SectionHeader headline="Tool Parameters" />
+              <SectionHeader heading="Tool Parameters" />
               <ParameterCard parameters={inference.tool_params} />
             </SectionLayout>
           )}
 
           {inference.function_type === "json" && (
             <SectionLayout>
-              <SectionHeader headline="Output Schema" />
+              <SectionHeader heading="Output Schema" />
               <ParameterCard parameters={inference.output_schema} />
             </SectionLayout>
           )}
 
           {Object.keys(inference.tags).length > 0 && (
             <SectionLayout>
-              <SectionHeader headline="Tags" />
+              <SectionHeader heading="Tags" />
               <TagsTable tags={inference.tags} />
             </SectionLayout>
           )}
 
           <SectionLayout>
-            <SectionHeader headline="Model Inferences" />
+            <SectionHeader heading="Model Inferences" />
             <ModelInferencesAccordion modelInferences={model_inferences} />
           </SectionLayout>
         </SectionsGroup>

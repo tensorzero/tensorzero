@@ -101,7 +101,7 @@ export default function SupervisedFineTuning({
     return (
       <div className="container mx-auto px-4 pb-8">
         <PageLayout>
-          <PageHeader headline="Supervised Fine-Tuning" />
+          <PageHeader heading="Supervised Fine-Tuning" />
           <SectionLayout>
             <div className="text-sm text-red-500">
               Error: {loaderData.error}
@@ -142,7 +142,7 @@ export default function SupervisedFineTuning({
   return (
     <div className="container mx-auto px-4 pb-8">
       <PageLayout>
-        <PageHeader headline="Supervised Fine-Tuning" />
+        <PageHeader heading="Supervised Fine-Tuning" />
         <SectionLayout>
           {status.status === "idle" && (
             <SFTForm

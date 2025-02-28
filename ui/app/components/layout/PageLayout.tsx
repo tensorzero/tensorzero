@@ -11,21 +11,29 @@ import { forwardRef } from "react";
 // PageHeader component
 interface PageHeaderProps {
   label?: string;
-  headline: string;
+  heading?: string;
+  name?: string;
   count?: number;
   lateral?: string;
   className?: string;
 }
 
 const PageHeader = forwardRef<HTMLDivElement, PageHeaderProps>(
-  ({ headline, label, count, lateral, className }, ref) => {
+  ({ heading, label, name, count, lateral, className }, ref) => {
     return (
       <div ref={ref} className={`${className || ""}`}>
         {label !== undefined && (
           <p className="text-sm font-normal text-foreground-muted">{label}</p>
         )}
         <div className="flex items-baseline gap-2">
-          <h4 className="text-2xl font-medium">{headline}</h4>
+          {heading !== undefined && (
+            <h4 className="text-2xl font-medium">{heading}</h4>
+          )}
+          {name !== undefined && (
+            <span className="rounded-lg bg-background-tertiary px-1.5 py-1 font-mono text-2xl font-semibold leading-none">
+              {name}
+            </span>
+          )}
           {lateral !== undefined && (
             <p className="text-sm font-normal text-foreground-muted">
               {lateral}
@@ -45,7 +53,7 @@ PageHeader.displayName = "PageHeader";
 
 // SectionHeader component
 interface SectionHeaderProps {
-  headline: string;
+  heading: string;
   count?: number;
   badge?: {
     name: string;
@@ -55,13 +63,13 @@ interface SectionHeaderProps {
 }
 
 const SectionHeader = forwardRef<HTMLHeadingElement, SectionHeaderProps>(
-  ({ headline, count, badge, className }, ref) => {
+  ({ heading, count, badge, className }, ref) => {
     return (
       <h3
         ref={ref}
         className={`flex items-center gap-2 text-xl font-medium ${className || ""}`}
       >
-        {headline}
+        {heading}
 
         {count !== undefined && (
           <span className="text-xl font-medium text-foreground-muted">

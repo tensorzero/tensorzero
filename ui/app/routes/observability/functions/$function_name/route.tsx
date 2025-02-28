@@ -189,7 +189,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   return (
     <div className="container mx-auto px-4 pb-8">
       <PageLayout>
-        <PageHeader headline={`Function ${function_name}`} />
+        <PageHeader heading="Function" name={function_name} />
 
         <SectionsGroup>
           <SectionLayout>
@@ -197,7 +197,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           </SectionLayout>
 
           <SectionLayout>
-            <SectionHeader headline="Variants" />
+            <SectionHeader heading="Variants" />
             <FunctionVariantTable
               variant_counts={variant_counts}
               function_name={function_name}
@@ -205,7 +205,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           </SectionLayout>
 
           <SectionLayout>
-            <SectionHeader headline="Metric" />
+            <SectionHeader heading="Metric" />
             <MetricSelector
               metricsWithFeedback={metricsWithFeedback}
               selectedMetric={metric_name || ""}
@@ -222,22 +222,14 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           </SectionLayout>
 
           <SectionLayout>
-            <SectionHeader headline="Inferences" count={num_inferences} />
-            {inferences.length > 0 ? (
-              <>
-                <FunctionInferenceTable inferences={inferences} />
-                <PageButtons
-                  onPreviousPage={handlePreviousInferencePage}
-                  onNextPage={handleNextInferencePage}
-                  disablePrevious={disablePreviousInferencePage}
-                  disableNext={disableNextInferencePage}
-                />
-              </>
-            ) : (
-              <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
-                No inferences found
-              </div>
-            )}
+            <SectionHeader heading="Inferences" count={num_inferences} />
+            <FunctionInferenceTable inferences={inferences} />
+            <PageButtons
+              onPreviousPage={handlePreviousInferencePage}
+              onNextPage={handleNextInferencePage}
+              disablePrevious={disablePreviousInferencePage}
+              disableNext={disableNextInferencePage}
+            />
           </SectionLayout>
         </SectionsGroup>
       </PageLayout>

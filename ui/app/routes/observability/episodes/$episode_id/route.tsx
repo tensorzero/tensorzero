@@ -147,11 +147,11 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   return (
     <div className="container mx-auto px-4 pb-8">
       <PageLayout>
-        <PageHeader headline={`Episode ${episode_id}`} />
+        <PageHeader heading="Episode" name={episode_id} />
 
         <SectionsGroup>
           <SectionLayout>
-            <SectionHeader headline="Inferences" count={num_inferences} />
+            <SectionHeader heading="Inferences" count={num_inferences} />
             <EpisodeInferenceTable inferences={inferences} />
             <PageButtons
               onPreviousPage={handlePreviousInferencePage}
@@ -163,7 +163,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
           <SectionLayout>
             <SectionHeader
-              headline="Feedback"
+              heading="Feedback"
               count={num_feedbacks}
               badge={{
                 name: "episode",

@@ -22,7 +22,7 @@ export default function FunctionsPage({ loaderData }: Route.ComponentProps) {
   return (
     <div className="container mx-auto px-4 pb-8">
       <PageLayout>
-        <PageHeader headline="Functions" count={totalFunctions} />
+        <PageHeader heading="Functions" count={totalFunctions} />
         <SectionLayout>
           <FunctionsTable functions={functions} countsInfo={countsInfo} />
         </SectionLayout>

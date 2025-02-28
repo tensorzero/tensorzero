@@ -199,7 +199,7 @@ export default function VariantDetails() {
   return (
     <div className="container mx-auto px-4 pb-8">
       <PageLayout>
-        <PageHeader headline={`Variant ${variant_name}`} />
+        <PageHeader heading="Variant" name={variant_name} />
 
         <SectionsGroup>
           <SectionLayout>
@@ -210,7 +210,7 @@ export default function VariantDetails() {
           </SectionLayout>
 
           <SectionLayout>
-            <SectionHeader headline="Metric" />
+            <SectionHeader heading="Metric" />
             <MetricSelector
               metricsWithFeedback={metricsWithFeedback}
               selectedMetric={metric_name || ""}
@@ -227,7 +227,7 @@ export default function VariantDetails() {
           </SectionLayout>
 
           <SectionLayout>
-            <SectionHeader headline="Inferences" count={num_inferences} />
+            <SectionHeader heading="Inferences" count={num_inferences} />
             {inferences.length > 0 ? (
               <>
                 <VariantInferenceTable inferences={inferences} />

@@ -13,6 +13,69 @@ interface BreadcrumbSegment {
   href?: string;
 }
 
+interface BreadcrumbConfig {
+  // Segments to exclude from breadcrumbs
+  excludeSegments: string[];
+  // Custom labels for specific segments
+  customLabels: { [key: string]: string };
+  // Special path handling for specific segments
+  specialPaths: {
+    [key: string]: (
+      segments: string[],
+      index: number,
+    ) => BreadcrumbSegment | null;
+  };
+}
+
+// Breadcrumb configuration
+const breadcrumbConfig: BreadcrumbConfig = {
+  excludeSegments: ["observability", "optimization"],
+  customLabels: {
+    functions: "Functions",
+    inferences: "Inferences",
+    episodes: "Episodes",
+    "supervised-fine-tuning": "Supervised Fine-tuning",
+    datasets: "Datasets",
+    datapoints: "Datapoints",
+    datapoint: "Datapoint",
+  },
+  specialPaths: {
+    // Handle variants special case
+    variants: (segments, index) => {
+      if (segments[index + 1]) {
+        return {
+          label: segments[index + 1],
+          href: `/observability/functions/${segments[index - 1]}/variants/${segments[index + 1]}`,
+        };
+      }
+      return null;
+    },
+    // Handle datapoints special case
+    datapoints: (segments, index) => {
+      if (segments[index + 1]) {
+        return {
+          label: segments[index + 1],
+          href: `/datasets/${segments[index - 1]}/datapoints/${segments[index + 1]}`,
+        };
+      }
+      return {
+        label: "Datapoints",
+        href: `/datasets/${segments[index - 1]}/datapoints`,
+      };
+    },
+    // Handle singular datapoint special case
+    datapoint: (segments, index) => {
+      if (segments[index + 1]) {
+        return {
+          label: segments[index + 1],
+          href: `/datasets/${segments[index - 1]}/datapoint/${segments[index + 1]}`,
+        };
+      }
+      return null;
+    },
+  },
+};
+
 export function SubNavBreadcrumbs() {
   const location = useLocation();
   const pathSegments = location.pathname.split("/").filter(Boolean);
@@ -25,79 +88,60 @@ export function SubNavBreadcrumbs() {
       return [{ label: "Dashboard" }];
     }
 
-    // Build breadcrumbs based on path segments
+    // Process each path segment
     for (let i = 0; i < pathSegments.length; i++) {
       const segment = pathSegments[i];
 
-      // Skip category segments
-      if (segment === "observability" || segment === "optimization") {
+      // Skip excluded segments
+      if (breadcrumbConfig.excludeSegments.includes(segment)) {
         continue;
       }
 
-      // Special cases for different routes
-      switch (segment) {
-        case "functions":
+      // Check for special path handling
+      if (breadcrumbConfig.specialPaths[segment]) {
+        const specialSegment = breadcrumbConfig.specialPaths[segment](
+          pathSegments,
+          i,
+        );
+        if (specialSegment) {
+          breadcrumbs.push(specialSegment);
+        }
+        continue;
+      }
+
+      // Handle IDs and names (segments that follow a known parent)
+      if (i > 0) {
+        const prevSegment = pathSegments[i - 1];
+
+        if (["functions", "inferences", "episodes"].includes(prevSegment)) {
           breadcrumbs.push({
-            label: "Functions",
-            href: "/observability/functions",
+            label: segment,
+            href: `/observability/${prevSegment}/${segment}`,
           });
-          break;
+          continue;
+        }
 
-        case "inferences":
+        if (prevSegment === "datasets") {
           breadcrumbs.push({
-            label: "Inferences",
-            href: "/observability/inferences",
+            label: segment,
+            href: `/datasets/${segment}`,
           });
-          break;
+          continue;
+        }
+      }
 
-        case "episodes":
-          breadcrumbs.push({
-            label: "Episodes",
-            href: "/observability/episodes",
-          });
-          break;
-
-        case "supervised-fine-tuning":
-          breadcrumbs.push({
-            label: "Supervised Fine-tuning",
-            href: "/optimization/supervised-fine-tuning",
-          });
-          break;
-
-        case "variants":
-          if (pathSegments[i + 1]) {
-            breadcrumbs.push({
-              label: `${pathSegments[i + 1]}`,
-              href: `/observability/functions/${pathSegments[i - 1]}/variants/${pathSegments[i + 1]}`,
-            });
-          }
-          break;
-
-        default:
-          // Handle IDs and names
-          if (i > 0) {
-            const prevSegment = pathSegments[i - 1];
-            switch (prevSegment) {
-              case "inferences":
-                breadcrumbs.push({
-                  label: `${segment}`,
-                  href: `/observability/inferences/${segment}`,
-                });
-                break;
-              case "episodes":
-                breadcrumbs.push({
-                  label: `${segment}`,
-                  href: `/observability/episodes/${segment}`,
-                });
-                break;
-              case "functions":
-                breadcrumbs.push({
-                  label: `${segment}`,
-                  href: `/observability/functions/${segment}`,
-                });
-                break;
-            }
-          }
+      // Add standard breadcrumb if not handled by special cases
+      if (breadcrumbConfig.customLabels[segment]) {
+        const category =
+          segment === "supervised-fine-tuning"
+            ? "optimization"
+            : segment === "datasets"
+              ? ""
+              : "observability";
+        breadcrumbs.push({
+          label: breadcrumbConfig.customLabels[segment],
+          href: `/${category}${category ? "/" : ""}${segment}`,
+        });
       }
     }
 
