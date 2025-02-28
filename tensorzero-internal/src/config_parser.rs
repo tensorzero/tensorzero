@@ -1483,6 +1483,25 @@ mod tests {
         );
     }
 
+    /// Ensure that the config validation fails when an eval points at a nonexistent function
+    #[test]
+    fn test_config_validate_eval_function_nonexistent() {
+        let mut config = get_sample_valid_config();
+        config["evals"]["eval1"]["function_name"] = "nonexistent_function".into();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+
+        assert_eq!(
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message:
+                    "Function `nonexistent_function` not found (referenced in `[evals.eval1]`)"
+                        .to_string()
+            }
+            .into()
+        );
+    }
+
     /// Ensure that the config validation fails when a function has a tool that does not exist in the tools section
     #[test]
     fn test_config_validate_function_nonexistent_tool() {
