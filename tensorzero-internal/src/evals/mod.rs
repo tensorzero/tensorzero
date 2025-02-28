@@ -350,3 +350,31 @@ fn read_system_instructions<P1: AsRef<Path>, P2: AsRef<Path>>(
     })?;
     Ok(contents)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_read_system_instructions() {
+        let system_instructions = read_system_instructions(
+            PathBuf::from("evals/eval1/llm_judge_bool/system_instructions.txt"),
+            &PathBuf::from("fixtures/config"),
+        )
+        .unwrap();
+        assert_eq!(
+            system_instructions,
+            "Return True if there is NSFW content in this generation.\n"
+        );
+
+        // Nonexistent file
+        let result = read_system_instructions(
+            PathBuf::from("evals/eval1/llm_judge_bool/nonexistent.txt"),
+            &PathBuf::from("fixtures/config"),
+        );
+        assert_eq!(*result.unwrap_err().get_details(), ErrorDetails::FileRead {
+            message: "Failed to open system instructions file: No such file or directory (os error 2)".to_string(),
+            file_path: "fixtures/config/evals/eval1/llm_judge_bool/nonexistent.txt".to_string(),
+        });
+    }
+}
