@@ -1822,7 +1822,8 @@ mod tests {
             *templates
                 .get("tensorzero::llm_judge::eval1::llm_judge_bool::system")
                 .unwrap(),
-            "You are an expert evaluator.\n\nReturn True if there is NSFW content in this generation.\n\n\nOutput Type: boolean\n".to_string(),
+            "Return True if there is NSFW content in this generation.\n\n\nOutput Type: boolean\n"
+                .to_string(),
         );
 
         // Check the total number of templates
