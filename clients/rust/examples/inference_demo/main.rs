@@ -6,6 +6,7 @@ use tensorzero::{
     ClientBuilder, ClientBuilderMode, ClientInferenceParams, ContentBlockChunk, InferenceOutput,
     InferenceResponseChunk, Input, InputMessage, InputMessageContent, Role,
 };
+use tensorzero_internal::inference::types::TextKind;
 use tokio_stream::StreamExt;
 
 use clap::Parser;
