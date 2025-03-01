@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["thinking", "score"],
+  "additionalProperties": false,
+  "properties": {
+    "thinking": {
+      "type": "string",
+      "description": "The reasoning or thought process behind the judgment"
+    },
+    "score": {
+      "type": "boolean",
+      "description": "The LLM judge's score as a boolean"
+    }
+  }
+}
