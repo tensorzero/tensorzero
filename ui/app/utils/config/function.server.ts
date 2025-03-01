@@ -1,9 +1,12 @@
 import { z } from "zod";
 import type { FunctionConfig, JSONSchema } from "./function";
 import { RawVariantConfigSchema } from "./variant.server";
-import type { VariantConfig } from "./variant";
+import { ChatCompletionConfigSchema, type VariantConfig } from "./variant";
 import path from "path";
 import fs from "fs";
+import { getUsedVariants } from "../clickhouse/function";
+
+export const DEFAULT_FUNCTION_NAME = "tensorzero::default";
 
 // Common schema for both Chat and Json variants
 const rawBaseConfigSchema = z.object({
@@ -120,3 +123,23 @@ export const RawFunctionConfigSchema = z
 export type RawFunctionConfigChat = z.infer<typeof RawFunctionConfigChatSchema>;
 export type RawFunctionConfigJson = z.infer<typeof RawFunctionConfigJsonSchema>;
 export type RawFunctionConfig = z.infer<typeof RawFunctionConfigSchema>;
+
+export const getDefaultFunctionWithVariants = async () => {
+  const variant_names = await getUsedVariants(DEFAULT_FUNCTION_NAME);
+  return {
+    type: "chat" as const,
+    variants: variant_names.reduce(
+      (acc, variant_name) => {
+        acc[variant_name] = ChatCompletionConfigSchema.parse({
+          type: "chat_completion",
+          model: variant_name,
+        });
+        return acc;
+      },
+      {} as Record<string, VariantConfig>,
+    ),
+    tools: [],
+    tool_choice: "none" as const,
+    parallel_tool_calls: false,
+  };
+};
