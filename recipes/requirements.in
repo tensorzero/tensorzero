@@ -1,5 +1,6 @@
--e ../../clients/python-pyo3
+-e ../clients/python-pyo3
 clickhouse-connect
 pandas
 pytest
 pytest-asyncio
+tiktoken
