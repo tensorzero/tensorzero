@@ -1986,7 +1986,7 @@ mod tests {
             *templates
                 .get("tensorzero::llm_judge::eval1::llm_judge_float::system")
                 .unwrap(),
-            "Give a vibes based score\n\nOutput Type: number\n"
+            "Give a vibes based score\n\n\nOutput Type: number\n"
         );
         // Check the total number of templates
         assert_eq!(templates.len(), 12);
