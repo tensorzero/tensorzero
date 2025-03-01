@@ -1,5 +1,5 @@
 import { Badge } from "~/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent } from "~/components/ui/card";
 import type {
   JsonInferenceOutput,
   ContentBlockOutput,
@@ -69,10 +69,7 @@ export function OutputContent({ output }: OutputProps) {
 export default function Output({ output }: OutputProps) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">Output</CardTitle>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
         <OutputContent output={output} />
       </CardContent>
     </Card>

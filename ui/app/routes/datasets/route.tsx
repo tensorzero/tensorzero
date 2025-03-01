@@ -4,6 +4,11 @@ import DatasetTable from "./DatasetTable";
 import { data, isRouteErrorResponse } from "react-router";
 import { useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
+import {
+  PageHeader,
+  PageLayout,
+  SectionLayout,
+} from "~/components/layout/PageLayout";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -30,15 +35,19 @@ export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="mb-4 text-2xl font-semibold">Datasets</h1>
-      <DatasetTable counts={counts} />
-      <PageButtons
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        disablePrevious={offset === 0}
-        disableNext={offset + pageSize >= counts.length}
-      />
+    <div className="container mx-auto px-4 pb-8">
+      <PageLayout>
+        <PageHeader heading="Datasets" count={counts.length} />
+        <SectionLayout>
+          <DatasetTable counts={counts} />
+          <PageButtons
+            onPreviousPage={handlePreviousPage}
+            onNextPage={handleNextPage}
+            disablePrevious={offset === 0}
+            disableNext={offset + pageSize >= counts.length}
+          />
+        </SectionLayout>
+      </PageLayout>
     </div>
   );
 }

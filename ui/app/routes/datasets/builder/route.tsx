@@ -8,6 +8,11 @@ import {
 } from "~/utils/clickhouse/datasets.server";
 import type { ActionFunctionArgs } from "react-router";
 import { serializedFormDataToDatasetQueryParams } from "./types";
+import {
+  PageHeader,
+  PageLayout,
+  SectionLayout,
+} from "~/components/layout/PageLayout";
 
 export const meta = () => {
   return [
@@ -50,12 +55,13 @@ export default function DatasetBuilder() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <main>
-        <h2 className="mb-4 text-2xl font-semibold">Dataset Builder</h2>
-        <div className="mb-6 h-px w-full bg-gray-200"></div>
-        <DatasetBuilderForm dataset_counts={dataset_counts} />
-      </main>
+    <div className="container mx-auto px-4 pb-8">
+      <PageLayout>
+        <PageHeader heading="Dataset Builder" />
+        <SectionLayout>
+          <DatasetBuilderForm dataset_counts={dataset_counts} />
+        </SectionLayout>
+      </PageLayout>
     </div>
   );
 }

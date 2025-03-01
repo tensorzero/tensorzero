@@ -4,7 +4,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "~/components/ui/accordion";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent } from "~/components/ui/card";
 import { Code } from "~/components/ui/code";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import { ModelInferenceItem } from "./ModelInferenceItem";
@@ -18,10 +18,7 @@ export function ModelInferencesAccordion({
 }: ModelInferencesAccordionProps) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">Model Inferences</CardTitle>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
         <Accordion type="single" collapsible className="w-full">
           {modelInferences.map((inference, index) => (
             <AccordionItem value={`item-${index}`} key={inference.id}>

@@ -8,7 +8,11 @@ import EpisodesTable from "./EpisodesTable";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import EpisodeSearchBar from "./EpisodeSearchBar";
-import { PageHeader } from "~/components/layout/PageHeader";
+import {
+  PageHeader,
+  PageLayout,
+  SectionLayout,
+} from "~/components/layout/PageLayout";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -44,10 +48,15 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
   if (episodes.length === 0) {
     return (
       <div className="container mx-auto px-4 pb-8">
-        <PageHeader headline="Episodes" count={totalCount} />
-        <EpisodeSearchBar />
-        <div className="my-6 h-px w-full bg-gray-200"></div>
-        <div className="py-8 text-center text-gray-500">No episodes found</div>
+        <PageLayout>
+          <PageHeader heading="Episodes" count={totalCount} />
+          <SectionLayout>
+            <EpisodeSearchBar />
+            <div className="py-8 text-center text-gray-500">
+              No episodes found
+            </div>
+          </SectionLayout>
+        </PageLayout>
       </div>
     );
   }
@@ -77,19 +86,23 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="container mx-auto px-4 pb-8">
-      <PageHeader headline="Episodes" count={totalCount} />
-      <EpisodeSearchBar />
-      <div className="my-6 h-px w-full bg-gray-200"></div>
-      <EpisodesTable episodes={episodes} />
-      <PageButtons
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        disablePrevious={disablePrevious}
-        disableNext={disableNext}
-      />
+      <PageLayout>
+        <PageHeader heading="Episodes" count={totalCount} />
+        <SectionLayout>
+          <EpisodeSearchBar />
+          <EpisodesTable episodes={episodes} />
+          <PageButtons
+            onPreviousPage={handlePreviousPage}
+            onNextPage={handleNextPage}
+            disablePrevious={disablePrevious}
+            disableNext={disableNext}
+          />
+        </SectionLayout>
+      </PageLayout>
     </div>
   );
 }
+
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   console.error(error);
 

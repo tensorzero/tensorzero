@@ -6,7 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent } from "~/components/ui/card";
 import { Code } from "~/components/ui/code";
 
 interface TagsTableProps {
@@ -16,10 +16,7 @@ interface TagsTableProps {
 export function TagsTable({ tags }: TagsTableProps) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">Tags</CardTitle>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
         <Table>
           <TableHeader>
             <TableRow>

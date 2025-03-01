@@ -17,7 +17,11 @@ import type { Route } from "./+types/route";
 import FineTuningStatus from "./FineTuningStatus";
 import { SFTResult } from "./SFTResult";
 import { SFTForm } from "./SFTForm";
-import { PageHeader } from "~/components/layout/PageHeader";
+import {
+  PageHeader,
+  PageLayout,
+  SectionLayout,
+} from "~/components/layout/PageLayout";
 
 export const meta: MetaFunction = () => {
   return [
@@ -96,8 +100,14 @@ export default function SupervisedFineTuning({
   if (loaderData.status === "error") {
     return (
       <div className="container mx-auto px-4 pb-8">
-        <PageHeader headline="Supervised Fine-Tuning" />
-        <div className="text-sm text-red-500">Error: {loaderData.error}</div>
+        <PageLayout>
+          <PageHeader heading="Supervised Fine-Tuning" />
+          <SectionLayout>
+            <div className="text-sm text-red-500">
+              Error: {loaderData.error}
+            </div>
+          </SectionLayout>
+        </PageLayout>
       </div>
     );
   }
@@ -131,19 +141,21 @@ export default function SupervisedFineTuning({
 
   return (
     <div className="container mx-auto px-4 pb-8">
-      <PageHeader headline="Supervised Fine-Tuning" />
-      <main>
-        {status.status === "idle" && (
-          <SFTForm
-            config={config}
-            submissionPhase={submissionPhase}
-            setSubmissionPhase={setSubmissionPhase}
-          />
-        )}
+      <PageLayout>
+        <PageHeader heading="Supervised Fine-Tuning" />
+        <SectionLayout>
+          {status.status === "idle" && (
+            <SFTForm
+              config={config}
+              submissionPhase={submissionPhase}
+              setSubmissionPhase={setSubmissionPhase}
+            />
+          )}
 
-        {<FineTuningStatus status={status} />}
-        <SFTResult finalResult={finalResult} />
-      </main>
+          {<FineTuningStatus status={status} />}
+          <SFTResult finalResult={finalResult} />
+        </SectionLayout>
+      </PageLayout>
     </div>
   );
 }
