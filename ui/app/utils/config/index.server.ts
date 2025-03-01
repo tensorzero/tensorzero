@@ -2,7 +2,11 @@ import { parse } from "smol-toml";
 import { promises as fs } from "fs";
 import { Config, GatewayConfig } from ".";
 import { MetricConfigSchema } from "./metric";
-import { RawFunctionConfigSchema } from "./function.server";
+import {
+  DEFAULT_FUNCTION_NAME,
+  getDefaultFunctionWithVariants,
+  RawFunctionConfigSchema,
+} from "./function.server";
 import { z } from "zod";
 import { EmbeddingModelConfigSchema, ModelConfigSchema } from "./models";
 import { ToolConfigSchema } from "./tool";
@@ -10,6 +14,7 @@ import type { FunctionConfig } from "./function";
 
 const DEFAULT_CONFIG_PATH = "config/tensorzero.toml";
 const ENV_CONFIG_PATH = process.env.TENSORZERO_UI_CONFIG_PATH;
+const CACHE_TTL_MS = 1000 * 60; // 1 minute
 
 export async function loadConfig(config_path?: string): Promise<Config> {
   // If the config_path was provided (via the env var)
@@ -58,18 +63,34 @@ export async function loadConfig(config_path?: string): Promise<Config> {
     },
   };
 
+  // Add default function to the config
+  loadedConfig.functions = {
+    ...loadedConfig.functions,
+    [DEFAULT_FUNCTION_NAME]: await getDefaultFunctionWithVariants(),
+  };
+
   return loadedConfig;
 }
 
-// Create singleton
-let configPromise: ReturnType<typeof loadConfig>;
+interface ConfigCache {
+  data: Config;
+  timestamp: number;
+}
 
-export function getConfig() {
-  if (!configPromise) {
-    // Pass in ENV_CONFIG_PATH; if not set, loadConfig() will try the default path.
-    configPromise = loadConfig(ENV_CONFIG_PATH);
+let configCache: ConfigCache | null = null;
+
+export async function getConfig() {
+  const now = Date.now();
+
+  if (configCache && now - configCache.timestamp < CACHE_TTL_MS) {
+    return configCache.data;
   }
-  return configPromise;
+
+  // Cache is invalid or doesn't exist, reload it
+  const freshConfig = await loadConfig(ENV_CONFIG_PATH);
+
+  configCache = { data: freshConfig, timestamp: now };
+  return freshConfig;
 }
 
 export const RawConfig = z
