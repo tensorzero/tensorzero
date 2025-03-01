@@ -46,7 +46,7 @@ derive_builder = "0.20.0"
 futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
-image = { version  = "0.25.5", default-features = false }
+image = { version = "0.25.5", default-features = false }
 itertools = "0.13.0"
 jsonschema = "0.18.0"
 jsonwebtoken = "9.3.0"
@@ -75,7 +75,7 @@ strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.3"
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
-toml = { workspace = true }
+toml = "0.8.15"
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.18", features = [
     "env-filter",
@@ -93,4 +93,6 @@ tensorzero = { path = "../clients/rust" }
 paste = "1.0.15"
 base64 = "0.22.1"
 aws-sdk-s3 = "1.76.0"
-aws-credential-types = { version = "1.2.1", features = ["hardcoded-credentials"] }
+aws-credential-types = { version = "1.2.1", features = [
+    "hardcoded-credentials",
+] }

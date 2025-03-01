@@ -21,7 +21,7 @@ pyo3 = { workspace = true, optional = true }
 workspace = true
 
 [dev-dependencies]
-clap = "4.5.27"
+clap = { workspace = true }
 tokio = { workspace = true }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"

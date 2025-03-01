@@ -1,0 +1,24 @@
+[package]
+name = "evals"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tensorzero = { path = "../clients/rust" }
+clap = { workspace = true }
+url = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+
+
+[lints]
+workspace = true
+
+[features]
+# Forward these features to 'tensorzero-internal', so that our embedded
+# client can recognize things like the `dummy` provider
+e2e_tests = []
+batch_tests = []
+default = []
