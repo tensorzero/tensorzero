@@ -10,12 +10,14 @@ import {
 } from "~/components/inference/TryWithVariantButton";
 import { AddToDatasetButton } from "./AddToDatasetButton";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
+import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 
 const FF_ENABLE_DATASETS =
   import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
 
 interface BasicInfoProps {
   inference: ParsedInferenceRow;
+  inferenceUsage?: InferenceUsage;
   tryWithVariantProps: TryWithVariantButtonProps;
   dataset_counts: DatasetCountInfo[];
   onDatasetSelect: (
@@ -27,6 +29,7 @@ interface BasicInfoProps {
 
 export default function BasicInfo({
   inference,
+  inferenceUsage,
   tryWithVariantProps,
   dataset_counts,
   onDatasetSelect,
@@ -74,13 +77,21 @@ export default function BasicInfo({
               {variantType}
             </Badge>
           </div>
-          <div>
+          <div className="col-span-2">
             <dt className="text-lg font-semibold">Episode ID</dt>
             <dd>
               <Link to={`/observability/episodes/${inference.episode_id}`}>
                 <Code>{inference.episode_id}</Code>
               </Link>
             </dd>
+          </div>
+          <div>
+            <dt className="text-lg font-semibold">Input Tokens</dt>
+            <dd>{inferenceUsage?.input_tokens ?? ""}</dd>
+          </div>
+          <div>
+            <dt className="text-lg font-semibold">Output Tokens</dt>
+            <dd>{inferenceUsage?.output_tokens ?? ""}</dd>
           </div>
           <div>
             <dt className="text-lg font-semibold">Timestamp</dt>
