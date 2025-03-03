@@ -29,7 +29,6 @@ user_template = "functions/generate_answer_chat/search_template/user_template.mi
 
 [functions.generate_answer_json]
 type = "json"
-output_schema = "functions/generate_answer_json/output_schema.json"
 system_schema = "functions/generate_answer_json/system_schema.json"
 user_schema = "functions/generate_answer_json/user_schema.json"
 
