@@ -100,10 +100,6 @@ jobs:
           done
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
-      - name: Wake up ClickHouse cloud (for batch tests)
-        run: |
-          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES' > clickhouse_wakeup_logs.txt &
-
       # We set 'TENSORZERO_E2E_PROXY' here so that embedded gateway tests can use it
       - name: Run all tests (including E2E tests)
         run: |
@@ -277,7 +273,3 @@ jobs:
       - name: Take down ui tests
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.yml down
-
-      - name: Print clickhouse wakeup logs
-        if: always()
-        run: cat clickhouse_wakeup_logs.txt

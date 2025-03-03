@@ -138,7 +138,7 @@ impl BaseTensorZeroGateway {
     fn new(
         py: Python<'_>,
         base_url: &str,
-        timeout: Option<u64>,
+        timeout: Option<f64>,
         verbose_errors: bool,
     ) -> PyResult<Self> {
         let mut client_builder = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
@@ -148,7 +148,10 @@ impl BaseTensorZeroGateway {
         .with_verbose_errors(verbose_errors);
         if let Some(timeout) = timeout {
             let http_client = reqwest::Client::builder()
-                .timeout(Duration::from_secs(timeout))
+                .timeout(
+                    Duration::try_from_secs_f64(timeout)
+                        .map_err(|e| PyValueError::new_err(format!("Invalid timeout: {e}")))?,
+                )
                 .build()
                 .map_err(|e| {
                     PyValueError::new_err(format!("Failed to build HTTP client: {e:?}"))
@@ -354,7 +357,7 @@ impl TensorZeroGateway {
     fn new(
         py: Python<'_>,
         base_url: &str,
-        timeout: Option<u64>,
+        timeout: Option<f64>,
     ) -> PyResult<(Self, BaseTensorZeroGateway)> {
         tracing::warn!("TensorZeroGateway.__init__ is deprecated. Use TensorZeroGateway.build_http or TensorZeroGateway.build_embedded instead.");
         Ok((
@@ -373,7 +376,7 @@ impl TensorZeroGateway {
     fn build_http(
         cls: &Bound<'_, PyType>,
         gateway_url: &str,
-        timeout: Option<u64>,
+        timeout: Option<f64>,
         verbose_errors: bool,
     ) -> PyResult<Py<TensorZeroGateway>> {
         let client = BaseTensorZeroGateway::new(cls.py(), gateway_url, timeout, verbose_errors)?;
@@ -388,7 +391,7 @@ impl TensorZeroGateway {
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
     #[allow(unused_variables)]
     #[pyo3(signature = (base_url, *, timeout=None))]
-    fn __init__(this: Py<Self>, base_url: &str, timeout: Option<u64>) -> Py<Self> {
+    fn __init__(this: Py<Self>, base_url: &str, timeout: Option<f64>) -> Py<Self> {
         // The actual logic is in the 'new' method - this method just exists to generate a docstring
         this
     }
@@ -599,7 +602,7 @@ impl AsyncTensorZeroGateway {
     fn new(
         py: Python<'_>,
         base_url: &str,
-        timeout: Option<u64>,
+        timeout: Option<f64>,
     ) -> PyResult<(Self, BaseTensorZeroGateway)> {
         tracing::warn!("AsyncTensorZeroGateway.__init__ is deprecated. Use AsyncTensorZeroGateway.build_http or AsyncTensorZeroGateway.build_embedded instead.");
         Ok((
@@ -618,7 +621,7 @@ impl AsyncTensorZeroGateway {
     fn build_http<'a>(
         cls: &Bound<'a, PyType>,
         gateway_url: &str,
-        timeout: Option<u64>,
+        timeout: Option<f64>,
         verbose_errors: bool,
     ) -> PyResult<Bound<'a, PyAny>> {
         let gateway_url = gateway_url.to_string();
@@ -639,7 +642,7 @@ impl AsyncTensorZeroGateway {
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
     #[allow(unused_variables)]
     #[pyo3(signature = (base_url, *, timeout=None))]
-    fn __init__(this: Py<Self>, base_url: &str, timeout: Option<u64>) -> Py<Self> {
+    fn __init__(this: Py<Self>, base_url: &str, timeout: Option<f64>) -> Py<Self> {
         // The actual logic is in the 'new' method - this method just exists to generate a docstring
         this
     }

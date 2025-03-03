@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    fmt::{self, Display},
     fs::File,
     io::{BufReader, Read},
     path::{Path, PathBuf},
@@ -61,20 +60,6 @@ pub struct LLMJudgeIncludeConfig {
 pub enum LLMJudgeOutputType {
     Float,
     Boolean,
-}
-
-impl Display for LLMJudgeOutputType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                // For formatting into the system instructions
-                LLMJudgeOutputType::Float => "number", // number for JSON compatibility
-                LLMJudgeOutputType::Boolean => "boolean",
-            }
-        )
-    }
 }
 
 impl From<LLMJudgeOutputType> for MetricConfigType {
