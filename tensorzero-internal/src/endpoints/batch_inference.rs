@@ -224,9 +224,13 @@ pub async fn start_batch_inference_handler(
         object_store_info: &config.object_store_info,
     };
 
-    let resolved_inputs =
-        futures::future::try_join_all(params.inputs.iter().map(|input| input.resolve(&context)))
-            .await?;
+    let resolved_inputs = futures::future::try_join_all(
+        params
+            .inputs
+            .into_iter()
+            .map(|input| input.resolve(&context)),
+    )
+    .await?;
 
     // Keep sampling variants until one succeeds
     // We already guarantee there is at least one inference
