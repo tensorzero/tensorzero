@@ -9,11 +9,13 @@ use super::{Base64Image, ImageKind};
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StorageKind {
     S3Compatible {
-        bucket_name: String,
-        region: String,
+        bucket_name: Option<String>,
+        region: Option<String>,
+        endpoint: Option<String>,
         /// An extra prefix to prepend to the object key.
         /// This is only enabled in e2e tests, to prevent clashes between concurrent test runs.
         #[cfg(feature = "e2e_tests")]
+        #[serde(default)]
         prefix: String,
     },
     Filesystem {

@@ -210,6 +210,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       <div className="space-y-6">
         <BasicInfo
           inference={inference}
+          inferenceUsage={getTotalInferenceUsage(model_inferences)}
           tryWithVariantProps={{
             variants,
             onVariantSelect,

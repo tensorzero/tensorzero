@@ -1692,7 +1692,7 @@ async def test_async_err_in_stream(async_client):
 
 
 @pytest.mark.asyncio
-async def test_async_timeout():
+async def test_async_timeout_int():
     async with await AsyncTensorZeroGateway.build_http(
         gateway_url="http://localhost:3000",
         timeout=1,
@@ -1709,7 +1709,25 @@ async def test_async_timeout():
         assert "HTTP request timed out" in str(exc_info.value)
 
 
-def test_sync_timeout():
+@pytest.mark.asyncio
+async def test_async_timeout_float():
+    async with await AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000",
+        timeout=0.1,
+    ) as async_client:
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            await async_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={
+                    "system": {"assistant_name": "TensorZero bot"},
+                    "messages": [{"role": "user", "content": "Hello"}],
+                },
+            )
+        assert "HTTP request timed out" in str(exc_info.value)
+
+
+def test_sync_timeout_int():
     with TensorZeroGateway.build_http(
         gateway_url="http://localhost:3000", timeout=1
     ) as sync_client:
@@ -1723,6 +1741,89 @@ def test_sync_timeout():
                 },
             )
         assert "HTTP request timed out" in str(exc_info.value)
+
+
+def test_sync_timeout_float():
+    with TensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000", timeout=0.1
+    ) as sync_client:
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            sync_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={
+                    "system": {"assistant_name": "TensorZero bot"},
+                    "messages": [{"role": "user", "content": "Hello"}],
+                },
+            )
+        assert "HTTP request timed out" in str(exc_info.value)
+
+
+def test_sync_timeout_invalid():
+    with pytest.raises(ValueError) as exc_info:
+        TensorZeroGateway.build_http(gateway_url="http://localhost:3000", timeout=-1)
+    assert (
+        "Invalid timeout: cannot convert float seconds to Duration: value is negative"
+        == str(exc_info.value)
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_non_verbose_errors():
+    async with await AsyncTensorZeroGateway.build_http(
+        gateway_url="http://tensorzero.invalid:3000", verbose_errors=False
+    ) as async_client:
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            await async_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={"messages": [{"role": "user", "content": "Hello"}]},
+            )
+
+        assert "dns error" not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_async_verbose_errors():
+    async with await AsyncTensorZeroGateway.build_http(
+        gateway_url="http://tensorzero.invalid:3000", verbose_errors=True
+    ) as async_client:
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            await async_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={"messages": [{"role": "user", "content": "Hello"}]},
+            )
+
+        assert "dns error" in str(exc_info.value)
+
+
+def test_sync_non_verbose_errors():
+    with TensorZeroGateway.build_http(
+        gateway_url="http://tensorzero.invalid:3000", verbose_errors=False
+    ) as async_client:
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            async_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={"messages": [{"role": "user", "content": "Hello"}]},
+            )
+
+        assert "dns error" not in str(exc_info.value)
+
+
+def test_sync_verbose_errors():
+    with TensorZeroGateway.build_http(
+        gateway_url="http://tensorzero.invalid:3000", verbose_errors=True
+    ) as async_client:
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            async_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={"messages": [{"role": "user", "content": "Hello"}]},
+            )
+
+        assert "dns error" in str(exc_info.value)
 
 
 def test_uuid7_import():

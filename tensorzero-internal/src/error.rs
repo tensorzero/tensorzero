@@ -123,6 +123,10 @@ pub enum ErrorDetails {
     DynamicJsonSchema {
         message: String,
     },
+    FileRead {
+        message: String,
+        file_path: String,
+    },
     GCPCredentials {
         message: String,
     },
@@ -330,6 +334,7 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
+            ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
@@ -404,6 +409,7 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceTarget { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::Inference { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -569,6 +575,9 @@ impl std::fmt::Display for ErrorDetails {
                     "Error in compiling client-provided JSON schema: {}",
                     message
                 )
+            }
+            ErrorDetails::FileRead { message, file_path } => {
+                write!(f, "Error reading file {file_path}: {message}")
             }
             ErrorDetails::GCPCredentials { message } => {
                 write!(f, "Error in acquiring GCP credentials: {}", message)
