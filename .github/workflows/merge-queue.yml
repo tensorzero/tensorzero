@@ -185,7 +185,7 @@ jobs:
           uv run pytest
 
       - name: "Python: Recipes: Install dependencies"
-        working-directory: recipes/tests
+        working-directory: recipes
         run: |
           uv venv
           uv pip sync requirements.txt
