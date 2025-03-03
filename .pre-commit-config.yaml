@@ -145,3 +145,14 @@ repos:
         args: ["--project", "clients/openai-python/pyrightconfig.json"]
         additional_dependencies:
           - openai
+
+      - id: pyright
+        name: "pyright: recipes"
+        files: ^recipes/
+        args: ["--project", "recipes/pyrightconfig.json"]
+        additional_dependencies:
+          - clickhouse-connect
+          - pandas
+          - pandas-stubs
+          - tensorzero
+          - tiktoken
