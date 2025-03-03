@@ -92,7 +92,10 @@ pub fn get_llm_judge_function_name(eval_name: &str, evaluator_name: &str) -> Str
 }
 
 pub fn get_evaluator_metric_name(eval_name: &str, evaluator_name: &str) -> String {
-    format!("tensorzero::eval::{}::{}", eval_name, evaluator_name)
+    format!(
+        "tensorzero::eval_name::{}::evaluator_name::{}",
+        eval_name, evaluator_name
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -473,7 +476,7 @@ mod tests {
             let metric_config_name = get_evaluator_metric_name(eval_name, "em_evaluator");
             assert_eq!(
                 metric_config_name,
-                "tensorzero::eval::test_eval::em_evaluator"
+                "tensorzero::eval_name::test_eval::evaluator_name::em_evaluator"
             );
             assert!(metric_configs.contains_key(&metric_config_name));
 
@@ -573,7 +576,7 @@ mod tests {
             let metric_config_name = get_evaluator_metric_name(eval_name, "llm_judge_eval");
             assert_eq!(
                 metric_config_name,
-                "tensorzero::eval::test_eval::llm_judge_eval"
+                "tensorzero::eval_name::test_eval::evaluator_name::llm_judge_eval"
             );
             assert!(metric_configs.contains_key(&metric_config_name));
 
@@ -677,7 +680,7 @@ mod tests {
             let metric_config_name = get_evaluator_metric_name(eval_name, "llm_judge_float");
             assert_eq!(
                 metric_config_name,
-                "tensorzero::eval::test_eval::llm_judge_float"
+                "tensorzero::eval_name::test_eval::evaluator_name::llm_judge_float"
             );
             assert!(metric_configs.contains_key(&metric_config_name));
 

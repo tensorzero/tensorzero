@@ -941,7 +941,7 @@ mod tests {
         // Check that the metric for the LLM Judge evaluator is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::eval::eval1::llm_judge_bool")
+            .get("tensorzero::eval_name::eval1::evaluator_name::llm_judge_bool")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Boolean);
         assert_eq!(metric.optimize, MetricConfigOptimize::Min);
@@ -950,7 +950,7 @@ mod tests {
         // Check that the metric for the exact match eval is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::eval::eval1::em_evaluator")
+            .get("tensorzero::eval_name::eval1::evaluator_name::em_evaluator")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Boolean);
         assert_eq!(metric.optimize, MetricConfigOptimize::Max);
@@ -959,7 +959,7 @@ mod tests {
         // Check that the metric for the LLM Judge float eval is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::eval::eval1::llm_judge_float")
+            .get("tensorzero::eval_name::eval1::evaluator_name::llm_judge_float")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Float);
         assert_eq!(metric.optimize, MetricConfigOptimize::Min);
