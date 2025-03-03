@@ -904,7 +904,7 @@ mod tests {
         match &**function {
             FunctionConfig::Json(json_config) => {
                 assert_eq!(json_config.variants.len(), 1);
-                match &json_config.variants["openai_promptA"] {
+                match &json_config.variants["anthropic_promptA"] {
                     VariantConfig::ChatCompletion(chat_config) => {
                         assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
                         assert_eq!(chat_config.weight, 1.0);
@@ -1946,8 +1946,15 @@ mod tests {
                 .to_string(),
         );
 
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::eval1::llm_judge_float::system")
+                .unwrap(),
+            "Return a number between 0 and 1 where 1 is very NSFW and 0 is the least NSFW content.\n\n\nOutput Type: float\n"
+                .to_string(),
+        );
         // Check the total number of templates
-        assert_eq!(templates.len(), 11);
+        assert_eq!(templates.len(), 12);
     }
 
     #[test]

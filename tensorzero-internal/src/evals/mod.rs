@@ -44,8 +44,14 @@ pub enum EvaluatorConfig {
 #[derive(Debug)]
 pub struct LLMJudgeConfig {
     pub output_type: LLMJudgeOutputType,
-    pub include_datapoint_output: bool,
+    pub include: LLMJudgeIncludeConfig,
     pub optimize: LLMJudgeOptimize,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct LLMJudgeIncludeConfig {
+    #[serde(default)]
+    pub reference_output: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -161,7 +167,8 @@ struct UninitializedLLMJudgeConfig {
     variants: HashMap<String, UninitializedLLMJudgeVariantConfig>,
     output_type: LLMJudgeOutputType,
     optimize: LLMJudgeOptimize,
-    include_datapoint_output: bool,
+    #[serde(default)]
+    include: LLMJudgeIncludeConfig,
 }
 
 impl UninitializedEvaluatorConfig {
@@ -240,7 +247,7 @@ impl UninitializedEvaluatorConfig {
                 Ok((
                     EvaluatorConfig::LLMJudge(LLMJudgeConfig {
                         output_type: params.output_type,
-                        include_datapoint_output: params.include_datapoint_output,
+                        include: params.include,
                         optimize: params.optimize,
                     }),
                     Some(function_config),
@@ -449,7 +456,9 @@ mod tests {
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Min,
-                include_datapoint_output: false,
+                include: LLMJudgeIncludeConfig {
+                    reference_output: false,
+                },
             };
 
             let mut evaluators = HashMap::new();
@@ -478,7 +487,7 @@ mod tests {
                         LLMJudgeOutputType::Boolean
                     ));
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
-                    assert!(!judge_config.include_datapoint_output);
+                    assert!(!judge_config.include.reference_output);
                 }
                 _ => panic!("Expected LLMJudge evaluator config"),
             }
@@ -606,7 +615,9 @@ mod tests {
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Min,
-                include_datapoint_output: false,
+                include: LLMJudgeIncludeConfig {
+                    reference_output: false,
+                },
             };
 
             let mut evaluators = HashMap::new();
@@ -674,6 +685,71 @@ mod tests {
                             .to_string(),
                 }
             );
+        }
+
+        // Test case 7: Successful loading with LLM judge evaluator with reference_output = true
+        {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "test_variant".to_string(),
+                UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                    UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: true,
+                        model: Arc::from("gpt-3.5-turbo"),
+                        system_instructions: PathBuf::from(
+                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                        ),
+                        temperature: Some(0.7),
+                        top_p: None,
+                        max_tokens: Some(100),
+                        presence_penalty: None,
+                        frequency_penalty: None,
+                        seed: None,
+                        json_mode: JsonMode::ImplicitTool,
+                        retries: RetryConfig::default(),
+                        extra_body: None,
+                    },
+                ),
+            );
+
+            let llm_judge_config = UninitializedLLMJudgeConfig {
+                variants,
+                output_type: LLMJudgeOutputType::Boolean,
+                optimize: LLMJudgeOptimize::Min,
+                include: LLMJudgeIncludeConfig {
+                    reference_output: true,
+                },
+            };
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "llm_judge_with_ref".to_string(),
+                UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
+            );
+
+            let uninitialized_config = UninitializedEvalConfig {
+                evaluators,
+                dataset_name: "test_dataset".to_string(),
+                function_name: function_name.to_string(),
+            };
+
+            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            assert!(result.is_ok());
+
+            let (config, _additional_functions) = result.unwrap();
+
+            // Verify LLM judge evaluator config with reference_output = true
+            match config.evaluators.get("llm_judge_with_ref").unwrap() {
+                EvaluatorConfig::LLMJudge(judge_config) => {
+                    assert!(matches!(
+                        judge_config.output_type,
+                        LLMJudgeOutputType::Boolean
+                    ));
+                    assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
+                    assert!(judge_config.include.reference_output);
+                }
+                _ => panic!("Expected LLMJudge evaluator config"),
+            }
         }
     }
 

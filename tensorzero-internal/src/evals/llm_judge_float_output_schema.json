@@ -9,7 +9,7 @@
       "description": "The reasoning or thought process behind the judgment"
     },
     "score": {
-      "type": "float",
+      "type": "number",
       "description": "The score assigned as a float between 0 and 1"
     }
   }
