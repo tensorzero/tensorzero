@@ -2058,7 +2058,7 @@ mod tests {
 
     /// Get a sample valid config for testing
     fn get_sample_valid_config() -> toml::Table {
-        let config_str = include_str!("../fixtures/config/tensorzero.test.toml");
+        let config_str = include_str!("../fixtures/config/tensorzero.toml");
         env::set_var("OPENAI_API_KEY", "sk-something");
         env::set_var("ANTHROPIC_API_KEY", "sk-something");
         env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
@@ -2152,25 +2152,6 @@ mod tests {
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         Config::load_from_toml(config, base_path.clone())
             .expect("Failed to construct config with valid AWS bedrock provider");
-    }
-
-    #[test]
-    fn test_tensorzero_example_file() {
-        env::set_var("OPENAI_API_KEY", "sk-something");
-        env::set_var("ANTHROPIC_API_KEY", "sk-something");
-        env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let config_path = format!("{}/fixtures/config/tensorzero.toml", manifest_dir);
-        let config_pathbuf = PathBuf::from(&config_path);
-        let base_path = config_pathbuf
-            .parent()
-            .expect("Failed to get parent directory of config file");
-        let config_table = UninitializedConfig::read_toml_config(Path::new(&config_path))
-            .expect("Failed to read tensorzero.toml")
-            .expect("Failed to read tensorzero.toml");
-
-        Config::load_from_toml(config_table, base_path.to_path_buf())
-            .expect("Failed to load config");
     }
 
     #[traced_test]
