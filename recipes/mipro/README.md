@@ -2,7 +2,9 @@
 
 The [mipro.ipynb](mipro.ipynb) notebook provides a step-by-step recipe to perform automated prompt engineering for OpenAI models based on data collected by the TensorZero Gateway.
 
-MIPRO (Multi-prompt Instruction PRoposal Optimizer) is an optimization framework designed for multi-stage Language Model (LM) applications. It enhances prompt effectiveness by systematically searching over instructions and few-shot demonstrations to maximize downstream task performance. Unlike traditional prompt engineering, which relies on manual trial-and-error methods, MIPRO introduces algorithmic strategies for optimizing LM programs under constraints such as black-box model access.
+## MIPRO (Multi-prompt Instruction PRoposal Optimizer)
+
+MIPRO is an optimization framework designed for multi-stage Language Model (LM) applications. It enhances prompt effectiveness by systematically searching over instructions and few-shot demonstrations to maximize downstream task performance. Unlike traditional prompt engineering, which relies on manual trial-and-error methods, MIPRO introduces algorithmic strategies for optimizing LM programs under constraints such as black-box model access.
 
 High-Level Structure
 
@@ -16,7 +18,7 @@ MIPRO operates within a structured optimization framework:
 
 For more details, see the [MIPRO paper](https://arxiv.org/abs/2406.11695v1), and the [DSPy Repository](https://github.com/stanfordnlp/dspy).
 
-In our implementation, we use an LLM judge to score the candidate prompts. The judge is configuable to fit your problem by describing the task and metric you want to optimize.
+In our implementation, we use an LLM judge to score the candidate prompts. The judge is configuable to fit your problem by describing the task and metric you want to optimize. This assumes that the LLM judge will output scores that are correlated with the metric you want to optimize.
 
 ## Setup
 
