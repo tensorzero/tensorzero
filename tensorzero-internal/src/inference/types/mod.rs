@@ -118,14 +118,9 @@ impl InputMessageContent {
                     value: value.clone(),
                 }
             }
-            InputMessageContent::RawText { value } => {
-                tracing::warn!(
-                    r#"Deprecation warning: `{{"type": "raw_text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` instead."#
-                );
-                ResolvedInputMessageContent::Text {
-                    value: Value::String(value.clone()),
-                }
-            }
+            InputMessageContent::RawText { value } => ResolvedInputMessageContent::RawText {
+                value: value.clone(),
+            },
             InputMessageContent::Image(image) => {
                 let storage_kind = context
                     .object_store_info
