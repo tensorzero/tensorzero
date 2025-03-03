@@ -1,6 +1,6 @@
 # TensorZero Recipe: Automated Prompt Engineering with MIPRO
 
-The mipro.ipynb notebook provides a step-by-step recipe to perform automated prompt engineering for OpenAI models based on data collected by the TensorZero Gateway.
+The [mipro.ipynb](mipro.ipynb) notebook provides a step-by-step recipe to perform automated prompt engineering for OpenAI models based on data collected by the TensorZero Gateway.
 
 MIPRO (Multi-prompt Instruction PRoposal Optimizer) is an optimization framework designed for multi-stage Language Model (LM) applications. It enhances prompt effectiveness by systematically searching over instructions and few-shot demonstrations to maximize downstream task performance. Unlike traditional prompt engineering, which relies on manual trial-and-error methods, MIPRO introduces algorithmic strategies for optimizing LM programs under constraints such as black-box model access.
 

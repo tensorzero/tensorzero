@@ -29,7 +29,7 @@ cycler==0.12.1
     # via matplotlib
 debugpy==1.8.12
     # via ipykernel
-decorator==5.1.1
+decorator==5.2.1
     # via ipython
 distro==1.9.0
     # via openai
@@ -56,7 +56,7 @@ idna==3.10
     #   httpx
 ipykernel==6.29.5
     # via -r requirements.in
-ipython==8.32.0
+ipython==8.33.0
     # via ipykernel
 jedi==0.19.2
     # via ipython
@@ -76,26 +76,26 @@ mako==1.3.9
     # via alembic
 markupsafe==3.0.2
     # via mako
-matplotlib==3.10.0
+matplotlib==3.10.1
     # via seaborn
 matplotlib-inline==0.1.7
     # via
     #   ipykernel
     #   ipython
-minijinja==2.7.0
+minijinja==2.8.0
     # via -r requirements.in
 nest-asyncio==1.6.0
     # via ipykernel
-numpy==2.2.2
+numpy==2.2.3
     # via
     #   contourpy
     #   matplotlib
     #   optuna
     #   pandas
     #   seaborn
-openai==1.61.1
+openai==1.65.2
     # via -r requirements.in
-optuna==4.2.0
+optuna==4.2.1
     # via -r requirements.in
 packaging==24.2
     # via
@@ -116,7 +116,7 @@ platformdirs==4.3.6
     # via jupyter-core
 prompt-toolkit==3.0.50
     # via ipython
-psutil==6.1.1
+psutil==7.0.0
     # via ipykernel
 ptyprocess==0.7.0
     # via pexpect
@@ -159,7 +159,7 @@ sqlalchemy==2.0.38
     #   optuna
 stack-data==0.6.3
     # via ipython
-tensorzero==2025.2.1
+tensorzero==2025.2.6
     # via -r requirements.in
 toml==0.10.2
     # via -r requirements.in
