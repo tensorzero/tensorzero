@@ -159,6 +159,14 @@ cargo test-unit
    uv run ruff check --output-format=github --extend-select I .
    ```
 
+> [!IMPORTANT]
+>
+> If you update the dependencies for the Python client or `recipes/`, you must complete the following additional steps:
+>
+> 1. Add the dependency to `pyproject.toml`
+> 2. Run `uv lock`
+> 3. Run `uv export --format requirements-txt > requirements.txt` 
+
 #### Dashboard
 
 For development, the UI runs against hardcoded fixtures in `ui/fixtures/`.
