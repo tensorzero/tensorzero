@@ -92,7 +92,9 @@ repos:
       - id: uv-export
         name: "uv-export: python-pyo3"
         files: clients/python-pyo3/pyproject.toml
-        args: [--project, clients/python-pyo3/pyproject.toml]
+        args:
+          - "--project=clients/python-pyo3/pyproject.toml"
+          - "--output-file=clients/python-pyo3/requirements.txt"
 
       - id: uv-lock
         name: "uv-lock: python-deprecated"
@@ -102,7 +104,9 @@ repos:
       - id: uv-export
         name: "uv-export: python-deprecated"
         files: clients/python-deprecated/pyproject.toml
-        args: [--project, clients/python-deprecated/pyproject.toml]
+        args:
+          - "--project=clients/python-deprecated/pyproject.toml"
+          - "--output-file=clients/python-deprecated/requirements.txt"
 
       - id: uv-lock
         name: "uv-lock: recipes"
@@ -112,7 +116,9 @@ repos:
       - id: uv-export
         name: "uv-export: recipes"
         files: recipes/pyproject.toml
-        args: [--project, recipes/pyproject.toml]
+        args:
+          - "--project=recipes/pyproject.toml"
+          - "--output-file=recipes/requirements.txt"
 
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
