@@ -14,13 +14,14 @@ use crate::{
     error::{Error, ErrorDetails},
     inference::types::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
-        ContentBlock, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+        ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     },
-    model::{build_creds_caching_default, Credential, CredentialLocation},
+    model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
 };
 
 use super::{
+    helpers::inject_extra_body,
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
         tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse,
@@ -129,8 +130,17 @@ impl InferenceProvider for FireworksProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = FireworksRequest::new(&self.model_name, request);
+        let mut request_body =
+            serde_json::to_value(FireworksRequest::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing Fireworks request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&FIREWORKS_API_BASE)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
@@ -201,8 +211,17 @@ impl InferenceProvider for FireworksProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = FireworksRequest::new(&self.model_name, request);
+        let mut request_body =
+            serde_json::to_value(FireworksRequest::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing Fireworks request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body: {e}"),
@@ -301,7 +320,10 @@ struct FireworksRequest<'a> {
 }
 
 impl<'a> FireworksRequest<'a> {
-    pub fn new(model: &'a str, request: &'a ModelInferenceRequest) -> FireworksRequest<'a> {
+    pub fn new(
+        model: &'a str,
+        request: &'a ModelInferenceRequest<'_>,
+    ) -> Result<FireworksRequest<'a>, Error> {
         // NB: Fireworks will throw an error if you give FireworksResponseFormat::Text and then also include tools.
         // So we just don't include it as Text is the same as None anyway.
         let response_format = match request.json_mode {
@@ -312,11 +334,11 @@ impl<'a> FireworksRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages = prepare_fireworks_messages(request);
+        let messages = prepare_fireworks_messages(request)?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         let tools = tools.map(|t| t.into_iter().map(|tool| tool.into()).collect());
 
-        FireworksRequest {
+        Ok(FireworksRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -328,22 +350,21 @@ impl<'a> FireworksRequest<'a> {
             response_format,
             tools,
             tool_choice,
-        }
+        })
     }
 }
 
 fn prepare_fireworks_messages<'a>(
-    request: &'a ModelInferenceRequest,
-) -> Vec<OpenAIRequestMessage<'a>> {
-    let mut messages: Vec<OpenAIRequestMessage> = request
-        .messages
-        .iter()
-        .flat_map(tensorzero_to_openai_messages)
-        .collect();
+    request: &'a ModelInferenceRequest<'_>,
+) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
+    let mut messages = Vec::with_capacity(request.messages.len());
+    for message in request.messages.iter() {
+        messages.extend(tensorzero_to_openai_messages(message)?);
+    }
     if let Some(system_msg) = tensorzero_to_fireworks_system_message(request.system.as_deref()) {
         messages.insert(0, system_msg);
     }
-    messages
+    Ok(messages)
 }
 
 fn tensorzero_to_fireworks_system_message(
@@ -375,7 +396,7 @@ struct FireworksResponseWithMetadata<'a> {
     response: OpenAIResponse,
     raw_response: String,
     latency: Latency,
-    request: FireworksRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -413,13 +434,13 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             }
             ))?
             .message;
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
@@ -477,10 +498,12 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let fireworks_request =
-            FireworksRequest::new("accounts/fireworks/models/llama-v3-8b", &request_with_tools);
+            FireworksRequest::new("accounts/fireworks/models/llama-v3-8b", &request_with_tools)
+                .unwrap();
 
         assert_eq!(
             fireworks_request.model,
@@ -587,6 +610,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let fireworks_response_with_metadata = FireworksResponseWithMetadata {
             response: valid_response,
@@ -594,7 +618,10 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: FireworksRequest::new("test-model", &generic_request),
+            request: serde_json::to_value(
+                FireworksRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =

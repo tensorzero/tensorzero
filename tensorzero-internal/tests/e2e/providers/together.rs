@@ -20,6 +20,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let extra_body_providers = vec![E2ETestProvider {
+        variant_name: "together-extra-body".to_string(),
+        model_name: "llama3.1-8b-instruct-together".into(),
+        model_provider_name: "together".into(),
+        credentials: HashMap::new(),
+    }];
+
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "together-dynamic".to_string(),
         model_name: "llama3.1-8b-instruct-together-dynamic".into(),
@@ -34,11 +41,27 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "together".into(),
             credentials: HashMap::new(),
         },
-        // TODOs (#80): see below
-        // E2ETestProvider {
-        //     variant_name: "together-implicit".to_string(),
-        // },
+        E2ETestProvider {
+            variant_name: "together-default".to_string(),
+            model_name: "llama3.1-8b-instruct-together".into(),
+            model_provider_name: "together".into(),
+            credentials: HashMap::new(),
+        },
     ];
+
+    let tool_providers = vec![E2ETestProvider {
+        variant_name: "together-tool".to_string(),
+        model_name: "llama3.1-405b-instruct-turbo-together".into(),
+        model_provider_name: "together".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let reasoning_providers = vec![E2ETestProvider {
+        variant_name: "together-deepseek-r1".to_string(),
+        model_name: "together-deepseek-r1".to_string(),
+        model_provider_name: "together".to_string(),
+        credentials: HashMap::new(),
+    }];
 
     #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
@@ -48,17 +71,17 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    // TODOs (#80):
-    // - Together seems to have a different format for tool use responses compared to OpenAI (breaking)
-    // - Together's function calling for Llama 3.1 is different from Llama 3.0 (breaking) - we should test both
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        extra_body_inference: extra_body_providers,
+        reasoning_inference: reasoning_providers.clone(),
         inference_params_inference: inference_params_providers,
-        tool_use_inference: vec![],
-        tool_multi_turn_inference: vec![],
-        dynamic_tool_use_inference: vec![],
-        parallel_tool_use_inference: vec![],
+        tool_use_inference: tool_providers.clone(),
+        tool_multi_turn_inference: tool_providers.clone(),
+        dynamic_tool_use_inference: tool_providers.clone(),
+        parallel_tool_use_inference: tool_providers.clone(),
         json_mode_inference: json_providers.clone(),
+        image_inference: vec![],
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
         #[cfg(feature = "batch_tests")]

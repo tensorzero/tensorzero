@@ -1,3 +1,6 @@
+use object_store::aws::AmazonS3Builder;
+use object_store::local::LocalFileSystem;
+use object_store::{ObjectStore, PutPayload};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -7,6 +10,7 @@ use tracing::instrument;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
+use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable};
@@ -15,10 +19,10 @@ use crate::tool::{
     ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
     IMPLICIT_TOOL_NAME,
 };
-use crate::variant::best_of_n_sampling::BestOfNSamplingConfig;
-use crate::variant::chat_completion::ChatCompletionConfig;
+use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
+use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
-use crate::variant::mixture_of_n::MixtureOfNConfig;
+use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig};
 
 #[derive(Debug, Default)]
@@ -30,13 +34,105 @@ pub struct Config<'c> {
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub templates: TemplateConfig<'c>,
+    pub object_store_info: Option<ObjectStoreInfo>,
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,
     pub debug: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct ObjectStoreInfo {
+    // This will be `None` if we have `StorageKind::Disabled`
+    pub object_store: Option<Arc<dyn ObjectStore>>,
+    pub kind: StorageKind,
+}
+
+impl ObjectStoreInfo {
+    fn new(config: Option<StorageKind>) -> Result<Option<Self>, Error> {
+        let Some(config) = config else {
+            return Ok(None);
+        };
+
+        let object_store: Option<Arc<dyn ObjectStore>> = match &config {
+            StorageKind::Filesystem { path } => Some(Arc::new(
+                LocalFileSystem::new_with_prefix(path).map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "Failed to create filesystem object store for path: {path}: {e}"
+                        ),
+                    })
+                })?,
+            )),
+            StorageKind::S3Compatible {
+                bucket_name,
+                region,
+                endpoint,
+                #[cfg(feature = "e2e_tests")]
+                    prefix: _,
+            } => {
+                let mut builder = AmazonS3Builder::from_env()
+                    // Uses the S3 'If-Match' and 'If-None-Match' headers to implement condition put
+                    .with_conditional_put(object_store::aws::S3ConditionalPut::ETagMatch);
+
+                // These env vars have the highest priority, overriding whatever was set from 'AmazonS3Builder::from_env()'
+                if let Ok(s3_access_key) = std::env::var("S3_ACCESS_KEY_ID") {
+                    let s3_secret_key = std::env::var("S3_SECRET_ACCESS_KEY").ok().ok_or_else(|| Error::new(ErrorDetails::Config {
+                        message: "S3_ACCESS_KEY_ID is set but S3_SECRET_ACCESS_KEY is not. Please set either both or none".to_string()
+                    }))?;
+                    builder = builder
+                        .with_access_key_id(s3_access_key)
+                        .with_secret_access_key(s3_secret_key);
+                }
+
+                if let Some(bucket_name) = bucket_name {
+                    builder = builder.with_bucket_name(bucket_name);
+                }
+                if let Some(region) = region {
+                    builder = builder.with_region(region);
+                }
+                if let Some(endpoint) = endpoint {
+                    builder = builder.with_endpoint(endpoint);
+                }
+
+                if let (Some(bucket_name), Some(endpoint)) = (bucket_name, endpoint) {
+                    if endpoint.ends_with(bucket_name) {
+                        tracing::warn!("S3-compatible object endpoint `{endpoint}` ends with configured bucket_name `{bucket_name}`. This may be incorrect - if the gateway fails to start, consider setting `bucket_name = null`");
+                    }
+                }
+
+                Some(Arc::new(
+                builder.build()
+                    .map_err(|e| Error::new(ErrorDetails::Config {
+                        message: format!("Failed to create S3-compatible object store with config `{config:?}`: {e}"),
+                    }))?),
+            )
+            }
+            StorageKind::Disabled => None,
+        };
+
+        Ok(Some(Self {
+            object_store,
+            kind: config,
+        }))
+    }
+
+    /// Verifies that the object store is configured correctly by writing an empty file to it.
+    pub async fn verify(&self) -> Result<(), Error> {
+        if let Some(store) = &self.object_store {
+            tracing::info!("Verifying that [object_storage] is configured correctly (writing .tensorzero-validate)");
+            store.put(&object_store::path::Path::from(".tensorzero-validate"), PutPayload::new())
+                .await
+                .map_err(|e| Error::new(ErrorDetails::Config {
+                    message: format!("Failed to write `.tensorzero-validate` to object store. Check that your credentials are configured correctly: {e:?}"),
+                }))?;
+            tracing::info!("Successfully wrote .tensorzero-validate to object store");
+        }
+        Ok(())
+    }
 }
 
 /// Note: This struct and the impl below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag
@@ -63,15 +159,19 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
                 }));
             }
             (true, None) => {
-                tracing::warn!("Deprecation Warning: The configuration flag `gateway.disable_observability.enabled` is deprecated in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.");
+                tracing::warn!("Deprecation Warning: The configuration flag `gateway.disable_observability` is deprecated in favor of `gateway.observability.enabled`. See https://github.com/tensorzero/tensorzero/issues/797 on GitHub for details.");
                 Some(false)
             }
             (false, Some(enabled)) => Some(enabled),
             (false, None) => None,
         };
+
         Ok(Self {
             bind_address: config.bind_address,
-            observability: ObservabilityConfig { enabled },
+            observability: ObservabilityConfig {
+                enabled,
+                async_writes: config.observability.async_writes,
+            },
             debug: config.debug,
         })
     }
@@ -82,6 +182,8 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
 pub struct ObservabilityConfig {
     #[serde(default)]
     pub enabled: Option<bool>,
+    #[serde(default)]
+    pub async_writes: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,7 +224,7 @@ impl std::fmt::Display for MetricConfigLevel {
 }
 
 impl<'c> Config<'c> {
-    pub fn load_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
+    pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
         let config_table = match UninitializedConfig::read_toml_config(config_path)? {
             Some(table) => table,
             None => {
@@ -144,6 +246,11 @@ impl<'c> Config<'c> {
             }
         };
         let config = Self::load_from_toml(config_table, base_path)?;
+
+        if let Some(object_store) = &config.object_store_info {
+            object_store.verify().await?;
+        }
+
         Ok(config)
     }
 
@@ -157,7 +264,7 @@ impl<'c> Config<'c> {
         let functions = config
             .functions
             .into_iter()
-            .map(|(name, config)| config.load(&base_path).map(|c| (name, Arc::new(c))))
+            .map(|(name, config)| config.load(&name, &base_path).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
 
         let tools = config
@@ -170,6 +277,8 @@ impl<'c> Config<'c> {
             })
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
+        let object_store_info = ObjectStoreInfo::new(config.object_storage)?;
+
         let mut config = Config {
             gateway,
             models: config.models,
@@ -178,10 +287,11 @@ impl<'c> Config<'c> {
             metrics: config.metrics,
             tools,
             templates,
+            object_store_info,
         };
 
         // Initialize the templates
-        let template_paths = config.get_templates(&base_path);
+        let template_paths = config.get_templates();
         config.templates.initialize(template_paths)?;
 
         // Validate the config
@@ -316,7 +426,7 @@ impl<'c> Config<'c> {
     /// The HashMap returned is a mapping from the path as given in the TOML file
     /// (relative to the directory containing the TOML file) to the path on the filesystem.
     /// The former path is used as the name of the template for retrieval by variants later.
-    pub fn get_templates<P: AsRef<Path>>(&self, base_path: P) -> HashMap<String, PathBuf> {
+    pub fn get_templates(&self) -> HashMap<String, String> {
         let mut templates = HashMap::new();
 
         for function in self.functions.values() {
@@ -324,14 +434,19 @@ impl<'c> Config<'c> {
                 let variant_template_paths = variant.get_all_template_paths();
                 for path in variant_template_paths {
                     templates.insert(
-                        path.to_string_lossy().to_string(),
-                        base_path.as_ref().join(path),
+                        path.path.to_string_lossy().to_string(),
+                        path.contents.clone(),
                     );
                 }
             }
         }
         templates
     }
+}
+
+/// A trait for loading configs with a base path
+pub trait LoadableConfig<T> {
+    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<T, Error>;
 }
 
 /// This struct is used to deserialize the TOML config file
@@ -354,6 +469,8 @@ struct UninitializedConfig {
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
+    #[serde(default)]
+    pub object_storage: Option<StorageKind>,
 }
 
 impl UninitializedConfig {
@@ -433,7 +550,11 @@ struct UninitializedFunctionConfigJson {
 }
 
 impl UninitializedFunctionConfig {
-    pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<FunctionConfig, Error> {
+    pub fn load<P: AsRef<Path>>(
+        self,
+        function_name: &str,
+        base_path: P,
+    ) -> Result<FunctionConfig, Error> {
         match self {
             UninitializedFunctionConfig::Chat(params) => {
                 let system_schema = params
@@ -453,6 +574,18 @@ impl UninitializedFunctionConfig {
                     .into_iter()
                     .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
+                for (name, variant) in variants.iter() {
+                    if let VariantConfig::ChatCompletion(chat_config) = variant {
+                        if chat_config.json_mode.is_some() {
+                            return Err(ErrorDetails::Config {
+                                message: format!(
+                                    "JSON mode is not supported for variant `{name}` (parent function is a chat function)",
+                                ),
+                            }
+                            .into());
+                        }
+                    }
+                }
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
                     system_schema,
@@ -493,6 +626,35 @@ impl UninitializedFunctionConfig {
                     .into_iter()
                     .map(|(name, variant)| variant.load(&base_path).map(|v| (name, v)))
                     .collect::<Result<HashMap<_, _>, Error>>()?;
+
+                for (name, variant) in variants.iter() {
+                    let mut warn_variant = None;
+                    match variant {
+                        VariantConfig::ChatCompletion(chat_config) => {
+                            if chat_config.json_mode.is_none() {
+                                warn_variant = Some(name.clone());
+                            }
+                        }
+                        VariantConfig::BestOfNSampling(best_of_n_config) => {
+                            if best_of_n_config.evaluator.inner.json_mode.is_none() {
+                                warn_variant = Some(format!("{name}.evaluator"));
+                            }
+                        }
+                        VariantConfig::MixtureOfN(mixture_of_n_config) => {
+                            if mixture_of_n_config.fuser.inner.json_mode.is_none() {
+                                warn_variant = Some(format!("{name}.fuser"));
+                            }
+                        }
+                        VariantConfig::Dicl(best_of_n_config) => {
+                            if best_of_n_config.json_mode.is_none() {
+                                warn_variant = Some(name.clone());
+                            }
+                        }
+                    }
+                    if let Some(warn_variant) = warn_variant {
+                        tracing::warn!("Deprecation Warning: `json_mode` is not specified for `[functions.{function_name}.variants.{warn_variant}]` (parent function `{function_name}` is a JSON function), defaulting to `strict`. This field will become required in a future release - see https://github.com/tensorzero/tensorzero/issues/1043 on GitHub for details.");
+                    }
+                }
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     system_schema,
@@ -511,28 +673,30 @@ impl UninitializedFunctionConfig {
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 pub enum UninitializedVariantConfig {
-    ChatCompletion(ChatCompletionConfig),
+    ChatCompletion(UninitializedChatCompletionConfig),
     #[serde(rename = "experimental_best_of_n_sampling")]
-    BestOfNSampling(BestOfNSamplingConfig),
+    BestOfNSampling(UninitializedBestOfNSamplingConfig),
     #[serde(rename = "experimental_dynamic_in_context_learning")]
     Dicl(UninitializedDiclConfig),
     #[serde(rename = "experimental_mixture_of_n")]
-    MixtureOfN(MixtureOfNConfig),
+    MixtureOfN(UninitializedMixtureOfNConfig),
 }
 
 impl UninitializedVariantConfig {
     pub fn load<P: AsRef<Path>>(self, base_path: P) -> Result<VariantConfig, Error> {
         match self {
             UninitializedVariantConfig::ChatCompletion(params) => {
-                Ok(VariantConfig::ChatCompletion(params))
+                Ok(VariantConfig::ChatCompletion(params.load(base_path)?))
             }
             UninitializedVariantConfig::BestOfNSampling(params) => {
-                Ok(VariantConfig::BestOfNSampling(params))
+                Ok(VariantConfig::BestOfNSampling(params.load(base_path)?))
             }
             UninitializedVariantConfig::Dicl(params) => {
                 Ok(VariantConfig::Dicl(params.load(base_path)?))
             }
-            UninitializedVariantConfig::MixtureOfN(params) => Ok(VariantConfig::MixtureOfN(params)),
+            UninitializedVariantConfig::MixtureOfN(params) => {
+                Ok(VariantConfig::MixtureOfN(params.load(base_path)?))
+            }
         }
     }
 }
@@ -561,9 +725,37 @@ impl UninitializedToolConfig {
     }
 }
 
+#[derive(Debug)]
+pub struct PathWithContents {
+    pub path: PathBuf,
+    pub contents: String,
+}
+
+impl PathWithContents {
+    pub fn from_path<P: AsRef<Path>>(path: PathBuf, base_path: Option<P>) -> Result<Self, Error> {
+        let full_path = if let Some(base_path) = base_path.as_ref() {
+            &base_path.as_ref().join(&path)
+        } else {
+            &path
+        };
+        let contents = std::fs::read_to_string(full_path).map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Failed to read file at {}: {}",
+                    full_path.to_string_lossy(),
+                    e
+                ),
+            })
+        })?;
+        Ok(Self { path, contents })
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
+    use std::io::Write;
+    use tempfile::NamedTempFile;
     use tracing_test::traced_test;
 
     use super::*;
@@ -595,7 +787,7 @@ mod tests {
             .get("openai_promptA")
             .unwrap()
         {
-            VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
+            VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode.unwrap(),
             _ => panic!("Expected a chat completion variant"),
         };
         assert_eq!(prompt_a_json_mode, &JsonMode::ImplicitTool);
@@ -608,11 +800,12 @@ mod tests {
             .get("openai_promptB")
             .unwrap()
         {
-            VariantConfig::ChatCompletion(chat_config) => &chat_config.json_mode,
+            VariantConfig::ChatCompletion(chat_config) => chat_config.json_mode,
             _ => panic!("Expected a chat completion variant"),
         };
-        // The default json mode is strict, so this should be strict
-        assert_eq!(prompt_b_json_mode, &JsonMode::Strict);
+        // The json mode is unset (the default will get filled in when we construct a request,
+        // using the variant mode (json/chat)).
+        assert_eq!(prompt_b_json_mode, None);
         // Check that the tool choice for get_weather is set to "specific" and the correct tool
         let function = config.functions.get("weather_helper").unwrap();
         match &**function {
@@ -647,6 +840,8 @@ mod tests {
             }
             _ => panic!("Expected a chat function"),
         }
+        // Check that the async flag is set to false by default
+        assert!(!config.gateway.observability.async_writes);
 
         // To test that variant default weights work correctly,
         // We check `functions.templates_with_variables_json.variants.variant_with_variables.weight`
@@ -1293,6 +1488,24 @@ mod tests {
         );
     }
 
+    /// Ensure that the config validation fails when a variant has a template that does not exist
+    #[test]
+    fn test_config_validate_variant_template_nonexistent() {
+        let mut config = get_sample_valid_config();
+        config["functions"]["generate_draft"]["variants"]["openai_promptA"]["system_template"] =
+            "nonexistent_template".into();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+
+        assert_eq!(
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message: "Failed to read file at nonexistent_template: No such file or directory (os error 2)".to_string()
+            }
+            .into()
+        );
+    }
+
     /// Ensure that the config validation fails when a function has a tool that does not exist in the tools section
     #[test]
     fn test_config_validate_function_nonexistent_tool() {
@@ -1452,6 +1665,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_config_validate_chat_function_json_mode() {
+        let mut config = get_sample_valid_config();
+
+        // Insert `json_mode = "on"` into a variant config for a chat function.
+        config["functions"]["generate_draft"]["variants"]["openai_promptA"]
+            .as_table_mut()
+            .unwrap()
+            .insert("json_mode".to_string(), "on".into());
+
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+
+        // Check that the config is rejected, since `generate_draft` is not a json function
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("JSON mode is not supported for variant `openai_promptA` (parent function is a chat function)"),
+            "Unexpected error message: {err_msg}"
+        );
+    }
+
     /// If you also want to confirm a variant name starting with `tensorzero::` fails
     /// (only do this if your `function.validate` logic checks variant names):
     #[test]
@@ -1521,74 +1755,90 @@ mod tests {
             Config::load_from_toml(config_table, PathBuf::new()).expect("Failed to load config");
 
         // Get all templates
-        let templates = config.get_templates(PathBuf::from("/base/path"));
+        let templates = config.get_templates();
 
         // Check if all expected templates are present
         assert_eq!(
-            templates
-                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-            ))
+            *templates
+                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja")
+                .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+            )
+            .to_string()
         );
         assert_eq!(
-            templates
-                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-            ))
+            *templates
+                .get("fixtures/config/functions/generate_draft/promptA/system_template.minijinja")
+                .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+            )
+            .to_string()
         );
         assert_eq!(
-            templates.get(
-                "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
-            ),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
-            ))
+            *templates
+                .get(
+                    "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
+                )
+                .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
+            )
+            .to_string()
         );
         assert_eq!(
-            templates.get(
-                "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
-            ),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
-            ))
+            *templates
+                .get(
+                    "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
+                )
+                .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
+            )
+            .to_string()
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
-            ))
+            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
+            ).to_string()
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
-            ))
+            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
+            ).to_string()
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
-            ))
+            *templates.get("fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
+            ).to_string()
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
-            ))
+            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
+            ).to_string()
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
-            ))
+            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
+            ).to_string()
         );
         assert_eq!(
-            templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"),
-            Some(&PathBuf::from(
-                "/base/path/fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
-            ))
+            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja")
+            .unwrap(),
+            include_str!(
+                "../fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
+            ).to_string()
         );
 
         // Check the total number of templates
@@ -1627,6 +1877,36 @@ mod tests {
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         Config::load_from_toml(config, base_path.clone()).expect("Failed to load config");
+    }
+
+    #[test]
+    fn test_model_provider_unknown_field() {
+        let config_str = r#"
+        # ┌────────────────────────────────────────────────────────────────────────────┐
+        # │                                  GENERAL                                   │
+        # └────────────────────────────────────────────────────────────────────────────┘
+
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+        [functions]
+
+        [models.my-model]
+        routing = ["dummy"]
+
+        [models.my-model.providers.dummy]
+        type = "dummy"
+        my_bad_key = "foo"
+        "#;
+
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .expect_err("Config should fail to load");
+        assert!(
+            err.to_string().contains("unknown field `my_bad_key`"),
+            "Unexpected error: {err:?}"
+        );
     }
 
     /// Get a sample valid config for testing
@@ -1919,14 +2199,103 @@ mod tests {
     }
 
     #[traced_test]
-    #[test]
-    fn test_config_load_no_config_file() {
-        let err = Config::load_from_path(Path::new("nonexistent.toml"))
+    #[tokio::test]
+    async fn test_config_load_no_config_file() {
+        let err = Config::load_and_verify_from_path(Path::new("nonexistent.toml"))
+            .await
             .unwrap_err()
             .to_string();
         assert!(
             err.contains("Config file not found"),
             "Unexpected error message: {err}"
         );
+    }
+
+    #[traced_test]
+    #[tokio::test]
+    async fn test_config_load_invalid_s3_creds() {
+        // Set invalid credentials (tests are isolated per-process)
+        // to make sure that the write fails quickly.
+        std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+        let tempfile = NamedTempFile::new().unwrap();
+        write!(
+            &tempfile,
+            r#"
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+            
+            [functions]"#
+        )
+        .unwrap();
+        let err = Config::load_and_verify_from_path(tempfile.path())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Failed to write `.tensorzero-validate` to object store."),
+            "Unexpected error message: {err}"
+        );
+    }
+
+    #[traced_test]
+    #[test]
+    fn test_deprecated_missing_json_mode() {
+        let config_str = r#"
+        [gateway]
+        bind_address = "0.0.0.0:3000"
+
+        [functions.basic_test]
+        type = "json"
+
+        [functions.basic_test.variants.good_variant]
+        type = "chat_completion"
+        model = "my-model"
+        json_mode = "off"
+
+        [functions.basic_test.variants.test]
+        type = "chat_completion"
+        model = "my-model"
+
+        [functions.basic_test.variants.dicl]
+        type = "experimental_dynamic_in_context_learning"
+        model = "my-model"
+        embedding_model = "openai::text-embedding-3-small"
+        k = 3
+        max_tokens = 100
+
+        [functions.basic_test.variants.mixture_of_n_variant]
+        type = "experimental_mixture_of_n"
+        candidates = ["test"]
+
+        [functions.basic_test.variants.mixture_of_n_variant.fuser]
+        model = "my-model"
+
+        [functions.basic_test.variants.best_of_n_variant]
+        type = "experimental_best_of_n_sampling"
+        candidates = ["test"]
+
+        [functions.basic_test.variants.best_of_n_variant.evaluator]
+        model = "my-model"
+
+        [models."my-model"]
+        routing = ["openai"]
+
+        [models.my-model.providers.openai]
+        type = "openai"
+        model_name = "gpt-4o-mini-2024-07-18"
+        "#;
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        Config::load_from_toml(config, base_path.clone()).expect("Failed to construct config");
+
+        assert!(!logs_contain("good_variant"));
+        assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.test]`"));
+        assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.dicl]`"));
+        assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.mixture_of_n_variant.fuser]`"));
+        assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.best_of_n_variant.evaluator]`"));
     }
 }

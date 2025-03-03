@@ -12,8 +12,9 @@ import { ConfigProvider } from "./context/config";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
 import { getConfig } from "./utils/config/index.server";
-import { AppSidebar } from "./components/ui/sidebar/app.sidebar";
+import { AppSidebar } from "./components/layout/app.sidebar";
 import { SidebarProvider } from "./components/ui/sidebar";
+import { ContentLayout } from "./components/layout/ContentLayout";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -58,14 +59,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const config = useLoaderData<typeof loader>();
+
   return (
     <ConfigProvider value={config}>
       <SidebarProvider>
-        <div className="flex min-h-screen w-full">
+        <div className="fixed inset-0 flex bg-background-secondary">
           <AppSidebar />
-          <main className="flex-1 overflow-y-auto">
+          <ContentLayout>
             <Outlet />
-          </main>
+          </ContentLayout>
         </div>
       </SidebarProvider>
     </ConfigProvider>

@@ -15,15 +15,40 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let extra_body_providers = vec![E2ETestProvider {
+        variant_name: "sglang-extra-body".to_string(),
+        model_name: "HuggingFaceTB/SmolLM-1.7B-Instruct".to_string(),
+        model_provider_name: "sglang".to_string(),
+        credentials: HashMap::new(),
+    }];
+
+    let json_providers = vec![
+        E2ETestProvider {
+            variant_name: "sglang".to_string(),
+            model_name: "HuggingFaceTB/SmolLM-1.7B-Instruct".to_string(),
+            model_provider_name: "sglang".to_string(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            variant_name: "sglang-default".to_string(),
+            model_name: "HuggingFaceTB/SmolLM-1.7B-Instruct".to_string(),
+            model_provider_name: "sglang".to_string(),
+            credentials: HashMap::new(),
+        },
+    ];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        extra_body_inference: extra_body_providers,
+        reasoning_inference: vec![],
         inference_params_inference: standard_providers.clone(),
         // TODO: Support tool use once SGLang makes a releawe with https://github.com/sgl-project/sglang/pull/2544
         tool_use_inference: vec![],
         tool_multi_turn_inference: vec![],
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
-        json_mode_inference: standard_providers.clone(),
+        json_mode_inference: json_providers.clone(),
+        image_inference: vec![],
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: vec![],
         #[cfg(feature = "batch_tests")]

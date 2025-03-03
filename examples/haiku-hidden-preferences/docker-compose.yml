@@ -30,6 +30,8 @@ services:
       - ${ENV_FILE:-.env}
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -40,6 +42,7 @@ services:
       - ./config:/app/config:ro
     environment:
       - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
+      - TENSORZERO_GATEWAY_URL=http://gateway:3000
     env_file:
       - ${ENV_FILE:-.env}
     ports:

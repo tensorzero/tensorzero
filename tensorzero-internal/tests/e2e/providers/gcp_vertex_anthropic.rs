@@ -15,6 +15,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let extra_body_providers = vec![E2ETestProvider {
+        variant_name: "gcp-vertex-haiku-extra-body".to_string(),
+        model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
+        model_provider_name: "gcp_vertex_anthropic".into(),
+        credentials: HashMap::new(),
+    }];
+
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "gcp-vertex-haiku".to_string(),
@@ -28,16 +35,25 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "gcp_vertex_anthropic".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            variant_name: "gcp-vertex-haiku-default".to_string(),
+            model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
+            model_provider_name: "gcp_vertex_anthropic".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        extra_body_inference: extra_body_providers,
+        reasoning_inference: vec![],
         inference_params_inference: standard_providers.clone(),
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
+        image_inference: vec![],
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: vec![],
         #[cfg(feature = "batch_tests")]

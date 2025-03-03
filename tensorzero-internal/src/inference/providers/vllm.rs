@@ -9,6 +9,7 @@ use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
 
+use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
     OpenAIRequestMessage, OpenAIResponse, OpenAISystemRequestMessage, StreamOptions,
@@ -18,11 +19,11 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
+    batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
 const PROVIDER_NAME: &str = "vLLM";
 const PROVIDER_TYPE: &str = "vllm";
@@ -113,8 +114,15 @@ impl InferenceProvider for VLLMProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = VLLMRequest::new(&self.model_name, request)?;
+        let mut request_body = serde_json::to_value(VLLMRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing VLLM request: {e}"),
+            })
+        })?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&self.api_base)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
@@ -184,8 +192,15 @@ impl InferenceProvider for VLLMProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = VLLMRequest::new(&self.model_name, request)?;
+        let mut request_body = serde_json::to_value(VLLMRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing VLLM request: {e}"),
+            })
+        })?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -271,7 +286,7 @@ struct VLLMRequest<'a> {
 impl<'a> VLLMRequest<'a> {
     pub fn new(
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<VLLMRequest<'a>, Error> {
         let guided_json = match (&request.json_mode, request.output_schema) {
             (
@@ -286,7 +301,7 @@ impl<'a> VLLMRequest<'a> {
             }),
             false => None,
         };
-        let messages = prepare_vllm_messages(request);
+        let messages = prepare_vllm_messages(request)?;
         // TODO (#169): Implement tool calling.
         if request.tool_config.is_some() {
             return Err(ErrorDetails::InferenceClient {
@@ -318,7 +333,7 @@ struct VLLMResponseWithMetadata<'a> {
     response: OpenAIResponse,
     latency: Latency,
     raw_response: String,
-    request: VLLMRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -356,13 +371,13 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
@@ -388,17 +403,16 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
 }
 
 pub(super) fn prepare_vllm_messages<'a>(
-    request: &'a ModelInferenceRequest,
-) -> Vec<OpenAIRequestMessage<'a>> {
-    let mut messages: Vec<OpenAIRequestMessage> = request
-        .messages
-        .iter()
-        .flat_map(tensorzero_to_openai_messages)
-        .collect();
+    request: &'a ModelInferenceRequest<'_>,
+) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
+    let mut messages = Vec::with_capacity(request.messages.len());
+    for message in request.messages.iter() {
+        messages.extend(tensorzero_to_openai_messages(message)?);
+    }
     if let Some(system_msg) = tensorzero_to_vllm_system_message(request.system.as_deref()) {
         messages.insert(0, system_msg);
     }
-    messages
+    Ok(messages)
 }
 
 fn tensorzero_to_vllm_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
@@ -453,6 +467,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
+            extra_body: None,
         };
 
         let vllm_request = VLLMRequest::new("llama-v3-8b", &request_with_tools).unwrap();
@@ -489,6 +504,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
+            extra_body: None,
         };
 
         let err = VLLMRequest::new("llama-v3-8b", &request_with_tools).unwrap_err();
@@ -561,6 +577,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let vllm_response_with_metadata = VLLMResponseWithMetadata {
             response: valid_response,
@@ -568,7 +585,10 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: VLLMRequest::new("test-model", &generic_request).unwrap(),
+            request: serde_json::to_value(
+                VLLMRequest::new("test-model", &generic_request).unwrap(),
+            )
+            .unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =

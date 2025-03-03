@@ -13,13 +13,15 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
+    batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
+use super::helpers::inject_extra_body;
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice, OpenAIToolChoiceString,
@@ -117,8 +119,14 @@ impl InferenceProvider for AzureProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = AzureRequest::new(request);
+        let mut request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing Azure request: {e}"),
+            })
+        })?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
@@ -188,8 +196,14 @@ impl InferenceProvider for AzureProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = AzureRequest::new(request);
+        let mut request_body = serde_json::to_value(AzureRequest::new(request)?).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error serializing Azure request: {e}"),
+            })
+        })?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
@@ -329,11 +343,11 @@ struct AzureRequest<'a> {
 }
 
 impl<'a> AzureRequest<'a> {
-    pub fn new(request: &'a ModelInferenceRequest) -> AzureRequest<'a> {
+    pub fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
         let response_format = AzureResponseFormat::new(&request.json_mode, request.output_schema);
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_openai_messages(request)?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
-        AzureRequest {
+        Ok(AzureRequest {
             messages,
             temperature: request.temperature,
             top_p: request.top_p,
@@ -345,7 +359,7 @@ impl<'a> AzureRequest<'a> {
             seed: request.seed,
             tools,
             tool_choice: tool_choice.map(AzureToolChoice::from),
-        }
+        })
     }
 }
 
@@ -384,7 +398,7 @@ struct AzureResponseWithMetadata<'a> {
     response: OpenAIResponse,
     raw_response: String,
     latency: Latency,
-    request: AzureRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -426,13 +440,13 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 })
             })?
             .message;
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
@@ -491,9 +505,10 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
-        let azure_request = AzureRequest::new(&request_with_tools);
+        let azure_request = AzureRequest::new(&request_with_tools).unwrap();
 
         assert_eq!(azure_request.messages.len(), 1);
         assert_eq!(azure_request.temperature, Some(0.5));
@@ -535,9 +550,10 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Json,
             output_schema: None,
+            extra_body: None,
         };
 
-        let azure_request = AzureRequest::new(&request_with_tools);
+        let azure_request = AzureRequest::new(&request_with_tools).unwrap();
 
         assert_eq!(azure_request.messages.len(), 2);
         assert_eq!(azure_request.temperature, Some(0.5));
@@ -677,6 +693,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let azure_response_with_metadata = AzureResponseWithMetadata {
             response: valid_response,
@@ -684,7 +701,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: AzureRequest::new(&generic_request),
+            request: serde_json::to_value(AzureRequest::new(&generic_request).unwrap()).unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =

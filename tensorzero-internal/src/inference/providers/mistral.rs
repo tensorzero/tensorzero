@@ -14,16 +14,17 @@ use crate::{
     error::{Error, ErrorDetails},
     inference::types::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
-        ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest,
+        ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
         ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
         ProviderInferenceResponse, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStreamInner, TextChunk, Usage,
     },
-    model::{build_creds_caching_default, Credential, CredentialLocation},
+    model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 
 use super::{
+    helpers::inject_extra_body,
     openai::{
         get_chat_url, tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage,
         OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
@@ -125,8 +126,15 @@ impl InferenceProvider for MistralProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = MistralRequest::new(&self.model_name, request)?;
+        let mut request_body =
+            serde_json::to_value(MistralRequest::new(&self.model_name, request)?).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing Mistral request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&MISTRAL_API_BASE)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -196,8 +204,15 @@ impl InferenceProvider for MistralProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = MistralRequest::new(&self.model_name, request)?;
+        let mut request_body =
+            serde_json::to_value(MistralRequest::new(&self.model_name, request)?).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing Mistral request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -322,17 +337,16 @@ pub fn stream_mistral(
 }
 
 pub(super) fn prepare_mistral_messages<'a>(
-    request: &'a ModelInferenceRequest,
-) -> Vec<OpenAIRequestMessage<'a>> {
-    let mut messages: Vec<OpenAIRequestMessage> = request
-        .messages
-        .iter()
-        .flat_map(tensorzero_to_openai_messages)
-        .collect();
+    request: &'a ModelInferenceRequest<'_>,
+) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
+    let mut messages = Vec::with_capacity(request.messages.len());
+    for message in request.messages.iter() {
+        messages.extend(tensorzero_to_openai_messages(message)?);
+    }
     if let Some(system_msg) = tensorzero_to_mistral_system_message(request.system.as_deref()) {
         messages.insert(0, system_msg);
     }
-    messages
+    Ok(messages)
 }
 
 fn tensorzero_to_mistral_system_message(system: Option<&str>) -> Option<OpenAIRequestMessage<'_>> {
@@ -453,7 +467,7 @@ struct MistralRequest<'a> {
 impl<'a> MistralRequest<'a> {
     pub fn new(
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<MistralRequest<'a>, Error> {
         let response_format = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
@@ -461,7 +475,7 @@ impl<'a> MistralRequest<'a> {
             }
             ModelInferenceRequestJsonMode::Off => None,
         };
-        let messages = prepare_mistral_messages(request);
+        let messages = prepare_mistral_messages(request)?;
         let (tools, tool_choice) = prepare_mistral_tools(request)?;
 
         Ok(MistralRequest {
@@ -545,7 +559,7 @@ struct MistralResponseWithMetadata<'a> {
     response: MistralResponse,
     raw_response: String,
     latency: Latency,
-    request: MistralRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -581,7 +595,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
                 raw_response: Some(raw_response.clone())
             }))?
             .message;
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             if !text.is_empty() {
                 content.push(text.into());
@@ -589,7 +603,7 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
@@ -729,6 +743,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let mistral_request =
@@ -787,6 +802,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let request_body = MistralRequest {
@@ -795,9 +811,9 @@ mod tests {
             temperature: Some(0.5),
             max_tokens: Some(100),
             random_seed: Some(69),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.1),
+            top_p: Some(0.5),
+            presence_penalty: Some(0.5),
+            frequency_penalty: Some(0.5),
             stream: false,
             response_format: Some(MistralResponseFormat::JsonObject),
             tools: None,
@@ -810,7 +826,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -878,6 +894,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let request_body = MistralRequest {
             messages: vec![],
@@ -885,9 +902,9 @@ mod tests {
             temperature: Some(0.5),
             max_tokens: Some(100),
             random_seed: Some(69),
-            top_p: Some(0.9),
-            presence_penalty: Some(0.1),
-            frequency_penalty: Some(0.1),
+            top_p: Some(0.5),
+            presence_penalty: Some(0.5),
+            frequency_penalty: Some(0.5),
             stream: false,
             response_format: Some(MistralResponseFormat::JsonObject),
             tools: None,
@@ -899,7 +916,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(110),
             },
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -907,7 +924,7 @@ mod tests {
         let inference_response = result.unwrap();
         assert_eq!(
             inference_response.output,
-            vec![ContentBlock::ToolCall(ToolCall {
+            vec![ContentBlockOutput::ToolCall(ToolCall {
                 id: "call1".to_string(),
                 name: "test_function".to_string(),
                 arguments: "{}".to_string(),
@@ -959,7 +976,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(120),
             },
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });
@@ -1008,7 +1025,7 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(130),
             },
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             generic_request: &generic_request,
             raw_response: raw_response.clone(),
         });

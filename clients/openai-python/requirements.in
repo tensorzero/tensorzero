@@ -1,4 +1,5 @@
--e ../python
+-e ../python-pyo3
 openai
 pytest
 pytest-asyncio
+pydantic

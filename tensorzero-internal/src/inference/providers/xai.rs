@@ -5,6 +5,7 @@ use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
+use serde_json::{json, Value};
 use tokio::time::Instant;
 use url::Url;
 
@@ -13,12 +14,13 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlock, Latency, ModelInferenceRequest,
+    batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
+use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,
@@ -117,8 +119,15 @@ impl InferenceProvider for XAIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = XAIRequest::new(&self.model_name, request)?;
+        let mut request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing xAI request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -191,8 +200,15 @@ impl InferenceProvider for XAIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = XAIRequest::new(&self.model_name, request)?;
+        let mut request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request)?)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing xAI request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request: {e}"),
@@ -272,6 +288,8 @@ struct XAIRequest<'a> {
     presence_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_format: Option<XAIResponseFormat>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
@@ -284,7 +302,7 @@ struct XAIRequest<'a> {
 impl<'a> XAIRequest<'a> {
     pub fn new(
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<XAIRequest<'a>, Error> {
         let ModelInferenceRequest {
             temperature,
@@ -304,14 +322,12 @@ impl<'a> XAIRequest<'a> {
             false => None,
         };
 
-        if request.json_mode == ModelInferenceRequestJsonMode::Strict {
-            return Err(ErrorDetails::InvalidRequest {
-                message: "The xAI models don't support strict JSON mode.".to_string(),
-            }
-            .into());
-        }
+        let response_format = Some(XAIResponseFormat::new(
+            &request.json_mode,
+            request.output_schema,
+        ));
 
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_openai_messages(request)?;
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         Ok(XAIRequest {
@@ -321,6 +337,7 @@ impl<'a> XAIRequest<'a> {
             max_tokens,
             seed,
             top_p,
+            response_format,
             presence_penalty,
             frequency_penalty,
             stream,
@@ -331,11 +348,39 @@ impl<'a> XAIRequest<'a> {
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+#[serde(tag = "type")]
+enum XAIResponseFormat {
+    #[default]
+    Text,
+    JsonObject,
+    JsonSchema {
+        json_schema: Value,
+    },
+}
+
+impl XAIResponseFormat {
+    fn new(json_mode: &ModelInferenceRequestJsonMode, output_schema: Option<&Value>) -> Self {
+        match json_mode {
+            ModelInferenceRequestJsonMode::On => XAIResponseFormat::JsonObject,
+            ModelInferenceRequestJsonMode::Off => XAIResponseFormat::Text,
+            ModelInferenceRequestJsonMode::Strict => match output_schema {
+                Some(schema) => {
+                    let json_schema = json!({"name": "response", "strict": true, "schema": schema});
+                    XAIResponseFormat::JsonSchema { json_schema }
+                }
+                None => XAIResponseFormat::JsonObject,
+            },
+        }
+    }
+}
+
 struct XAIResponseWithMetadata<'a> {
     response: OpenAIResponse,
     raw_response: String,
     latency: Latency,
-    request: XAIRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -374,13 +419,13 @@ impl<'a> TryFrom<XAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
             }))?
             .message;
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
@@ -440,6 +485,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
@@ -484,6 +530,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Json,
             output_schema: None,
+            extra_body: None,
         };
 
         let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
@@ -513,15 +560,6 @@ mod tests {
                 }
             }))
         );
-
-        let request_with_tools = ModelInferenceRequest {
-            inference_id: Uuid::now_v7(),
-            json_mode: ModelInferenceRequestJsonMode::Strict,
-            ..request_with_tools
-        };
-
-        let xai_request = XAIRequest::new("grok-beta", &request_with_tools);
-        assert!(xai_request.is_err());
     }
 
     #[test]
@@ -592,6 +630,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let xai_response_with_metadata = XAIResponseWithMetadata {
             response: valid_response,
@@ -599,7 +638,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: XAIRequest::new("grok-beta", &generic_request).unwrap(),
+            request: serde_json::to_value(XAIRequest::new("grok-beta", &generic_request).unwrap())
+                .unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =

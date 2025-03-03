@@ -21,6 +21,7 @@ use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 
+use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, prepare_openai_messages, prepare_openai_tools, OpenAIRequestMessage, OpenAITool,
     OpenAIToolChoice, OpenAIToolType, StreamOptions,
@@ -32,11 +33,12 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
 };
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, TextChunk, Usage,
+    ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, TextChunk, Usage,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::ToolCall;
 
 const PROVIDER_NAME: &str = "TGI";
@@ -120,10 +122,17 @@ impl InferenceProvider for TGIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         // TGI doesn't care about this field, so we can hardcode it to "tgi"
         let model_name = PROVIDER_TYPE.to_string();
-        let request_body = TGIRequest::new(&model_name, request)?;
+        let mut request_body = serde_json::to_value(TGIRequest::new(&model_name, request)?)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing TGI request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -200,11 +209,18 @@ impl InferenceProvider for TGIProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let model_name = PROVIDER_NAME.to_lowercase().clone();
-        let request_body = TGIRequest::new(&model_name, request)?;
+        let mut request_body = serde_json::to_value(TGIRequest::new(&model_name, request)?)
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Error serializing TGI request: {e}"),
+                })
+            })?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         // TGI integration does not support tools in streaming mode
-        if request_body.tools.is_some() {
+        if request_body.get("tools").is_some() {
             return Err(ErrorDetails::InvalidTool {
                 message: "TGI does not support tools in streaming mode".to_string(),
             }
@@ -348,13 +364,13 @@ struct TGIRequest<'a> {
 impl<'a> TGIRequest<'a> {
     pub fn new(
         model: &'a str,
-        request: &'a ModelInferenceRequest,
+        request: &'a ModelInferenceRequest<'_>,
     ) -> Result<TGIRequest<'a>, Error> {
         // TGI doesn't support JSON mode at all (only through tools [https://huggingface.co/docs/text-generation-inference/en/conceptual/guidance])
         // So we log a warning and ignore the JSON mode
         // You can get JSON mode through `implicit_tool` instead.
         if request.json_mode != ModelInferenceRequestJsonMode::Off {
-            tracing::warn!("TGI does not support JSON mode. Ignoring JSON mode.");
+            tracing::warn!("TGI does not support JSON mode. Ignoring JSON mode. Consider using `json_mode = \"implicit_tool\"` instead.");
         }
 
         let stream_options = match request.stream {
@@ -364,7 +380,7 @@ impl<'a> TGIRequest<'a> {
             false => None,
         };
 
-        let messages = prepare_openai_messages(request);
+        let messages = prepare_openai_messages(request)?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 
@@ -403,7 +419,7 @@ struct TGIResponseWithMetadata<'a> {
     response: TGIResponse,
     latency: Latency,
     raw_response: String,
-    request: TGIRequest<'a>,
+    request: serde_json::Value,
     generic_request: &'a ModelInferenceRequest<'a>,
 }
 
@@ -440,13 +456,13 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: Some(raw_response.clone()),
             }))?
             .message;
-        let mut content: Vec<ContentBlock> = Vec::new();
+        let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
         }
         if let Some(tool_calls) = message.tool_calls {
             for tool_call in tool_calls {
-                content.push(ContentBlock::ToolCall(tool_call.into()));
+                content.push(ContentBlockOutput::ToolCall(tool_call.into()));
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
@@ -688,6 +704,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let tgi_request = TGIRequest::new(&model_name, &basic_request).unwrap();
 
@@ -723,6 +740,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let tgi_request = TGIRequest::new(&model_name, &request_with_tools).unwrap();
@@ -769,6 +787,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
 
         let tgi_request = TGIRequest::new(&model_name, &request_with_tools).unwrap();
@@ -803,6 +822,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
+            extra_body: None,
         };
 
         let tgi_request = TGIRequest::new(&model_name, &request_with_tools).unwrap();
@@ -872,6 +892,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let tgi_response_with_metadata = TGIResponseWithMetadata {
             response: valid_response,
@@ -879,7 +900,8 @@ mod tests {
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
             },
-            request: TGIRequest::new("test-model", &generic_request).unwrap(),
+            request: serde_json::to_value(TGIRequest::new("test-model", &generic_request).unwrap())
+                .unwrap(),
             generic_request: &generic_request,
         };
         let inference_response: ProviderInferenceResponse =

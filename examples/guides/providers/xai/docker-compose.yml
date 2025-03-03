@@ -10,3 +10,5 @@ services:
       - XAI_API_KEY=${XAI_API_KEY:?Environment variable XAI_API_KEY must be set.}
     ports:
       - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

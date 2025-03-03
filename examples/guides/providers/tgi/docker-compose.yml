@@ -9,6 +9,5 @@ services:
     #   - TGI_API_KEY=${TGI_API_KEY:?Environment variable TGI_API_KEY must be set.}
     ports:
       - "3000:3000"
-    # The following entry is needed if TGI runs on the host machine. If it runs on a separate server, you can remove it.
     extra_hosts:
       - "host.docker.internal:host-gateway"

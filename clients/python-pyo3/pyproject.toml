@@ -4,11 +4,19 @@ build-backend = "maturin"
 
 [project]
 name = "tensorzero"
+description = "The Python client for TensorZero"
 license = "Apache-2.0"
-requires-python = ">=3.8"
+readme = "README.md"
+requires-python = ">=3.9"
 dependencies = ["httpx>=0.27.0", "uuid-utils>=0.9.0"]
+authors = [
+    { name = "Viraj Mehta", email = "viraj@tensorzero.com" },
+    { name = "Gabriel Bianconi", email = "gabriel@tensorzero.com" },
+    { name = "Aaron Hill", email = "aaron@tensorzero.com" },
+]
 dynamic = ["version"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-
+include = [".cargo/*"]
+strip = true

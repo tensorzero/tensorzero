@@ -5,7 +5,7 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ModelInferenceRequest, ModelInferenceResponse,
+    ContentBlockChunk, ContentBlockOutput, ModelInferenceRequest, ModelInferenceResponse,
     ProviderInferenceResponseChunk,
 };
 use crate::model::StreamResponse;
@@ -160,7 +160,7 @@ impl CacheOutput for NonStreamingCacheData {}
 #[serde(transparent)]
 pub struct NonStreamingCacheData {
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub blocks: Vec<ContentBlock>,
+    pub blocks: Vec<ContentBlockOutput>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -174,7 +174,7 @@ pub struct StreamingCacheData {
 pub fn start_cache_write(
     clickhouse_client: &ClickHouseConnectionInfo,
     request: ModelProviderRequest<'_>,
-    output: &[ContentBlock],
+    output: &[ContentBlockOutput],
     raw_request: &str,
     raw_response: &str,
 ) -> Result<(), Error> {
@@ -288,6 +288,9 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
     // but we always check against the long cache key before returning a result
     let short_cache_key = cache_key.get_short_key()?.to_string();
     let long_cache_key = cache_key.get_long_key();
+    // The clickhouse query args look like rust format string args, but they're not.
+    #[allow(unknown_lints)]
+    #[allow(clippy::literal_string_with_formatting_args)]
     let query = if max_age_s.is_some() {
         r#"
             SELECT
@@ -367,6 +370,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let model_provider_request = ModelProviderRequest {
             request: &model_inference_request,
@@ -389,6 +393,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let model_provider_request = ModelProviderRequest {
             request: &model_inference_request,
@@ -413,6 +418,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let model_provider_request = ModelProviderRequest {
             request: &streaming_model_inference_request,

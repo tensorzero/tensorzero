@@ -20,6 +20,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let extra_body_providers = vec![E2ETestProvider {
+        variant_name: "hyperbolic-extra-body".to_string(),
+        model_name: "meta-llama/Meta-Llama-3-70B-Instruct".into(),
+        model_provider_name: "hyperbolic".into(),
+        credentials: HashMap::new(),
+    }];
+
     let inference_params_providers = vec![E2ETestProvider {
         variant_name: "hyperbolic-dynamic".to_string(),
         model_name: "meta-llama/Meta-Llama-3-70B-Instruct-dynamic".into(),
@@ -37,12 +44,15 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers,
+        reasoning_inference: vec![],
+        extra_body_inference: extra_body_providers,
         inference_params_inference: inference_params_providers,
         tool_use_inference: vec![],
         tool_multi_turn_inference: vec![],
         dynamic_tool_use_inference: vec![],
         parallel_tool_use_inference: vec![],
         json_mode_inference: vec![],
+        image_inference: vec![],
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
         #[cfg(feature = "batch_tests")]

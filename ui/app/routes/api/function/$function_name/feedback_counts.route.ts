@@ -25,7 +25,6 @@ export async function loader({
       inference_table: inferenceTable,
       metrics: config.metrics,
     });
-
     return Response.json(result);
   } catch (error) {
     console.error("Error fetching metrics with feedback:", error);

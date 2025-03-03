@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::path::PathBuf;
+use std::path::Path;
 
 use backon::Retryable;
 use futures::future::join_all;
@@ -9,13 +9,15 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
+use crate::config_parser::{LoadableConfig, PathWithContents};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, ContentBlock, FunctionType, ModelInferenceRequest,
+    batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
+use crate::inference::types::{ContentBlockOutput, ResolvedInput};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::model::ModelTable;
 use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
@@ -23,33 +25,60 @@ use crate::{
     endpoints::inference::InferenceParams,
     error::Error,
     function::FunctionConfig,
-    inference::types::{InferenceResult, InferenceResultStream, Input},
+    inference::types::{InferenceResult, InferenceResultStream},
     minijinja_util::TemplateConfig,
     variant::chat_completion::ChatCompletionConfig,
 };
 
+use super::chat_completion::UninitializedChatCompletionConfig;
 use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
+
+#[derive(Debug)]
+pub struct BestOfNSamplingConfig {
+    pub weight: f64,
+    pub timeout_s: f64,
+    pub candidates: Vec<String>,
+    pub evaluator: EvaluatorConfig,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct BestOfNSamplingConfig {
+pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default)]
     pub weight: f64,
     #[serde(default = "default_timeout")]
     pub timeout_s: f64,
     pub candidates: Vec<String>,
-    pub evaluator: EvaluatorConfig,
+    pub evaluator: UninitializedEvaluatorConfig,
 }
 
 fn default_timeout() -> f64 {
     300.0
 }
 
+#[derive(Debug)]
+pub struct EvaluatorConfig {
+    pub inner: ChatCompletionConfig,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct EvaluatorConfig {
+pub struct UninitializedEvaluatorConfig {
     #[serde(flatten)]
-    inner: ChatCompletionConfig,
+    pub inner: UninitializedChatCompletionConfig,
+}
+
+impl LoadableConfig<BestOfNSamplingConfig> for UninitializedBestOfNSamplingConfig {
+    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<BestOfNSamplingConfig, Error> {
+        Ok(BestOfNSamplingConfig {
+            weight: self.weight,
+            timeout_s: self.timeout_s,
+            candidates: self.candidates,
+            evaluator: EvaluatorConfig {
+                inner: self.evaluator.inner.load(base_path)?,
+            },
+        })
+    }
 }
 
 lazy_static! {
@@ -78,7 +107,7 @@ lazy_static! {
 impl Variant for BestOfNSamplingConfig {
     async fn infer<'a: 'request, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -100,7 +129,7 @@ impl Variant for BestOfNSamplingConfig {
 
     async fn infer_stream<'request>(
         &self,
-        _input: &Input,
+        _input: &ResolvedInput,
         _models: &'request InferenceModels<'_>,
         _function: &FunctionConfig,
         _inference_config: &'request InferenceConfig<'static, 'request>,
@@ -160,13 +189,13 @@ impl Variant for BestOfNSamplingConfig {
     // We do not return templates for the candidates, as they are required to be variants in the same function
     // and will therefore also have the same templates.
     // We only return templates for the evaluator variant.
-    fn get_all_template_paths(&self) -> Vec<&PathBuf> {
+    fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         self.evaluator.inner.get_all_template_paths()
     }
 
     async fn start_batch_inference<'a>(
         &'a self,
-        _input: &[Input],
+        _input: &[ResolvedInput],
         _models: &'a InferenceModels<'a>,
         _function: &'a FunctionConfig,
         _inference_configs: &'a [InferenceConfig<'a, 'a>],
@@ -181,7 +210,7 @@ impl BestOfNSamplingConfig {
     /// Infer each candidate variant concurrently and return the results.
     async fn infer_candidates<'a, 'request>(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &'request InferenceModels<'a>,
         function: &'a FunctionConfig,
         inference_config: &'request InferenceConfig<'static, 'request>,
@@ -255,7 +284,7 @@ impl BestOfNSamplingConfig {
     /// we randomly select one of the candidates.
     async fn select_best_candidate<'a, 'request>(
         &'a self,
-        input: &Input,
+        input: &ResolvedInput,
         models: &ModelTable,
         inference_config: &'request InferenceConfig<'a, 'request>,
         clients: &'request InferenceClients<'request>,
@@ -341,7 +370,7 @@ impl BestOfNSamplingConfig {
 ///  * Return the index and the model inference result.
 async fn inner_select_best_candidate<'a, 'request>(
     evaluator: &'a EvaluatorConfig,
-    input: &'request Input,
+    input: &'request ResolvedInput,
     models: &'a ModelTable,
     inference_config: &'request InferenceConfig<'a, 'request>,
     clients: &'request InferenceClients<'request>,
@@ -391,8 +420,8 @@ async fn inner_select_best_candidate<'a, 'request>(
         .output
         .iter()
         .find_map(|block| match block {
-            ContentBlock::Text(text) => Some(&text.text),
-            ContentBlock::ToolCall(tool_call) => Some(&tool_call.arguments),
+            ContentBlockOutput::Text(text) => Some(&text.text),
+            ContentBlockOutput::ToolCall(tool_call) => Some(&tool_call.arguments),
             _ => None,
         }) {
         Some(text) => text,
@@ -558,7 +587,7 @@ impl EvaluatorConfig {
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
     fn prepare_request(
         &self,
-        input: &Input,
+        input: &ResolvedInput,
         inference_config: &InferenceConfig<'_, '_>,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
@@ -600,7 +629,12 @@ impl EvaluatorConfig {
                 self.inner.presence_penalty,
                 self.inner.frequency_penalty,
             );
-        let tool_config = match self.inner.json_mode {
+        let json_mode = inference_params
+            .chat_completion
+            .json_mode
+            .or(self.inner.json_mode)
+            .unwrap_or(JsonMode::Strict);
+        let tool_config = match json_mode {
             JsonMode::ImplicitTool => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
             _ => None,
         };
@@ -617,9 +651,10 @@ impl EvaluatorConfig {
                 presence_penalty: inference_params.chat_completion.presence_penalty,
                 frequency_penalty: inference_params.chat_completion.frequency_penalty,
                 stream: false,
-                json_mode: (&self.inner.json_mode).into(),
+                json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
+                extra_body: self.inner.extra_body.as_ref(),
             },
             skipped_indices,
         ))
@@ -660,7 +695,7 @@ mod tests {
             types::{ChatInferenceResult, JsonInferenceResult, Latency},
         },
         minijinja_util::tests::get_test_template_config,
-        model::{ModelConfig, ProviderConfig},
+        model::{ModelConfig, ModelProvider, ProviderConfig},
     };
 
     use super::*;
@@ -747,7 +782,10 @@ mod tests {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
                 weight: 1.0,
-                system_template: Some(system_template_name.into()),
+                system_template: Some(PathWithContents {
+                    path: system_template_name.into(),
+                    contents: "".to_string(),
+                }),
                 ..Default::default()
             },
         };
@@ -779,7 +817,10 @@ mod tests {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
                 weight: 1.0,
-                system_template: Some(system_template_name.into()),
+                system_template: Some(PathWithContents {
+                    path: system_template_name.into(),
+                    contents: "".to_string(),
+                }),
                 ..Default::default()
             },
         };
@@ -1109,10 +1150,13 @@ mod tests {
                 routing: vec!["best_of_n_1".into()],
                 providers: HashMap::from([(
                     "best_of_n_1".into(),
-                    ProviderConfig::Dummy(DummyProvider {
-                        model_name: "best_of_n_1".into(),
-                        ..Default::default()
-                    }),
+                    ModelProvider {
+                        config: ProviderConfig::Dummy(DummyProvider {
+                            model_name: "best_of_n_1".into(),
+                            ..Default::default()
+                        }),
+                        extra_body: None,
+                    },
                 )]),
             },
         )]))
@@ -1129,7 +1173,7 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly,
             },
         };
-        let input = Input {
+        let input = ResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1197,16 +1241,19 @@ mod tests {
                     routing: vec!["error".into()],
                     providers: HashMap::from([(
                         "error".into(),
-                        ProviderConfig::Dummy(DummyProvider {
-                            model_name: "error".into(),
-                            ..Default::default()
-                        }),
+                        ModelProvider {
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "error".into(),
+                                ..Default::default()
+                            }),
+                            extra_body: None,
+                        },
                     )]),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
         };
-        let input = Input {
+        let input = ResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1256,16 +1303,19 @@ mod tests {
                     routing: vec!["regular".into()],
                     providers: HashMap::from([(
                         "regular".into(),
-                        ProviderConfig::Dummy(DummyProvider {
-                            model_name: "regular".into(),
-                            ..Default::default()
-                        }),
+                        ModelProvider {
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "regular".into(),
+                                ..Default::default()
+                            }),
+                            extra_body: None,
+                        },
                     )]),
                 },
             );
             ModelTable::try_from(map).expect("Failed to create model table")
         };
-        let input = Input {
+        let input = ResolvedInput {
             system: None,
             messages: vec![],
         };
@@ -1332,10 +1382,13 @@ mod tests {
                 routing: vec!["best_of_n_big".into()],
                 providers: HashMap::from([(
                     "best_of_n_big".into(),
-                    ProviderConfig::Dummy(DummyProvider {
-                        model_name: "best_of_n_big".into(),
-                        ..Default::default()
-                    }),
+                    ModelProvider {
+                        config: ProviderConfig::Dummy(DummyProvider {
+                            model_name: "best_of_n_big".into(),
+                            ..Default::default()
+                        }),
+                        extra_body: None,
+                    },
                 )]),
             },
         );

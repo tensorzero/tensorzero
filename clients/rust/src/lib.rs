@@ -1,11 +1,11 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{fmt::Display, path::PathBuf, sync::Arc};
 
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use std::fmt::Debug;
 use tensorzero_internal::{
     config_parser::Config,
     error::ErrorDetails,
-    gateway_util::{setup_clickhouse, AppStateData},
+    gateway_util::{setup_clickhouse, setup_http_client, AppStateData},
 };
 use thiserror::Error;
 use tokio_stream::StreamExt;
@@ -55,6 +55,7 @@ struct EmbeddedGateway {
 pub struct ClientBuilder {
     mode: ClientBuilderMode,
     http_client: Option<reqwest::Client>,
+    verbose_errors: bool,
 }
 
 /// An error type representing an error from within the TensorZero gateway
@@ -73,6 +74,8 @@ pub enum TensorZeroError {
         #[source]
         source: TensorZeroInternalError,
     },
+    #[error("HTTP request timed out")]
+    RequestTimeout,
 }
 
 #[derive(Debug, Error)]
@@ -83,7 +86,7 @@ pub struct TensorZeroInternalError(#[from] tensorzero_internal::error::Error);
 #[non_exhaustive]
 pub enum ClientBuilderError {
     #[error(
-        "Missing config - you must call `with_config_path` before calling `build` in EmbeddedGateway mode"
+        "Missing config - you must call `with_config_file` before calling `build` in EmbeddedGateway mode"
     )]
     MissingConfig,
     #[error(
@@ -97,7 +100,23 @@ pub enum ClientBuilderError {
     #[error("Failed to parse config: {0}")]
     ConfigParsing(TensorZeroError),
     #[error("Failed to build HTTP client: {0}")]
-    HTTPClientBuild(reqwest::Error),
+    HTTPClientBuild(TensorZeroError),
+}
+
+// Helper type to choose between using Debug or Display for a type
+struct DisplayOrDebug<T: Debug + Display> {
+    val: T,
+    debug: bool,
+}
+
+impl<T: Debug + Display> Display for DisplayOrDebug<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.debug {
+            write!(f, "{:?}", self.val)
+        } else {
+            write!(f, "{}", self.val)
+        }
+    }
 }
 
 /// Controls how a `Client` is run
@@ -107,7 +126,7 @@ pub enum ClientBuilderMode {
     /// In EmbeddedGateway mode, we run an embedded gateway using a config file.
     /// We do not launch an HTTP server - we only make outgoing HTTP requests to model providers and to ClickHouse.
     EmbeddedGateway {
-        config_path: PathBuf,
+        config_file: Option<PathBuf>,
         clickhouse_url: Option<String>,
     },
 }
@@ -118,6 +137,7 @@ impl ClientBuilder {
         Self {
             mode,
             http_client: None,
+            verbose_errors: false,
         }
     }
 
@@ -130,30 +150,63 @@ impl ClientBuilder {
         self
     }
 
+    /// Sets whether error messages should be more verbose (more `Debug` impls are used).
+    /// This increases the chances of exposing sensitive information (e.g. model responses)
+    /// in error messages.
+    ///
+    /// This is `false` by default.
+    pub fn with_verbose_errors(mut self, verbose_errors: bool) -> Self {
+        self.verbose_errors = verbose_errors;
+        self
+    }
+
     /// Constructs a `Client`, returning an error if the configuration is invalid.
     pub async fn build(self) -> Result<Client, ClientBuilderError> {
         match &self.mode {
             ClientBuilderMode::HTTPGateway { .. } => self.build_http(),
             ClientBuilderMode::EmbeddedGateway {
-                config_path,
+                config_file,
                 clickhouse_url,
             } => {
-                let config = Arc::new(Config::load_from_path(config_path).map_err(|e| {
-                    ClientBuilderError::ConfigParsing(TensorZeroError::Other { source: e.into() })
-                })?);
-                let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url.clone())
-                    .await
-                    .map_err(|e| {
-                        ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
-                    })?;
+                let config = if let Some(config_file) = config_file {
+                    Arc::new(
+                        Config::load_and_verify_from_path(config_file)
+                            .await
+                            .map_err(|e| {
+                                ClientBuilderError::ConfigParsing(TensorZeroError::Other {
+                                    source: e.into(),
+                                })
+                            })?,
+                    )
+                } else {
+                    Arc::new(Config::default())
+                };
+                let clickhouse_connection_info =
+                    setup_clickhouse(&config, clickhouse_url.clone(), true)
+                        .await
+                        .map_err(|e| {
+                            ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                                source: e.into(),
+                            })
+                        })?;
+                let http_client = if let Some(http_client) = self.http_client {
+                    http_client
+                } else {
+                    setup_http_client().map_err(|e| {
+                        ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
+                            source: e.into(),
+                        })
+                    })?
+                };
                 Ok(Client {
                     mode: ClientMode::EmbeddedGateway(EmbeddedGateway {
                         state: AppStateData {
                             config,
-                            http_client: self.http_client.unwrap_or_default(),
+                            http_client,
                             clickhouse_connection_info,
                         },
                     }),
+                    verbose_errors: self.verbose_errors,
                 })
             }
         }
@@ -170,6 +223,7 @@ impl ClientBuilder {
                 base_url: url,
                 http_client: self.http_client.unwrap_or_default(),
             }),
+            verbose_errors: self.verbose_errors,
         })
     }
 }
@@ -178,6 +232,7 @@ impl ClientBuilder {
 #[derive(Debug)]
 pub struct Client {
     mode: ClientMode,
+    verbose_errors: bool,
 }
 
 impl Client {
@@ -264,7 +319,7 @@ impl Client {
                             .into(),
                         })?;
                     Ok(InferenceOutput::Streaming(
-                        Self::http_inference_stream(event_source).await?,
+                        self.http_inference_stream(event_source).await?,
                     ))
                 } else {
                     Ok(InferenceOutput::NonStreaming(
@@ -289,11 +344,23 @@ impl Client {
         &self,
         resp: Result<reqwest::Response, reqwest::Error>,
     ) -> Result<T, TensorZeroError> {
-        let resp = resp.map_err(|e| TensorZeroError::Other {
-            source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
-                message: format!("Error from server: {e}"),
-            })
-            .into(),
+        let resp = resp.map_err(|e| {
+            if e.is_timeout() {
+                TensorZeroError::RequestTimeout
+            } else {
+                TensorZeroError::Other {
+                    source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
+                        message: format!(
+                            "Error from server: {}",
+                            DisplayOrDebug {
+                                val: e,
+                                debug: self.verbose_errors,
+                            }
+                        ),
+                    })
+                    .into(),
+                }
+            }
         })?;
 
         if let Err(e) = resp.error_for_status_ref() {
@@ -303,7 +370,13 @@ impl Client {
                 status_code,
                 text,
                 source: tensorzero_internal::error::Error::new(ErrorDetails::JsonRequest {
-                    message: format!("Request failed: {e}"),
+                    message: format!(
+                        "Request failed: {}",
+                        DisplayOrDebug {
+                            val: e,
+                            debug: self.verbose_errors,
+                        }
+                    ),
                 })
                 .into(),
             });
@@ -311,13 +384,20 @@ impl Client {
 
         resp.json().await.map_err(|e| TensorZeroError::Other {
             source: tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
-                message: format!("Error deserializing inference response: {e:?}"),
+                message: format!(
+                    "Error deserializing inference response: {}",
+                    DisplayOrDebug {
+                        val: e,
+                        debug: self.verbose_errors,
+                    }
+                ),
             })
             .into(),
         })
     }
 
     async fn http_inference_stream(
+        &self,
         event_source: EventSource,
     ) -> Result<InferenceStream, TensorZeroError> {
         let mut event_source = event_source.peekable();
@@ -350,6 +430,7 @@ impl Client {
                 .into(),
             });
         }
+        let verbose_errors = self.verbose_errors;
         Ok(Box::pin(async_stream::stream! {
             while let Some(ev) = event_source.next().await {
                 match ev {
@@ -359,7 +440,10 @@ impl Client {
                         }
                         yield Err(tensorzero_internal::error::Error::new(ErrorDetails::StreamError {
                             source: Box::new(tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
-                                message: format!("Error in streaming response: {e:?}")
+                                message: format!("Error in streaming response: {}", DisplayOrDebug {
+                                    val: e,
+                                    debug: verbose_errors,
+                                })
                             }))
                         }))
                     }
@@ -371,20 +455,29 @@ impl Client {
                             }
                             let json: serde_json::Value = serde_json::from_str(&message.data).map_err(|e| {
                                 tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
-                                    message: format!("Error deserializing inference response chunk: {e:?}"),
+                                    message: format!("Error deserializing inference response chunk: {}", DisplayOrDebug {
+                                        val: e,
+                                        debug: verbose_errors,
+                                    }),
                                 })
                             })?;
                             if let Some(err) = json.get("error") {
                                 yield Err(tensorzero_internal::error::Error::new(ErrorDetails::StreamError {
                                     source: Box::new(tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
-                                        message: format!("Stream produced an error: {err:?}")
+                                        message: format!("Stream produced an error: {}", DisplayOrDebug {
+                                            val: err,
+                                            debug: verbose_errors,
+                                        }),
                                     }))
                                 }));
                             } else {
                                 let data: InferenceResponseChunk =
                                 serde_json::from_value(json).map_err(|e| {
                                     tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
-                                        message: format!("Error deserializing json value as InferenceResponseChunk: {e:?}"),
+                                        message: format!("Error deserializing json value as InferenceResponseChunk: {}", DisplayOrDebug {
+                                            val: e,
+                                            debug: verbose_errors,
+                                        }),
                                     })
                                 })?;
                                 yield Ok(data);
@@ -416,15 +509,16 @@ pub use tensorzero_internal::observability;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tracing_test::traced_test;
 
     #[tokio::test]
     #[ignore] // TODO - set an environment variable, or create a new config with dummy credentials
     async fn test_missing_clickhouse() {
         // This config file requires ClickHouse, so it should fail if no ClickHouse URL is provided
         let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-            config_path: PathBuf::from(
+            config_file: Some(PathBuf::from(
                 "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
-            ),
+            )),
             clickhouse_url: None,
         })
         .build()
@@ -435,5 +529,24 @@ mod tests {
             err.to_string().contains("Missing ClickHouse URL"),
             "Bad error message: {err_msg}"
         );
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_log_no_clickhouse() {
+        // Default observability and no ClickHouse URL
+        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(PathBuf::from(
+                "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
+            )),
+            clickhouse_url: None,
+        })
+        .build()
+        .await
+        .expect("Failed to build client");
+        assert!(!logs_contain(
+            "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
+        ));
+        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."));
     }
 }

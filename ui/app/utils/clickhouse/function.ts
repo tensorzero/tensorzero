@@ -1,7 +1,8 @@
 import z from "zod";
-import { clickhouseClient, getInferenceTableName } from "./common";
+import { getInferenceTableName } from "./common";
 import type { MetricConfig } from "../config/metric";
 import type { FunctionConfig } from "../config/function";
+import { clickhouseClient } from "./client.server";
 
 export const timeWindowUnitSchema = z.enum([
   "day",
@@ -114,11 +115,16 @@ WITH sub AS (
         i.episode_id AS episode_id,
         any(f.value) AS value_per_episode
     FROM ${inference_table_name} i
-    JOIN ${metric_table_name} f
-        ON i.episode_id = f.target_id
+    JOIN (
+        SELECT
+            target_id,
+            value,
+            ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+        FROM ${metric_table_name}
+        WHERE metric_name = {metric_name:String}
+    ) f ON i.episode_id = f.target_id AND f.rn = 1
     WHERE
-        f.metric_name = {metric_name:String}
-        AND i.function_name = {function_name:String}${variantFilter}
+        i.function_name = {function_name:String}${variantFilter}
     GROUP BY
         variant_name,
         episode_id
@@ -161,14 +167,16 @@ WITH sub AS (
         */
         any(f.value) AS value_per_episode
     FROM ${inference_table_name} i
-    JOIN ${metric_table_name} f
-        ON i.episode_id = f.target_id
+    JOIN (
+        SELECT
+            target_id,
+            value,
+            ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+        FROM ${metric_table_name}
+        WHERE metric_name = {metric_name:String}
+    ) f ON i.episode_id = f.target_id AND f.rn = 1
     WHERE
-        /* Filter for the metric you're interested in. */
-        f.metric_name = {metric_name:String}
-
-        /* Filter to only inferences with the correct function_name. */
-        AND i.function_name = {function_name:String}${variantFilter}
+        i.function_name = {function_name:String}${variantFilter}
     GROUP BY
         period_start,
         variant_name,
@@ -253,11 +261,16 @@ SELECT
     stddevSamp(f.value) AS stdev,
     1.96 * (stddevSamp(f.value) / sqrt(count())) AS ci_error
 FROM ${inference_table_name} i
-JOIN ${metric_table_name} f
-    ON i.id = f.target_id
+JOIN (
+    SELECT
+        target_id,
+        value,
+        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+    FROM ${metric_table_name}
+    WHERE metric_name = {metric_name:String}
+) f ON i.id = f.target_id AND f.rn = 1
 WHERE
-    f.metric_name = {metric_name:String}
-    AND i.function_name = {function_name:String}${variantFilter}
+    i.function_name = {function_name:String}${variantFilter}
 GROUP BY
     variant_name
 ORDER BY
@@ -272,11 +285,16 @@ SELECT
     stddevSamp(f.value) AS stdev,
     1.96 * (stddevSamp(f.value) / sqrt(count())) AS ci_error
 FROM ${inference_table_name} i
-JOIN ${metric_table_name} f
-    ON i.id = f.target_id
+JOIN (
+    SELECT
+        target_id,
+        value,
+        ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY timestamp DESC) as rn
+    FROM ${metric_table_name}
+    WHERE metric_name = {metric_name:String}
+) f ON i.id = f.target_id AND f.rn = 1
 WHERE
-    f.metric_name = {metric_name:String}
-    AND i.function_name = {function_name:String}${variantFilter}
+    i.function_name = {function_name:String}${variantFilter}
 GROUP BY
     period_start,
     variant_name

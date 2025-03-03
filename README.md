@@ -90,6 +90,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
         <li><b><a href="https://www.tensorzero.com/docs/gateway/tutorial#experimentation">Experimentation (A/B Testing)</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/configuration-reference">Configuration-as-Code (GitOps)</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/batch-inference">Batch Inference</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-caching">Inference Caching</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/metrics-feedback">Metrics & Feedback</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/episodes">Multi-Step LLM Workflows (Episodes)</a></b></li>
         <li><em>& a lot more...</em></li>
@@ -112,8 +113,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 
 You can access any provider using the TensorZero Python client.
 
-1. Deploy `tensorzero/gateway` using Docker.
-   **[Detailed instructions →](https://www.tensorzero.com/docs/gateway/deployment)**
+1. `pip install tensorzero`
 2. Optional: Set up the TensorZero configuration.
 3. Run inference:
 
@@ -121,7 +121,7 @@ You can access any provider using the TensorZero Python client.
 from tensorzero import TensorZeroGateway
 
 
-with TensorZeroGateway(...) as client:
+with TensorZeroGateway.build_embedded(clickhouse_url="...", config_file="...") as client:
     response = client.inference(
         model_name="openai::gpt-4o-mini",
         input={

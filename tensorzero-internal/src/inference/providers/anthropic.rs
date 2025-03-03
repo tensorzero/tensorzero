@@ -15,19 +15,20 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
     Latency, ModelInferenceRequestJsonMode, Role, Text,
 };
 use crate::inference::types::{
-    ModelInferenceRequest, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
-    TextChunk, Usage,
+    ContentBlockOutput, ImageKind, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Usage,
 };
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation};
+use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
-use super::helpers::peek_first_chunk;
+use super::helpers::{inject_extra_body, peek_first_chunk};
 
 lazy_static! {
     static ref ANTHROPIC_BASE_URL: Url = {
@@ -125,8 +126,17 @@ impl InferenceProvider for AnthropicProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
+        let mut request_body =
+            serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing Anthropic request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let res = http_client
@@ -210,8 +220,17 @@ impl InferenceProvider for AnthropicProvider {
         request: &'a ModelInferenceRequest<'_>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = AnthropicRequestBody::new(&self.model_name, request)?;
+        let mut request_body =
+            serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Error serializing Anthropic request: {e}"),
+                    })
+                },
+            )?;
+        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
@@ -422,6 +441,9 @@ enum AnthropicMessageContent<'a> {
     Text {
         text: &'a str,
     },
+    Image {
+        source: AnthropicImageSource,
+    },
     ToolResult {
         tool_use_id: &'a str,
         content: Vec<AnthropicMessageContent<'a>>,
@@ -433,12 +455,26 @@ enum AnthropicMessageContent<'a> {
     },
 }
 
-impl<'a> TryFrom<&'a ContentBlock> for AnthropicMessageContent<'a> {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+struct AnthropicImageSource {
+    r#type: AnthropicImageType,
+    media_type: ImageKind,
+    data: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum AnthropicImageType {
+    Base64,
+}
+
+impl<'a> TryFrom<&'a ContentBlock> for Option<AnthropicMessageContent<'a>> {
     type Error = Error;
 
     fn try_from(block: &'a ContentBlock) -> Result<Self, Self::Error> {
         match block {
-            ContentBlock::Text(Text { text }) => Ok(AnthropicMessageContent::Text { text }),
+            ContentBlock::Text(Text { text }) => Ok(Some(AnthropicMessageContent::Text { text })),
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value (Anthropic expects an object)
                 let input: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
@@ -461,18 +497,36 @@ impl<'a> TryFrom<&'a ContentBlock> for AnthropicMessageContent<'a> {
                     }));
                 }
 
-                Ok(AnthropicMessageContent::ToolUse {
+                Ok(Some(AnthropicMessageContent::ToolUse {
                     id: &tool_call.id,
                     name: &tool_call.name,
                     input,
-                })
+                }))
             }
-            ContentBlock::ToolResult(tool_result) => Ok(AnthropicMessageContent::ToolResult {
-                tool_use_id: &tool_result.id,
-                content: vec![AnthropicMessageContent::Text {
-                    text: &tool_result.result,
-                }],
-            }),
+            ContentBlock::ToolResult(tool_result) => {
+                Ok(Some(AnthropicMessageContent::ToolResult {
+                    tool_use_id: &tool_result.id,
+                    content: vec![AnthropicMessageContent::Text {
+                        text: &tool_result.result,
+                    }],
+                }))
+            }
+            ContentBlock::Image(ImageWithPath {
+                image,
+                storage_path: _,
+            }) => Ok(Some(AnthropicMessageContent::Image {
+                source: AnthropicImageSource {
+                    r#type: AnthropicImageType::Base64,
+                    media_type: image.mime_type,
+                    data: image.data()?.clone(),
+                },
+            })),
+            // We don't support thought blocks being passed in from a request.
+            // These are only possible to be passed in in the scenario where the
+            // output of a chat completion is used as an input to another model inference,
+            // i.e. a judge or something.
+            // We don't think the thoughts should be passed in in this case.
+            ContentBlock::Thought(_thought) => Ok(None),
         }
     }
 }
@@ -485,7 +539,6 @@ struct AnthropicMessage<'a> {
 
 impl<'a> TryFrom<&'a RequestMessage> for AnthropicMessage<'a> {
     type Error = Error;
-
     fn try_from(
         inference_message: &'a RequestMessage,
     ) -> Result<AnthropicMessage<'a>, Self::Error> {
@@ -493,7 +546,10 @@ impl<'a> TryFrom<&'a RequestMessage> for AnthropicMessage<'a> {
             .content
             .iter()
             .map(|block| block.try_into())
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<Option<AnthropicMessageContent>>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
 
         Ok(AnthropicMessage {
             role: inference_message.role.into(),
@@ -640,13 +696,13 @@ fn prefill_json_message(messages: Vec<AnthropicMessage>) -> Vec<AnthropicMessage
 }
 
 pub(crate) fn prefill_json_response(
-    content: Vec<ContentBlock>,
-) -> Result<Vec<ContentBlock>, Error> {
+    content: Vec<ContentBlockOutput>,
+) -> Result<Vec<ContentBlockOutput>, Error> {
     // Check if the content is a single text block
     if content.len() == 1 {
-        if let ContentBlock::Text(text) = &content[0] {
+        if let ContentBlockOutput::Text(text) = &content[0] {
             // If it's a single text block, add a "{" to the beginning
-            return Ok(vec![ContentBlock::Text(Text {
+            return Ok(vec![ContentBlockOutput::Text(Text {
                 text: format!("{{{}", text.text.trim()),
             })]);
         }
@@ -709,13 +765,13 @@ pub enum AnthropicContentBlock {
     },
 }
 
-impl TryFrom<AnthropicContentBlock> for ContentBlock {
+impl TryFrom<AnthropicContentBlock> for ContentBlockOutput {
     type Error = Error;
     fn try_from(block: AnthropicContentBlock) -> Result<Self, Self::Error> {
         match block {
             AnthropicContentBlock::Text { text } => Ok(text.into()),
             AnthropicContentBlock::ToolUse { id, name, input } => {
-                Ok(ContentBlock::ToolCall(ToolCall {
+                Ok(ContentBlockOutput::ToolCall(ToolCall {
                     id,
                     name,
                     arguments: serde_json::to_string(&input).map_err(|e| {
@@ -766,7 +822,7 @@ struct AnthropicResponseWithMetadata<'a> {
     response: AnthropicResponse,
     raw_response: String,
     latency: Latency,
-    request: AnthropicRequestBody<'a>,
+    request: serde_json::Value,
     input_messages: Vec<RequestMessage>,
     function_type: &'a FunctionType,
     json_mode: &'a ModelInferenceRequestJsonMode,
@@ -791,7 +847,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             })
         })?;
 
-        let output: Vec<ContentBlock> = response
+        let output: Vec<ContentBlockOutput> = response
             .content
             .into_iter()
             .map(|block| block.try_into())
@@ -808,7 +864,10 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
 
         Ok(ProviderInferenceResponse::new(
             content,
-            request_body.system.map(String::from),
+            request_body
+                .get("system")
+                .and_then(|s| s.as_str())
+                .map(|s| s.to_owned()),
             input_messages,
             raw_request,
             raw_response,
@@ -1027,7 +1086,7 @@ fn anthropic_to_tensorzero_stream_message(
                 Ok(None)
             }
         }
-        AnthropicStreamMessage::MessageStop | AnthropicStreamMessage::Ping {} => Ok(None),
+        AnthropicStreamMessage::MessageStop | AnthropicStreamMessage::Ping => Ok(None),
     }
 }
 
@@ -1147,9 +1206,11 @@ mod tests {
 
     #[test]
     fn test_try_from_content_block() {
-        let text_content_block = "test".to_string().into();
+        let text_content_block: ContentBlock = "test".to_string().into();
         let anthropic_content_block =
-            AnthropicMessageContent::try_from(&text_content_block).unwrap();
+            Option::<AnthropicMessageContent>::try_from(&text_content_block)
+                .unwrap()
+                .unwrap();
         assert_eq!(
             anthropic_content_block,
             AnthropicMessageContent::Text { text: "test" }
@@ -1161,7 +1222,9 @@ mod tests {
             arguments: serde_json::to_string(&json!({"type": "string"})).unwrap(),
         });
         let anthropic_content_block =
-            AnthropicMessageContent::try_from(&tool_call_content_block).unwrap();
+            Option::<AnthropicMessageContent>::try_from(&tool_call_content_block)
+                .unwrap()
+                .unwrap();
         assert_eq!(
             anthropic_content_block,
             AnthropicMessageContent::ToolUse {
@@ -1254,6 +1317,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         let details = anthropic_request_body.unwrap_err().get_owned_details();
@@ -1284,6 +1348,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1332,6 +1397,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1384,6 +1450,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
+            extra_body: None,
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1436,6 +1503,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Json,
             output_schema: None,
+            extra_body: None,
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1732,7 +1800,7 @@ mod tests {
             max_tokens: 100,
             stream: Some(false),
             system: None,
-            top_p: Some(0.9),
+            top_p: Some(0.5),
             temperature: None,
             tool_choice: None,
             tools: None,
@@ -1747,7 +1815,7 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
@@ -1791,7 +1859,7 @@ mod tests {
             stream: Some(false),
             system: None,
             temperature: None,
-            top_p: Some(0.9),
+            top_p: Some(0.5),
             tool_choice: None,
             tools: None,
         };
@@ -1804,7 +1872,7 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
@@ -1814,7 +1882,7 @@ mod tests {
         assert!(inference_response.output.len() == 1);
         assert_eq!(
             inference_response.output[0],
-            ContentBlock::ToolCall(ToolCall {
+            ContentBlockOutput::ToolCall(ToolCall {
                 id: "tool_call_1".to_string(),
                 name: "get_temperature".to_string(),
                 arguments: r#"{"location":"New York"}"#.to_string(),
@@ -1858,7 +1926,7 @@ mod tests {
             stream: Some(false),
             system: None,
             temperature: None,
-            top_p: Some(0.9),
+            top_p: Some(0.5),
             tool_choice: None,
             tools: None,
         };
@@ -1871,7 +1939,7 @@ mod tests {
             response: anthropic_response_body.clone(),
             raw_response: raw_response.clone(),
             latency: latency.clone(),
-            request: request_body,
+            request: serde_json::to_value(&request_body).unwrap(),
             input_messages: input_messages.clone(),
             function_type: &FunctionType::Chat,
             json_mode: &ModelInferenceRequestJsonMode::Off,
@@ -1884,7 +1952,7 @@ mod tests {
         assert!(inference_response.output.len() == 2);
         assert_eq!(
             inference_response.output[1],
-            ContentBlock::ToolCall(ToolCall {
+            ContentBlockOutput::ToolCall(ToolCall {
                 id: "tool_call_2".to_string(),
                 name: "get_temperature".to_string(),
                 arguments: r#"{"location":"London"}"#.to_string(),
@@ -2256,24 +2324,24 @@ mod tests {
     #[test]
     fn test_prefill_json_response() {
         // Test case 1: Single text block
-        let input = vec![ContentBlock::Text(Text {
+        let input = vec![ContentBlockOutput::Text(Text {
             text: "  \"key\": \"value\"}".to_string(),
         })];
         let result = prefill_json_response(input).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(
             result[0],
-            ContentBlock::Text(Text {
+            ContentBlockOutput::Text(Text {
                 text: "{\"key\": \"value\"}".to_string(),
             })
         );
 
         // Test case 2: Multiple blocks
         let input = vec![
-            ContentBlock::Text(Text {
+            ContentBlockOutput::Text(Text {
                 text: "Block 1".to_string(),
             }),
-            ContentBlock::Text(Text {
+            ContentBlockOutput::Text(Text {
                 text: "Block 2".to_string(),
             }),
         ];
@@ -2286,7 +2354,7 @@ mod tests {
         assert_eq!(result, input);
 
         // Test case 4: Non-text block
-        let input = vec![ContentBlock::ToolCall(ToolCall {
+        let input = vec![ContentBlockOutput::ToolCall(ToolCall {
             id: "1".to_string(),
             name: "test_tool".to_string(),
             arguments: "{}".to_string(),

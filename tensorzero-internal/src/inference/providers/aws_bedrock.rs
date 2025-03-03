@@ -1,4 +1,7 @@
 use aws_config::meta::region::RegionProviderChain;
+use aws_sdk_bedrockruntime::client::customize::CustomizableOperation;
+use aws_sdk_bedrockruntime::config::interceptors::BeforeTransmitInterceptorContextMut;
+use aws_sdk_bedrockruntime::config::{Intercept, RuntimeComponents};
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
 use aws_sdk_bedrockruntime::operation::converse_stream::ConverseStreamOutput;
 use aws_sdk_bedrockruntime::types::{
@@ -9,28 +12,33 @@ use aws_sdk_bedrockruntime::types::{
     ToolConfiguration, ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification,
     ToolUseBlock,
 };
+use aws_smithy_types::body::SdkBody;
+use aws_smithy_types::config_bag::ConfigBag;
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
 use futures::StreamExt;
 use reqwest::StatusCode;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::helpers::peek_first_chunk;
+use super::helpers::{inject_extra_body, peek_first_chunk};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
-    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, RequestMessage, Role, Text, TextChunk, Usage,
+    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
+    ContentBlockOutput, FunctionType, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, TextChunk, Usage,
 };
+use crate::model::{ModelProvider, ModelProviderRequestInfo};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::variant::chat_completion::ExtraBodyConfig;
 
 #[allow(unused)]
 const PROVIDER_NAME: &str = "AWS Bedrock";
@@ -72,12 +80,122 @@ impl AWSBedrockProvider {
     }
 }
 
+struct WithRawRequest<T, E, S, F: FnOnce() -> Result<String, Error>> {
+    bedrock_request: CustomizableOperation<T, E, S>,
+    get_raw_request: F,
+}
+
+/// Attaches our custom interceptor to the request builder, which injects our 'extra_body' parameters into
+/// the request body.
+/// Returns the modified request builder, and a function to retrieve the raw request.
+/// This awkward signature is due to the fact that we cannot call `send()` from a generic
+/// function, as one of the needed traits is private: https://github.com/awslabs/aws-sdk-rust/issues/987
+fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
+    mut bedrock_request: CustomizableOperation<T, E, S>,
+    request: &ModelInferenceRequest<'_>,
+    model_provider: &ModelProvider,
+) -> WithRawRequest<T, E, S, impl FnOnce() -> Result<String, Error>> {
+    let raw_request = Arc::new(Mutex::new(None));
+    let extra_body = request.extra_body.cloned();
+
+    #[derive(Debug)]
+    struct TensorZeroInterceptor {
+        /// Captures the raw request from `modify_before_signing`.
+        /// After the request is executed, we use this to retrieve the raw request.
+        raw_request: Arc<Mutex<Option<String>>>,
+        extra_body: Option<ExtraBodyConfig>,
+        model_provider_info: ModelProviderRequestInfo,
+    }
+    impl Intercept for TensorZeroInterceptor {
+        fn name(&self) -> &'static str {
+            "TensorZeroInterceptor"
+        }
+        // This interceptor injects our 'extra_body' parameters into the request body,
+        // and captures the raw request.
+        fn modify_before_signing(
+            &self,
+            context: &mut BeforeTransmitInterceptorContextMut<'_>,
+            _runtime_components: &RuntimeComponents,
+            _cfg: &mut ConfigBag,
+        ) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
+            let http_request = context.request_mut();
+            let bytes = http_request.body().bytes().ok_or_else(|| {
+                Error::new(ErrorDetails::Serialization {
+                    message: "Failed to get body from AWS Bedrock request".to_string(),
+                })
+            })?;
+            let mut body_json: serde_json::Value = serde_json::from_slice(bytes).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to deserialize AWS Bedrock request body: {e}"),
+                })
+            })?;
+            inject_extra_body(
+                self.extra_body.as_ref(),
+                self.model_provider_info.clone(),
+                &mut body_json,
+            )?;
+            let raw_request = serde_json::to_string(&body_json).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to serialize AWS Bedrock request body: {e}"),
+                })
+            })?;
+            // Bedrock inexplicably sets this header before calling this interceptor, so we need to update
+            // it ourselves (in case the body length changed)
+            http_request
+                .headers_mut()
+                .insert("content-length", raw_request.len().to_string());
+            *http_request.body_mut() = SdkBody::from(raw_request.clone());
+
+            // Capture the raw request for later use. Note that `modify_before_signing` may be
+            // called multiple times (due to internal aws sdk retries), so this will overwrite
+            // the Mutex to contain the latest raw request (which is what we want).
+            let body = self.raw_request.lock();
+            // Ignore poisoned lock, since we're overwriting it.
+            let mut body = match body {
+                Ok(body) => body,
+                Err(e) => e.into_inner(),
+            };
+            *body = Some(raw_request);
+            Ok(())
+        }
+    }
+
+    let interceptor = TensorZeroInterceptor {
+        raw_request: raw_request.clone(),
+        extra_body,
+        model_provider_info: model_provider.into(),
+    };
+
+    bedrock_request = bedrock_request.interceptor(interceptor);
+
+    WithRawRequest {
+        bedrock_request,
+        get_raw_request: move || {
+            let raw_request = raw_request
+                .lock()
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Poisoned raw_request mutex for AWS bedrock: {e:?}"),
+                    })
+                })?
+                .clone()
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: "Failed to get serialized AWS Bedrock request".to_string(),
+                    })
+                })?;
+            Ok(raw_request)
+        },
+    }
+}
+
 impl InferenceProvider for AWSBedrockProvider {
     async fn infer<'a>(
         &'a self,
         request: &'a ModelInferenceRequest<'_>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         // TODO (#55): add support for guardrails and additional fields
 
@@ -149,14 +267,16 @@ impl InferenceProvider for AWSBedrockProvider {
             }
         }
 
-        // We serialize here because the ConverseFluidBuilder type is not one you can import I guess
-        let raw_request = serialize_aws_bedrock_struct(&bedrock_request)?;
+        let WithRawRequest {
+            bedrock_request,
+            get_raw_request,
+        } = attach_interceptor(bedrock_request.customize(), request, model_provider);
 
         let start_time = Instant::now();
         let output = bedrock_request.send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!(
-                    "Error sending request to AWS Bedrock: {}",
+                    "Error sending request to AWS Bedrock: {:?}",
                     DisplayErrorContext(&e)
                 ),
                 raw_request: None,
@@ -168,6 +288,8 @@ impl InferenceProvider for AWSBedrockProvider {
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
         };
+
+        let raw_request = get_raw_request()?;
 
         ConverseOutputWithMetadata {
             output,
@@ -187,6 +309,7 @@ impl InferenceProvider for AWSBedrockProvider {
         request: &'a ModelInferenceRequest<'_>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
+        model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         // TODO (#55): add support for guardrails and additional fields
 
@@ -255,21 +378,25 @@ impl InferenceProvider for AWSBedrockProvider {
                 bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
             }
         }
-
-        let raw_request = serialize_aws_bedrock_struct(&bedrock_request)?;
+        let WithRawRequest {
+            bedrock_request,
+            get_raw_request,
+        } = attach_interceptor(bedrock_request.customize(), request, model_provider);
 
         let start_time = Instant::now();
         let stream = bedrock_request.send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
-                raw_request: Some(raw_request.clone()),
-                raw_response: None,
                 message: format!(
                     "Error sending request to AWS Bedrock: {}",
                     DisplayErrorContext(&e)
                 ),
+                raw_request: None,
+                raw_response: None,
                 provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
+
+        let raw_request = get_raw_request()?;
 
         let mut stream = stream_bedrock(stream, start_time).peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
@@ -494,12 +621,12 @@ fn prefill_json_message(messages: &mut Vec<Message>) -> Result<(), Error> {
     Ok(())
 }
 
-impl TryFrom<&ContentBlock> for BedrockContentBlock {
+impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
     type Error = Error;
 
     fn try_from(block: &ContentBlock) -> Result<Self, Self::Error> {
         match block {
-            ContentBlock::Text(Text { text }) => Ok(BedrockContentBlock::Text(text.clone())),
+            ContentBlock::Text(Text { text }) => Ok(Some(BedrockContentBlock::Text(text.clone()))),
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value...
                 let input = serde_json::from_str(&tool_call.arguments).map_err(|e| {
@@ -539,7 +666,7 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
                         })
                     })?;
 
-                Ok(BedrockContentBlock::ToolUse(tool_use_block))
+                Ok(Some(BedrockContentBlock::ToolUse(tool_use_block)))
             }
             ContentBlock::ToolResult(tool_result) => {
                 let tool_result_block = ToolResultBlock::builder()
@@ -557,13 +684,23 @@ impl TryFrom<&ContentBlock> for BedrockContentBlock {
                         })
                     })?;
 
-                Ok(BedrockContentBlock::ToolResult(tool_result_block))
+                Ok(Some(BedrockContentBlock::ToolResult(tool_result_block)))
             }
+            ContentBlock::Image(_) => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                content_block_type: "image".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+            })),
+            // We don't support thought blocks being passed in from a request.
+            // These are only possible to be passed in in the scenario where the
+            // output of a chat completion is used as an input to another model inference,
+            // i.e. a judge or something.
+            // We don't think the thoughts should be passed in in this case.
+            ContentBlock::Thought(_thought) => Ok(None),
         }
     }
 }
 
-impl TryFrom<BedrockContentBlock> for ContentBlock {
+impl TryFrom<BedrockContentBlock> for ContentBlockOutput {
     type Error = Error;
 
     fn try_from(block: BedrockContentBlock) -> Result<Self, Self::Error> {
@@ -579,7 +716,7 @@ impl TryFrom<BedrockContentBlock> for ContentBlock {
                     })
                 })?;
 
-                Ok(ContentBlock::ToolCall(ToolCall {
+                Ok(ContentBlockOutput::ToolCall(ToolCall {
                     name: tool_use.name,
                     arguments,
                     id: tool_use.tool_use_id,
@@ -600,13 +737,16 @@ impl TryFrom<&RequestMessage> for Message {
 
     fn try_from(inference_message: &RequestMessage) -> Result<Message, Error> {
         let role: ConversationRole = inference_message.role.into();
-        let blocks: Vec<BedrockContentBlock> = inference_message
+        let content: Vec<BedrockContentBlock> = inference_message
             .content
             .iter()
             .map(|block| block.try_into())
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<Option<BedrockContentBlock>>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
         let mut message_builder = Message::builder().role(role);
-        for block in blocks {
+        for block in content {
             message_builder = message_builder.content(block);
         }
         let message = message_builder.build().map_err(|e| {
@@ -661,7 +801,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             }
         };
 
-        let mut content: Vec<ContentBlock> = message
+        let mut content: Vec<ContentBlockOutput> = message
             .ok_or_else(|| {
                 Error::new(ErrorDetails::InferenceServer {
                     raw_request: None,
@@ -673,7 +813,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             .content
             .into_iter()
             .map(|block| block.try_into())
-            .collect::<Result<Vec<ContentBlock>, _>>()?;
+            .collect::<Result<Vec<ContentBlockOutput>, _>>()?;
 
         if model_id.contains("claude")
             && *function_type == FunctionType::Json

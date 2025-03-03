@@ -4,7 +4,9 @@ from tensorzero import AsyncTensorZeroGateway, ToolCall
 
 
 async def main():
-    async with AsyncTensorZeroGateway("http://localhost:3000") as client:
+    async with await AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000"
+    ) as client:
         query_result = await client.inference(
             function_name="generate_weather_query",
             # This is the first inference request in an episode so we don't need to provide an episode_id

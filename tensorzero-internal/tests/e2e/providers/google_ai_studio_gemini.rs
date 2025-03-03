@@ -28,6 +28,19 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let image_providers = vec![E2ETestProvider {
+        variant_name: "google-ai-studio-gemini-flash-8b".to_string(),
+        model_name: "google_ai_studio_gemini::gemini-1.5-flash-8b".into(),
+        model_provider_name: "google_ai_studio_gemini".into(),
+        credentials: HashMap::new(),
+    }];
+    let extra_body_providers = vec![E2ETestProvider {
+        variant_name: "google-ai-studio-gemini-flash-8b-extra-body".to_string(),
+        model_name: "gemini-1.5-flash-8b".into(),
+        model_provider_name: "google_ai_studio_gemini".into(),
+        credentials: HashMap::new(),
+    }];
+
     let inference_params_providers = vec![
         E2ETestProvider {
             variant_name: "google-ai-studio-gemini-flash-8b-dynamic".to_string(),
@@ -75,6 +88,12 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "google_ai_studio_gemini".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            variant_name: "google-ai-studio-gemini-flash-8b-default".to_string(),
+            model_name: "gemini-1.5-flash-8b".into(),
+            model_provider_name: "google_ai_studio_gemini".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     #[cfg(feature = "e2e_tests")]
@@ -87,12 +106,15 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        extra_body_inference: extra_body_providers,
+        reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
         tool_use_inference: tool_providers.clone(),
         tool_multi_turn_inference: tool_providers.clone(),
         dynamic_tool_use_inference: tool_providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
+        image_inference: image_providers,
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
         #[cfg(feature = "batch_tests")]

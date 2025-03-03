@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import {
   Table,
   TableBody,
@@ -18,6 +19,34 @@ export default function FunctionsTable({
   functions: Record<string, FunctionConfig>;
   countsInfo: FunctionCountInfo[];
 }) {
+  // Create a union of all function names from both data sources.
+  const functionNamesSet = new Set<string>([
+    ...Object.keys(functions),
+    ...countsInfo.map((info) => info.function_name),
+  ]);
+
+  const mergedFunctions = Array.from(functionNamesSet).map((function_name) => {
+    const countInfo = countsInfo.find(
+      (info) => info.function_name === function_name,
+    );
+    const function_config = functions[function_name] || null;
+
+    // Special handling: if the function name is 'tensorzero::default', type is 'chat'
+    let type: "chat" | "json" | "?";
+    if (function_config) {
+      type = function_config.type;
+    } else {
+      type = "?";
+    }
+
+    return {
+      function_name,
+      count: countInfo ? countInfo.count : 0,
+      max_timestamp: countInfo ? countInfo.max_timestamp : "Never",
+      type,
+    };
+  });
+
   return (
     <div>
       <Table>
@@ -30,39 +59,31 @@ export default function FunctionsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {countsInfo.map((countInfo) => {
-            const function_config = functions[countInfo.function_name];
-            if (!function_config) {
-              console.warn(
-                `No function config found for ${countInfo.function_name}`,
-              );
-              return null;
-            }
-            return (
-              <TableRow
-                key={countInfo.function_name}
-                id={countInfo.function_name}
-              >
+          {mergedFunctions.map(
+            ({ function_name, count, max_timestamp, type }) => (
+              <TableRow key={function_name} id={function_name}>
                 <TableCell className="max-w-[200px] lg:max-w-none">
-                  <a
-                    href={`/observability/function/${countInfo.function_name}`}
+                  <Link
+                    to={`/observability/functions/${function_name}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {countInfo.function_name}
+                      {function_name}
                     </code>
-                  </a>
+                  </Link>
                 </TableCell>
                 <TableCell>
-                  <Code>{function_config.type}</Code>
+                  <Code>{type}</Code>
                 </TableCell>
-                <TableCell>{countInfo.count}</TableCell>
+                <TableCell>{count}</TableCell>
                 <TableCell>
-                  {formatDate(new Date(countInfo.max_timestamp))}
+                  {max_timestamp === "Never"
+                    ? "Never"
+                    : formatDate(new Date(max_timestamp))}
                 </TableCell>
               </TableRow>
-            );
-          })}
+            ),
+          )}
         </TableBody>
       </Table>
     </div>

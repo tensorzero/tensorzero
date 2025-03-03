@@ -7,6 +7,7 @@ from typing import (
     Literal,
     Optional,
     Union,
+    final,
 )
 from uuid import UUID
 
@@ -18,40 +19,9 @@ from tensorzero import (
 )
 
 class BaseTensorZeroGateway:
-    def __init__(self, base_url: str, *, timeout: Optional[float] = None): ...
-    def inference(
-        self,
-        *,
-        input: InferenceInput,
-        function_name: Optional[str] = None,
-        model_name: Optional[str] = None,
-        episode_id: Optional[UUID] = None,
-        stream: Optional[bool] = None,
-        params: Optional[Dict[str, Any]] = None,
-        variant_name: Optional[str] = None,
-        dryrun: Optional[bool] = None,
-        output_schema: Optional[Dict[str, Any]] = None,
-        allowed_tools: Optional[List[str]] = None,
-        additional_tools: Optional[List[Dict[str, Any]]] = None,
-        tool_choice: Optional[
-            Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
-        ] = None,
-        parallel_tool_calls: Optional[bool] = None,
-        tags: Optional[Dict[str, str]] = None,
-        credentials: Optional[Dict[str, str]] = None,
-        cache_options: Optional[Dict[str, Any]] = None,
-    ) -> Union[InferenceResponse, Generator[InferenceChunk, None, None]]: ...
-    def feedback(
-        self,
-        *,
-        metric_name: str,
-        value: Any,
-        inference_id: Optional[UUID] = None,
-        episode_id: Optional[UUID] = None,
-        dryrun: Optional[bool] = None,
-        tags: Optional[Dict[str, str]] = None,
-    ) -> FeedbackResponse: ...
+    pass
 
+@final
 class TensorZeroGateway(BaseTensorZeroGateway):
     def __init__(self, base_url: str, *, timeout: Optional[float] = None):
         """
@@ -62,23 +32,28 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
     @classmethod
     def build_http(
-        self, gateway_url: str, *, timeout: Optional[float] = None
+        cls,
+        *,
+        gateway_url: str,
+        timeout: Optional[float] = None,
+        verbose_errors: bool = False,
     ) -> "TensorZeroGateway":
         """
-        Build a TensorZeroGateway instance.
-
+        Initialize the TensorZero client, using the HTTP gateway.
         :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
-        :param timeout: (Optional) The timeout for the HTTP request.
+        :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
+        :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
+        :return: A `TensorZeroGateway` instance configured to use the HTTP gateway.
         """
 
     @classmethod
     def build_embedded(
-        self, *, config_path: Optional[str] = None, clickhouse_url: Optional[str] = None
+        cls, *, config_file: Optional[str] = None, clickhouse_url: Optional[str] = None
     ) -> "TensorZeroGateway":
         """
         Build a TensorZeroGateway instance.
 
-        :param config_path: (Optional) The path to the TensorZero configuration file.
+        :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
         """
 
@@ -173,19 +148,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         exc_val: Optional[BaseException],
         exc_tb: Optional[object],
     ) -> None: ...
-    def _stream_inference(
-        self, url: str, data: Dict[str, Any]
-    ) -> Generator[InferenceChunk, None, None]:
-        """
-        Parse the SSE stream from the response.
 
-        NOTE: The httpx client won't make a request until you start consuming the stream.
-
-        :param url: The URL to stream from
-        :param data: The request data to send
-        :yield: InferenceChunk objects containing partial results
-        """
-
+@final
 class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     def __init__(self, base_url: str, *, timeout: Optional[float] = None):
         """
@@ -196,23 +160,28 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
     @classmethod
     async def build_http(
-        self, gateway_url: str, *, timeout: Optional[float] = None
+        cls,
+        *,
+        gateway_url: str,
+        timeout: Optional[float] = None,
+        verbose_errors: bool = False,
     ) -> "AsyncTensorZeroGateway":
         """
-        Build an AsyncTensorZeroGateway instance.
-
-        :param gateway_url: (Required) The base URL of the TensorZero gateway. Example: "http://localhost:3000"
-        :param timeout: (Optional) The timeout for the HTTP request.
+        Initialize the TensorZero client, using the HTTP gateway.
+        :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+        :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
+        :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
+        :return: An `AsyncTensorZeroGateway` instance configured to use the HTTP gateway.
         """
 
     @classmethod
     async def build_embedded(
-        self, *, config_path: Optional[str] = None, clickhouse_url: Optional[str] = None
+        cls, *, config_file: Optional[str] = None, clickhouse_url: Optional[str] = None
     ) -> "AsyncTensorZeroGateway":
         """
         Build an AsyncTensorZeroGateway instance.
 
-        :param config_path: (Optional) The path to the TensorZero configuration file.
+        :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
         """
 
@@ -307,3 +276,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         exc_val: Optional[BaseException],
         exc_tb: Optional[object],
     ) -> None: ...
+
+__all__ = [
+    "AsyncTensorZeroGateway",
+    "BaseTensorZeroGateway",
+    "TensorZeroGateway",
+]

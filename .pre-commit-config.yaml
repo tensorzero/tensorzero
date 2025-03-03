@@ -13,10 +13,7 @@ repos:
       - id: check-xml
       - id: check-yaml
       - id: detect-private-key
-        exclude: |
-          (?x)
-          gateway/src/inference/providers/gcp_vertex_gemini\.rs|
-          CONTRIBUTING\.md
+        exclude: ^tensorzero-internal/src/inference/providers/gcp_vertex_gemini\.rs$
       - id: end-of-file-fixer
         exclude: \.minijinja$
       - id: trailing-whitespace
@@ -101,9 +98,9 @@ repos:
     rev: v1.1.391
     hooks:
       - id: pyright
-        name: "pyright: clients/python"
-        files: ^clients/python/
-        args: ["--project", "clients/python/pyproject.toml"]
+        name: "pyright: clients/python-deprecated"
+        files: ^clients/python-deprecated/
+        args: ["--project", "clients/python-deprecated/pyproject.toml"]
         additional_dependencies:
           - httpx
           - uuid_utils
