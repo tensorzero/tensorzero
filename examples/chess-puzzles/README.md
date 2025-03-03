@@ -7,7 +7,7 @@ See [Inference-Time Optimizations](https://www.tensorzero.com/docs/gateway/guide
 **We'll show that we can improve the performance of an LLM system by increasing the compute budget without changing the prompt or model used.**
 
 <p align="center">
-  <img src="img/results.png" alt="Results">
+  <img src="img/results.svg" alt="Results">
 </p>
 
 ## Background: Chess Puzzles
