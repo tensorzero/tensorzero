@@ -16,6 +16,7 @@ tensorzero-internal = { path = "../../tensorzero-internal" }
 url = { workspace = true }
 thiserror = "2.0.11"
 pyo3 = { workspace = true, optional = true }
+tracing = { workspace = true }
 
 [lints]
 workspace = true

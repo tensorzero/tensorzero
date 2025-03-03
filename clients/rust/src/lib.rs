@@ -179,6 +179,7 @@ impl ClientBuilder {
                             })?,
                     )
                 } else {
+                    tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
                     Arc::new(Config::default())
                 };
                 let clickhouse_connection_info =
@@ -547,6 +548,23 @@ mod tests {
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
+        assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."));
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_log_no_config() {
+        ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: None,
+            clickhouse_url: None,
+        })
+        .build()
+        .await
+        .expect("Failed to build client");
+        assert!(!logs_contain(
+            "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
+        ));
+        assert!(logs_contain("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"));
         assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."));
     }
 }
