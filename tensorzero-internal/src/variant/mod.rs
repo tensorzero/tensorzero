@@ -6,12 +6,12 @@ use itertools::izip;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::config_parser::PathWithContents;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -149,7 +149,7 @@ pub trait Variant {
         variant_name: &str,
     ) -> Result<(), Error>;
 
-    fn get_all_template_paths(&self) -> Vec<&PathBuf>;
+    fn get_all_template_paths(&self) -> Vec<&PathWithContents>;
 
     async fn start_batch_inference<'a>(
         &'a self,
@@ -380,7 +380,7 @@ impl Variant for VariantConfig {
         }
     }
 
-    fn get_all_template_paths(&self) -> Vec<&PathBuf> {
+    fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         match self {
             VariantConfig::ChatCompletion(params) => params.get_all_template_paths(),
             VariantConfig::BestOfNSampling(params) => params.get_all_template_paths(),

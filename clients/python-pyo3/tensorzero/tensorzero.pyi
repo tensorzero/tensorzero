@@ -32,13 +32,18 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
     @classmethod
     def build_http(
-        cls, *, gateway_url: str, timeout: Optional[float] = None
+        cls,
+        *,
+        gateway_url: str,
+        timeout: Optional[float] = None,
+        verbose_errors: bool = False,
     ) -> "TensorZeroGateway":
         """
-        Build a TensorZeroGateway instance.
-
+        Initialize the TensorZero client, using the HTTP gateway.
         :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
-        :param timeout: (Optional) The timeout for the HTTP request.
+        :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
+        :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
+        :return: A `TensorZeroGateway` instance configured to use the HTTP gateway.
         """
 
     @classmethod
@@ -155,13 +160,18 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
     @classmethod
     async def build_http(
-        cls, *, gateway_url: str, timeout: Optional[float] = None
+        cls,
+        *,
+        gateway_url: str,
+        timeout: Optional[float] = None,
+        verbose_errors: bool = False,
     ) -> "AsyncTensorZeroGateway":
         """
-        Build an AsyncTensorZeroGateway instance.
-
-        :param gateway_url: (Required) The base URL of the TensorZero gateway. Example: "http://localhost:3000"
-        :param timeout: (Optional) The timeout for the HTTP request.
+        Initialize the TensorZero client, using the HTTP gateway.
+        :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
+        :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
+        :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
+        :return: An `AsyncTensorZeroGateway` instance configured to use the HTTP gateway.
         """
 
     @classmethod

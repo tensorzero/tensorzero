@@ -417,7 +417,7 @@ stack-data==0.6.3
     # via ipython
 tatsu==5.8.3
     # via textworld
-tensorzero==2025.2.5
+tensorzero==2025.2.6
     # via -r requirements.in
 termcolor==2.5.0
     # via
