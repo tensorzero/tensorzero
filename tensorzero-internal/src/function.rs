@@ -338,7 +338,9 @@ fn validate_all_text_input(
                         }));
                     }
                     content = Some(match kind {
-                        TextKind::Arguments { arguments } => Cow::Borrowed(arguments),
+                        TextKind::Arguments { arguments } => {
+                            Cow::Owned(Value::Object(arguments.clone()))
+                        }
                         TextKind::Text { text } => Cow::Owned(Value::String(text.clone())),
                         TextKind::LegacyValue { value } => Cow::Borrowed(value),
                     });
@@ -574,7 +576,7 @@ mod tests {
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" }),
+                    arguments: json!({ "name": "assistant name" }).as_object().unwrap().clone(),
                 })],
             },
         ];
@@ -719,7 +721,7 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "user name" }),
+                    arguments: json!({ "name": "user name" }).as_object().unwrap().clone(),
                 })],
             },
             InputMessage {
@@ -782,7 +784,7 @@ mod tests {
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" }),
+                    arguments: json!({ "name": "assistant name" }).as_object().unwrap().clone(),
                 })],
             },
         ];
@@ -847,13 +849,13 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "user name" }),
+                    arguments: json!({ "name": "user name" }).as_object().unwrap().clone(),
                 })],
             },
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" }),
+                    arguments: json!({ "name": "assistant name" }).as_object().unwrap().clone(),
                 })],
             },
         ];
@@ -962,7 +964,7 @@ mod tests {
                 role: Role::User,
                 content: vec![
                     InputMessageContent::Text(TextKind::Arguments {
-                        arguments: json!({ "name": "user name" }),
+                        arguments: json!({ "name": "user name" }).as_object().unwrap().clone(),
                     }),
                     InputMessageContent::RawText {
                         value: "raw text".to_string(),
@@ -972,7 +974,7 @@ mod tests {
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" }),
+                    arguments: json!({ "name": "assistant name" }).as_object().unwrap().clone(),
                 })],
             },
         ];
@@ -1034,13 +1036,13 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "user name" }),
+                    arguments: json!({ "name": "user name" }).as_object().unwrap().clone(),
                 })],
             },
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" }),
+                    arguments: json!({ "name": "assistant name" }).as_object().unwrap().clone(),
                 })],
             },
         ];
@@ -1168,7 +1170,7 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "user name" }),
+                    arguments: json!({ "name": "user name" }).as_object().unwrap().clone(),
                 })],
             },
             InputMessage {
@@ -1234,7 +1236,7 @@ mod tests {
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" }),
+                    arguments: json!({ "name": "assistant name" }).as_object().unwrap().clone(),
                 })],
             },
         ];
@@ -1294,13 +1296,13 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "user name" }),
+                    arguments: json!({ "name": "user name" }).as_object().unwrap().clone(),
                 })],
             },
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" }),
+                    arguments: json!({ "name": "assistant name" }).as_object().unwrap().clone(),
                 })],
             },
         ];

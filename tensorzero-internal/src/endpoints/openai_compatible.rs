@@ -19,7 +19,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use tokio_stream::StreamExt;
 use url::Url;
 use uuid::Uuid;
@@ -503,7 +503,7 @@ pub enum TextContent {
     /// A special TensorZero mode: `{"type": "text", "tensorzero::arguments": {"custom_key": "custom_val"}}`.
     TensorZeroArguments {
         #[serde(default, rename = "tensorzero::arguments")]
-        tensorzero_arguments: Value,
+        tensorzero_arguments: Map<String, Value>,
     },
 }
 
@@ -552,7 +552,14 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                     }
                     Err(e) => {
                         tracing::warn!(r#"Content block `{val}` was not a valid OpenAI content block. This is deprecated - please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
-                        InputMessageContent::Text(TextKind::Arguments { arguments: val })
+                        if let Value::Object(obj) = val {
+                            InputMessageContent::Text(TextKind::Arguments { arguments: obj })
+                        } else {
+                            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                message: format!("Content block `{val}` is not an object"),
+                            }));
+                        }
+                        
                     }
                 };
                 outputs.push(output);
@@ -991,7 +998,7 @@ mod tests {
                 arguments: json!({
                     "country": "Japan",
                     "city": "Tokyo",
-                }),
+                }).as_object().unwrap().clone(),
             })
         );
 
@@ -1073,7 +1080,7 @@ mod tests {
                 arguments: json!({
                     "country": "Japan",
                     "city": "Tokyo",
-                }),
+                }).as_object().unwrap().clone(),
             })]
         );
         let content = json!({
@@ -1104,7 +1111,7 @@ mod tests {
             vec![InputMessageContent::Text(TextKind::Arguments {
                 arguments: json!({
                     "custom_key": "custom_val",
-                }),
+                }).as_object().unwrap().clone(),
             })]
         );
     }
@@ -1123,7 +1130,7 @@ mod tests {
                 arguments: json!({
                     "country": "Japan",
                     "city": "Tokyo",
-                }),
+                }).as_object().unwrap().clone(),
             })]
         );
         assert!(logs_contain(
@@ -1141,7 +1148,7 @@ mod tests {
                 arguments: json!({
                     "type": "text",
                     "my_custom_arg": 123
-                }),
+                }).as_object().unwrap().clone(),
             })]
         );
         assert!(logs_contain(

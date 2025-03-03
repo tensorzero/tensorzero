@@ -6,7 +6,7 @@ pub use image::{Base64Image, Image, ImageKind};
 use resolved_input::ImageWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -101,7 +101,7 @@ impl InputMessageContent {
             }
             InputMessageContent::Text(TextKind::Arguments { arguments }) => {
                 ResolvedInputMessageContent::Text {
-                    value: arguments.clone(),
+                    value: Value::Object(arguments.clone())
                 }
             }
             InputMessageContent::ToolCall(tool_call) => {
@@ -172,7 +172,7 @@ pub enum InputMessageContent {
 #[serde(untagged, deny_unknown_fields)]
 pub enum TextKind {
     Text { text: String },
-    Arguments { arguments: Value },
+    Arguments { arguments: Map<String, Value> },
     LegacyValue { value: Value },
 }
 
