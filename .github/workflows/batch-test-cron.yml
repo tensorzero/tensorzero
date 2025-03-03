@@ -59,7 +59,7 @@ jobs:
 
       - name: Wake up ClickHouse cloud (for batch tests)
         run: |
-          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES' > clickhouse_wakeup_logs.txt &
+          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES'
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
