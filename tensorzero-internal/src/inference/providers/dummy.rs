@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use super::provider_trait::InferenceProvider;
 
+use crate::cache::ModelProviderRequest;
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
@@ -154,7 +155,11 @@ pub static DUMMY_RAW_REQUEST: &str = "raw request";
 impl InferenceProvider for DummyProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         _http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         _model_provider: &'a ModelProvider,

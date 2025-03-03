@@ -9,6 +9,7 @@ use resolved_input::ImageWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
+use serde_untagged::UntaggedEnumVisitor;
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -128,27 +129,48 @@ impl InputMessageContent {
                     storage_path: path,
                 })
             }
+            InputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            } => ResolvedInputMessageContent::Unknown {
+                data,
+                model_provider_name,
+            },
         })
     }
 }
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct InputMessage {
     pub role: Role,
+    #[serde(deserialize_with = "deserialize_content")]
     pub content: Vec<InputMessageContent>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InputMessageContent {
-    Text { value: Value },
+    Text {
+        value: Value,
+    },
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    RawText { value: String },
+    RawText {
+        value: String,
+    },
     Image(Image),
+    /// An unknown content block type, used to allow passing provider-specific
+    /// content blocks (e.g. Anthropic's "redacted_thinking") in and out
+    /// of TensorZero.
+    /// The 'data' field hold the original content block from the provider,
+    /// without any validation or transformation by TensorZero.
+    Unknown {
+        data: Value,
+        model_provider_name: Option<String>,
+    },
     // We may extend this in the future to include other types of content
 }
 
@@ -188,6 +210,31 @@ pub enum ContentBlock {
     ToolResult(ToolResult),
     Image(ImageWithPath),
     Thought(Thought),
+    /// Represents an unknown provider-specific content block.
+    /// We pass this along as-is without any validation or transformation.
+    Unknown {
+        /// The underlying content block to be passed to the model provider.
+        data: Value,
+        /// A fully-qualified name specifying when this content block should
+        /// be included in the model provider input.
+        /// E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
+        ///
+        /// If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
+        /// a model provider, and stripped from the input if it doesn't match.
+        /// If set to `None, then this is passed to all model providers.
+        /// Individual model provider implementation never need to check this field themselves -
+        /// they only need to produce it with the proper `fully_qualified_name` set.
+        model_provider_name: Option<String>,
+    },
+}
+
+/// A helper type for dealing with `ContentBlock::Unknown` in model providers.
+/// This flattens the wrapped `Value` when serializing and deserializing.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum FlattenUnknown<'a, T> {
+    Normal(T),
+    Unknown(Cow<'a, Value>),
 }
 
 /// Defines the types of content block that can come out of a model provider
@@ -197,6 +244,10 @@ pub enum ContentBlockOutput {
     Text(Text),
     ToolCall(ToolCall),
     Thought(Thought),
+    Unknown {
+        data: Value,
+        model_provider_name: Option<String>,
+    },
 }
 
 /// Defines the types of content block that can come from a `chat` function
@@ -206,6 +257,10 @@ pub enum ContentBlockChatOutput {
     Text(Text),
     ToolCall(ToolCallOutput),
     Thought(Thought),
+    Unknown {
+        data: Value,
+        model_provider_name: Option<String>,
+    },
 }
 
 /// A RequestMessage is a message sent to a model
@@ -535,7 +590,25 @@ impl From<Value> for ResolvedInputMessageContent {
     }
 }
 
-impl<'de> Deserialize<'de> for InputMessage {
+fn deserialize_content<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<InputMessageContent>, D::Error> {
+    UntaggedEnumVisitor::new()
+        .string(|text| {
+            Ok(vec![InputMessageContent::Text {
+                value: Value::String(text.to_string()),
+            }])
+        })
+        .map(|object| {
+            Ok(vec![InputMessageContent::Text {
+                value: Value::Object(object.deserialize()?),
+            }])
+        })
+        .seq(|seq| seq.deserialize())
+        .deserialize(deserializer)
+}
+
+/*impl<'de> Deserialize<'de> for InputMessage {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -557,16 +630,8 @@ impl<'de> Deserialize<'de> for InputMessage {
         let helper = Helper::deserialize(deserializer)?;
 
         let content = match helper.content {
-            ContentHelper::Single(text) => {
-                vec![InputMessageContent::Text {
-                    value: Value::String(text),
-                }]
-            }
-            ContentHelper::Object(object) => {
-                vec![InputMessageContent::Text {
-                    value: Value::Object(object),
-                }]
-            }
+            ContentHelper::Single(text) => {}
+            ContentHelper::Object(object) => {}
             ContentHelper::Multiple(content) => content,
         };
 
@@ -575,7 +640,7 @@ impl<'de> Deserialize<'de> for InputMessage {
             content,
         })
     }
-}
+}*/
 
 impl fmt::Display for Role {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -874,6 +939,15 @@ pub async fn parse_chat_output(
             ContentBlockOutput::Thought(thought) => {
                 output.push(ContentBlockChatOutput::Thought(thought));
             }
+            ContentBlockOutput::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                output.push(ContentBlockChatOutput::Unknown {
+                    data,
+                    model_provider_name,
+                });
+            }
         }
     }
     output
@@ -1022,6 +1096,13 @@ impl From<ContentBlockChatOutput> for ContentBlock {
                 ContentBlock::ToolCall(tool_call_output.into())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlock::Thought(thought),
+            ContentBlockChatOutput::Unknown {
+                data,
+                model_provider_name,
+            } => ContentBlock::Unknown {
+                data,
+                model_provider_name,
+            },
         }
     }
 }

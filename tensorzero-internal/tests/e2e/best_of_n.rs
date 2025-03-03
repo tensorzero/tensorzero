@@ -29,7 +29,11 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
             "messages": [
                 {
                     "role": "user",
-                    "content": "Please write me a sentence about Megumin making an explosion."
+                    "content": [
+                        {"type": "text", "value": "Please write me a sentence about Megumin making an explosion."},
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input"}},
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-1.5-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
+                    ]
                 }
             ]},
         "stream": false,
@@ -84,7 +88,11 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Please write me a sentence about Megumin making an explosion."}]
+                    "content": [
+                        {"type": "text", "value": "Please write me a sentence about Megumin making an explosion."},
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input"}},
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-1.5-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
+                    ]
                 }
             ]
         }
@@ -108,7 +116,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
     assert_eq!(variant_name, "best_of_n_variant");
 
     // Check the ModelInference Table
-    let results = select_model_inferences_clickhouse(&clickhouse, inference_id)
+    let results: Vec<Value> = select_model_inferences_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
     assert_eq!(results.len(), 3);
@@ -147,6 +155,9 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "parts": [
                       {
                         "text": "Please write me a sentence about Megumin making an explosion."
+                      },
+                      {
+                        "text": "My extra gemini text"
                       }
                     ]
                   },
@@ -194,7 +205,11 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     content: vec![
                         "Please write me a sentence about Megumin making an explosion."
                             .to_string()
-                            .into()
+                            .into(),
+                        ContentBlock::Unknown {
+                            model_provider_name: Some("tensorzero::model_name::gemini-1.5-flash-001::provider_name::gcp_vertex_gemini".into()),
+                            data: serde_json::json!({"text": "My extra gemini text"})
+                        }
                     ],
                 }
             );
@@ -246,7 +261,13 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     content: vec![
                         "Please write me a sentence about Megumin making an explosion."
                             .to_string()
-                            .into()
+                            .into(),
+                        ContentBlock::Unknown {
+                            model_provider_name: Some(
+                                "tensorzero::model_name::json::provider_name::json".into()
+                            ),
+                            data: serde_json::json!({"type": "text", "text": "My extra json-model input"})
+                        }
                     ],
                 }
             );

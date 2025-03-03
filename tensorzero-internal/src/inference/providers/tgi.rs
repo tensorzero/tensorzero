@@ -26,6 +26,7 @@ use super::openai::{
     get_chat_url, prepare_openai_messages, prepare_openai_tools, OpenAIRequestMessage, OpenAITool,
     OpenAIToolChoice, OpenAIToolType, StreamOptions,
 };
+use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
@@ -119,7 +120,11 @@ impl TGICredentials {
 impl InferenceProvider for TGIProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
