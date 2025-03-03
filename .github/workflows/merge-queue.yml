@@ -193,7 +193,7 @@ jobs:
       - name: "Python: Recipes: pyright"
         working-directory: recipes/tests
         run: |
-          uv pip install pyright==1.1.394
+          uv pip install pyright==1.1.394 pandas-stubs
           uv run pyright
 
       - name: "Python: Recipes: pytest"
