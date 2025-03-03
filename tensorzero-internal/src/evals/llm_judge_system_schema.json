@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["system_instructions"],
+  "additionalProperties": false,
+  "properties": {
+    "system_instructions": {
+      "type": "string",
+      "description": "System instructions for the LLM judge"
+    }
+  }
+}

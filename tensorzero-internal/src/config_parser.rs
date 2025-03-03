@@ -9,16 +9,14 @@ use tracing::instrument;
 
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
+use crate::evals::{EvalConfig, UninitializedEvalConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable};
 use crate::model_table::{CowNoClone, ShorthandModelConfig};
-use crate::tool::{
-    ImplicitToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
-    IMPLICIT_TOOL_NAME,
-};
+use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
@@ -33,6 +31,7 @@ pub struct Config<'c> {
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
+    pub evals: HashMap<String, EvalConfig>,    // eval name => eval config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
 }
@@ -255,19 +254,22 @@ impl<'c> Config<'c> {
     }
 
     fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config<'c>, Error> {
-        let config = UninitializedConfig::try_from(table)?;
+        let uninitialized_config = UninitializedConfig::try_from(table)?;
 
-        let gateway = config.gateway.unwrap_or_default().try_into()?;
+        let gateway = uninitialized_config
+            .gateway
+            .unwrap_or_default()
+            .try_into()?;
 
         let templates = TemplateConfig::new();
 
-        let functions = config
+        let functions = uninitialized_config
             .functions
             .into_iter()
             .map(|(name, config)| config.load(&name, &base_path).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
 
-        let tools = config
+        let tools = uninitialized_config
             .tools
             .into_iter()
             .map(|(name, config)| {
@@ -277,15 +279,16 @@ impl<'c> Config<'c> {
             })
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
 
-        let object_store_info = ObjectStoreInfo::new(config.object_storage)?;
+        let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
 
         let mut config = Config {
             gateway,
-            models: config.models,
-            embedding_models: config.embedding_models,
+            models: uninitialized_config.models,
+            embedding_models: uninitialized_config.embedding_models,
             functions,
-            metrics: config.metrics,
+            metrics: uninitialized_config.metrics,
             tools,
+            evals: HashMap::new(),
             templates,
             object_store_info,
         };
@@ -296,6 +299,29 @@ impl<'c> Config<'c> {
 
         // Validate the config
         config.validate()?;
+
+        // We add the evals after validation since we will be writing tensorzero:: functions to the functions map
+        let mut evals = HashMap::new();
+        for (name, eval_config) in uninitialized_config.evals {
+            let (eval_config, eval_function_configs) =
+                eval_config.load(&config.functions, &base_path, &name)?;
+            evals.insert(name, eval_config);
+            for (eval_function_name, eval_function_config) in eval_function_configs {
+                if config.functions.contains_key(&eval_function_name) {
+                    return Err(ErrorDetails::Config {
+                        message: format!(
+                            "Duplicate evaluator function name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
+                            eval_function_name
+                        ),
+                    }
+                    .into());
+                }
+                config
+                    .functions
+                    .insert(eval_function_name, eval_function_config);
+            }
+        }
+        config.evals = evals;
 
         Ok(config)
     }
@@ -470,6 +496,7 @@ struct UninitializedConfig {
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
     #[serde(default)]
+    pub evals: HashMap<String, UninitializedEvalConfig>, // eval name => eval config
     pub object_storage: Option<StorageKind>,
 }
 
@@ -613,14 +640,8 @@ impl UninitializedFunctionConfig {
                     Some(path) => JSONSchemaFromPath::new(path, base_path.as_ref())?,
                     None => JSONSchemaFromPath::default(),
                 };
-                let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig {
-                    parameters: output_schema.clone(),
-                });
-                let implicit_tool_call_config = ToolCallConfig {
-                    tools_available: vec![implicit_tool],
-                    tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
-                    parallel_tool_calls: false,
-                };
+                let implicit_tool_call_config =
+                    create_implicit_tool_call_config(output_schema.clone());
                 let variants = params
                     .variants
                     .into_iter()
@@ -725,7 +746,7 @@ impl UninitializedToolConfig {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct PathWithContents {
     pub path: PathBuf,
     pub contents: String,
@@ -874,6 +895,39 @@ mod tests {
         assert_eq!(embedding_model.providers.len(), 1);
         let provider = embedding_model.providers.get("openai").unwrap();
         assert!(matches!(provider, EmbeddingProviderConfig::OpenAI(_)));
+
+        // Check that the function for the LLM Judge eval is added to the functions table
+        let function = config
+            .functions
+            .get("tensorzero::llm_judge::eval1::llm_judge_bool")
+            .unwrap();
+        match &**function {
+            FunctionConfig::Json(json_config) => {
+                assert_eq!(json_config.variants.len(), 1);
+                match &json_config.variants["anthropic_promptA"] {
+                    VariantConfig::ChatCompletion(chat_config) => {
+                        assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
+                        assert_eq!(chat_config.weight, 1.0);
+                        assert_eq!(
+                            *chat_config.system_template.as_ref().unwrap(),
+                            PathWithContents {
+                                // We don't use a real path for programmatically generated templates
+                                // Instead we use this handle and then the same in minijinja
+                                path: PathBuf::from(
+                                    "tensorzero::llm_judge::eval1::llm_judge_bool::system"
+                                ),
+                                contents:
+                                    "Return True if there is NSFW content in this generation.\n\n"
+                                        .to_string(),
+                            }
+                        );
+                        assert_eq!(chat_config.json_mode, Some(JsonMode::ImplicitTool));
+                    }
+                    _ => panic!("Expected a chat completion variant"),
+                }
+            }
+            _ => panic!("Expected a JSON function"),
+        }
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
@@ -1506,6 +1560,49 @@ mod tests {
         );
     }
 
+    /// Ensure that the config validation fails when an eval points at a nonexistent function
+    #[test]
+    fn test_config_validate_eval_function_nonexistent() {
+        let mut config = get_sample_valid_config();
+        config["evals"]["eval1"]["function_name"] = "nonexistent_function".into();
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+
+        assert_eq!(
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message:
+                    "Function `nonexistent_function` not found (referenced in `[evals.eval1]`)"
+                        .to_string()
+            }
+            .into()
+        );
+    }
+
+    /// Ensure that the config validation fails when an eval name contains `::`
+    #[test]
+    fn test_config_validate_eval_name_contains_double_colon() {
+        let mut config = get_sample_valid_config();
+        let eval1 = config["evals"]["eval1"].clone();
+        config
+            .get_mut("evals")
+            .unwrap()
+            .as_table_mut()
+            .unwrap()
+            .insert("bad::eval".to_string(), eval1);
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+
+        assert_eq!(
+            result.unwrap_err(),
+            ErrorDetails::Config {
+                message: "Eval names cannot contain \"::\" (referenced in `[evals.bad::eval]`)"
+                    .to_string()
+            }
+            .into()
+        );
+    }
+
     /// Ensure that the config validation fails when a function has a tool that does not exist in the tools section
     #[test]
     fn test_config_validate_function_nonexistent_tool() {
@@ -1834,15 +1931,29 @@ mod tests {
             ).to_string()
         );
         assert_eq!(
-            *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja")
-            .unwrap(),
-            include_str!(
-                "../fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
-            ).to_string()
+                    *templates.get("fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja")
+                    .unwrap(),
+                    include_str!(
+                        "../fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
+                    ).to_string()
+                );
+
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::eval1::llm_judge_bool::system")
+                .unwrap(),
+            "Return True if there is NSFW content in this generation.\n\n".to_string(),
         );
 
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::eval1::llm_judge_float::system")
+                .unwrap(),
+            "Return a number between 0 and 1 where 1 is very NSFW and 0 is the least NSFW content.\n\n"
+                .to_string(),
+        );
         // Check the total number of templates
-        assert_eq!(templates.len(), 10);
+        assert_eq!(templates.len(), 12);
     }
 
     #[test]
@@ -1911,179 +2022,7 @@ mod tests {
 
     /// Get a sample valid config for testing
     fn get_sample_valid_config() -> toml::Table {
-        let config_str = r#"
-        # ┌────────────────────────────────────────────────────────────────────────────┐
-        # │                                  GENERAL                                   │
-        # └────────────────────────────────────────────────────────────────────────────┘
-
-        [gateway]
-        bind_address = "0.0.0.0:3000"
-
-        # ┌────────────────────────────────────────────────────────────────────────────┐
-        # │                                   MODELS                                   │
-        # └────────────────────────────────────────────────────────────────────────────┘
-
-        [models."gpt-3.5-turbo"]
-        routing = ["openai", "azure"]
-
-        [models."gpt-3.5-turbo".providers.openai]
-        type = "openai"
-        model_name = "gpt-3.5-turbo"
-
-        [models."gpt-3.5-turbo".providers.azure]
-        type = "azure"
-        deployment_id = "gpt-35-turbo"
-        endpoint = "https://your-endpoint.openai.azure.com"
-
-        [models.claude-3-haiku-20240307]
-        routing = ["anthropic"]
-
-        [models.claude-3-haiku-20240307.providers.anthropic]
-        type = "anthropic"
-        model_name = "claude-3-haiku-20240307"
-
-        # ┌────────────────────────────────────────────────────────────────────────────┐
-        # │                              EMBEDDING MODELS                              │
-        # └────────────────────────────────────────────────────────────────────────────┘
-
-        [embedding_models.text-embedding-3-small]
-        routing = ["openai"]
-
-        [embedding_models.text-embedding-3-small.providers.openai]
-        type = "openai"
-        model_name = "text-embedding-3-small"
-
-        # ┌────────────────────────────────────────────────────────────────────────────┐
-        # │                                 FUNCTIONS                                  │
-        # └────────────────────────────────────────────────────────────────────────────┘
-
-        [functions.generate_draft]
-        type = "chat"
-        system_schema = "fixtures/config/functions/generate_draft/system_schema.json"
-
-        [functions.generate_draft.variants.openai_promptA]
-        type = "chat_completion"
-        weight = 0.9
-        model = "gpt-3.5-turbo"
-        system_template = "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-
-        [functions.generate_draft.variants.openai_promptB]
-        type = "chat_completion"
-        weight = 0.1
-        model = "gpt-3.5-turbo"
-        system_template = "fixtures/config/functions/generate_draft/promptB/system_template.minijinja"
-
-        [functions.json_with_schemas]
-        type = "json"
-        system_schema = "fixtures/config/functions/json_with_schemas/system_schema.json"
-        output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
-
-        [functions.json_with_schemas.variants.openai_promptA]
-        type = "chat_completion"
-        weight = 0.9
-        model = "gpt-3.5-turbo"
-        system_template = "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
-        json_mode = "implicit_tool"
-
-        [functions.json_with_schemas.variants.openai_promptB]
-        type = "chat_completion"
-        weight = 0.1
-        model = "gpt-3.5-turbo"
-        system_template = "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
-
-        [functions.weather_helper]
-        type = "chat"
-        tools = ["get_temperature"]
-        tool_choice = {specific = "get_temperature"}
-
-        [functions.weather_helper.variants.openai_promptA]
-        type = "chat_completion"
-        weight = 1.0
-        model = "gpt-3.5-turbo"
-
-        [functions.templates_without_variables_chat]
-        type = "chat"
-
-        [functions.templates_without_variables_chat.variants.variant_without_templates]
-        type = "chat_completion"
-        weight = 1.0
-        model = "gpt-3.5-turbo"
-        system_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
-        user_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
-        assistant_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
-
-        [functions.templates_with_variables_chat]
-        type = "chat"
-        system_schema = "fixtures/config/functions/templates_with_variables/system_schema.json"
-        user_schema = "fixtures/config/functions/templates_with_variables/user_schema.json"
-        assistant_schema = "fixtures/config/functions/templates_with_variables/assistant_schema.json"
-
-        [functions.templates_with_variables_chat.variants.variant_with_variables]
-        type = "chat_completion"
-        weight = 1.0
-        model = "gpt-3.5-turbo"
-        system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
-        user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
-        assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
-
-        [functions.templates_with_variables_chat.variants.best_of_n]
-        type = "experimental_best_of_n_sampling"
-        weight = 1.0
-        candidates = ["variant_with_variables", "variant_with_variables"]
-
-        [functions.templates_with_variables_chat.variants.best_of_n.evaluator]
-        model = "gpt-3.5-turbo"
-        system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
-        user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
-        assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
-
-        [functions.templates_without_variables_json]
-        type = "json"
-        output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
-
-        [functions.templates_without_variables_json.variants.variant_without_templates]
-        type = "chat_completion"
-        weight = 1.0
-        model = "gpt-3.5-turbo"
-        system_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
-        user_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
-        assistant_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
-
-        [functions.templates_with_variables_json]
-        type = "json"
-        system_schema = "fixtures/config/functions/templates_with_variables/system_schema.json"
-        user_schema = "fixtures/config/functions/templates_with_variables/user_schema.json"
-        assistant_schema = "fixtures/config/functions/templates_with_variables/assistant_schema.json"
-        output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
-
-        [functions.templates_with_variables_json.variants.variant_with_variables]
-        type = "chat_completion"
-        model = "gpt-3.5-turbo"
-        system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
-        user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
-        assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
-
-        # ┌────────────────────────────────────────────────────────────────────────────┐
-        # │                                  METRICS                                   │
-        # └────────────────────────────────────────────────────────────────────────────┘
-
-        [metrics.task_success]
-        type = "boolean"
-        optimize = "max"
-        level = "inference"
-
-        [metrics.user_rating]
-        type = "float"
-        optimize = "max"
-        level = "episode"
-
-        # ┌────────────────────────────────────────────────────────────────────────────┐
-        # │                                   TOOLS                                    │
-        # └────────────────────────────────────────────────────────────────────────────┘
-        [tools.get_temperature]
-        description = "Get the weather for a given location"
-        parameters = "fixtures/config/tools/get_temperature.json"
-        "#;
+        let config_str = include_str!("../fixtures/config/tensorzero.test.toml");
         env::set_var("OPENAI_API_KEY", "sk-something");
         env::set_var("ANTHROPIC_API_KEY", "sk-something");
         env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
@@ -2191,8 +2130,8 @@ mod tests {
             .parent()
             .expect("Failed to get parent directory of config file");
         let config_table = UninitializedConfig::read_toml_config(Path::new(&config_path))
-            .expect("Failed to read tensorzero.example.toml")
-            .expect("Failed to read tensorzero.example.toml");
+            .expect("Failed to read tensorzero.toml")
+            .expect("Failed to read tensorzero.toml");
 
         Config::load_from_toml(config_table, base_path.to_path_buf())
             .expect("Failed to load config");
@@ -2226,7 +2165,7 @@ mod tests {
             type = "s3_compatible"
             bucket_name = "tensorzero-fake-bucket"
             region = "us-east-1"
-            
+
             [functions]"#
         )
         .unwrap();
