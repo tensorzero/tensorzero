@@ -3,6 +3,8 @@ name: Merge Queue Checks
 on:
   workflow_dispatch:
   merge_group:
+  pull_request:
+    branches: ["main"]
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -188,16 +190,15 @@ jobs:
         working-directory: recipes
         run: |
           uv venv
-          uv pip sync requirements.txt
+          uv sync
 
       - name: "Python: Recipes: pyright"
-        working-directory: recipes/tests
+        working-directory: recipes
         run: |
-          uv pip install pyright==1.1.394 pandas-stubs
           uv run pyright
 
       - name: "Python: Recipes: pytest"
-        working-directory: recipes/tests
+        working-directory: recipes
         run: |
           uv run pytest
 
