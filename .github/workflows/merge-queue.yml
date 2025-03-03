@@ -3,6 +3,8 @@ name: Merge Queue Checks
 on:
   workflow_dispatch:
   merge_group:
+  pull_request:
+    branches: ["main"]
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
