@@ -917,7 +917,7 @@ mod tests {
                                     "tensorzero::llm_judge::eval1::llm_judge_bool::system"
                                 ),
                                 contents:
-                                    "Return True if there is NSFW content in this generation.\n\n\nOutput Type: boolean\n"
+                                    "Return True if there is NSFW content in this generation.\n\n"
                                         .to_string(),
                             }
                         );
@@ -1942,15 +1942,14 @@ mod tests {
             *templates
                 .get("tensorzero::llm_judge::eval1::llm_judge_bool::system")
                 .unwrap(),
-            "Return True if there is NSFW content in this generation.\n\n\nOutput Type: boolean\n"
-                .to_string(),
+            "Return True if there is NSFW content in this generation.\n\n".to_string(),
         );
 
         assert_eq!(
             *templates
                 .get("tensorzero::llm_judge::eval1::llm_judge_float::system")
                 .unwrap(),
-            "Return a number between 0 and 1 where 1 is very NSFW and 0 is the least NSFW content.\n\n\nOutput Type: float\n"
+            "Return a number between 0 and 1 where 1 is very NSFW and 0 is the least NSFW content.\n\n"
                 .to_string(),
         );
         // Check the total number of templates

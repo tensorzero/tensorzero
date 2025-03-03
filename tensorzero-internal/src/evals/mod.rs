@@ -195,7 +195,7 @@ impl UninitializedEvaluatorConfig {
                     .into_iter()
                     .map(|(name, variant)| {
                         variant
-                            .load(base_path, eval_name, evaluator_name, &params.output_type)
+                            .load(base_path, eval_name, evaluator_name)
                             .map(|v| (name, v))
                     })
                     .collect::<Result<HashMap<_, _>, Error>>()?;
@@ -289,7 +289,6 @@ impl UninitializedLLMJudgeVariantConfig {
         base_path: &P,
         eval_name: &str,
         evaluator_name: &str,
-        output_type: &LLMJudgeOutputType,
     ) -> Result<VariantConfig, Error> {
         match self {
             UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => {
@@ -298,7 +297,6 @@ impl UninitializedLLMJudgeVariantConfig {
                 let templated_system_instructions = format!(
                     include_str!("llm_judge_system_instructions.txt"),
                     system_instructions = system_instructions,
-                    output_type = output_type
                 );
                 let system_template = PathWithContents {
                     // Not a real path but this is used as the handle everywhere as the content is already provided below

@@ -1,17 +1,12 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["system_instructions", "output_type"],
+  "required": ["system_instructions"],
   "additionalProperties": false,
   "properties": {
     "system_instructions": {
       "type": "string",
       "description": "System instructions for the LLM judge"
-    },
-    "output_type": {
-      "type": "string",
-      "enum": ["float", "bool"],
-      "description": "The type of output expected from the judge"
     }
   }
 }
