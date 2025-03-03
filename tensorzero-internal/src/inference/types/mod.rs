@@ -101,7 +101,7 @@ impl InputMessageContent {
             }
             InputMessageContent::Text(TextKind::Arguments { arguments }) => {
                 ResolvedInputMessageContent::Text {
-                    value: Value::Object(arguments.clone())
+                    value: Value::Object(arguments.clone()),
                 }
             }
             InputMessageContent::ToolCall(tool_call) => {

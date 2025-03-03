@@ -559,7 +559,6 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                                 message: format!("Content block `{val}` is not an object"),
                             }));
                         }
-                        
                     }
                 };
                 outputs.push(output);
@@ -998,7 +997,10 @@ mod tests {
                 arguments: json!({
                     "country": "Japan",
                     "city": "Tokyo",
-                }).as_object().unwrap().clone(),
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
             })
         );
 
@@ -1080,7 +1082,10 @@ mod tests {
                 arguments: json!({
                     "country": "Japan",
                     "city": "Tokyo",
-                }).as_object().unwrap().clone(),
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
             })]
         );
         let content = json!({
@@ -1111,7 +1116,10 @@ mod tests {
             vec![InputMessageContent::Text(TextKind::Arguments {
                 arguments: json!({
                     "custom_key": "custom_val",
-                }).as_object().unwrap().clone(),
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
             })]
         );
     }
@@ -1130,7 +1138,10 @@ mod tests {
                 arguments: json!({
                     "country": "Japan",
                     "city": "Tokyo",
-                }).as_object().unwrap().clone(),
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
             })]
         );
         assert!(logs_contain(
@@ -1148,7 +1159,10 @@ mod tests {
                 arguments: json!({
                     "type": "text",
                     "my_custom_arg": 123
-                }).as_object().unwrap().clone(),
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
             })]
         );
         assert!(logs_contain(
