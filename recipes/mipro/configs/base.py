@@ -19,21 +19,16 @@ class BaseConfigs(BaseModel, Generic[T]):
 
     def __getitem__(self, key: str) -> T:
         """Get the configuration associated with the given key."""
-        # return self.__dict__[key]
         return getattr(self, key)
 
     def __setitem__(self, key: str, value: T) -> None:
         """Set the configuration for a given key."""
-        # super().__setattr__(key, value)
-        # self.__dict__[key] = value
         setattr(self, key, value)
 
     def items(self):
         """Return all configuration items."""
-        # return self.__dict__.items()
         return self.model_dump().items()
 
     def keys(self):
         """Return all configuration keys."""
-        # return self.__dict__.keys()
         return self.model_dump().keys()

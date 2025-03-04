@@ -6,8 +6,7 @@ from typing import Optional, TypeVar
 import toml
 from pydantic import BaseModel
 
-from .enums import FunctionConfigType
-from .functions import FunctionConfigs
+from .functions import FunctionConfigs, FunctionConfigType
 from .gateway import GatewayConfig
 from .metrics import MetricConfigs
 from .tools import ToolConfigs

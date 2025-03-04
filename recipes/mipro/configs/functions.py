@@ -1,4 +1,5 @@
 import json
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Generic, List, Literal, Optional, Type, TypeVar, Union
 
@@ -13,13 +14,21 @@ from pydantic import (
 
 from .base import BaseConfigs
 from .conversion import create_pydantic_model_from_schema
-from .enums import FunctionConfigType
 from .tools import ToolCallConfig, ToolChoice
 from .variants import VariantConfigs
 from .writers import write_output_schema, write_pydantic_schema
 
 T_fn = TypeVar("T_fn")
 T = TypeVar("T")
+
+
+class FunctionConfigType(str, Enum):
+    """
+    Enumeration of function configuration types.
+    """
+
+    CHAT = "chat"
+    JSON = "json"
 
 
 class FunctionConfig(BaseModel, Generic[T_fn]):
