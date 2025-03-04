@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Copy } from "lucide-react";
+import { useRef, useState } from "react";
 
 export interface CodeTab {
   id: string;
@@ -28,6 +29,7 @@ export interface CodeSnippetContentProps {
   content?: string;
   language?: string;
   showLineNumbers?: boolean;
+  forceShowCopyButton?: boolean;
 }
 
 export function CodeSnippetHeader({ heading }: { heading?: string }) {
@@ -79,11 +81,29 @@ export function CodeSnippetContent({
   label,
   content,
   showLineNumbers = false,
+  forceShowCopyButton = false,
 }: CodeSnippetContentProps) {
   if (!content) return null;
+  const [error, setError] = useState<string | null>(null);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(content);
+  const isSecureContext =
+    typeof window !== "undefined" && window.isSecureContext;
+  const isClipboard = typeof navigator !== "undefined" && !!navigator.clipboard;
+  const shouldShowCopyButton =
+    (isSecureContext && isClipboard) || forceShowCopyButton;
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to copy. Please copy manually.");
+      if (textAreaRef.current) {
+        textAreaRef.current.select();
+      }
+    }
   };
 
   const lines = content.split("\n");
@@ -93,15 +113,31 @@ export function CodeSnippetContent({
       {label && <Badge className="mb-2">{label}</Badge>}
 
       <div className="relative rounded-lg bg-background-primary">
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={handleCopy}
-          className="absolute right-2 top-2 z-10 h-7 w-7 p-0 shadow-none"
-          aria-label="Copy code"
-        >
-          <Copy className="h-4 w-4" />
-        </Button>
+        {shouldShowCopyButton && (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleCopy}
+            className="absolute right-2 top-2 z-10 h-7 w-7 p-0 shadow-none"
+            aria-label="Copy code"
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
+        )}
+
+        <textarea
+          ref={textAreaRef}
+          value={content}
+          readOnly
+          className="sr-only"
+          aria-hidden="true"
+        />
+
+        {error && (
+          <div className="absolute right-2 top-10 z-10 mt-2 rounded bg-red-100 p-2 text-xs text-red-800">
+            {error}
+          </div>
+        )}
 
         <div className="relative overflow-x-auto">
           <div className="flex">
