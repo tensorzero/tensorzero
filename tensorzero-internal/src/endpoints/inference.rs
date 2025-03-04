@@ -388,7 +388,11 @@ pub async fn inference(
                 };
 
                 let async_writes = config.gateway.observability.async_writes;
-                let write_future = async move {
+                // Always spawn a tokio task here. This ensures that 'write_inference' will
+                // not be cancelled partway through execution if the outer '/inference' request
+                // is cancelled. This reduces the chances that we only write to some tables and not others
+                // (but this is inherently best-effort due to ClickHouse's lack of transactions).
+                let write_future = tokio::spawn(async move {
                     write_inference(
                         &clickhouse_connection_info,
                         &config,
@@ -397,11 +401,13 @@ pub async fn inference(
                         write_metadata,
                     )
                     .await;
-                };
-                if async_writes {
-                    tokio::spawn(write_future);
-                } else {
-                    write_future.await;
+                });
+                if !async_writes {
+                    write_future.await.map_err(|e| {
+                        Error::new(ErrorDetails::InternalError {
+                            message: format!("Failed to await ClickHouse inference write: {e:?}"),
+                        })
+                    })?;
                 }
             }
 

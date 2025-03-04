@@ -1,7 +1,3 @@
-# NOTE: This is an example configuration file for TensorZero.
-#       You can use this file as a reference for your own configuration by adding
-#       your own models, functions, and metrics.
-
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  GENERAL                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -13,16 +9,16 @@ bind_address = "0.0.0.0:3000"
 # │                                   MODELS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[models.gpt-4o-mini]
+[models."gpt-3.5-turbo"]
 routing = ["openai", "azure"]
 
-[models.gpt-4o-mini.providers.openai]
+[models."gpt-3.5-turbo".providers.openai]
 type = "openai"
-model_name = "gpt-4o-mini-2024-07-18"
+model_name = "gpt-3.5-turbo"
 
-[models.gpt-4o-mini.providers.azure]
+[models."gpt-3.5-turbo".providers.azure]
 type = "azure"
-deployment_id = "gpt-4o-mini"
+deployment_id = "gpt-35-turbo"
 endpoint = "https://your-endpoint.openai.azure.com"
 
 [models.claude-3-haiku-20240307]
@@ -33,60 +29,178 @@ type = "anthropic"
 model_name = "claude-3-haiku-20240307"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
+# │                              EMBEDDING MODELS                              │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[embedding_models.text-embedding-3-small]
+routing = ["openai"]
+
+[embedding_models.text-embedding-3-small.providers.openai]
+type = "openai"
+model_name = "text-embedding-3-small"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[functions.example_generate_draft]
+[functions.generate_draft]
 type = "chat"
-system_schema = "functions/example_generate_draft/system_schema.json"
+system_schema = "fixtures/config/functions/generate_draft/system_schema.json"
 
-[functions.example_generate_draft.variants.openai_promptA]
+[functions.generate_draft.variants.openai_promptA]
 type = "chat_completion"
 weight = 0.9
-model = "gpt-4o-mini"
-system_template = "functions/example_generate_draft/promptA/system_template.minijinja"
+model = "gpt-3.5-turbo"
+system_template = "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
 
-[functions.example_generate_draft.variants.openai_promptB]
+[functions.generate_draft.variants.openai_promptB]
 type = "chat_completion"
 weight = 0.1
-model = "gpt-4o-mini"
-system_template = "functions/example_generate_draft/promptB/system_template.minijinja"
+model = "gpt-3.5-turbo"
+system_template = "fixtures/config/functions/generate_draft/promptB/system_template.minijinja"
 
-[functions.example_extract_data]
+[functions.json_with_schemas]
 type = "json"
-system_schema = "functions/example_extract_data/system_schema.json"
-output_schema = "functions/example_extract_data/output_schema.json"
+system_schema = "fixtures/config/functions/json_with_schemas/system_schema.json"
+output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
 
-[functions.example_extract_data.variants.openai_promptA]
+[functions.json_with_schemas.variants.openai_promptA]
 type = "chat_completion"
 weight = 0.9
-model = "gpt-4o-mini"
-system_template = "functions/example_extract_data/promptA/system_template.minijinja"
+model = "gpt-3.5-turbo"
+system_template = "fixtures/config/functions/json_with_schemas/promptA/system_template.minijinja"
+json_mode = "implicit_tool"
 
-[functions.example_extract_data.variants.openai_promptB]
+[functions.json_with_schemas.variants.openai_promptB]
 type = "chat_completion"
 weight = 0.1
-model = "gpt-4o-mini"
-system_template = "functions/example_extract_data/promptB/system_template.minijinja"
+model = "gpt-3.5-turbo"
+system_template = "fixtures/config/functions/json_with_schemas/promptB/system_template.minijinja"
+
+[functions.weather_helper]
+type = "chat"
+tools = ["get_temperature"]
+tool_choice = { specific = "get_temperature" }
+
+[functions.weather_helper.variants.openai_promptA]
+type = "chat_completion"
+weight = 1.0
+model = "gpt-3.5-turbo"
+
+[functions.templates_without_variables_chat]
+type = "chat"
+
+[functions.templates_without_variables_chat.variants.variant_without_templates]
+type = "chat_completion"
+weight = 1.0
+model = "gpt-3.5-turbo"
+system_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
+user_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
+assistant_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
+
+[functions.templates_with_variables_chat]
+type = "chat"
+system_schema = "fixtures/config/functions/templates_with_variables/system_schema.json"
+user_schema = "fixtures/config/functions/templates_with_variables/user_schema.json"
+assistant_schema = "fixtures/config/functions/templates_with_variables/assistant_schema.json"
+
+[functions.templates_with_variables_chat.variants.variant_with_variables]
+type = "chat_completion"
+weight = 1.0
+model = "gpt-3.5-turbo"
+system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
+user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
+assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
+
+[functions.templates_with_variables_chat.variants.best_of_n]
+type = "experimental_best_of_n_sampling"
+weight = 1.0
+candidates = ["variant_with_variables", "variant_with_variables"]
+
+[functions.templates_with_variables_chat.variants.best_of_n.evaluator]
+model = "gpt-3.5-turbo"
+system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
+user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
+assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
+
+[functions.templates_without_variables_json]
+type = "json"
+output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
+
+[functions.templates_without_variables_json.variants.variant_without_templates]
+type = "chat_completion"
+weight = 1.0
+model = "gpt-3.5-turbo"
+system_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/system_template.minijinja"
+user_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/user_template.minijinja"
+assistant_template = "fixtures/config/functions/templates_without_variables/variant_without_templates/assistant_template.minijinja"
+
+[functions.templates_with_variables_json]
+type = "json"
+system_schema = "fixtures/config/functions/templates_with_variables/system_schema.json"
+user_schema = "fixtures/config/functions/templates_with_variables/user_schema.json"
+assistant_schema = "fixtures/config/functions/templates_with_variables/assistant_schema.json"
+output_schema = "fixtures/config/functions/json_with_schemas/output_schema.json"
+
+[functions.templates_with_variables_json.variants.variant_with_variables]
+type = "chat_completion"
+model = "gpt-3.5-turbo"
+system_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/system_template.minijinja"
+user_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/user_template.minijinja"
+assistant_template = "fixtures/config/functions/templates_with_variables/variant_with_variables/assistant_template.minijinja"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[metrics.example_task_success]
-type = "boolean"    # "boolean", "float"
-optimize = "max"    # "min", "max"
-level = "inference" # "inference", "episode"
+[metrics.task_success]
+type = "boolean"
+optimize = "max"
+level = "inference"
 
-[metrics.example_user_rating]
+[metrics.user_rating]
 type = "float"
 optimize = "max"
 level = "episode"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                                  TOOLS                                     │
+# │                                   TOOLS                                    │
 # └────────────────────────────────────────────────────────────────────────────┘
+[tools.get_temperature]
+description = "Get the weather for a given location"
+parameters = "fixtures/config/tools/get_temperature.json"
 
-[tools.example_query_articles]
-description = "Query articles from Wikipedia"
-parameters = "tools/example_query_articles.json"
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   EVALS                                    │
+# └────────────────────────────────────────────────────────────────────────────┘
+[evals.eval1]
+dataset_name = "dataset1"
+function_name = "generate_draft"
+
+[evals.eval1.evaluators.em_evaluator]
+type = "exact_match"
+
+[evals.eval1.evaluators.llm_judge_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "min"
+
+[evals.eval1.evaluators.llm_judge_bool.variants.anthropic_promptA]
+type = "chat_completion"
+active = true
+model = "anthropic::claude-3.5-sonnet"
+system_instructions = "fixtures/config/evals/eval1/llm_judge_bool/system_instructions.txt"
+json_mode = "implicit_tool"
+
+[evals.eval1.evaluators.llm_judge_float]
+type = "llm_judge"
+output_type = "float"
+optimize = "min"
+include = { reference_output = true }
+
+[evals.eval1.evaluators.llm_judge_float.variants.anthropic_promptA]
+type = "chat_completion"
+active = true
+json_mode = "off"
+model = "anthropic::claude-3.5-sonnet"
+system_instructions = "fixtures/config/evals/eval1/llm_judge_float/system_instructions.txt"

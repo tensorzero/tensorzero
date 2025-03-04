@@ -17,7 +17,7 @@ If using `uv`, then instead run:
 
 ```bash
 uv venv
-uv pip sync requirements.txt
+uv sync
 uv run maturin develop --uv
 uv run python
 ```

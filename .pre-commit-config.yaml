@@ -3,6 +3,7 @@ repos:
     rev: v4.6.0
     hooks:
       - id: check-added-large-files
+        exclude: ^examples/data-extraction-ner/data/clickhouse/fixture\.zip$
       - id: check-case-conflict
       - id: check-executables-have-shebangs
       - id: check-json
@@ -81,6 +82,45 @@ repos:
           - typescript
         pass_filenames: false
 
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.5.25
+    hooks:
+      - id: uv-lock
+        name: "uv-lock: python-pyo3"
+        files: clients/python-pyo3/pyproject.toml
+        args: [--project, clients/python-pyo3/pyproject.toml]
+
+      - id: uv-export
+        name: "uv-export: python-pyo3"
+        files: clients/python-pyo3/pyproject.toml
+        args:
+          - "--project=clients/python-pyo3/pyproject.toml"
+          - "--output-file=clients/python-pyo3/requirements.txt"
+
+      - id: uv-lock
+        name: "uv-lock: python-deprecated"
+        files: clients/python-deprecated/pyproject.toml
+        args: [--project, clients/python-deprecated/pyproject.toml]
+
+      - id: uv-export
+        name: "uv-export: python-deprecated"
+        files: clients/python-deprecated/pyproject.toml
+        args:
+          - "--project=clients/python-deprecated/pyproject.toml"
+          - "--output-file=clients/python-deprecated/requirements.txt"
+
+      - id: uv-lock
+        name: "uv-lock: recipes"
+        files: recipes/pyproject.toml
+        args: [--project, recipes/pyproject.toml]
+
+      - id: uv-export
+        name: "uv-export: recipes"
+        files: recipes/pyproject.toml
+        args:
+          - "--project=recipes/pyproject.toml"
+          - "--output-file=recipes/requirements.txt"
+
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
     hooks:
@@ -94,6 +134,7 @@ repos:
       - id: ruff
         args: ["--extend-select", "I", "--fix"]
       - id: ruff-format
+
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.391
     hooks:
@@ -111,3 +152,14 @@ repos:
         args: ["--project", "clients/openai-python/pyrightconfig.json"]
         additional_dependencies:
           - openai
+
+      - id: pyright
+        name: "pyright: recipes"
+        files: ^recipes/
+        args: ["--project", "recipes/pyrightconfig.json"]
+        additional_dependencies:
+          - clickhouse-connect
+          - pandas
+          - pandas-stubs
+          - tensorzero
+          - tiktoken

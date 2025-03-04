@@ -1,5 +1,0 @@
--e ../../clients/python-pyo3
-clickhouse-connect
-pandas
-pytest
-pytest-asyncio

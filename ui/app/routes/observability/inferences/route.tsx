@@ -8,7 +8,11 @@ import InferencesTable from "./InferencesTable";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import InferenceSearchBar from "./InferenceSearchBar";
-import { PageHeader } from "~/components/layout/PageHeader";
+import {
+  PageHeader,
+  PageLayout,
+  SectionLayout,
+} from "~/components/layout/PageLayout";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -46,12 +50,15 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   if (inferences.length === 0) {
     return (
       <div className="container mx-auto px-4 pb-8">
-        <PageHeader headline="Inferences" count={totalInferences} />
-        <InferenceSearchBar />
-        <div className="my-6 h-px w-full bg-gray-200"></div>
-        <div className="py-8 text-center text-gray-500">
-          No inferences found
-        </div>
+        <PageLayout>
+          <PageHeader heading="Inferences" count={totalInferences} />
+          <SectionLayout>
+            <InferenceSearchBar />
+            <div className="py-8 text-center text-gray-500">
+              No inferences found
+            </div>
+          </SectionLayout>
+        </PageLayout>
       </div>
     );
   }
@@ -78,16 +85,19 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="container mx-auto px-4 pb-8">
-      <PageHeader headline="Inferences" count={totalInferences} />
-      <InferenceSearchBar />
-      <div className="my-6 h-px w-full bg-gray-200"></div>
-      <InferencesTable inferences={inferences} />
-      <PageButtons
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        disablePrevious={disablePrevious}
-        disableNext={disableNext}
-      />
+      <PageLayout>
+        <PageHeader heading="Inferences" count={totalInferences} />
+        <SectionLayout>
+          <InferenceSearchBar />
+          <InferencesTable inferences={inferences} />
+          <PageButtons
+            onPreviousPage={handlePreviousPage}
+            onNextPage={handleNextPage}
+            disablePrevious={disablePrevious}
+            disableNext={disableNext}
+          />
+        </SectionLayout>
+      </PageLayout>
     </div>
   );
 }

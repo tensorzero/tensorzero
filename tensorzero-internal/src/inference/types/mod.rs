@@ -1,3 +1,5 @@
+use crate::inference::types::batch::deserialize_json_string;
+use crate::inference::types::batch::deserialize_optional_json_string;
 use derive_builder::Builder;
 use futures::stream::Peekable;
 use futures::Stream;
@@ -63,22 +65,26 @@ pub struct FetchContext<'a> {
 impl Input {
     /// Resolves any nested network resources in the input.
     /// Currently, this resolves input image urls into base64-encoded images.
-    pub async fn resolve(&self, context: &FetchContext<'_>) -> Result<ResolvedInput, Error> {
+    pub async fn resolve(self, context: &FetchContext<'_>) -> Result<ResolvedInput, Error> {
         let messages = futures::future::try_join_all(
-            self.messages.iter().map(|message| message.resolve(context)),
+            self.messages
+                .into_iter()
+                .map(|message| message.resolve(context)),
         )
         .await?;
         Ok(ResolvedInput {
-            system: self.system.clone(),
+            system: self.system,
             messages,
         })
     }
 }
 
 impl InputMessage {
-    pub async fn resolve(&self, context: &FetchContext<'_>) -> Result<ResolvedInputMessage, Error> {
+    pub async fn resolve(self, context: &FetchContext<'_>) -> Result<ResolvedInputMessage, Error> {
         let content = futures::future::try_join_all(
-            self.content.iter().map(|content| content.resolve(context)),
+            self.content
+                .into_iter()
+                .map(|content| content.resolve(context)),
         )
         .await?;
         Ok(ResolvedInputMessage {
@@ -90,22 +96,20 @@ impl InputMessage {
 
 impl InputMessageContent {
     pub async fn resolve(
-        &self,
+        self,
         context: &FetchContext<'_>,
     ) -> Result<ResolvedInputMessageContent, Error> {
         Ok(match self {
-            InputMessageContent::Text { value } => ResolvedInputMessageContent::Text {
-                value: value.clone(),
-            },
+            InputMessageContent::Text { value } => ResolvedInputMessageContent::Text { value },
             InputMessageContent::ToolCall(tool_call) => {
-                ResolvedInputMessageContent::ToolCall(tool_call.clone())
+                ResolvedInputMessageContent::ToolCall(tool_call)
             }
             InputMessageContent::ToolResult(tool_result) => {
-                ResolvedInputMessageContent::ToolResult(tool_result.clone())
+                ResolvedInputMessageContent::ToolResult(tool_result)
             }
-            InputMessageContent::RawText { value } => ResolvedInputMessageContent::RawText {
-                value: value.clone(),
-            },
+            InputMessageContent::RawText { value } => {
+                ResolvedInputMessageContent::RawText { value }
+            }
             InputMessageContent::Image(image) => {
                 let storage_kind = context
                     .object_store_info
@@ -117,7 +121,7 @@ impl InputMessageContent {
                     })?
                     .kind
                     .clone();
-                let image = image.clone().take_or_fetch(context.client).await?;
+                let image = image.take_or_fetch(context.client).await?;
                 let path = storage_kind.image_path(&image)?;
                 ResolvedInputMessageContent::Image(ImageWithPath {
                     image,
@@ -433,36 +437,43 @@ pub enum InferenceResultChunk {
 /// For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and ModelInferenceDatabaseInserts,
 /// which are written to ClickHouse tables of the same name asynchronously.
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ChatInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u32>,
     pub tags: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct JsonInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub output: JsonInferenceOutput,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u32>,
     pub output_schema: Value,
     pub tags: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum InferenceDatabaseInsert {
     Chat(ChatInferenceDatabaseInsert),

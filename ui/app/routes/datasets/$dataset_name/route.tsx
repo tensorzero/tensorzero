@@ -7,8 +7,12 @@ import DatasetRowTable from "./DatasetRowTable";
 import { data, isRouteErrorResponse } from "react-router";
 import { useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
-import { Code } from "~/components/ui/code";
 import DatasetRowSearchBar from "./DatasetRowSearchBar";
+import {
+  PageHeader,
+  PageLayout,
+  SectionLayout,
+} from "~/components/layout/PageLayout";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -48,21 +52,20 @@ export default function DatasetDetailPage({
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="mb-4 text-2xl font-semibold">
-        Dataset{" "}
-        <Code className="rounded bg-gray-100 p-1 text-2xl">
-          {count_info.dataset_name}
-        </Code>
-      </h1>
-      <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
-      <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
-      <PageButtons
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        disablePrevious={offset === 0}
-        disableNext={offset + pageSize >= count_info.count}
-      />
+    <div className="container mx-auto px-4 pb-8">
+      <PageLayout>
+        <PageHeader heading="Dataset" name={count_info.dataset_name} />
+        <SectionLayout>
+          <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
+          <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
+          <PageButtons
+            onPreviousPage={handlePreviousPage}
+            onNextPage={handleNextPage}
+            disablePrevious={offset === 0}
+            disableNext={offset + pageSize >= count_info.count}
+          />
+        </SectionLayout>
+      </PageLayout>
     </div>
   );
 }

@@ -17,6 +17,13 @@ import {
   deleteDatapoint as deleteDatapointServer,
   getDatasetCounts,
 } from "~/utils/clickhouse/datasets.server";
+import {
+  PageHeader,
+  PageLayout,
+  SectionHeader,
+  SectionLayout,
+  SectionsGroup,
+} from "~/components/layout/PageLayout";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -117,41 +124,59 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <div className="container mx-auto space-y-6 p-4">
-      <h2 className="mb-4 text-2xl font-semibold">
-        Datapoint{" "}
-        <code className="rounded bg-gray-100 p-1 text-2xl">{datapoint.id}</code>
-        in dataset{" "}
-        <Link to={`/datasets/${datapoint.dataset_name}`}>
-          <code className="rounded bg-gray-100 p-1 text-2xl">
-            {datapoint.dataset_name}
-          </code>
-        </Link>
-      </h2>
-      <div className="mb-6 h-px w-full bg-gray-200"></div>
+    <div className="container mx-auto px-4 pb-8">
+      <PageLayout>
+        <div className="flex flex-col gap-3">
+          <PageHeader heading="Datapoint" name={datapoint.id} />
+          <div className="text-sm text-foreground">
+            Dataset{" "}
+            <Link
+              to={`/datasets/${datapoint.dataset_name}`}
+              className="rounded bg-background-tertiary px-1.5 py-1 font-mono font-semibold"
+            >
+              {datapoint.dataset_name}
+            </Link>
+          </div>
+        </div>
 
-      <BasicInfo
-        datapoint={datapoint}
-        tryWithVariantProps={{
-          variants,
-          onVariantSelect,
-          isLoading: variantInferenceIsLoading,
-        }}
-        onDelete={handleDelete}
-        isDeleting={deleteFetcher.state === "submitting"}
-      />
-      <Input input={datapoint.input} />
-      {datapoint.output && <Output output={datapoint.output} />}
-      {selectedVariant && (
-        <VariantResponseModal
-          isOpen={isModalOpen}
-          isLoading={variantInferenceIsLoading}
-          setIsLoading={setVariantInferenceIsLoading}
-          onClose={handleModalClose}
-          datapoint={datapoint}
-          selectedVariant={selectedVariant}
-        />
-      )}
+        <SectionsGroup>
+          <SectionLayout>
+            <BasicInfo
+              datapoint={datapoint}
+              tryWithVariantProps={{
+                variants,
+                onVariantSelect,
+                isLoading: variantInferenceIsLoading,
+              }}
+              onDelete={handleDelete}
+              isDeleting={deleteFetcher.state === "submitting"}
+            />
+          </SectionLayout>
+
+          <SectionLayout>
+            <SectionHeader heading="Input" />
+            <Input input={datapoint.input} />
+          </SectionLayout>
+
+          {datapoint.output && (
+            <SectionLayout>
+              <SectionHeader heading="Output" />
+              <Output output={datapoint.output} />
+            </SectionLayout>
+          )}
+        </SectionsGroup>
+
+        {selectedVariant && (
+          <VariantResponseModal
+            isOpen={isModalOpen}
+            isLoading={variantInferenceIsLoading}
+            setIsLoading={setVariantInferenceIsLoading}
+            onClose={handleModalClose}
+            datapoint={datapoint}
+            selectedVariant={selectedVariant}
+          />
+        )}
+      </PageLayout>
     </div>
   );
 }
