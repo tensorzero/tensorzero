@@ -17,6 +17,7 @@ use migrations::migration_0011::Migration0011;
 use migrations::migration_0013::Migration0013;
 use migrations::migration_0014::Migration0014;
 use migrations::migration_0015::Migration0015;
+use migrations::migration_0016::Migration0016;
 
 use async_trait::async_trait;
 
@@ -65,6 +66,7 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     .await?;
     run_migration(&Migration0014 { clickhouse }).await?;
     run_migration(&Migration0015 { clickhouse }).await?;
+    run_migration(&Migration0016 { clickhouse }).await?;
     // NOTE:
     // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
     //
