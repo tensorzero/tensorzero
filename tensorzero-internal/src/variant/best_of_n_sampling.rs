@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::path::PathBuf;
+use std::path::Path;
 
 use backon::Retryable;
 use futures::future::join_all;
@@ -9,6 +9,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::time::{timeout, Duration};
 
+use crate::config_parser::{LoadableConfig, PathWithContents};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
@@ -29,28 +30,55 @@ use crate::{
     variant::chat_completion::ChatCompletionConfig,
 };
 
+use super::chat_completion::UninitializedChatCompletionConfig;
 use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
+
+#[derive(Debug)]
+pub struct BestOfNSamplingConfig {
+    pub weight: f64,
+    pub timeout_s: f64,
+    pub candidates: Vec<String>,
+    pub evaluator: EvaluatorConfig,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct BestOfNSamplingConfig {
+pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default)]
     pub weight: f64,
     #[serde(default = "default_timeout")]
     pub timeout_s: f64,
     pub candidates: Vec<String>,
-    pub evaluator: EvaluatorConfig,
+    pub evaluator: UninitializedEvaluatorConfig,
 }
 
 fn default_timeout() -> f64 {
     300.0
 }
 
+#[derive(Debug)]
+pub struct EvaluatorConfig {
+    pub inner: ChatCompletionConfig,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct EvaluatorConfig {
+pub struct UninitializedEvaluatorConfig {
     #[serde(flatten)]
-    pub inner: ChatCompletionConfig,
+    pub inner: UninitializedChatCompletionConfig,
+}
+
+impl LoadableConfig<BestOfNSamplingConfig> for UninitializedBestOfNSamplingConfig {
+    fn load<P: AsRef<Path>>(self, base_path: P) -> Result<BestOfNSamplingConfig, Error> {
+        Ok(BestOfNSamplingConfig {
+            weight: self.weight,
+            timeout_s: self.timeout_s,
+            candidates: self.candidates,
+            evaluator: EvaluatorConfig {
+                inner: self.evaluator.inner.load(base_path)?,
+            },
+        })
+    }
 }
 
 lazy_static! {
@@ -161,7 +189,7 @@ impl Variant for BestOfNSamplingConfig {
     // We do not return templates for the candidates, as they are required to be variants in the same function
     // and will therefore also have the same templates.
     // We only return templates for the evaluator variant.
-    fn get_all_template_paths(&self) -> Vec<&PathBuf> {
+    fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         self.evaluator.inner.get_all_template_paths()
     }
 
@@ -754,7 +782,10 @@ mod tests {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
                 weight: 1.0,
-                system_template: Some(system_template_name.into()),
+                system_template: Some(PathWithContents {
+                    path: system_template_name.into(),
+                    contents: "".to_string(),
+                }),
                 ..Default::default()
             },
         };
@@ -786,7 +817,10 @@ mod tests {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
                 weight: 1.0,
-                system_template: Some(system_template_name.into()),
+                system_template: Some(PathWithContents {
+                    path: system_template_name.into(),
+                    contents: "".to_string(),
+                }),
                 ..Default::default()
             },
         };
@@ -1121,6 +1155,7 @@ mod tests {
                             model_name: "best_of_n_1".into(),
                             ..Default::default()
                         }),
+                        extra_body: None,
                     },
                 )]),
             },
@@ -1211,6 +1246,7 @@ mod tests {
                                 model_name: "error".into(),
                                 ..Default::default()
                             }),
+                            extra_body: None,
                         },
                     )]),
                 },
@@ -1272,6 +1308,7 @@ mod tests {
                                 model_name: "regular".into(),
                                 ..Default::default()
                             }),
+                            extra_body: None,
                         },
                     )]),
                 },
@@ -1350,6 +1387,7 @@ mod tests {
                             model_name: "best_of_n_big".into(),
                             ..Default::default()
                         }),
+                        extra_body: None,
                     },
                 )]),
             },

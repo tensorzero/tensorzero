@@ -8,14 +8,40 @@ use super::{Base64Image, ImageKind};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StorageKind {
-    S3Compatible { bucket_name: String, region: String },
-    Filesystem { path: String },
+    S3Compatible {
+        bucket_name: Option<String>,
+        region: Option<String>,
+        endpoint: Option<String>,
+        /// An extra prefix to prepend to the object key.
+        /// This is only enabled in e2e tests, to prevent clashes between concurrent test runs.
+        #[cfg(feature = "e2e_tests")]
+        #[serde(default)]
+        prefix: String,
+    },
+    Filesystem {
+        path: String,
+    },
     // This must be set explicitly in `tensorzero.toml` to allow image requests to succeed
     // By default, requests will fail (we'll have a `None` for the outer `ObjectStoreData`)
     Disabled,
 }
 
 impl StorageKind {
+    /// Get the extra prefix for the object key during e2e-tests
+    #[cfg(feature = "e2e_tests")]
+    fn prefix(&self) -> &str {
+        match self {
+            StorageKind::S3Compatible { prefix, .. } => prefix,
+            _ => "",
+        }
+    }
+
+    /// During a normal run, we never use a prefix on the object key.
+    /// See `StorageKind::S3Compatible.prefix`
+    #[cfg(not(feature = "e2e_tests"))]
+    fn prefix(&self) -> &str {
+        ""
+    }
     pub fn image_path(self, image: &Base64Image) -> Result<StoragePath, Error> {
         let hash = blake3::hash(
             image
@@ -34,7 +60,11 @@ impl StorageKind {
             ImageKind::Png => "png",
             ImageKind::WebP => "webp",
         };
-        let path = Path::parse(format!("observability/images/{hash}.{suffix}")).map_err(|e| {
+        let path = Path::parse(format!(
+            "{}observability/images/{hash}.{suffix}",
+            self.prefix()
+        ))
+        .map_err(|e| {
             Error::new(ErrorDetails::InternalError {
                 message: format!("Failed to construct object_store path: {e}"),
             })

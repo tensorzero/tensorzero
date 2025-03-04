@@ -19,13 +19,15 @@ uv run pytest
 ```
 """
 
+import base64
 import json
+from os import path
 from time import time
 from uuid import UUID
 
 import pytest
 import pytest_asyncio
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, BadRequestError
 from pydantic import BaseModel, ValidationError
 from tensorzero.util import uuid7
 
@@ -441,6 +443,39 @@ async def test_async_json_streaming(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_json_success_non_deprecated(async_client):
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+            ],
+        },
+    ]
+    episode_id = str(uuid7())
+    result = await async_client.chat.completions.create(
+        extra_headers={"episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::function_name::json_success",
+    )
+    assert result.model == "test"
+    assert result.episode_id == episode_id
+    assert result.choices[0].message.content == '{"answer":"Hello"}'
+    assert result.choices[0].message.tool_calls is None
+    assert result.usage.prompt_tokens == 10
+    assert result.usage.completion_tokens == 10
+
+
+@pytest.mark.asyncio
 async def test_async_json_success(async_client):
     messages = [
         {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
@@ -458,6 +493,33 @@ async def test_async_json_success(async_client):
     assert result.choices[0].message.tool_calls is None
     assert result.usage.prompt_tokens == 10
     assert result.usage.completion_tokens == 10
+
+
+@pytest.mark.asyncio
+async def test_async_json_invalid_system(async_client):
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/image.jpg"},
+                }
+            ],
+        },
+        {"role": "user", "content": [{"country": "Japan"}]},
+    ]
+    episode_id = str(uuid7())
+    with pytest.raises(BadRequestError) as exc_info:
+        await async_client.chat.completions.create(
+            extra_headers={"episode_id": episode_id},
+            messages=messages,
+            model="tensorzero::function_name::json_success",
+        )
+    assert (
+        "Invalid request to OpenAI-compatible endpoint: System message must be a text content block"
+        in str(exc_info.value)
+    )
 
 
 @pytest.mark.asyncio
@@ -573,3 +635,63 @@ async def test_dynamic_json_mode_inference_openai(async_client):
     assert result.choices[0].message.tool_calls is None
     assert result.usage.prompt_tokens > 50
     assert result.usage.completion_tokens > 0
+
+
+@pytest.mark.asyncio
+async def test_async_multi_block_image_url(async_client):
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Output exactly two words describing the image",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png"
+                    },
+                },
+            ],
+        },
+    ]
+    episode_id = str(uuid7())
+    result = await async_client.chat.completions.create(
+        extra_headers={"episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::model_name::openai::gpt-4o-mini",
+    )
+    assert "crab" in result.choices[0].message.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_async_multi_block_image_base64(async_client):
+    basepath = path.dirname(__file__)
+    with open(
+        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/ferris.png", "rb"
+    ) as f:
+        ferris_png = base64.b64encode(f.read()).decode("ascii")
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Output exactly two words describing the image",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{ferris_png}"},
+                },
+            ],
+        },
+    ]
+    episode_id = str(uuid7())
+    result = await async_client.chat.completions.create(
+        extra_headers={"episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::model_name::openai::gpt-4o-mini",
+    )
+    assert "crab" in result.choices[0].message.content.lower()

@@ -1,0 +1,9 @@
+clickhouse-connect
+ipykernel
+minijinja
+notebook
+numpy
+requests
+pandas
+toml
+together

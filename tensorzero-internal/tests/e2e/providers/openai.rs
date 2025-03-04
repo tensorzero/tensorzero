@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 
 use reqwest::Client;
@@ -128,6 +129,104 @@ async fn get_providers() -> E2ETestProviders {
         #[cfg(feature = "batch_tests")]
         supports_batch_inference: true,
     }
+}
+
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+pub async fn test_provider_config_extra_body() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "openai-extra-body-provider-config",
+        "episode_id": episode_id,
+        "params": {
+            "chat_completion": {
+                "temperature": 9000
+            }
+        },
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check if ClickHouse is ok - ChatInference Table
+    let clickhouse = get_clickhouse().await;
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request_val: serde_json::Value = serde_json::from_str::<Value>(raw_request).unwrap();
+
+    // This is set in both the variant and model provider extra_body, and
+    // so the model provider should win
+    assert_eq!(
+        raw_request_val
+            .get("temperature")
+            .unwrap()
+            .as_f64()
+            .expect("Temperature is not a number"),
+        0.456
+    );
+
+    // This is only set in the variant extra_body
+    assert_eq!(
+        raw_request_val
+            .get("max_completion_tokens")
+            .unwrap()
+            .as_u64()
+            .expect("max_completion_tokens is not a number"),
+        123
+    );
+
+    // This is only set in the model provider extra_body
+    assert_eq!(
+        raw_request_val
+            .get("frequency_penalty")
+            .unwrap()
+            .as_f64()
+            .expect("frequency_penalty is not a number"),
+        1.42
+    );
 }
 
 // Tests using 'model_name' with a shorthand model
@@ -861,4 +960,149 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     let magnitude_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let magnitude_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
     dot_product / (magnitude_a * magnitude_b)
+}
+
+// We already test Amazon S3 with all image providers, so let's test Cloudflare R2
+// (which is S3-compatible) with just OpenAI to save time and money.
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+pub async fn test_image_inference_with_provider_cloudflare_r2() {
+    use crate::providers::common::test_image_inference_with_provider_s3_compatible;
+    use aws_credential_types::Credentials;
+    use aws_sdk_s3::config::SharedCredentialsProvider;
+    use rand::distributions::Alphanumeric;
+    use rand::distributions::DistString;
+    use tensorzero_internal::inference::types::storage::StorageKind;
+
+    // We expect CI to provide our credentials in 'R2_' variables
+    // (to avoid conflicting with the normal AWS credentials for bedrock)
+    let r2_access_key_id = std::env::var("R2_ACCESS_KEY_ID").unwrap();
+    let r2_secret_access_key = std::env::var("R2_SECRET_ACCESS_KEY").unwrap();
+
+    let credentials = Credentials::from_keys(&r2_access_key_id, &r2_secret_access_key, None);
+
+    // Our S3-compatible object store checks for these variables, giving them
+    // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
+    std::env::set_var("S3_ACCESS_KEY_ID", r2_access_key_id);
+    std::env::set_var("S3_SECRET_ACCESS_KEY", r2_secret_access_key);
+
+    let provider = E2ETestProvider {
+        variant_name: "openai".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    };
+
+    let endpoint = "https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/tensorzero-e2e-test-images".to_string();
+
+    let test_bucket = "tensorzero-e2e-test-images";
+    let config = aws_config::load_from_env()
+        .await
+        .to_builder()
+        .credentials_provider(SharedCredentialsProvider::new(credentials))
+        .endpoint_url(&endpoint)
+        .build();
+
+    let client = aws_sdk_s3::Client::new(&config);
+
+    let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
+    prefix += "-";
+
+    test_image_inference_with_provider_s3_compatible(
+        provider,
+        &StorageKind::S3Compatible {
+            bucket_name: Some(test_bucket.to_string()),
+            region: None,
+            prefix: prefix.clone(),
+            endpoint: Some(endpoint.clone()),
+        },
+        &client,
+        &format!(
+            r#"
+    [object_storage]
+    type = "s3_compatible"
+    endpoint = "{endpoint}"
+    bucket_name = "{test_bucket}"
+    prefix = "{prefix}"
+    
+    [functions]
+    "#
+        ),
+        test_bucket,
+        &prefix,
+    )
+    .await;
+}
+
+// We already test Amazon S3 with all image providers, so let's test Google Cloud Storage
+// (which is S3-compatible) with just OpenAI to save time and money.
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+pub async fn test_image_inference_with_provider_gcp_storage() {
+    use crate::providers::common::test_image_inference_with_provider_s3_compatible;
+    use aws_credential_types::Credentials;
+    use aws_sdk_s3::config::SharedCredentialsProvider;
+    use rand::distributions::Alphanumeric;
+    use rand::distributions::DistString;
+    use tensorzero_internal::inference::types::storage::StorageKind;
+
+    // We expect CI to provide our credentials in 'GCP_STORAGE_' variables
+    // (to avoid conflicting with the normal AWS credentials for bedrock)
+    let gcloud_access_key_id = std::env::var("GCP_STORAGE_ACCESS_KEY_ID").unwrap();
+    let gcloud_secret_access_key = std::env::var("GCP_STORAGE_SECRET_ACCESS_KEY").unwrap();
+
+    let credentials =
+        Credentials::from_keys(&gcloud_access_key_id, &gcloud_secret_access_key, None);
+
+    // Our S3-compatible object store checks for these variables, giving them
+    // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
+    std::env::set_var("S3_ACCESS_KEY_ID", gcloud_access_key_id);
+    std::env::set_var("S3_SECRET_ACCESS_KEY", gcloud_secret_access_key);
+
+    let provider = E2ETestProvider {
+        variant_name: "openai".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    };
+
+    let endpoint = "https://storage.googleapis.com".to_string();
+
+    let test_bucket = "tensorzero-e2e-tests";
+    let config = aws_config::load_from_env()
+        .await
+        .to_builder()
+        .credentials_provider(SharedCredentialsProvider::new(credentials))
+        .endpoint_url(&endpoint)
+        .build();
+
+    let client = aws_sdk_s3::Client::new(&config);
+
+    let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
+    prefix += "-";
+
+    test_image_inference_with_provider_s3_compatible(
+        provider,
+        &StorageKind::S3Compatible {
+            bucket_name: Some(test_bucket.to_string()),
+            region: None,
+            prefix: prefix.clone(),
+            endpoint: Some(endpoint.clone()),
+        },
+        &client,
+        &format!(
+            r#"
+    [object_storage]
+    type = "s3_compatible"
+    endpoint = "{endpoint}"
+    bucket_name = "{test_bucket}"
+    prefix = "{prefix}"
+    
+    [functions]
+    "#
+        ),
+        test_bucket,
+        &prefix,
+    )
+    .await;
 }

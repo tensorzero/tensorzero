@@ -33,6 +33,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, Usage,
 };
 use crate::model_table::{BaseModelTable, ShorthandModelConfig};
+use crate::variant::chat_completion::ExtraBodyConfig;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -129,8 +130,7 @@ impl ModelConfig {
                     provider_name: provider_name.to_string(),
                 })
             })?;
-            let provider_config = &provider.config;
-            let response = provider_config
+            let response = provider
                 .infer(request, clients.http_client, clients.credentials)
                 .instrument(span!(
                     Level::INFO,
@@ -201,8 +201,7 @@ impl ModelConfig {
                     provider_name: provider_name.to_string(),
                 })
             })?;
-            let provider_config = &provider.config;
-            let response = provider_config
+            let response = provider
                 .infer_stream(request, clients.http_client, clients.credentials)
                 .instrument(span!(
                     Level::INFO,
@@ -264,8 +263,7 @@ impl ModelConfig {
                     provider_name: provider_name.to_string(),
                 })
             })?;
-            let provider_config = &provider.config;
-            let response = provider_config
+            let response = provider
                 .start_batch_inference(requests, client, api_keys)
                 .instrument(span!(
                     Level::INFO,
@@ -328,9 +326,23 @@ async fn stream_with_cache_write(
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(transparent)]
 pub struct ModelProvider {
+    #[serde(flatten)]
     pub config: ProviderConfig,
+    pub extra_body: Option<ExtraBodyConfig>,
+}
+
+impl From<&ModelProvider> for ModelProviderRequestInfo {
+    fn from(val: &ModelProvider) -> Self {
+        ModelProviderRequestInfo {
+            extra_body: val.extra_body.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ModelProviderRequestInfo {
+    pub extra_body: Option<ExtraBodyConfig>,
 }
 
 #[derive(Debug)]
@@ -620,38 +632,60 @@ impl<'de> Deserialize<'de> for ProviderConfig {
     }
 }
 
-impl ProviderConfig {
+impl ModelProvider {
     async fn infer(
         &self,
         request: &ModelInferenceRequest<'_>,
         client: &Client,
         api_keys: &InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
-        match self {
-            ProviderConfig::Anthropic(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::AWSBedrock(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::Azure(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::Fireworks(provider) => provider.infer(request, client, api_keys).await,
+        match &self.config {
+            ProviderConfig::Anthropic(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
+            ProviderConfig::AWSBedrock(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
+            ProviderConfig::Azure(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
+            ProviderConfig::Fireworks(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
             ProviderConfig::GCPVertexAnthropic(provider) => {
-                provider.infer(request, client, api_keys).await
+                provider.infer(request, client, api_keys, self).await
             }
             ProviderConfig::GCPVertexGemini(provider) => {
-                provider.infer(request, client, api_keys).await
+                provider.infer(request, client, api_keys, self).await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
-                provider.infer(request, client, api_keys).await
+                provider.infer(request, client, api_keys, self).await
             }
-            ProviderConfig::Hyperbolic(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::Mistral(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::OpenAI(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::Together(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::SGLang(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::TGI(provider) => provider.infer(request, client, api_keys).await,
-            ProviderConfig::DeepSeek(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::Hyperbolic(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
+            ProviderConfig::Mistral(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
+            ProviderConfig::OpenAI(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
+            ProviderConfig::Together(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
+            ProviderConfig::SGLang(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
+            ProviderConfig::VLLM(provider) => provider.infer(request, client, api_keys, self).await,
+            ProviderConfig::XAI(provider) => provider.infer(request, client, api_keys, self).await,
+            ProviderConfig::TGI(provider) => provider.infer(request, client, api_keys, self).await,
+            ProviderConfig::DeepSeek(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
-            ProviderConfig::Dummy(provider) => provider.infer(request, client, api_keys).await,
+            ProviderConfig::Dummy(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
         }
     }
 
@@ -661,54 +695,58 @@ impl ProviderConfig {
         client: &Client,
         api_keys: &InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        match self {
+        match &self.config {
             ProviderConfig::Anthropic(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::AWSBedrock(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Azure(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Fireworks(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::GCPVertexAnthropic(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::GCPVertexGemini(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Hyperbolic(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Mistral(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::OpenAI(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Together(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::SGLang(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
-            ProviderConfig::XAI(provider) => provider.infer_stream(request, client, api_keys).await,
+            ProviderConfig::XAI(provider) => {
+                provider.infer_stream(request, client, api_keys, self).await
+            }
             ProviderConfig::VLLM(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
-            ProviderConfig::TGI(provider) => provider.infer_stream(request, client, api_keys).await,
+            ProviderConfig::TGI(provider) => {
+                provider.infer_stream(request, client, api_keys, self).await
+            }
             ProviderConfig::DeepSeek(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
-                provider.infer_stream(request, client, api_keys).await
+                provider.infer_stream(request, client, api_keys, self).await
             }
         }
     }
@@ -719,7 +757,7 @@ impl ProviderConfig {
         client: &'a Client,
         api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
-        match self {
+        match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
@@ -815,7 +853,7 @@ impl ProviderConfig {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
-        match self {
+        match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
@@ -1166,6 +1204,7 @@ impl ShorthandModelConfig for ModelConfig {
                 provider_type.to_string().into(),
                 ModelProvider {
                     config: provider_config,
+                    extra_body: None,
                 },
             )]),
         })
@@ -1262,6 +1301,7 @@ mod tests {
                 "good_provider".into(),
                 ModelProvider {
                     config: good_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1324,6 +1364,7 @@ mod tests {
                 "error".into(),
                 ModelProvider {
                     config: bad_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1404,12 +1445,14 @@ mod tests {
                     "error_provider".to_string().into(),
                     ModelProvider {
                         config: bad_provider_config,
+                        extra_body: None,
                     },
                 ),
                 (
                     "good_provider".to_string().into(),
                     ModelProvider {
                         config: good_provider_config,
+                        extra_body: None,
                     },
                 ),
             ]),
@@ -1470,6 +1513,7 @@ mod tests {
                 "good_provider".to_string().into(),
                 ModelProvider {
                     config: good_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1533,6 +1577,7 @@ mod tests {
                 "error".to_string().into(),
                 ModelProvider {
                     config: bad_provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1615,12 +1660,14 @@ mod tests {
                     "error_provider".to_string().into(),
                     ModelProvider {
                         config: bad_provider_config,
+                        extra_body: None,
                     },
                 ),
                 (
                     "good_provider".to_string().into(),
                     ModelProvider {
                         config: good_provider_config,
+                        extra_body: None,
                     },
                 ),
             ]),
@@ -1691,6 +1738,7 @@ mod tests {
                 "model".into(),
                 ModelProvider {
                     config: provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1793,6 +1841,7 @@ mod tests {
                 "model".to_string().into(),
                 ModelProvider {
                     config: provider_config,
+                    extra_body: None,
                 },
             )]),
         };
@@ -1909,6 +1958,7 @@ mod tests {
                 "anthropic".into(),
                 ModelProvider {
                     config: anthropic_provider_config,
+                    extra_body: None,
                 },
             )]),
         };

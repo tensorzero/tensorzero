@@ -1,5 +1,6 @@
 import { Card, CardContent } from "~/components/ui/card";
 import type { Input, InputMessage } from "~/utils/clickhouse/common";
+import { SkeletonImage } from "./SkeletonImage";
 
 interface InputProps {
   input: Input;
@@ -40,6 +41,8 @@ function MessageContent({ content }: { content: InputMessage["content"] }) {
                 <pre className="mt-1 text-sm">{block.result}</pre>
               </div>
             );
+          case "image":
+            return <SkeletonImage key={index} />;
         }
       })}
     </div>
