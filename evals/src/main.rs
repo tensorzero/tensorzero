@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use tensorzero::{ClientBuilder, ClientBuilderMode};
-use tokio::{sync::Semaphore, task::JoinSet};
+use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
+use tokio::sync::Semaphore;
+// use tokio::task::JoinSet;
 use url::Url;
 
 #[derive(Parser, Debug)]
@@ -46,14 +48,16 @@ async fn main() -> Result<()> {
         }
         None => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(args.config_file),
-            clickhouse_url: Some(clickhouse_url),
+            clickhouse_url: Some(clickhouse_url.clone()),
         }),
     }
     .build()
     .await
     .map_err(|e| anyhow!("Failed to build client: {}", e))?;
 
+    #[allow(unused)]
     let semaphore = Semaphore::new(args.concurrency);
+    #[allow(unused)]
     let clickhouse_client = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
     // let mut join_set = JoinSet::new();
 
