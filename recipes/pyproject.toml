@@ -1,0 +1,21 @@
+[project]
+name = "tensorzero-recipes"
+version = "0.0.0"
+requires-python = ">=3.9"
+dependencies = [
+    "clickhouse-connect",
+    "pandas",
+    "tensorzero",
+    "tiktoken",
+]
+
+[tool.uv.workspace]
+members = ["tensorzero-recipes"]
+
+[dependency-groups]
+dev = [
+    "pandas-stubs",
+    "pyright",
+    "pytest-asyncio",
+    "pytest",
+]

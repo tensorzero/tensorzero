@@ -184,9 +184,9 @@ type = "exact_match"
 type = "llm_judge"
 output_type = "boolean"
 optimize = "min"
-include_datapoint_output = false
 
-[evals.eval1.evaluators.llm_judge_bool.variants.openai_promptA]
+
+[evals.eval1.evaluators.llm_judge_bool.variants.anthropic_promptA]
 type = "chat_completion"
 active = true
 model = "anthropic::claude-3.5-sonnet"
@@ -196,12 +196,12 @@ json_mode = "implicit_tool"
 [evals.eval1.evaluators.llm_judge_float]
 type = "llm_judge"
 output_type = "float"
-optimize = "max"
-include_datapoint_output = false
+optimize = "min"
+include = { reference_output = true }
 
-[evals.eval1.evaluators.llm_judge_float.variants.openai_promptA]
+[evals.eval1.evaluators.llm_judge_float.variants.anthropic_promptA]
 type = "chat_completion"
 active = true
+json_mode = "implicit_tool"
 model = "anthropic::claude-3.5-sonnet"
 system_instructions = "fixtures/config/evals/eval1/llm_judge_float/system_instructions.txt"
-json_mode = "off"

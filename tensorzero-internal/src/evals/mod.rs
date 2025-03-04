@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    fmt::{self, Display},
     fs::File,
     io::{BufReader, Read},
     path::{Path, PathBuf},
@@ -46,8 +45,14 @@ pub enum EvaluatorConfig {
 #[derive(Debug)]
 pub struct LLMJudgeConfig {
     pub output_type: LLMJudgeOutputType,
-    pub include_datapoint_output: bool,
+    pub include: LLMJudgeIncludeConfig,
     pub optimize: LLMJudgeOptimize,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct LLMJudgeIncludeConfig {
+    #[serde(default)]
+    pub reference_output: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -55,20 +60,6 @@ pub struct LLMJudgeConfig {
 pub enum LLMJudgeOutputType {
     Float,
     Boolean,
-}
-
-impl Display for LLMJudgeOutputType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                // For formatting into the system instructions
-                LLMJudgeOutputType::Float => "number", // number for JSON compatibility
-                LLMJudgeOutputType::Boolean => "boolean",
-            }
-        )
-    }
 }
 
 impl From<LLMJudgeOutputType> for MetricConfigType {
@@ -101,7 +92,10 @@ pub fn get_llm_judge_function_name(eval_name: &str, evaluator_name: &str) -> Str
 }
 
 pub fn get_evaluator_metric_name(eval_name: &str, evaluator_name: &str) -> String {
-    format!("tensorzero::eval::{}::{}", eval_name, evaluator_name)
+    format!(
+        "tensorzero::eval_name::{}::evaluator_name::{}",
+        eval_name, evaluator_name
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -205,7 +199,8 @@ struct UninitializedLLMJudgeConfig {
     variants: HashMap<String, UninitializedLLMJudgeVariantConfig>,
     output_type: LLMJudgeOutputType,
     optimize: LLMJudgeOptimize,
-    include_datapoint_output: bool,
+    #[serde(default)]
+    include: LLMJudgeIncludeConfig,
 }
 
 impl UninitializedEvaluatorConfig {
@@ -240,7 +235,7 @@ impl UninitializedEvaluatorConfig {
                     .into_iter()
                     .map(|(name, variant)| {
                         variant
-                            .load(base_path, eval_name, evaluator_name, &params.output_type)
+                            .load(base_path, eval_name, evaluator_name)
                             .map(|v| (name, v))
                     })
                     .collect::<Result<HashMap<_, _>, Error>>()?;
@@ -292,7 +287,7 @@ impl UninitializedEvaluatorConfig {
                 Ok((
                     EvaluatorConfig::LLMJudge(LLMJudgeConfig {
                         output_type: params.output_type,
-                        include_datapoint_output: params.include_datapoint_output,
+                        include: params.include,
                         optimize: params.optimize,
                     }),
                     Some(function_config),
@@ -339,7 +334,6 @@ impl UninitializedLLMJudgeVariantConfig {
         base_path: &P,
         eval_name: &str,
         evaluator_name: &str,
-        output_type: &LLMJudgeOutputType,
     ) -> Result<VariantConfig, Error> {
         match self {
             UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => {
@@ -348,7 +342,6 @@ impl UninitializedLLMJudgeVariantConfig {
                 let templated_system_instructions = format!(
                     include_str!("llm_judge_system_instructions.txt"),
                     system_instructions = system_instructions,
-                    output_type = output_type
                 );
                 let system_template = PathWithContents {
                     // Not a real path but this is used as the handle everywhere as the content is already provided below
@@ -483,7 +476,7 @@ mod tests {
             let metric_config_name = get_evaluator_metric_name(eval_name, "em_evaluator");
             assert_eq!(
                 metric_config_name,
-                "tensorzero::eval::test_eval::em_evaluator"
+                "tensorzero::eval_name::test_eval::evaluator_name::em_evaluator"
             );
             assert!(metric_configs.contains_key(&metric_config_name));
 
@@ -523,7 +516,9 @@ mod tests {
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Min,
-                include_datapoint_output: false,
+                include: LLMJudgeIncludeConfig {
+                    reference_output: false,
+                },
             };
 
             let mut evaluators = HashMap::new();
@@ -552,7 +547,7 @@ mod tests {
                         LLMJudgeOutputType::Boolean
                     ));
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
-                    assert!(!judge_config.include_datapoint_output);
+                    assert!(!judge_config.include.reference_output);
                 }
                 _ => panic!("Expected LLMJudge evaluator config"),
             }
@@ -581,7 +576,7 @@ mod tests {
             let metric_config_name = get_evaluator_metric_name(eval_name, "llm_judge_eval");
             assert_eq!(
                 metric_config_name,
-                "tensorzero::eval::test_eval::llm_judge_eval"
+                "tensorzero::eval_name::test_eval::evaluator_name::llm_judge_eval"
             );
             assert!(metric_configs.contains_key(&metric_config_name));
 
@@ -637,7 +632,9 @@ mod tests {
                 variants,
                 output_type: LLMJudgeOutputType::Float,
                 optimize: LLMJudgeOptimize::Max,
-                include_datapoint_output: true,
+                include: LLMJudgeIncludeConfig {
+                    reference_output: true,
+                },
             };
 
             let mut evaluators = HashMap::new();
@@ -666,7 +663,7 @@ mod tests {
                         LLMJudgeOutputType::Float
                     ));
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Max));
-                    assert!(judge_config.include_datapoint_output);
+                    assert!(judge_config.include.reference_output);
                 }
                 _ => panic!("Expected LLMJudge evaluator config"),
             }
@@ -683,7 +680,7 @@ mod tests {
             let metric_config_name = get_evaluator_metric_name(eval_name, "llm_judge_float");
             assert_eq!(
                 metric_config_name,
-                "tensorzero::eval::test_eval::llm_judge_float"
+                "tensorzero::eval_name::test_eval::evaluator_name::llm_judge_float"
             );
             assert!(metric_configs.contains_key(&metric_config_name));
 
@@ -815,7 +812,9 @@ mod tests {
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Min,
-                include_datapoint_output: false,
+                include: LLMJudgeIncludeConfig {
+                    reference_output: false,
+                },
             };
 
             let mut evaluators = HashMap::new();
@@ -883,6 +882,71 @@ mod tests {
                             .to_string(),
                 }
             );
+        }
+
+        // Test case 7: Successful loading with LLM judge evaluator with reference_output = true
+        {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "test_variant".to_string(),
+                UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                    UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: true,
+                        model: Arc::from("gpt-3.5-turbo"),
+                        system_instructions: PathBuf::from(
+                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                        ),
+                        temperature: Some(0.7),
+                        top_p: None,
+                        max_tokens: Some(100),
+                        presence_penalty: None,
+                        frequency_penalty: None,
+                        seed: None,
+                        json_mode: JsonMode::ImplicitTool,
+                        retries: RetryConfig::default(),
+                        extra_body: None,
+                    },
+                ),
+            );
+
+            let llm_judge_config = UninitializedLLMJudgeConfig {
+                variants,
+                output_type: LLMJudgeOutputType::Boolean,
+                optimize: LLMJudgeOptimize::Min,
+                include: LLMJudgeIncludeConfig {
+                    reference_output: true,
+                },
+            };
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "llm_judge_with_ref".to_string(),
+                UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
+            );
+
+            let uninitialized_config = UninitializedEvalConfig {
+                evaluators,
+                dataset_name: "test_dataset".to_string(),
+                function_name: function_name.to_string(),
+            };
+
+            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            assert!(result.is_ok());
+
+            let (config, _additional_functions, _metric_configs) = result.unwrap();
+
+            // Verify LLM judge evaluator config with reference_output = true
+            match config.evaluators.get("llm_judge_with_ref").unwrap() {
+                EvaluatorConfig::LLMJudge(judge_config) => {
+                    assert!(matches!(
+                        judge_config.output_type,
+                        LLMJudgeOutputType::Boolean
+                    ));
+                    assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
+                    assert!(judge_config.include.reference_output);
+                }
+                _ => panic!("Expected LLMJudge evaluator config"),
+            }
         }
     }
 

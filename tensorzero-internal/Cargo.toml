@@ -75,7 +75,7 @@ strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.3"
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
-toml = "0.8.15"
+toml = { workspace = true }
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.18", features = [
     "env-filter",

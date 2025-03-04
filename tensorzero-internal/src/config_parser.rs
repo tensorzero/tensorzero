@@ -914,7 +914,7 @@ mod tests {
         match &**function {
             FunctionConfig::Json(json_config) => {
                 assert_eq!(json_config.variants.len(), 1);
-                match &json_config.variants["openai_promptA"] {
+                match &json_config.variants["anthropic_promptA"] {
                     VariantConfig::ChatCompletion(chat_config) => {
                         assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
                         assert_eq!(chat_config.weight, 1.0);
@@ -927,7 +927,7 @@ mod tests {
                                     "tensorzero::llm_judge::eval1::llm_judge_bool::system"
                                 ),
                                 contents:
-                                    "Return True if there is NSFW content in this generation.\n\n\nOutput Type: boolean\n"
+                                    "Return True if there is NSFW content in this generation.\n\n"
                                         .to_string(),
                             }
                         );
@@ -941,7 +941,7 @@ mod tests {
         // Check that the metric for the LLM Judge evaluator is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::eval::eval1::llm_judge_bool")
+            .get("tensorzero::eval_name::eval1::evaluator_name::llm_judge_bool")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Boolean);
         assert_eq!(metric.optimize, MetricConfigOptimize::Min);
@@ -950,7 +950,7 @@ mod tests {
         // Check that the metric for the exact match eval is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::eval::eval1::em_evaluator")
+            .get("tensorzero::eval_name::eval1::evaluator_name::em_evaluator")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Boolean);
         assert_eq!(metric.optimize, MetricConfigOptimize::Max);
@@ -959,10 +959,10 @@ mod tests {
         // Check that the metric for the LLM Judge float eval is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::eval::eval1::llm_judge_float")
+            .get("tensorzero::eval_name::eval1::evaluator_name::llm_judge_float")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Float);
-        assert_eq!(metric.optimize, MetricConfigOptimize::Max);
+        assert_eq!(metric.optimize, MetricConfigOptimize::Min);
         assert_eq!(metric.level, MetricConfigLevel::Inference);
     }
 
@@ -1978,15 +1978,15 @@ mod tests {
             *templates
                 .get("tensorzero::llm_judge::eval1::llm_judge_bool::system")
                 .unwrap(),
-            "Return True if there is NSFW content in this generation.\n\n\nOutput Type: boolean\n"
-                .to_string(),
+            "Return True if there is NSFW content in this generation.\n\n".to_string(),
         );
 
         assert_eq!(
             *templates
                 .get("tensorzero::llm_judge::eval1::llm_judge_float::system")
                 .unwrap(),
-            "Give a vibes based score\n\n\nOutput Type: number\n"
+            "Return a number between 0 and 1 where 1 is very NSFW and 0 is the least NSFW content.\n\n"
+                .to_string(),
         );
         // Check the total number of templates
         assert_eq!(templates.len(), 12);
@@ -2058,7 +2058,7 @@ mod tests {
 
     /// Get a sample valid config for testing
     fn get_sample_valid_config() -> toml::Table {
-        let config_str = include_str!("../fixtures/config/tensorzero.test.toml");
+        let config_str = include_str!("../fixtures/config/tensorzero.toml");
         env::set_var("OPENAI_API_KEY", "sk-something");
         env::set_var("ANTHROPIC_API_KEY", "sk-something");
         env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
@@ -2152,25 +2152,6 @@ mod tests {
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         Config::load_from_toml(config, base_path.clone())
             .expect("Failed to construct config with valid AWS bedrock provider");
-    }
-
-    #[test]
-    fn test_tensorzero_example_file() {
-        env::set_var("OPENAI_API_KEY", "sk-something");
-        env::set_var("ANTHROPIC_API_KEY", "sk-something");
-        env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let config_path = format!("{}/fixtures/config/tensorzero.toml", manifest_dir);
-        let config_pathbuf = PathBuf::from(&config_path);
-        let base_path = config_pathbuf
-            .parent()
-            .expect("Failed to get parent directory of config file");
-        let config_table = UninitializedConfig::read_toml_config(Path::new(&config_path))
-            .expect("Failed to read tensorzero.toml")
-            .expect("Failed to read tensorzero.toml");
-
-        Config::load_from_toml(config_table, base_path.to_path_buf())
-            .expect("Failed to load config");
     }
 
     #[traced_test]

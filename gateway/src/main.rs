@@ -74,7 +74,9 @@ async fn main() {
         ClickHouseConnectionInfo::Mock { healthy, .. } => {
             format!("mocked (healthy={healthy})")
         }
-        ClickHouseConnectionInfo::Production { .. } => "enabled".to_string(),
+        ClickHouseConnectionInfo::Production { database, .. } => {
+            format!("enabled (database: {database})")
+        }
     };
 
     // Set debug mode
