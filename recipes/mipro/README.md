@@ -20,11 +20,13 @@ For more details, see the [MIPRO paper](https://arxiv.org/abs/2406.11695v1), and
 
 In our implementation, we use an LLM judge to score the candidate prompts. The judge is configuable to fit your problem by describing the task and metric you want to optimize. This assumes that the LLM judge will output scores that are correlated with the metric you want to optimize.
 
-**We'll show that TensorZero can optimize GPT-4o Mini using MIPRO and compare the results to our DICL, and SFT recipes.**
+**We'll show that TensorZero can optimize GPT-4o Mini using MIPRO and compare the results to our Dynamic In-Context Learning (DICL), and Supervised Fine-Tuning (SFT) recipes.**
 
 <p align="center">
   <img src="visualization.svg" alt="Metrics by Variant" />
 </p>
+
+We see that MIPRO achieves competitive results compared to DICL. The MIPRO optimized variant can be more efficient than DICL at test time as it does not require searching for the set of demonstrations for a given user prompt.
 
 ## Setup
 
