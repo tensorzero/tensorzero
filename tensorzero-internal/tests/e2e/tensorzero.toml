@@ -727,7 +727,7 @@ extra_body = [{ pointer = "/temperature", value = 0.123 }, { pointer = "/max_com
 type = "chat_completion"
 model = "o1-2024-12-17"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 400
+max_tokens = 1000
 
 [functions.basic_test.variants.openai-dynamic]
 type = "chat_completion"
@@ -1261,7 +1261,7 @@ model = "o1-2024-12-17"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 400
+max_tokens = 1000
 
 [functions.json_success.variants.openai-implicit]
 type = "chat_completion"
@@ -1670,7 +1670,7 @@ model = "o1-2024-12-17"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
-max_tokens = 400
+max_tokens = 1000
 
 
 [functions.dynamic_json.variants.openai-implicit]
@@ -1955,7 +1955,7 @@ max_tokens = 100
 type = "chat_completion"
 model = "o1-2024-12-17"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 400
+max_tokens = 1000
 
 [functions.weather_helper.variants.together-tool]
 type = "chat_completion"
@@ -1988,7 +1988,7 @@ type = "chat_completion"
 weight = 1
 model = "o1-2024-12-17"
 system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
-max_tokens = 400
+max_tokens = 1000
 
 [functions.weather_helper_parallel.variants.anthropic]
 type = "chat_completion"
