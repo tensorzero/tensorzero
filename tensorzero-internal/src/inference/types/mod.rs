@@ -608,40 +608,6 @@ fn deserialize_content<'de, D: Deserializer<'de>>(
         .deserialize(deserializer)
 }
 
-/*impl<'de> Deserialize<'de> for InputMessage {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct Helper {
-            role: Role,
-            content: ContentHelper,
-        }
-
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum ContentHelper {
-            Single(String),
-            Object(serde_json::Map<String, Value>),
-            Multiple(Vec<InputMessageContent>),
-        }
-
-        let helper = Helper::deserialize(deserializer)?;
-
-        let content = match helper.content {
-            ContentHelper::Single(text) => {}
-            ContentHelper::Object(object) => {}
-            ContentHelper::Multiple(content) => content,
-        };
-
-        Ok(InputMessage {
-            role: helper.role,
-            content,
-        })
-    }
-}*/
-
 impl fmt::Display for Role {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
