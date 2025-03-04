@@ -3,7 +3,7 @@ use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
-use super::{check_table_exists, get_column_type};
+use super::{check_table_exists, get_column_type, table_is_nonempty};
 
 /// This migration is used to set up the ClickHouse database for the datasets feature.
 /// It creates two tables: `ChatInferenceDataset` and `JsonInferenceDataset`
@@ -61,6 +61,25 @@ impl Migration for Migration0014<'_> {
     }
 
     async fn apply(&self) -> Result<(), Error> {
+        let chat_inference_dataset_has_data =
+            table_is_nonempty(self.clickhouse, "ChatInferenceDataset", "0014").await?;
+        if chat_inference_dataset_has_data {
+            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                id: "0014".to_string(),
+                message: "ChatInferenceDataset has data. Your database state is invalid."
+                    .to_string(),
+            }));
+        }
+        let json_inference_dataset_has_data =
+            table_is_nonempty(self.clickhouse, "JsonInferenceDataset", "0014").await?;
+        if json_inference_dataset_has_data {
+            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                id: "0014".to_string(),
+                message: "JsonInferenceDataset has data. Your database state is invalid."
+                    .to_string(),
+            }));
+        }
+
         // First, drop the tables if they were created in 0012
         let query = "DROP TABLE IF EXISTS ChatInferenceDataset";
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;

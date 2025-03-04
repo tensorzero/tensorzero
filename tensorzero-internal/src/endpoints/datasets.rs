@@ -151,8 +151,13 @@ FORMAT JSONEachRow;"#
     Ok(inference_data)
 }
 
-/// A handler for the feedback endpoint
-#[instrument(name = "create_datapoint", skip_all)]
+/// The handler for the `/datasets/:dataset/datapoints` endpoint.
+/// This inserts a new datapoint into `ChatInferenceDataset`/`JsonInferenceDataset`
+/// based on an existing inference (specified by `inference_id`).
+///
+/// The inference is mostly copied as-is, except for the 'output' field.
+/// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
+#[instrument(name = "create_datapoint", skip(app_state))]
 pub async fn create_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<PathParams>,
@@ -185,6 +190,9 @@ pub async fn create_datapoint_handler(
                 1,
             )
             .await?;
+            // Validate that the demonstration value has the expected format.
+            // The actual 'output' column will be copied directly from the demonstration,
+            // without round-tripping through serde.
             match &inference_data {
                 TaggedInferenceDatabaseInsert::Json(_) => {
                     let _: JsonInferenceOutput = serde_json::from_str(&demonstration.value)
@@ -260,7 +268,7 @@ pub struct PathParams {
     pub dataset: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct CreateDatapointParams {
     pub output: OutputKind,
     pub inference_id: Uuid,
