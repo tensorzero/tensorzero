@@ -185,7 +185,7 @@ pub struct ObservabilityConfig {
     pub async_writes: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct MetricConfig {
     pub r#type: MetricConfigType,
@@ -193,14 +193,14 @@ pub struct MetricConfig {
     pub level: MetricConfigLevel,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum MetricConfigType {
     Boolean,
     Float,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum MetricConfigOptimize {
     Min,
@@ -301,9 +301,10 @@ impl<'c> Config<'c> {
         config.validate()?;
 
         // We add the evals after validation since we will be writing tensorzero:: functions to the functions map
+        // and tensorzero:: metrics to the metrics map
         let mut evals = HashMap::new();
         for (name, eval_config) in uninitialized_config.evals {
-            let (eval_config, eval_function_configs) =
+            let (eval_config, eval_function_configs, eval_metric_configs) =
                 eval_config.load(&config.functions, &base_path, &name)?;
             evals.insert(name, eval_config);
             for (eval_function_name, eval_function_config) in eval_function_configs {
@@ -319,6 +320,15 @@ impl<'c> Config<'c> {
                 config
                     .functions
                     .insert(eval_function_name, eval_function_config);
+            }
+            for (eval_metric_name, eval_metric_config) in eval_metric_configs {
+                if config.metrics.contains_key(&eval_metric_name) {
+                    return Err(ErrorDetails::Config {
+                        message: format!("Duplicate evaluator metric name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.", eval_metric_name),
+                    }
+                    .into());
+                }
+                config.metrics.insert(eval_metric_name, eval_metric_config);
             }
         }
         config.evals = evals;
@@ -928,6 +938,32 @@ mod tests {
             }
             _ => panic!("Expected a JSON function"),
         }
+        // Check that the metric for the LLM Judge evaluator is added to the metrics table
+        let metric = config
+            .metrics
+            .get("tensorzero::eval_name::eval1::evaluator_name::llm_judge_bool")
+            .unwrap();
+        assert_eq!(metric.r#type, MetricConfigType::Boolean);
+        assert_eq!(metric.optimize, MetricConfigOptimize::Min);
+        assert_eq!(metric.level, MetricConfigLevel::Inference);
+
+        // Check that the metric for the exact match eval is added to the metrics table
+        let metric = config
+            .metrics
+            .get("tensorzero::eval_name::eval1::evaluator_name::em_evaluator")
+            .unwrap();
+        assert_eq!(metric.r#type, MetricConfigType::Boolean);
+        assert_eq!(metric.optimize, MetricConfigOptimize::Max);
+        assert_eq!(metric.level, MetricConfigLevel::Inference);
+
+        // Check that the metric for the LLM Judge float eval is added to the metrics table
+        let metric = config
+            .metrics
+            .get("tensorzero::eval_name::eval1::evaluator_name::llm_judge_float")
+            .unwrap();
+        assert_eq!(metric.r#type, MetricConfigType::Float);
+        assert_eq!(metric.optimize, MetricConfigOptimize::Min);
+        assert_eq!(metric.level, MetricConfigLevel::Inference);
     }
 
     /// Ensure that the config parsing correctly handles the `gateway.bind_address` field
@@ -2022,7 +2058,7 @@ mod tests {
 
     /// Get a sample valid config for testing
     fn get_sample_valid_config() -> toml::Table {
-        let config_str = include_str!("../fixtures/config/tensorzero.test.toml");
+        let config_str = include_str!("../fixtures/config/tensorzero.toml");
         env::set_var("OPENAI_API_KEY", "sk-something");
         env::set_var("ANTHROPIC_API_KEY", "sk-something");
         env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
@@ -2116,25 +2152,6 @@ mod tests {
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         Config::load_from_toml(config, base_path.clone())
             .expect("Failed to construct config with valid AWS bedrock provider");
-    }
-
-    #[test]
-    fn test_tensorzero_example_file() {
-        env::set_var("OPENAI_API_KEY", "sk-something");
-        env::set_var("ANTHROPIC_API_KEY", "sk-something");
-        env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let config_path = format!("{}/fixtures/config/tensorzero.toml", manifest_dir);
-        let config_pathbuf = PathBuf::from(&config_path);
-        let base_path = config_pathbuf
-            .parent()
-            .expect("Failed to get parent directory of config file");
-        let config_table = UninitializedConfig::read_toml_config(Path::new(&config_path))
-            .expect("Failed to read tensorzero.toml")
-            .expect("Failed to read tensorzero.toml");
-
-        Config::load_from_toml(config_table, base_path.to_path_buf())
-            .expect("Failed to load config");
     }
 
     #[traced_test]

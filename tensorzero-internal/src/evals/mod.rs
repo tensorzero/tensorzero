@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    fmt::{self, Display},
     fs::File,
     io::{BufReader, Read},
     path::{Path, PathBuf},
@@ -10,7 +9,9 @@ use std::{
 use serde::Deserialize;
 
 use crate::{
-    config_parser::PathWithContents,
+    config_parser::{
+        MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType, PathWithContents,
+    },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
     jsonschema_util::JSONSchemaFromPath,
@@ -54,35 +55,47 @@ pub struct LLMJudgeIncludeConfig {
     pub reference_output: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeOutputType {
     Float,
     Boolean,
 }
 
-impl Display for LLMJudgeOutputType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                LLMJudgeOutputType::Float => "float",
-                LLMJudgeOutputType::Boolean => "boolean",
-            }
-        )
+impl From<LLMJudgeOutputType> for MetricConfigType {
+    fn from(output_type: LLMJudgeOutputType) -> Self {
+        match output_type {
+            LLMJudgeOutputType::Float => MetricConfigType::Float,
+            LLMJudgeOutputType::Boolean => MetricConfigType::Boolean,
+        }
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeOptimize {
     Min,
     Max,
 }
 
+impl From<LLMJudgeOptimize> for MetricConfigOptimize {
+    fn from(optimize: LLMJudgeOptimize) -> Self {
+        match optimize {
+            LLMJudgeOptimize::Min => MetricConfigOptimize::Min,
+            LLMJudgeOptimize::Max => MetricConfigOptimize::Max,
+        }
+    }
+}
+
 pub fn get_llm_judge_function_name(eval_name: &str, evaluator_name: &str) -> String {
     format!("tensorzero::llm_judge::{}::{}", eval_name, evaluator_name)
+}
+
+pub fn get_evaluator_metric_name(eval_name: &str, evaluator_name: &str) -> String {
+    format!(
+        "tensorzero::eval_name::{}::evaluator_name::{}",
+        eval_name, evaluator_name
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,13 +105,22 @@ pub struct UninitializedEvalConfig {
     function_name: String,
 }
 
+type EvalLoadResult = Result<
+    (
+        EvalConfig,                           // The eval itself
+        HashMap<String, Arc<FunctionConfig>>, // All functions which the eval needs {function_name -> function_config}
+        HashMap<String, MetricConfig>, // All metrics which the eval needs {metric_name -> metric_config}
+    ),
+    Error,
+>;
+
 impl UninitializedEvalConfig {
     pub fn load<P: AsRef<Path>>(
         self,
         functions: &HashMap<String, Arc<FunctionConfig>>,
         base_path: P,
         eval_name: &str,
-    ) -> Result<(EvalConfig, HashMap<String, Arc<FunctionConfig>>), Error> {
+    ) -> EvalLoadResult {
         if !functions.contains_key(&self.function_name) {
             return Err(ErrorDetails::Config {
                 message: format!(
@@ -121,17 +143,20 @@ impl UninitializedEvalConfig {
             .evaluators
             .into_iter()
             .map(|(name, config)| {
-                config
-                    .load(&base_path, eval_name, &name)
-                    .map(|(eval_config, func_config)| (name, eval_config, func_config))
+                config.load(&base_path, eval_name, &name).map(
+                    |(eval_config, func_config, metric_config)| {
+                        (name, eval_config, func_config, metric_config)
+                    },
+                )
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
         // Create HashMaps from the results
         let mut evaluators = HashMap::new();
         let mut function_configs = HashMap::new();
-
-        for (evaluator_name, evaluator_config, function_config) in evaluator_results {
+        let mut metric_configs = HashMap::new();
+        for (evaluator_name, evaluator_config, function_config, metric_config) in evaluator_results
+        {
             // Add to evaluators map
             evaluators.insert(evaluator_name.clone(), evaluator_config);
 
@@ -142,6 +167,12 @@ impl UninitializedEvalConfig {
                     Arc::new(config),
                 );
             }
+
+            // Add to metric_configs map
+            metric_configs.insert(
+                get_evaluator_metric_name(eval_name, &evaluator_name),
+                metric_config,
+            );
         }
         Ok((
             EvalConfig {
@@ -150,6 +181,7 @@ impl UninitializedEvalConfig {
                 function_name: self.function_name,
             },
             function_configs,
+            metric_configs,
         ))
     }
 }
@@ -177,7 +209,7 @@ impl UninitializedEvaluatorConfig {
         base_path: &P,
         eval_name: &str,
         evaluator_name: &str,
-    ) -> Result<(EvaluatorConfig, Option<FunctionConfig>), Error> {
+    ) -> Result<(EvaluatorConfig, Option<FunctionConfig>, MetricConfig), Error> {
         // Evaluator names cannot have "::" in them since we use it as a delimiter in our function names later on
         if evaluator_name.contains("::") {
             return Err(ErrorDetails::Config {
@@ -188,7 +220,15 @@ impl UninitializedEvaluatorConfig {
             .into());
         }
         match self {
-            UninitializedEvaluatorConfig::ExactMatch => Ok((EvaluatorConfig::ExactMatch, None)),
+            UninitializedEvaluatorConfig::ExactMatch => Ok((
+                EvaluatorConfig::ExactMatch,
+                None,
+                MetricConfig {
+                    r#type: MetricConfigType::Boolean,
+                    optimize: MetricConfigOptimize::Max,
+                    level: MetricConfigLevel::Inference,
+                },
+            )),
             UninitializedEvaluatorConfig::LLMJudge(params) => {
                 let variants = params
                     .variants
@@ -251,6 +291,11 @@ impl UninitializedEvaluatorConfig {
                         optimize: params.optimize,
                     }),
                     Some(function_config),
+                    MetricConfig {
+                        r#type: params.output_type.into(),
+                        optimize: params.optimize.into(),
+                        level: MetricConfigLevel::Inference,
+                    },
                 ))
             }
         }
@@ -413,7 +458,7 @@ mod tests {
             let result = uninitialized_config.load(&functions, &base_path, eval_name);
             assert!(result.is_ok());
 
-            let (config, additional_functions) = result.unwrap();
+            let (config, additional_functions, metric_configs) = result.unwrap();
             assert_eq!(config.dataset_name, "test_dataset");
             assert_eq!(config.function_name, function_name);
             assert_eq!(config.evaluators.len(), 1);
@@ -423,6 +468,23 @@ mod tests {
             ));
             // No additional function configs for exact match
             assert_eq!(additional_functions.len(), 0);
+
+            // Verify the metrics
+            assert_eq!(metric_configs.len(), 1);
+
+            // Check the metric name follows expected format
+            let metric_config_name = get_evaluator_metric_name(eval_name, "em_evaluator");
+            assert_eq!(
+                metric_config_name,
+                "tensorzero::eval_name::test_eval::evaluator_name::em_evaluator"
+            );
+            assert!(metric_configs.contains_key(&metric_config_name));
+
+            // Verify all properties of the metric config
+            let metric_config = metric_configs.get(&metric_config_name).unwrap();
+            assert_eq!(metric_config.r#type, MetricConfigType::Boolean);
+            assert_eq!(metric_config.optimize, MetricConfigOptimize::Max);
+            assert_eq!(metric_config.level, MetricConfigLevel::Inference);
         }
 
         // Test case 2: Successful loading with LLM judge evaluator
@@ -474,7 +536,7 @@ mod tests {
             let result = uninitialized_config.load(&functions, &base_path, eval_name);
             assert!(result.is_ok());
 
-            let (config, additional_functions) = result.unwrap();
+            let (config, additional_functions, metric_configs) = result.unwrap();
             assert_eq!(config.evaluators.len(), 1);
 
             // Verify LLM judge evaluator config
@@ -506,6 +568,143 @@ mod tests {
                 }
                 _ => panic!("Expected Json function config"),
             }
+
+            // Verify the metrics
+            assert_eq!(metric_configs.len(), 1);
+
+            // Check the metric name follows expected format
+            let metric_config_name = get_evaluator_metric_name(eval_name, "llm_judge_eval");
+            assert_eq!(
+                metric_config_name,
+                "tensorzero::eval_name::test_eval::evaluator_name::llm_judge_eval"
+            );
+            assert!(metric_configs.contains_key(&metric_config_name));
+
+            // Verify all properties of the metric config
+            let metric_config = metric_configs.get(&metric_config_name).unwrap();
+            assert_eq!(metric_config.r#type, MetricConfigType::Boolean);
+            assert_eq!(metric_config.optimize, MetricConfigOptimize::Min);
+            assert_eq!(metric_config.level, MetricConfigLevel::Inference);
+
+            // Verify the type conversion from LLMJudgeOutputType to MetricConfigType
+            let llm_judge_eval = match config.evaluators.get("llm_judge_eval").unwrap() {
+                EvaluatorConfig::LLMJudge(config) => config,
+                _ => panic!("Expected LLMJudge evaluator"),
+            };
+            assert_eq!(
+                MetricConfigType::from(llm_judge_eval.output_type),
+                metric_config.r#type
+            );
+
+            // Verify the optimize conversion from LLMJudgeOptimize to MetricConfigOptimize
+            assert_eq!(
+                MetricConfigOptimize::from(llm_judge_eval.optimize),
+                metric_config.optimize
+            );
+        }
+
+        // Test case 2.1: Successful loading with LLM judge evaluator with Float output type
+        {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "test_variant".to_string(),
+                UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                    UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: true,
+                        model: Arc::from("gpt-3.5-turbo"),
+                        system_instructions: PathBuf::from(
+                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                        ),
+                        temperature: Some(0.7),
+                        top_p: None,
+                        max_tokens: Some(100),
+                        presence_penalty: None,
+                        frequency_penalty: None,
+                        seed: None,
+                        json_mode: JsonMode::ImplicitTool,
+                        retries: RetryConfig::default(),
+                        extra_body: None,
+                    },
+                ),
+            );
+
+            let llm_judge_config = UninitializedLLMJudgeConfig {
+                variants,
+                output_type: LLMJudgeOutputType::Float,
+                optimize: LLMJudgeOptimize::Max,
+                include: LLMJudgeIncludeConfig {
+                    reference_output: true,
+                },
+            };
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "llm_judge_float".to_string(),
+                UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
+            );
+
+            let uninitialized_config = UninitializedEvalConfig {
+                evaluators,
+                dataset_name: "test_dataset".to_string(),
+                function_name: function_name.to_string(),
+            };
+
+            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            assert!(result.is_ok());
+
+            let (config, additional_functions, metric_configs) = result.unwrap();
+            assert_eq!(config.evaluators.len(), 1);
+
+            // Verify LLM judge evaluator config
+            match config.evaluators.get("llm_judge_float").unwrap() {
+                EvaluatorConfig::LLMJudge(judge_config) => {
+                    assert!(matches!(
+                        judge_config.output_type,
+                        LLMJudgeOutputType::Float
+                    ));
+                    assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Max));
+                    assert!(judge_config.include.reference_output);
+                }
+                _ => panic!("Expected LLMJudge evaluator config"),
+            }
+
+            // Verify additional function config was created
+            assert_eq!(additional_functions.len(), 1);
+            let function_name = get_llm_judge_function_name(eval_name, "llm_judge_float");
+            assert!(additional_functions.contains_key(&function_name));
+
+            // Verify the metrics
+            assert_eq!(metric_configs.len(), 1);
+
+            // Check the metric name follows expected format
+            let metric_config_name = get_evaluator_metric_name(eval_name, "llm_judge_float");
+            assert_eq!(
+                metric_config_name,
+                "tensorzero::eval_name::test_eval::evaluator_name::llm_judge_float"
+            );
+            assert!(metric_configs.contains_key(&metric_config_name));
+
+            // Verify all properties of the metric config
+            let metric_config = metric_configs.get(&metric_config_name).unwrap();
+            assert_eq!(metric_config.r#type, MetricConfigType::Float);
+            assert_eq!(metric_config.optimize, MetricConfigOptimize::Max);
+            assert_eq!(metric_config.level, MetricConfigLevel::Inference);
+
+            // Verify the type conversion from LLMJudgeOutputType to MetricConfigType
+            let llm_judge_eval = match config.evaluators.get("llm_judge_float").unwrap() {
+                EvaluatorConfig::LLMJudge(config) => config,
+                _ => panic!("Expected LLMJudge evaluator"),
+            };
+            assert_eq!(
+                MetricConfigType::from(llm_judge_eval.output_type),
+                metric_config.r#type
+            );
+
+            // Verify the optimize conversion from LLMJudgeOptimize to MetricConfigOptimize
+            assert_eq!(
+                MetricConfigOptimize::from(llm_judge_eval.optimize),
+                metric_config.optimize
+            );
         }
 
         // Test case 3: Error when function doesn't exist
@@ -734,7 +933,7 @@ mod tests {
             let result = uninitialized_config.load(&functions, &base_path, eval_name);
             assert!(result.is_ok());
 
-            let (config, _additional_functions) = result.unwrap();
+            let (config, _additional_functions, _metric_configs) = result.unwrap();
 
             // Verify LLM judge evaluator config with reference_output = true
             match config.evaluators.get("llm_judge_with_ref").unwrap() {
