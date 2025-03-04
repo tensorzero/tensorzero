@@ -4,9 +4,12 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use tensorzero::{ClientBuilder, ClientBuilderMode};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
+use tensorzero_internal::config_parser::Config;
 use tokio::sync::Semaphore;
 // use tokio::task::JoinSet;
 use url::Url;
+
+use evals::dataset::query_dataset;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -41,6 +44,8 @@ async fn main() -> Result<()> {
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
 
+    let config = Config::load_and_verify_from_path(&args.config_file).await?;
+    let function_config = config.get_function(&args.name)?;
     #[allow(unused)]
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
@@ -57,9 +62,17 @@ async fn main() -> Result<()> {
 
     #[allow(unused)]
     let semaphore = Semaphore::new(args.concurrency);
-    #[allow(unused)]
     let clickhouse_client = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
     // let mut join_set = JoinSet::new();
+
+    #[allow(unused)]
+    let dataset = query_dataset(
+        &clickhouse_client,
+        &args.name,
+        &args.variant,
+        function_config,
+    )
+    .await?;
 
     Ok(())
 }
