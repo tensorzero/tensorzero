@@ -29,7 +29,7 @@ class TensorZeroConfig(BaseModel):
         if base_dir is None:
             base_temp_dir: Path = Path(tempfile.mkdtemp(prefix="mipro_"))
         else:
-            base_temp_dir: Path = base_dir
+            base_temp_dir: Path = Path(base_dir)
 
         # The top-level config folder
         config_dir: Path = base_temp_dir / "config"

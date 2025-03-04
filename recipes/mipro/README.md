@@ -20,6 +20,12 @@ For more details, see the [MIPRO paper](https://arxiv.org/abs/2406.11695v1), and
 
 In our implementation, we use an LLM judge to score the candidate prompts. The judge is configuable to fit your problem by describing the task and metric you want to optimize. This assumes that the LLM judge will output scores that are correlated with the metric you want to optimize.
 
+**We'll show that TensorZero can optimize GPT-4o Mini using MIPRO and compare the results to our DICL, and SFT recipes.**
+
+<p align="center">
+  <img src="visualization.svg" alt="Metrics by Variant" />
+</p>
+
 ## Setup
 
 Set the `OPENAI_API_KEY` in the shell your notebook will run in.
