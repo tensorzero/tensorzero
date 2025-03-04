@@ -161,8 +161,8 @@ impl ClickHouseConnectionInfo {
 
                 match client
                     .get(ping_url)
-                    // If ClickHouse is healthy, it should respond within 500ms
-                    .timeout(std::time::Duration::from_millis(500))
+                    // If ClickHouse is healthy, it should respond within 2000ms
+                    .timeout(std::time::Duration::from_millis(2000))
                     .send()
                     .await
                 {
