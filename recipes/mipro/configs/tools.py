@@ -1,7 +1,7 @@
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import (
     BaseModel,
@@ -15,17 +15,6 @@ from pydantic import (
 from .base import BaseConfigs
 
 
-class ParametersSchema(BaseModel):
-    """
-    Schema for parameters, typically used to validate JSON-like objects.
-    """
-
-    type: Literal["object"]
-    properties: Dict[str, Any]
-    required: List[str]
-    additionalProperties: Optional[bool] = Field(default=False)
-
-
 class ToolConfig(BaseModel):
     """
     Configuration for a tool including its name, description, and associated parameters.
@@ -34,24 +23,28 @@ class ToolConfig(BaseModel):
     config_dir: Path = Field(default=Path("config/"))
 
     description: str
-    parameters: ParametersSchema
+    parameters: Dict[str, Any]
     name: str
 
     @field_validator("parameters", mode="before")
     @classmethod
     def validate_parameters(
-        cls, value: ParametersSchema, values: ValidationInfo
-    ) -> ParametersSchema:
-        if isinstance(value, type):
+        cls, value: Union[str, Dict[str, Any]], values: ValidationInfo
+    ) -> Dict[str, Any]:
+        if isinstance(value, Dict):
             return value
-
-        print(value)
-
         schema_path = values.data["config_dir"] / value
         if schema_path.is_file():
             with open(schema_path, "r") as f:
-                parameters_dict = json.load(f)
-                return ParametersSchema(**parameters_dict)
+                schema_dict = json.load(f)
+                parameters_dict = {}
+                parameters_dict["type"] = schema_dict.get("type")
+                parameters_dict["properties"] = schema_dict.get("properties")
+                parameters_dict["required"] = schema_dict.get("required")
+                parameters_dict["additionalProperties"] = schema_dict.get(
+                    "additionalProperties", False
+                )
+                return parameters_dict
         else:
             raise ValueError(f"Schema file not found: {schema_path}")
 
@@ -60,7 +53,7 @@ class ToolConfig(BaseModel):
         return None
 
     @field_serializer("parameters")
-    def serialize_parameters(self, value: ParametersSchema) -> str:
+    def serialize_parameters(self, value: Dict[str, Any]) -> str:
         return f"tools/{self.name}.json"
 
 
@@ -103,7 +96,6 @@ class ToolConfigs(BaseConfigs[ToolConfig]):
         """Convert dictionaries to the correct FunctionConfig type before validation."""
         converted: Dict[str, ToolConfig] = {}
         for key, value in values.items():
-            print(key, value)
             if isinstance(value, dict):
                 converted[key] = ToolConfig(**value)
             else:

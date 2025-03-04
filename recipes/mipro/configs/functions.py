@@ -13,10 +13,9 @@ from pydantic import (
 )
 
 from .base import BaseConfigs
-from .conversion import create_pydantic_model_from_schema
 from .tools import ToolCallConfig, ToolChoice
 from .variants import VariantConfigs
-from .writers import write_output_schema, write_pydantic_schema
+from .writers import write_json_schema
 
 T_fn = TypeVar("T_fn")
 T = TypeVar("T")
@@ -52,9 +51,9 @@ class FunctionConfig(BaseModel, Generic[T_fn]):
 
     config_dir: Path = Field(default=Path("config/"))
 
-    system_schema: Optional[Type[BaseModel]] = None
-    user_schema: Optional[Type[BaseModel]] = None
-    assistant_schema: Optional[Type[BaseModel]] = None
+    system_schema: Optional[Dict[str, Any]] = None
+    user_schema: Optional[Dict[str, Any]] = None
+    assistant_schema: Optional[Dict[str, Any]] = None
 
     variants: VariantConfigs
 
@@ -64,10 +63,10 @@ class FunctionConfig(BaseModel, Generic[T_fn]):
     @field_validator("system_schema", "user_schema", "assistant_schema", mode="before")
     @classmethod
     def validate_schema(
-        cls, value: Union[str, Type[BaseModel]], values: ValidationInfo
-    ) -> Type[BaseModel]:
+        cls, value: Union[str, Dict[str, Any]], values: ValidationInfo
+    ) -> Dict[str, Any]:
         """Allow system_schema and output_schema to be either a file path or a BaseModel subclass."""
-        if isinstance(value, type):
+        if isinstance(value, Dict):
             return value  # Already a BaseModel subclass
 
         schema_path = values.data["config_dir"] / value
@@ -77,7 +76,7 @@ class FunctionConfig(BaseModel, Generic[T_fn]):
         with schema_path.open("r", encoding="utf-8") as f:
             schema_dict = json.load(f)
 
-        return create_pydantic_model_from_schema(schema_dict)
+        return schema_dict
 
     @field_serializer("type")
     def serialize_type(self, value: FunctionConfigType) -> str:
@@ -111,13 +110,11 @@ class FunctionConfig(BaseModel, Generic[T_fn]):
 
     def write(self, function_dir: Path):
         if self.system_schema:
-            write_pydantic_schema(
-                function_dir / "system_schema.json", self.system_schema
-            )
+            write_json_schema(function_dir / "system_schema.json", self.system_schema)
         if self.user_schema:
-            write_pydantic_schema(function_dir / "user_schema.json", self.user_schema)
+            write_json_schema(function_dir / "user_schema.json", self.user_schema)
         if self.assistant_schema:
-            write_pydantic_schema(
+            write_json_schema(
                 function_dir / "assistant_schema.json", self.assistant_schema
             )
 
@@ -153,7 +150,7 @@ class FunctionConfigJson(FunctionConfig[Literal[FunctionConfigType.JSON]]):
     type: Literal[FunctionConfigType.JSON] = Field(default=FunctionConfigType.JSON)
 
     # JSON-specific field: a pointer to a BaseModel subclass defining the output schema.
-    output_schema: Type[BaseModel]
+    output_schema: Dict[str, Any]
 
     implicit_tool_call_config: Optional[ToolCallConfig] = None
 
@@ -166,8 +163,8 @@ class FunctionConfigJson(FunctionConfig[Literal[FunctionConfigType.JSON]]):
     )
     @classmethod
     def validate_schema(
-        cls, value: Union[str, Type[BaseModel]], values: ValidationInfo
-    ) -> Type[BaseModel]:
+        cls, value: Union[str, Dict[str, Any]], values: ValidationInfo
+    ) -> Dict[str, Any]:
         """Allow system_schema and output_schema to be either a file path or a BaseModel subclass."""
         return super().validate_schema(value, values)
 
@@ -177,7 +174,7 @@ class FunctionConfigJson(FunctionConfig[Literal[FunctionConfigType.JSON]]):
 
     def write(self, function_dir: Path):
         super().write(function_dir)
-        write_output_schema(function_dir / "output_schema.json", self.output_schema)
+        write_json_schema(function_dir / "output_schema.json", self.output_schema)
 
 
 class FunctionConfigs(BaseConfigs[Union[FunctionConfigChat, FunctionConfigJson]]):

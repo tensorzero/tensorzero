@@ -13,10 +13,6 @@ class BaseConfigs(BaseModel, Generic[T]):
     class Config:
         extra = "allow"
 
-    def __setattr__(self, key: str, value: T):
-        super().__setattr__(key, value)
-        self.__dict__[key] = value
-
     def __getitem__(self, key: str) -> T:
         """Get the configuration associated with the given key."""
         return getattr(self, key)
