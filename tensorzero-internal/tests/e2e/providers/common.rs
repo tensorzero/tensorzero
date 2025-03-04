@@ -584,7 +584,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     region = "us-east-1"
     bucket_name = "{test_bucket}"
     prefix = "{prefix}"
-    
+
     [functions]
     "#
         ),

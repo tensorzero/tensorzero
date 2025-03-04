@@ -13,13 +13,31 @@ repos:
       - id: check-xml
       - id: check-yaml
       - id: detect-private-key
-        exclude: ^tensorzero-internal/src/inference/providers/gcp_vertex_gemini\.rs$
+        exclude: ^tensorzero-internal/src/inference/providers/gcp_vertex_gemini\.rs$|^ci/dummy-gcp-credentials\.json$
       - id: end-of-file-fixer
         exclude: \.minijinja$
       - id: trailing-whitespace
 
   - repo: local
     hooks:
+      # Find every pyproject.toml and generate a uv.lock file
+      - id: uv-lock
+        name: uv lock
+        entry: bash -c 'for f in "$@"; do dir=$(dirname "$f"); echo "Locking $f"; uv lock --project="$f" && git add --intent-to-add "$dir/uv.lock"; done'
+        language: system
+        files: pyproject.toml$
+        pass_filenames: true
+        require_serial: true
+
+      # Find every pyproject.toml and generate a requirements.txt file
+      - id: uv-export
+        name: uv export
+        entry: bash -c 'for f in "$@"; do dir=$(dirname "$f"); echo "Exporting $f"; uv export --project="$f" --output-file="$dir/requirements.txt" --quiet && git add --intent-to-add "$dir/requirements.txt"; done'
+        language: system
+        files: pyproject.toml$
+        pass_filenames: true
+        require_serial: true
+
       - id: cargo-deny
         name: cargo deny
         entry: cargo deny check bans
@@ -80,24 +98,6 @@ repos:
         additional_dependencies:
           - typescript
         pass_filenames: false
-
-      # Find every pyproject.toml and generate a uv.lock file
-      - id: uv-lock
-        name: uv lock
-        entry: bash -c 'for f in "$@"; do dir=$(dirname "$f"); echo "Locking $f"; uv lock --project="$f" && git add --intent-to-add "$dir/uv.lock"; done'
-        language: system
-        files: pyproject.toml$
-        pass_filenames: true
-        require_serial: true
-
-      # Find every pyproject.toml and generate a requirements.txt file
-      - id: uv-export
-        name: uv export
-        entry: bash -c 'for f in "$@"; do dir=$(dirname "$f"); echo "Exporting $f"; uv export --project="$f" --output-file="$dir/requirements.txt" --quiet && git add --intent-to-add "$dir/requirements.txt"; done'
-        language: system
-        files: pyproject.toml$
-        pass_filenames: true
-        require_serial: true
 
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0
