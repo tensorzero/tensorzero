@@ -11,6 +11,7 @@ use crate::{
     clickhouse::ClickHouseConnectionInfo,
     error::{Error, ErrorDetails},
     gateway_util::{AppState, StructuredJson},
+    inference::types::batch::{deserialize_json_string, deserialize_optional_json_string},
     inference::types::{
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, JsonInferenceDatabaseInsert,
         JsonInferenceOutput, ResolvedInput,
@@ -166,71 +167,36 @@ pub async fn create_datapoint_handler(
     let inference_data =
         query_inference_for_datapoint(&app_state.clickhouse_connection_info, params.inference_id)
             .await?;
-    let datapoint_output = match params.output {
-        OutputKind::Inherit => match &inference_data {
-            TaggedInferenceDatabaseInsert::Json(inference) => {
-                Some(serde_json::to_string(&inference.output).map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!("Failed to serialize JSON output: {}", e),
-                    })
-                })?)
-            }
-            TaggedInferenceDatabaseInsert::Chat(inference) => {
-                Some(serde_json::to_string(&inference.output).map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!("Failed to serialize chat output: {}", e),
-                    })
-                })?)
-            }
-        },
-        OutputKind::Demonstration => {
-            let demonstration = query_demonstration(
-                &app_state.clickhouse_connection_info,
-                params.inference_id,
-                1,
-            )
-            .await?;
-            // Validate that the demonstration value has the expected format.
-            // The actual 'output' column will be copied directly from the demonstration,
-            // without round-tripping through serde.
-            match &inference_data {
-                TaggedInferenceDatabaseInsert::Json(_) => {
-                    let _: JsonInferenceOutput = serde_json::from_str(&demonstration.value)
-                        .map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: format!(
-                                    "Failed to deserialize JSON demonstration output: {}",
-                                    e
-                                ),
-                            })
-                        })?;
-                }
-                TaggedInferenceDatabaseInsert::Chat(_) => {
-                    let _: Vec<ContentBlockChatOutput> = serde_json::from_str(&demonstration.value)
-                        .map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: format!(
-                                    "Failed to deserialize chat demonstration output: {}",
-                                    e
-                                ),
-                            })
-                        })?;
-                }
-            };
-            Some(demonstration.value)
-        }
-        OutputKind::None => None,
-    };
 
     match inference_data {
         TaggedInferenceDatabaseInsert::Json(inference) => {
+            let output = match params.output {
+                OutputKind::Inherit => Some(inference.output),
+                OutputKind::Demonstration => {
+                    let demonstration = query_demonstration(
+                        &app_state.clickhouse_connection_info,
+                        params.inference_id,
+                        1,
+                    )
+                    .await?;
+                    Some(serde_json::from_str(&demonstration.value).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Failed to deserialize JSON demonstration output: {}",
+                                e
+                            ),
+                        })
+                    })?)
+                }
+                OutputKind::None => None,
+            };
             let datapoint = JsonInferenceDatapoint {
                 dataset_name: path_params.dataset,
                 function_name: inference.function_name,
                 id: inference.id,
                 episode_id: inference.episode_id,
                 input: inference.input,
-                output: datapoint_output,
+                output,
                 output_schema: inference.output_schema,
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
@@ -242,13 +208,33 @@ pub async fn create_datapoint_handler(
                 .await?;
         }
         TaggedInferenceDatabaseInsert::Chat(inference) => {
+            let output = match params.output {
+                OutputKind::Inherit => Some(inference.output),
+                OutputKind::Demonstration => {
+                    let demonstration = query_demonstration(
+                        &app_state.clickhouse_connection_info,
+                        params.inference_id,
+                        1,
+                    )
+                    .await?;
+                    Some(serde_json::from_str(&demonstration.value).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Failed to deserialize chat demonstration output: {}",
+                                e
+                            ),
+                        })
+                    })?)
+                }
+                OutputKind::None => None,
+            };
             let datapoint = ChatInferenceDatapoint {
                 dataset_name: path_params.dataset,
                 function_name: inference.function_name,
                 id: inference.id,
                 episode_id: inference.episode_id,
                 input: inference.input,
-                output: datapoint_output,
+                output,
                 tool_params: inference.tool_params,
                 tags: Some(inference.tags),
                 auxiliary: "{}".to_string(),
@@ -277,35 +263,56 @@ pub struct CreateDatapointParams {
 #[derive(Debug, Serialize)]
 pub struct CreateDatapointResponse {}
 
+#[derive(Debug, Deserialize, Serialize)]
 pub enum Datapoint {
     ChatInference(ChatInferenceDatapoint),
     JsonInference(JsonInferenceDatapoint),
 }
 
-#[derive(Debug, Serialize)]
+impl Datapoint {
+    pub fn dataset_name(&self) -> &str {
+        match self {
+            Datapoint::ChatInference(datapoint) => &datapoint.dataset_name,
+            Datapoint::JsonInference(datapoint) => &datapoint.dataset_name,
+        }
+    }
+
+    pub fn input(&self) -> &ResolvedInput {
+        match self {
+            Datapoint::ChatInference(datapoint) => &datapoint.input,
+            Datapoint::JsonInference(datapoint) => &datapoint.input,
+        }
+    }
+}
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
     pub id: Uuid,
     pub episode_id: Uuid,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub output: Option<String>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub tags: Option<HashMap<String, String>>,
     pub auxiliary: String,
     pub is_deleted: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
     pub id: Uuid,
     pub episode_id: Uuid,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
-    pub output: Option<String>,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    pub output: Option<JsonInferenceOutput>,
     pub output_schema: serde_json::Value,
     pub tags: Option<HashMap<String, String>>,
     pub auxiliary: String,
