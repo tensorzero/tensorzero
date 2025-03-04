@@ -8,7 +8,7 @@ pub use image::{Base64Image, Image, ImageKind};
 use resolved_input::ImageWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -100,7 +100,16 @@ impl InputMessageContent {
         context: &FetchContext<'_>,
     ) -> Result<ResolvedInputMessageContent, Error> {
         Ok(match self {
-            InputMessageContent::Text { value } => ResolvedInputMessageContent::Text { value },
+            InputMessageContent::Text(TextKind::Text { text }) => {
+                ResolvedInputMessageContent::Text {
+                    value: Value::String(text),
+                }
+            }
+            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
+                ResolvedInputMessageContent::Text {
+                    value: Value::Object(arguments),
+                }
+            }
             InputMessageContent::ToolCall(tool_call) => {
                 ResolvedInputMessageContent::ToolCall(tool_call)
             }
@@ -109,6 +118,12 @@ impl InputMessageContent {
             }
             InputMessageContent::RawText { value } => {
                 ResolvedInputMessageContent::RawText { value }
+            }
+            InputMessageContent::Text(TextKind::LegacyValue { value }) => {
+                tracing::warn!(
+                    r#"Deprecation warning: `{{"type": "text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` or `{{"type": "text", "arguments": {{..}}}} ` instead."#
+                );
+                ResolvedInputMessageContent::Text { value }
             }
             InputMessageContent::Image(image) => {
                 let storage_kind = context
@@ -144,12 +159,20 @@ pub struct InputMessage {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InputMessageContent {
-    Text { value: Value },
+    Text(TextKind),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
     RawText { value: String },
     Image(Image),
     // We may extend this in the future to include other types of content
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(untagged, deny_unknown_fields)]
+pub enum TextKind {
+    Text { text: String },
+    Arguments { arguments: Map<String, Value> },
+    LegacyValue { value: Value },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
@@ -501,9 +524,7 @@ pub struct ModelInferenceDatabaseInsert {
 #[cfg(test)]
 impl From<String> for InputMessageContent {
     fn from(text: String) -> Self {
-        InputMessageContent::Text {
-            value: Value::String(text),
-        }
+        InputMessageContent::Text(TextKind::Text { text })
     }
 }
 
@@ -520,12 +541,6 @@ impl From<String> for ResolvedInputMessageContent {
 impl From<String> for ContentBlockChatOutput {
     fn from(text: String) -> Self {
         ContentBlockChatOutput::Text(Text { text })
-    }
-}
-
-impl From<Value> for InputMessageContent {
-    fn from(value: Value) -> Self {
-        InputMessageContent::Text { value }
     }
 }
 
@@ -558,14 +573,13 @@ impl<'de> Deserialize<'de> for InputMessage {
 
         let content = match helper.content {
             ContentHelper::Single(text) => {
-                vec![InputMessageContent::Text {
-                    value: Value::String(text),
-                }]
+                vec![InputMessageContent::Text(TextKind::Text { text })]
             }
             ContentHelper::Object(object) => {
-                vec![InputMessageContent::Text {
+                tracing::warn!("Deprecation warning - passing in an object for `content` is deprecated. Please use an array of content blocks instead.");
+                vec![InputMessageContent::Text(TextKind::LegacyValue {
                     value: Value::Object(object),
-                }]
+                })]
             }
             ContentHelper::Multiple(content) => content,
         };
@@ -2574,8 +2588,10 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
-            InputMessageContent::Text { value } => assert_eq!(value, "Hello, world!"),
-            _ => panic!("Expected Text content"),
+            InputMessageContent::Text(TextKind::Text { text }) => {
+                assert_eq!(text, "Hello, world!")
+            }
+            _ => panic!("Expected Text content: {message:?}"),
         }
 
         // Test case for object content
@@ -2587,7 +2603,7 @@ mod tests {
         assert_eq!(message.role, Role::Assistant);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
-            InputMessageContent::Text { value } => {
+            InputMessageContent::Text(TextKind::LegacyValue { value }) => {
                 assert_eq!(value, &json!({"key": "value"}))
             }
             _ => panic!("Expected Text content"),
@@ -2605,7 +2621,9 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Text { value } => assert_eq!(value, "Hello"),
+            InputMessageContent::Text(TextKind::LegacyValue { value }) => {
+                assert_eq!(value, "Hello")
+            }
             _ => panic!("Expected Text content"),
         }
         match &message.content[1] {
@@ -2628,7 +2646,7 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Text { value } => {
+            InputMessageContent::Text(TextKind::LegacyValue { value }) => {
                 assert_eq!(
                     value,
                     &json!({"complex": "json", "with": ["nested", "array"]})
