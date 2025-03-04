@@ -1,7 +1,6 @@
 [project]
-name = "data-extraction-ner"
+name = "tensorzero-examples-data-extraction-ner"
 version = "0.0.0"
-description = "Example: Optimizing Data Extraction (NER) with TensorZero"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [

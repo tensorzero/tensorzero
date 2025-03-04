@@ -337,27 +337,6 @@ wheels = [
 ]
 
 [[package]]
-name = "data-extraction-ner"
-version = "0.0.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "altair" },
-    { name = "ipykernel" },
-    { name = "notebook" },
-    { name = "pandas" },
-    { name = "tensorzero" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "altair" },
-    { name = "ipykernel" },
-    { name = "notebook" },
-    { name = "pandas" },
-    { name = "tensorzero" },
-]
-
-[[package]]
 name = "debugpy"
 version = "1.8.12"
 source = { registry = "https://pypi.org/simple" }
@@ -1813,6 +1792,27 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/74/70/1100dc905f63425fa4eff04ea829236b9cf08bb576871f5d4292854c5340/tensorzero-2025.2.6-cp39-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:dda641f8eca36bbbf387729215ed71f156ab3412d69a2a817dd7430751b5e350", size = 9884380 },
     { url = "https://files.pythonhosted.org/packages/9b/31/1a34c4a13f6d0d922fc0abfa43e3ab41d3f59bef38a6f6b092d6d61d0de3/tensorzero-2025.2.6-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:216c5b8bfca1011170697b9af6efccc5902631d3dca1c182dcba6e54398a69bc", size = 10644784 },
     { url = "https://files.pythonhosted.org/packages/a8/1c/6b835807d4310a878cebbcf0187a17659a1331faaa391c587665036b23d7/tensorzero-2025.2.6-cp39-abi3-win_amd64.whl", hash = "sha256:13e634c9297efaeaf70c138f6ba422aa88ada74ed800ce7bfca7743eff68069b", size = 10123646 },
+]
+
+[[package]]
+name = "tensorzero-examples-data-extraction-ner"
+version = "0.0.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "altair" },
+    { name = "ipykernel" },
+    { name = "notebook" },
+    { name = "pandas" },
+    { name = "tensorzero" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "altair" },
+    { name = "ipykernel" },
+    { name = "notebook" },
+    { name = "pandas" },
+    { name = "tensorzero" },
 ]
 
 [[package]]
