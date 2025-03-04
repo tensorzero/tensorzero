@@ -20,16 +20,9 @@ pub struct Migration0004<'a> {
 
 #[async_trait]
 impl Migration for Migration0004<'_> {
-    /// Check if you can connect to the database and if the ModelInference table exists
+    /// Check if the ModelInference table exists
     /// If all of this is OK, then we can apply the migration
     async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse.health().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0004".to_string(),
-                message: e.to_string(),
-            })
-        })?;
-
         if !check_table_exists(self.clickhouse, "ModelInference", "0004").await? {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: "0004".to_string(),
