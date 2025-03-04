@@ -23,20 +23,18 @@ repos:
       # Find every pyproject.toml and generate a uv.lock file
       - id: uv-lock
         name: uv lock
-        entry: bash -c 'for f in "$@"; do dir=$(dirname "$f"); echo "Locking $f"; uv lock --project="$f" && git add --intent-to-add "$dir/uv.lock"; done'
+        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Locking $f"; uv lock --project="$f" && git add --intent-to-add "$dir/uv.lock"; done'
         language: system
-        files: pyproject.toml$
-        pass_filenames: true
-        require_serial: true
+        pass_filenames: false
+        always_run: true
 
       # Find every pyproject.toml and generate a requirements.txt file
       - id: uv-export
         name: uv export
-        entry: bash -c 'for f in "$@"; do dir=$(dirname "$f"); echo "Exporting $f"; uv export --project="$f" --output-file="$dir/requirements.txt" --quiet && git add --intent-to-add "$dir/requirements.txt"; done'
+        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Exporting $f"; uv export --project="$f" --output-file="$dir/requirements.txt" --quiet && git add --intent-to-add "$dir/requirements.txt"; done'
         language: system
-        files: pyproject.toml$
-        pass_filenames: true
-        require_serial: true
+        pass_filenames: false
+        always_run: true
 
       - id: cargo-deny
         name: cargo deny
