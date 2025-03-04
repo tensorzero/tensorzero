@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use tensorzero::{ClientBuilder, ClientBuilderMode};
+use tokio::{sync::Semaphore, task::JoinSet};
 use url::Url;
 
 #[derive(Parser, Debug)]
@@ -23,6 +24,10 @@ struct Args {
     /// Name of the variant to run.
     #[arg(short, long)]
     variant: String,
+
+    /// Number of concurrent requests to make.
+    #[arg(short, long, default_value = "1")]
+    concurrency: usize,
 }
 
 #[tokio::main]
@@ -31,6 +36,8 @@ async fn main() -> Result<()> {
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))?;
     let args = Args::parse();
+    let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
+        .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
 
     #[allow(unused)]
     let tensorzero_client = match args.gateway_url {
@@ -39,15 +46,16 @@ async fn main() -> Result<()> {
         }
         None => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(args.config_file),
-            clickhouse_url: Some(
-                std::env::var("TENSORZERO_CLICKHOUSE_URL")
-                    .map_err(|_| anyhow!("Missing ClickHouse URL"))?,
-            ),
+            clickhouse_url: Some(clickhouse_url),
         }),
     }
     .build()
     .await
     .map_err(|e| anyhow!("Failed to build client: {}", e))?;
+
+    let semaphore = Semaphore::new(args.concurrency);
+    let clickhouse_client = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
+    // let mut join_set = JoinSet::new();
 
     Ok(())
 }
