@@ -3,7 +3,11 @@ repos:
     rev: v4.6.0
     hooks:
       - id: check-added-large-files
-        exclude: ^examples/data-extraction-ner/data/clickhouse/fixture\.zip$
+        exclude: |
+          (?x)^(
+              examples/data-extraction-ner/data/clickhouse/fixture\.zip$|
+              examples/haiku-hidden-preferences/data/clickhouse/fixture\.zip$
+          )$
       - id: check-case-conflict
       - id: check-executables-have-shebangs
       - id: check-json
@@ -14,7 +18,11 @@ repos:
       - id: check-xml
       - id: check-yaml
       - id: detect-private-key
-        exclude: ^tensorzero-internal/src/inference/providers/gcp_vertex_gemini\.rs$|^ci/dummy-gcp-credentials\.json$
+        exclude: |
+          (?x)^(
+              tensorzero-internal/src/inference/providers/gcp_vertex_gemini\.rs|
+              ci/dummy-gcp-credentials\.json
+          )$
       - id: end-of-file-fixer
         exclude: \.minijinja$
       - id: trailing-whitespace
