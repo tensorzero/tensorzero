@@ -1,7 +1,6 @@
 import asyncio
 from typing import Any, Dict, Optional
 
-from minijinja import Environment
 from tensorzero import AsyncTensorZeroGateway, InferenceResponse
 
 
@@ -38,44 +37,20 @@ async def get_instructions(
         return None
 
 
-async def generate_answer(
+async def candidate_inference(
     client: AsyncTensorZeroGateway,
     function_name: str,
-    instruction: str,
-    demonstrations: str,
-    query: str,
+    input: Dict[str, Any],
+    variant_name: str,
     semaphore: asyncio.Semaphore,
-    output_schema: Dict[str, Any] = None,
-    system_args: Dict[str, Any] = None,
-    variant_name: str = "gpt_4o_mini",
     dryrun: bool = True,
 ) -> Optional["InferenceResponse"]:
-    """
-    Generate an answer from the client with retries.
-    """
-
-    if system_args:
-        env = Environment(templates={"system": instruction})
-        instruction = env.render_template("system", **system_args)
-
     try:
         async with semaphore:
             return await client.inference(
                 function_name=function_name,
-                input={
-                    "system": {
-                        "instructions": instruction,
-                        "demonstrations": demonstrations,
-                    },
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": {"query": query},
-                        },
-                    ],
-                },
+                input=input,
                 variant_name=variant_name,
-                output_schema=output_schema,
                 dryrun=dryrun,
             )
     except Exception as e:

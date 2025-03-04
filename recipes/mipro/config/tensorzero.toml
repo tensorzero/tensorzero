@@ -14,32 +14,6 @@ model = "openai::o1"
 retries = { num_retries = 3, max_delay_s = 10 }
 system_template = "functions/generate_instruction/baseline/system_template.minijinja"
 
-[functions.generate_answer_chat]
-type = "chat"
-system_schema = "functions/generate_answer_chat/system_schema.json"
-user_schema = "functions/generate_answer_chat/user_schema.json"
-
-[functions.generate_answer_chat.variants.gpt_4o_mini]
-type = "chat_completion"
-weight = 1.0
-model = "openai::gpt-4o-mini-2024-07-18"
-retries = { num_retries = 3, max_delay_s = 10 }
-system_template = "functions/generate_answer_chat/search_template/system_template.minijinja"
-user_template = "functions/generate_answer_chat/search_template/user_template.minijinja"
-
-[functions.generate_answer_json]
-type = "json"
-system_schema = "functions/generate_answer_json/system_schema.json"
-user_schema = "functions/generate_answer_json/user_schema.json"
-
-[functions.generate_answer_json.variants.gpt_4o_mini]
-type = "chat_completion"
-weight = 1.0
-model = "openai::gpt-4o-mini-2024-07-18"
-retries = { num_retries = 3, max_delay_s = 10 }
-system_template = "functions/generate_answer_json/search_template/system_template.minijinja"
-user_template = "functions/generate_answer_json/search_template/user_template.minijinja"
-
 [functions.judge_answer]
 type = "json"
 output_schema = "functions/judge_answer/output_schema.json"
