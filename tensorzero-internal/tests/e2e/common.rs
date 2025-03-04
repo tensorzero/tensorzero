@@ -31,6 +31,48 @@ pub async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo
         .unwrap();
 }
 
+#[allow(dead_code)]
+pub(crate) async fn select_chat_datapoint_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    inference_id: Uuid,
+) -> Option<Value> {
+    #[cfg(feature = "e2e_tests")]
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM ChatInferenceDataset WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
+        inference_id
+    );
+
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}
+
+#[allow(dead_code)]
+pub(crate) async fn select_json_datapoint_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    inference_id: Uuid,
+) -> Option<Value> {
+    #[cfg(feature = "e2e_tests")]
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM JsonInferenceDataset WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
+        inference_id
+    );
+
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}
+
 pub(crate) async fn select_chat_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,

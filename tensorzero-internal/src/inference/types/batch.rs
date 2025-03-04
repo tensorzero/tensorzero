@@ -165,16 +165,21 @@ where
     serde_json::from_str(&json_str).map_err(serde::de::Error::custom)
 }
 
-fn deserialize_optional_json_string<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+pub fn deserialize_optional_json_string<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: serde::de::DeserializeOwned,
 {
     let opt_json_str: Option<String> = Option::deserialize(deserializer)?;
     match opt_json_str {
-        Some(json_str) => serde_json::from_str(&json_str)
-            .map(Some)
-            .map_err(serde::de::Error::custom),
+        Some(json_str) => {
+            if json_str.is_empty() {
+                return Ok(None);
+            }
+            serde_json::from_str(&json_str)
+                .map(Some)
+                .map_err(serde::de::Error::custom)
+        }
         None => Ok(None),
     }
 }
@@ -222,6 +227,7 @@ pub struct BatchModelInferenceRow<'a> {
     #[serde(deserialize_with = "deserialize_json_string")]
     pub input_messages: Vec<RequestMessage>,
     pub system: Option<Cow<'a, str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(deserialize_with = "deserialize_json_string")]
