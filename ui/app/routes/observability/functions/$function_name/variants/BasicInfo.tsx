@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { Badge } from "~/components/ui/badge";
 import {
   Collapsible,
   CollapsibleContent,
@@ -134,9 +133,7 @@ export default function BasicVariantInfo({
           <div>
             <dt className="text-lg font-semibold">Type</dt>
             <dd>
-              <Badge variant="outline" className="bg-blue-200">
-                {variantConfig.type}
-              </Badge>
+              <Code>{variantConfig.type}</Code>
             </dd>
           </div>
 
