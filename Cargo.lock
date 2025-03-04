@@ -1280,6 +1280,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "serde",
+ "serde_json",
  "tensorzero",
  "tensorzero-internal",
  "tokio",
