@@ -1279,6 +1279,7 @@ dependencies = [
  "anyhow",
  "clap",
  "tensorzero",
+ "tensorzero-internal",
  "tokio",
  "tracing",
  "tracing-subscriber",

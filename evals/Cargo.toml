@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 tensorzero = { path = "../clients/rust" }
+tensorzero-internal = { path = "../tensorzero-internal" }
 clap = { workspace = true }
 url = { workspace = true }
 tracing = { workspace = true }
