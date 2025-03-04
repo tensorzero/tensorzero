@@ -1,17 +1,13 @@
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent } from "~/components/ui/card";
 
 interface ParameterCardProps {
-  title: string;
   parameters: Record<string, unknown>;
 }
 
-export function ParameterCard({ title, parameters }: ParameterCardProps) {
+export function ParameterCard({ parameters }: ParameterCardProps) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
         <pre className="overflow-x-auto rounded-md bg-muted p-4">
           <code className="text-sm">{JSON.stringify(parameters, null, 2)}</code>
         </pre>
