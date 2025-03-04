@@ -2,7 +2,7 @@ use async_trait::async_trait;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::clickhouse_migration_manager::migration_trait::Migration;
-use crate::error::{Error, ErrorDetails};
+use crate::error::Error;
 
 use super::check_table_exists;
 
@@ -14,14 +14,8 @@ pub struct Migration0002<'a> {
 
 #[async_trait]
 impl Migration for Migration0002<'_> {
-    /// Check if you can connect to the database
     async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse.health().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0002".to_string(),
-                message: e.to_string(),
-            })
-        })
+        Ok(())
     }
 
     /// Check if the migration has already been applied

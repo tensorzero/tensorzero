@@ -22,15 +22,7 @@ pub struct Migration0014<'a> {
 
 #[async_trait]
 impl Migration for Migration0014<'_> {
-    /// Check if you can connect to the database
     async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse.health().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0014".to_string(),
-                message: e.to_string(),
-            })
-        })?;
-
         Ok(())
     }
 

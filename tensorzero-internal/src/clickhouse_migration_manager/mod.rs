@@ -21,6 +21,7 @@ use migrations::migration_0015::Migration0015;
 use async_trait::async_trait;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
+    clickhouse.health().await?;
     // This is a no-op if the database already exists
     clickhouse.create_database().await?;
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
