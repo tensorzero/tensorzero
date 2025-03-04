@@ -104,6 +104,10 @@ async fn main() {
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
         .route(
+            "/datasets/:dataset/datapoints",
+            post(endpoints::datasets::create_datapoint_handler),
+        )
+        .route(
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
         )

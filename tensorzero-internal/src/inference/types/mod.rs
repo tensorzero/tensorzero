@@ -1,3 +1,5 @@
+use crate::inference::types::batch::deserialize_json_string;
+use crate::inference::types::batch::deserialize_optional_json_string;
 use derive_builder::Builder;
 use futures::stream::Peekable;
 use futures::Stream;
@@ -458,36 +460,43 @@ pub enum InferenceResultChunk {
 /// For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and ModelInferenceDatabaseInserts,
 /// which are written to ClickHouse tables of the same name asynchronously.
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ChatInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u32>,
     pub tags: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct JsonInferenceDatabaseInsert {
     pub id: Uuid,
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub output: JsonInferenceOutput,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u32>,
     pub output_schema: Value,
     pub tags: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum InferenceDatabaseInsert {
     Chat(ChatInferenceDatabaseInsert),

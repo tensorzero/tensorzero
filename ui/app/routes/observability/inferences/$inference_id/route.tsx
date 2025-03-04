@@ -24,17 +24,17 @@ import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { ParameterCard } from "./InferenceParameters";
 import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesAccordion } from "./ModelInferencesAccordion";
-import { TooltipContent } from "~/components/ui/tooltip";
-import { TooltipTrigger } from "~/components/ui/tooltip";
-import { Tooltip } from "~/components/ui/tooltip";
-import { TooltipProvider } from "~/components/ui/tooltip";
-import { Badge } from "~/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { useState } from "react";
 import { useConfig } from "~/context/config";
 import { VariantResponseModal } from "./VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
-import { PageHeader } from "~/components/layout/PageHeader";
+import {
+  PageHeader,
+  PageLayout,
+  SectionHeader,
+  SectionLayout,
+  SectionsGroup,
+} from "~/components/layout/PageLayout";
 import {
   getDatasetCounts,
   insertDatapoint,
@@ -206,46 +206,45 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="container mx-auto px-4 pb-8">
-      <PageHeader headline={`Inference ${inference.id}`} />
-      <div className="space-y-6">
-        <BasicInfo
-          inference={inference}
-          inferenceUsage={getTotalInferenceUsage(model_inferences)}
-          tryWithVariantProps={{
-            variants,
-            onVariantSelect,
-            isLoading: variantInferenceIsLoading,
-          }}
-          dataset_counts={dataset_counts}
-          onDatasetSelect={handleAddToDataset}
-          hasDemonstration={hasDemonstration}
-        />
-        <Input input={inference.input} />
-        <Output output={inference.output} />
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl">
-              Feedback
-              <TooltipProvider>
-                <Tooltip delayDuration={0}>
-                  <TooltipTrigger asChild>
-                    <Badge variant="outline" className="px-2 py-0.5 text-xs">
-                      inference
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="max-w-xs">
-                      This table only includes inference-level feedback. To see
-                      episode-level feedback, open the detail page for that
-                      episode.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <Badge variant="secondary">Count: {num_feedbacks}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+      <PageLayout>
+        <PageHeader heading="Inference" name={inference.id} />
+
+        <SectionsGroup>
+          <SectionLayout>
+            <BasicInfo
+              inference={inference}
+              inferenceUsage={getTotalInferenceUsage(model_inferences)}
+              tryWithVariantProps={{
+                variants,
+                onVariantSelect,
+                isLoading: variantInferenceIsLoading,
+              }}
+              dataset_counts={dataset_counts}
+              onDatasetSelect={handleAddToDataset}
+              hasDemonstration={hasDemonstration}
+            />
+          </SectionLayout>
+
+          <SectionLayout>
+            <SectionHeader heading="Input" />
+            <Input input={inference.input} />
+          </SectionLayout>
+
+          <SectionLayout>
+            <SectionHeader heading="Output" />
+            <Output output={inference.output} />
+          </SectionLayout>
+
+          <SectionLayout>
+            <SectionHeader
+              heading="Feedback"
+              count={num_feedbacks}
+              badge={{
+                name: "inference",
+                tooltip:
+                  "This table only includes inference-level feedback. To see episode-level feedback, open the detail page for that episode.",
+              }}
+            />
             <FeedbackTable feedback={feedback} />
             <PageButtons
               onNextPage={handleNextFeedbackPage}
@@ -253,28 +252,39 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
               disableNext={disableNextFeedbackPage}
               disablePrevious={disablePreviousFeedbackPage}
             />
-          </CardContent>
-        </Card>
-        <ParameterCard
-          title="Inference Parameters"
-          parameters={inference.inference_params}
-        />
-        {inference.function_type === "chat" && (
-          <ParameterCard
-            title="Tool Parameters"
-            parameters={inference.tool_params}
-          />
-        )}
-        {inference.function_type === "json" && (
-          <ParameterCard
-            title="Output Schema"
-            parameters={inference.output_schema}
-          />
-        )}
-        {Object.keys(inference.tags).length > 0 && (
-          <TagsTable tags={inference.tags} />
-        )}
-        <ModelInferencesAccordion modelInferences={model_inferences} />
+          </SectionLayout>
+
+          <SectionLayout>
+            <SectionHeader heading="Inference Parameters" />
+            <ParameterCard parameters={inference.inference_params} />
+          </SectionLayout>
+
+          {inference.function_type === "chat" && (
+            <SectionLayout>
+              <SectionHeader heading="Tool Parameters" />
+              <ParameterCard parameters={inference.tool_params} />
+            </SectionLayout>
+          )}
+
+          {inference.function_type === "json" && (
+            <SectionLayout>
+              <SectionHeader heading="Output Schema" />
+              <ParameterCard parameters={inference.output_schema} />
+            </SectionLayout>
+          )}
+
+          {Object.keys(inference.tags).length > 0 && (
+            <SectionLayout>
+              <SectionHeader heading="Tags" />
+              <TagsTable tags={inference.tags} />
+            </SectionLayout>
+          )}
+
+          <SectionLayout>
+            <SectionHeader heading="Model Inferences" />
+            <ModelInferencesAccordion modelInferences={model_inferences} />
+          </SectionLayout>
+        </SectionsGroup>
 
         {selectedVariant && (
           <VariantResponseModal
@@ -287,7 +297,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
             selectedVariant={selectedVariant}
           />
         )}
-      </div>
+      </PageLayout>
     </div>
   );
 }

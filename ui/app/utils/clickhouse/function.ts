@@ -351,3 +351,32 @@ ORDER BY count DESC
   const parsedRows = z.array(variantCountsSchema).parse(rows);
   return parsedRows;
 }
+
+export async function getUsedVariants(
+  function_name: string,
+): Promise<string[]> {
+  const query = `
+  SELECT DISTINCT variant_name
+  FROM (
+    SELECT variant_name
+    FROM ChatInference
+    WHERE function_name = {function_name:String}
+    UNION ALL
+    SELECT variant_name
+    FROM JsonInference
+    WHERE function_name = {function_name:String}
+  )
+`;
+  const resultSet = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: { function_name },
+  });
+  const rows = await resultSet.json();
+
+  const parsedRows = z
+    .array(z.object({ variant_name: z.string() }))
+    .parse(rows)
+    .map((row) => row.variant_name);
+  return parsedRows;
+}

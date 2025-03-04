@@ -57,29 +57,34 @@ impl Migration for Migration0014<'_> {
             return Ok(true);
         }
 
-        let chat_inference_dataset_has_data =
-            table_is_nonempty(self.clickhouse, "ChatInferenceDataset", "0014").await?;
-        if chat_inference_dataset_has_data {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0014".to_string(),
-                message: "ChatInferenceDataset has data. Your database state is invalid."
-                    .to_string(),
-            }));
-        }
-        let json_inference_dataset_has_data =
-            table_is_nonempty(self.clickhouse, "JsonInferenceDataset", "0014").await?;
-        if json_inference_dataset_has_data {
-            return Err(Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0014".to_string(),
-                message: "JsonInferenceDataset has data. Your database state is invalid."
-                    .to_string(),
-            }));
-        }
-
         Ok(false)
     }
 
     async fn apply(&self) -> Result<(), Error> {
+        if check_table_exists(self.clickhouse, "ChatInferenceDataset", "0014").await? {
+            let chat_inference_dataset_has_data =
+                table_is_nonempty(self.clickhouse, "ChatInferenceDataset", "0014").await?;
+            if chat_inference_dataset_has_data {
+                return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0014".to_string(),
+                    message: "ChatInferenceDataset has data. Your database state is invalid."
+                        .to_string(),
+                }));
+            }
+        }
+
+        if check_table_exists(self.clickhouse, "JsonInferenceDataset", "0014").await? {
+            let json_inference_dataset_has_data =
+                table_is_nonempty(self.clickhouse, "JsonInferenceDataset", "0014").await?;
+            if json_inference_dataset_has_data {
+                return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0014".to_string(),
+                    message: "JsonInferenceDataset has data. Your database state is invalid."
+                        .to_string(),
+                }));
+            }
+        }
+
         // First, drop the tables if they were created in 0012
         let query = "DROP TABLE IF EXISTS ChatInferenceDataset";
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;

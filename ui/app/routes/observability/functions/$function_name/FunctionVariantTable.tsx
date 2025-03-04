@@ -35,31 +35,42 @@ export default function FunctionVariantTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {variant_counts.map((variant_count) => (
-          <TableRow
-            key={variant_count.variant_name}
-            id={variant_count.variant_name}
-          >
-            <TableCell className="max-w-[200px]">
-              <Link
-                to={`/observability/functions/${function_name}/variants/${variant_count.variant_name}`}
-                className="block no-underline"
-              >
-                <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                  {variant_count.variant_name}
-                </code>
-              </Link>
-            </TableCell>
-            <TableCell>
-              <Code>{variant_count.type}</Code>
-            </TableCell>
-            <TableCell>{variant_count.weight}</TableCell>
-            <TableCell>{variant_count.count}</TableCell>
-            <TableCell>
-              {formatDate(new Date(variant_count.last_used))}
+        {variant_counts.length === 0 ? (
+          <TableRow className="hover:bg-background-primary">
+            <TableCell
+              colSpan={5}
+              className="px-3 py-8 text-center text-foreground-muted"
+            >
+              No variants found
             </TableCell>
           </TableRow>
-        ))}
+        ) : (
+          variant_counts.map((variant_count) => (
+            <TableRow
+              key={variant_count.variant_name}
+              id={variant_count.variant_name}
+            >
+              <TableCell className="max-w-[200px]">
+                <Link
+                  to={`/observability/functions/${function_name}/variants/${variant_count.variant_name}`}
+                  className="block no-underline"
+                >
+                  <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                    {variant_count.variant_name}
+                  </code>
+                </Link>
+              </TableCell>
+              <TableCell>
+                <Code>{variant_count.type}</Code>
+              </TableCell>
+              <TableCell>{variant_count.weight}</TableCell>
+              <TableCell>{variant_count.count}</TableCell>
+              <TableCell>
+                {formatDate(new Date(variant_count.last_used))}
+              </TableCell>
+            </TableRow>
+          ))
+        )}
       </TableBody>
     </Table>
   );
