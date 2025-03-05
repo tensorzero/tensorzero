@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -11,11 +12,13 @@ use tokio::time::Instant;
 use url::Url;
 use uuid::Uuid;
 
+use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::resolved_input::ImageWithPath;
+use crate::inference::types::FlattenUnknown;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -136,7 +139,11 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
     /// Google AI Studio Gemini non-streaming API request
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -378,12 +385,14 @@ struct GeminiInlineData<'a> {
     data: &'a str,
 }
 
-impl<'a> TryFrom<&'a ContentBlock> for Option<GeminiPart<'a>> {
+impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GeminiPart<'a>>> {
     type Error = Error;
 
     fn try_from(block: &'a ContentBlock) -> Result<Self, Error> {
         match block {
-            ContentBlock::Text(Text { text }) => Ok(Some(GeminiPart::Text { text })),
+            ContentBlock::Text(Text { text }) => {
+                Ok(Some(FlattenUnknown::Normal(GeminiPart::Text { text })))
+            }
             ContentBlock::ToolResult(tool_result) => {
                 // Convert the tool result from String to JSON Value (Gemini expects an object)
                 let response: Value = serde_json::from_str(&tool_result.result).map_err(|e| {
@@ -402,12 +411,12 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GeminiPart<'a>> {
                     "content": response,
                 });
 
-                Ok(Some(GeminiPart::FunctionResponse {
+                Ok(Some(FlattenUnknown::Normal(GeminiPart::FunctionResponse {
                     function_response: GeminiFunctionResponse {
                         name: &tool_result.name,
                         response,
                     },
-                }))
+                })))
             }
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value (Gemini expects an object)
@@ -432,22 +441,22 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GeminiPart<'a>> {
                     .into());
                 }
 
-                Ok(Some(GeminiPart::FunctionCall {
+                Ok(Some(FlattenUnknown::Normal(GeminiPart::FunctionCall {
                     function_call: GeminiFunctionCall {
                         name: &tool_call.name,
                         args,
                     },
-                }))
+                })))
             }
             ContentBlock::Image(ImageWithPath {
                 image,
                 storage_path: _,
-            }) => Ok(Some(GeminiPart::InlineData {
+            }) => Ok(Some(FlattenUnknown::Normal(GeminiPart::InlineData {
                 inline_data: GeminiInlineData {
                     mime_type: image.mime_type.to_string(),
                     data: image.data()?.as_str(),
                 },
-            })),
+            }))),
 
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
@@ -455,6 +464,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GeminiPart<'a>> {
             // i.e. a judge or something.
             // We don't think the thoughts should be passed in in this case.
             ContentBlock::Thought(_thought) => Ok(None),
+            ContentBlock::Unknown {
+                data,
+                model_provider_name: _,
+            } => Ok(Some(FlattenUnknown::Unknown(Cow::Borrowed(data)))),
         }
     }
 }
@@ -462,7 +475,7 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GeminiPart<'a>> {
 #[derive(Debug, PartialEq, Serialize)]
 struct GeminiContent<'a> {
     role: GeminiRole,
-    parts: Vec<GeminiPart<'a>>,
+    parts: Vec<FlattenUnknown<'a, GeminiPart<'a>>>,
 }
 
 impl<'a> TryFrom<&'a RequestMessage> for GeminiContent<'a> {
@@ -470,11 +483,11 @@ impl<'a> TryFrom<&'a RequestMessage> for GeminiContent<'a> {
 
     fn try_from(message: &'a RequestMessage) -> Result<Self, Self::Error> {
         let role = GeminiRole::from(message.role);
-        let parts: Vec<GeminiPart> = message
+        let parts: Vec<FlattenUnknown<GeminiPart>> = message
             .content
             .iter()
             .map(|block| block.try_into())
-            .collect::<Result<Vec<Option<GeminiPart>>, _>>()?
+            .collect::<Result<Vec<Option<FlattenUnknown<GeminiPart>>>, _>>()?
             .into_iter()
             .flatten()
             .collect();
@@ -661,7 +674,7 @@ impl<'a> GeminiRequest<'a> {
             generation_config,
             system_instruction: system_instruction.map(|content| GeminiContent {
                 role: GeminiRole::Model,
-                parts: vec![content],
+                parts: vec![FlattenUnknown::Normal(content)],
             }),
         })
     }
@@ -941,7 +954,7 @@ mod tests {
 
     use super::*;
     use crate::inference::providers::common::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
+    use crate::inference::types::{FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode};
     use crate::tool::{ToolCallConfig, ToolResult};
 
     #[test]
@@ -955,9 +968,9 @@ mod tests {
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
             content.parts[0],
-            GeminiPart::Text {
+            FlattenUnknown::Normal(GeminiPart::Text {
                 text: "Hello, world!"
-            }
+            })
         );
 
         let message = RequestMessage {
@@ -969,9 +982,9 @@ mod tests {
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
             content.parts[0],
-            GeminiPart::Text {
+            FlattenUnknown::Normal(GeminiPart::Text {
                 text: "Hello, world!"
-            }
+            })
         );
         let message = RequestMessage {
             role: Role::Assistant,
@@ -989,18 +1002,18 @@ mod tests {
         assert_eq!(content.parts.len(), 2);
         assert_eq!(
             content.parts[0],
-            GeminiPart::Text {
+            FlattenUnknown::Normal(GeminiPart::Text {
                 text: "Here's the result of the function call:"
-            }
+            })
         );
         assert_eq!(
             content.parts[1],
-            GeminiPart::FunctionCall {
+            FlattenUnknown::Normal(GeminiPart::FunctionCall {
                 function_call: GeminiFunctionCall {
                     name: "get_temperature",
                     args: json!({"location": "New York", "unit": "celsius"}),
                 }
-            }
+            })
         );
 
         let message = RequestMessage {
@@ -1016,7 +1029,7 @@ mod tests {
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
             content.parts[0],
-            GeminiPart::FunctionResponse {
+            FlattenUnknown::Normal(GeminiPart::FunctionResponse {
                 function_response: GeminiFunctionResponse {
                     name: "get_temperature",
                     response: json!({
@@ -1024,7 +1037,7 @@ mod tests {
                         "content": json!({"temperature": 25, "conditions": "sunny"})
                     }),
                 }
-            }
+            })
         );
     }
 
@@ -1169,15 +1182,15 @@ mod tests {
         assert_eq!(request.contents[0].role, GeminiRole::User);
         assert_eq!(
             request.contents[0].parts[0],
-            GeminiPart::Text { text: "test_user" }
+            FlattenUnknown::Normal(GeminiPart::Text { text: "test_user" })
         );
         assert_eq!(request.contents[1].role, GeminiRole::Model);
         assert_eq!(request.contents[1].parts.len(), 1);
         assert_eq!(
             request.contents[1].parts[0],
-            GeminiPart::Text {
+            FlattenUnknown::Normal(GeminiPart::Text {
                 text: "test_assistant"
-            }
+            })
         );
 
         // Test case 3: Messages with system message and some of the optional fields are tested
@@ -1225,17 +1238,17 @@ mod tests {
         assert_eq!(request.contents[2].parts.len(), 1);
         assert_eq!(
             request.contents[0].parts[0],
-            GeminiPart::Text { text: "test_user" }
+            FlattenUnknown::Normal(GeminiPart::Text { text: "test_user" })
         );
         assert_eq!(
             request.contents[1].parts[0],
-            GeminiPart::Text { text: "test_user2" }
+            FlattenUnknown::Normal(GeminiPart::Text { text: "test_user2" })
         );
         assert_eq!(
             request.contents[2].parts[0],
-            GeminiPart::Text {
+            FlattenUnknown::Normal(GeminiPart::Text {
                 text: "test_assistant"
-            }
+            })
         );
         assert_eq!(
             request.generation_config.as_ref().unwrap().temperature,

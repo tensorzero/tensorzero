@@ -298,6 +298,7 @@ impl Datapoint {
         }
     }
 }
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,

@@ -15,12 +15,13 @@ use migrations::migration_0009::Migration0009;
 use migrations::migration_0011::Migration0011;
 // use migrations::migration_0012::Migration0012;
 use migrations::migration_0013::Migration0013;
-use migrations::migration_0014::Migration0014;
 use migrations::migration_0015::Migration0015;
+use migrations::migration_0016::Migration0016;
 
 use async_trait::async_trait;
 
 pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
+    clickhouse.health().await?;
     // This is a no-op if the database already exists
     clickhouse.create_database().await?;
     // If the first migration needs to run, we are starting from scratch and don't need to wait for data to migrate
@@ -62,8 +63,10 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
         clean_start,
     })
     .await?;
-    run_migration(&Migration0014 { clickhouse }).await?;
+    // BANNED: This migration is no longer needed because it is deleted and replaced by migration 0016
+    // run_migration(&Migration0014 { clickhouse }).await?;
     run_migration(&Migration0015 { clickhouse }).await?;
+    run_migration(&Migration0016 { clickhouse }).await?;
     // NOTE:
     // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
     //

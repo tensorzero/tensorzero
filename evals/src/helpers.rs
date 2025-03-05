@@ -3,7 +3,9 @@ use futures::future::join_all;
 use tensorzero::{DynamicToolParams, Input, InputMessage, InputMessageContent};
 use tensorzero_internal::{
     function::FunctionConfig,
-    inference::types::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent},
+    inference::types::{
+        ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, TextKind,
+    },
     tool::ToolCallConfigDatabaseInsert,
 };
 
@@ -46,7 +48,15 @@ async fn resolved_input_message_content_to_input_message_content(
     resolved_input_message_content: ResolvedInputMessageContent,
 ) -> Result<InputMessageContent> {
     match resolved_input_message_content {
-        ResolvedInputMessageContent::Text { value } => Ok(InputMessageContent::Text { value }),
+        ResolvedInputMessageContent::Text { value } => match value {
+            serde_json::Value::String(s) => {
+                Ok(InputMessageContent::Text(TextKind::Text { text: s }))
+            }
+            serde_json::Value::Object(o) => Ok(InputMessageContent::Text(TextKind::Arguments {
+                arguments: o,
+            })),
+            _ => Err(anyhow::anyhow!("Unsupported text content: {:?}", value)),
+        },
         ResolvedInputMessageContent::ToolCall(tool_call) => {
             Ok(InputMessageContent::ToolCall(tool_call))
         }
@@ -61,6 +71,13 @@ async fn resolved_input_message_content_to_input_message_content(
             // This will involve grabbing the image from object storage using the object storage client included in `tensorzero-internal`
             Err(anyhow::anyhow!("Image not supported for evals (yet!)"))
         }
+        ResolvedInputMessageContent::Unknown {
+            data,
+            model_provider_name,
+        } => Ok(InputMessageContent::Unknown {
+            data,
+            model_provider_name,
+        }),
     }
 }
 

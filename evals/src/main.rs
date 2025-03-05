@@ -116,7 +116,7 @@ async fn infer_datapoint(
 ) -> Result<InferenceResponse> {
     let input = resolved_input_to_input(datapoint.input().clone()).await?;
     let dynamic_tool_params = match datapoint.tool_call_config() {
-        Some(tool_params) => get_tool_params_args(tool_params, &function_config).await,
+        Some(tool_params) => get_tool_params_args(tool_params, function_config).await,
         None => DynamicToolParams::default(),
     };
     let output_schema = datapoint.output_schema();

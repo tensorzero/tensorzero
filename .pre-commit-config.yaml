@@ -3,6 +3,11 @@ repos:
     rev: v4.6.0
     hooks:
       - id: check-added-large-files
+        exclude: |
+          (?x)^(
+              examples/data-extraction-ner/data/clickhouse/fixture\.zip$|
+              examples/haiku-hidden-preferences/data/clickhouse/fixture\.zip$
+          )$
       - id: check-case-conflict
       - id: check-executables-have-shebangs
       - id: check-json
@@ -13,13 +18,33 @@ repos:
       - id: check-xml
       - id: check-yaml
       - id: detect-private-key
-        exclude: ^tensorzero-internal/src/inference/providers/gcp_vertex_gemini\.rs$
+        exclude: |
+          (?x)^(
+              tensorzero-internal/src/inference/providers/gcp_vertex_gemini\.rs|
+              ci/dummy-gcp-credentials\.json
+          )$
       - id: end-of-file-fixer
         exclude: \.minijinja$
       - id: trailing-whitespace
 
   - repo: local
     hooks:
+      # Find every pyproject.toml and generate a uv.lock file
+      - id: uv-lock
+        name: uv lock
+        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Locking $f"; uv lock --project="$f" && git add --intent-to-add "$dir/uv.lock"; done'
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      # Find every pyproject.toml and generate a requirements.txt file
+      - id: uv-export
+        name: uv export
+        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Exporting $f"; uv export --project="$f" --output-file="$dir/requirements.txt" --quiet && git add --intent-to-add "$dir/requirements.txt"; done'
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: cargo-deny
         name: cargo deny
         entry: cargo deny check bans
@@ -80,45 +105,6 @@ repos:
         additional_dependencies:
           - typescript
         pass_filenames: false
-
-  - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.5.25
-    hooks:
-      - id: uv-lock
-        name: "uv-lock: python-pyo3"
-        files: clients/python-pyo3/pyproject.toml
-        args: [--project, clients/python-pyo3/pyproject.toml]
-
-      - id: uv-export
-        name: "uv-export: python-pyo3"
-        files: clients/python-pyo3/pyproject.toml
-        args:
-          - "--project=clients/python-pyo3/pyproject.toml"
-          - "--output-file=clients/python-pyo3/requirements.txt"
-
-      - id: uv-lock
-        name: "uv-lock: python-deprecated"
-        files: clients/python-deprecated/pyproject.toml
-        args: [--project, clients/python-deprecated/pyproject.toml]
-
-      - id: uv-export
-        name: "uv-export: python-deprecated"
-        files: clients/python-deprecated/pyproject.toml
-        args:
-          - "--project=clients/python-deprecated/pyproject.toml"
-          - "--output-file=clients/python-deprecated/requirements.txt"
-
-      - id: uv-lock
-        name: "uv-lock: recipes"
-        files: recipes/pyproject.toml
-        args: [--project, recipes/pyproject.toml]
-
-      - id: uv-export
-        name: "uv-export: recipes"
-        files: recipes/pyproject.toml
-        args:
-          - "--project=recipes/pyproject.toml"
-          - "--output-file=recipes/requirements.txt"
 
   - repo: https://github.com/srstevenson/nb-clean
     rev: 3.2.0

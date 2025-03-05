@@ -9,9 +9,7 @@ Each example in the dataset includes a short segment of text and instructs the m
 
 **We'll show that TensorZero can optimize GPT-4o Mini to outperform GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.**
 
-<p align="center">
-  <img src="visualization.svg" alt="Metrics by Variant" />
-</p>
+<p align="center"><img src="data/visualization.svg" alt="Metrics by Variant" /></p>
 
 ## Sample Data
 

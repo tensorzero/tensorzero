@@ -19,15 +19,8 @@ pub struct Migration0008<'a> {
 
 #[async_trait]
 impl Migration for Migration0008<'_> {
-    /// Check if you can connect to the database
-    /// Also check that the tables that need altering already exist
+    /// Ccheck that the tables that need altering already exist
     async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse.health().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0008".to_string(),
-                message: e.to_string(),
-            })
-        })?;
         let tables = [
             "ModelInference",
             "ChatInference",

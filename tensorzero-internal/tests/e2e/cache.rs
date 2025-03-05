@@ -72,7 +72,7 @@ async fn test_cache_write_and_read() {
     // Read (should be None)
     let result = cache_lookup(
         &clickhouse_connection_info,
-        model_provider_request.clone(),
+        model_provider_request,
         Some(max_age_s),
     )
     .await
@@ -82,7 +82,7 @@ async fn test_cache_write_and_read() {
     // Write
     start_cache_write(
         &clickhouse_connection_info,
-        model_provider_request.clone(),
+        model_provider_request,
         &["test content".to_string().into()],
         "raw request",
         "raw response",
@@ -93,7 +93,7 @@ async fn test_cache_write_and_read() {
     // Read (should be Some)
     let result = cache_lookup(
         &clickhouse_connection_info,
-        model_provider_request.clone(),
+        model_provider_request,
         Some(max_age_s),
     )
     .await
@@ -174,7 +174,7 @@ async fn test_cache_stream_write_and_read() {
     // Read (should be None)
     let result = cache_lookup_streaming(
         &clickhouse_connection_info,
-        model_provider_request.clone(),
+        model_provider_request,
         Some(max_age_s),
     )
     .await
@@ -208,7 +208,7 @@ async fn test_cache_stream_write_and_read() {
     // Read (should be Some)
     let result = cache_lookup_streaming(
         &clickhouse_connection_info,
-        model_provider_request.clone(),
+        model_provider_request,
         Some(max_age_s),
     )
     .await
