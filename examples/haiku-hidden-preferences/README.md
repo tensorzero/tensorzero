@@ -16,7 +16,7 @@ This is similar to learning from thumbs up/down, conversions, and other boolean 
 
 **We'll show that GPT-4o Mini can be fine-tuned on a small amount of thumbs up/down feedback data to learn granular hidden preferences.**
 
-<p align="center"><img src="visualization.svg" alt="Metrics by Variant" /></p>
+<p align="center"><img src="data/visualization.svg" alt="Metrics by Variant" /></p>
 
 ## Getting Started
 

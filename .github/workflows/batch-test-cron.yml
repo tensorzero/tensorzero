@@ -87,7 +87,7 @@ jobs:
 
       - name: Run batch tests
         run: |
-          cargo test-batch
+          cargo test-batch --no-fail-fast
 
       - name: Print clickhouse wakeup logs
         if: always()
