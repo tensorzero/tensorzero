@@ -11,17 +11,16 @@ use super::{check_table_exists, get_column_type, table_is_nonempty};
 /// implement dynamic in-context learning, and run curated SFT jobs.
 /// We anticipate unpredictable future uses for datasets as well.
 ///
-/// This migration should subsume migration 0012.
+/// This migration should subsume migration 0014.
 /// They should have been removed from the binary upon merging of this migration.
 ///
-/// There were two changes made form 0014: changing created_at to updated_at and
-/// changing the output column to be Nullable(String) instead of String.
-pub struct Migration0014<'a> {
+/// This migration differs from 0014 in that it uses DateTime64(6, 'UTC') instead of DateTime('UTC')
+pub struct Migration0016<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
 #[async_trait]
-impl Migration for Migration0014<'_> {
+impl Migration for Migration0016<'_> {
     async fn can_apply(&self) -> Result<(), Error> {
         Ok(())
     }
@@ -32,19 +31,29 @@ impl Migration for Migration0014<'_> {
     /// OR if they exist and either `output` column is not Nullable(String)
     async fn should_apply(&self) -> Result<bool, Error> {
         let chat_inference_dataset_table_exists =
-            check_table_exists(self.clickhouse, "ChatInferenceDataset", "0014").await?;
+            check_table_exists(self.clickhouse, "ChatInferenceDataset", "0016").await?;
         let json_inference_dataset_table_exists =
-            check_table_exists(self.clickhouse, "JsonInferenceDataset", "0014").await?;
+            check_table_exists(self.clickhouse, "JsonInferenceDataset", "0016").await?;
         if !chat_inference_dataset_table_exists || !json_inference_dataset_table_exists {
             return Ok(true);
         }
 
-        let chat_inference_dataset_output_type =
-            get_column_type(self.clickhouse, "ChatInferenceDataset", "output", "0014").await?;
-        let json_inference_dataset_output_type =
-            get_column_type(self.clickhouse, "JsonInferenceDataset", "output", "0014").await?;
-        if chat_inference_dataset_output_type != "Nullable(String)"
-            || json_inference_dataset_output_type != "Nullable(String)"
+        let chat_inference_dataset_output_type = get_column_type(
+            self.clickhouse,
+            "ChatInferenceDataset",
+            "updated_at",
+            "0016",
+        )
+        .await?;
+        let json_inference_dataset_output_type = get_column_type(
+            self.clickhouse,
+            "JsonInferenceDataset",
+            "updated_at",
+            "0016",
+        )
+        .await?;
+        if chat_inference_dataset_output_type != "DateTime64(6, \\'UTC\\')"
+            || json_inference_dataset_output_type != "DateTime64(6, \\'UTC\\')"
         {
             return Ok(true);
         }
@@ -53,31 +62,31 @@ impl Migration for Migration0014<'_> {
     }
 
     async fn apply(&self) -> Result<(), Error> {
-        if check_table_exists(self.clickhouse, "ChatInferenceDataset", "0014").await? {
+        if check_table_exists(self.clickhouse, "ChatInferenceDataset", "0016").await? {
             let chat_inference_dataset_has_data =
-                table_is_nonempty(self.clickhouse, "ChatInferenceDataset", "0014").await?;
+                table_is_nonempty(self.clickhouse, "ChatInferenceDataset", "0016").await?;
             if chat_inference_dataset_has_data {
                 return Err(Error::new(ErrorDetails::ClickHouseMigration {
-                    id: "0014".to_string(),
+                    id: "0016".to_string(),
                     message: "ChatInferenceDataset has data. Your database state is invalid."
                         .to_string(),
                 }));
             }
         }
 
-        if check_table_exists(self.clickhouse, "JsonInferenceDataset", "0014").await? {
+        if check_table_exists(self.clickhouse, "JsonInferenceDataset", "0016").await? {
             let json_inference_dataset_has_data =
-                table_is_nonempty(self.clickhouse, "JsonInferenceDataset", "0014").await?;
+                table_is_nonempty(self.clickhouse, "JsonInferenceDataset", "0016").await?;
             if json_inference_dataset_has_data {
                 return Err(Error::new(ErrorDetails::ClickHouseMigration {
-                    id: "0014".to_string(),
+                    id: "0016".to_string(),
                     message: "JsonInferenceDataset has data. Your database state is invalid."
                         .to_string(),
                 }));
             }
         }
 
-        // First, drop the tables if they were created in 0012
+        // First, drop the tables if they were created in 0014
         let query = "DROP TABLE IF EXISTS ChatInferenceDataset";
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
@@ -103,7 +112,7 @@ impl Migration for Migration0014<'_> {
                 tags Map(String, String),
                 auxiliary String, -- a JSON (unstructured, for now)
                 is_deleted Bool DEFAULT false,
-                updated_at DateTime DEFAULT now()
+                updated_at DateTime64(6, 'UTC') DEFAULT now()
             ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
@@ -123,7 +132,7 @@ impl Migration for Migration0014<'_> {
                 tags Map(String, String),
                 auxiliary String, -- a JSON (unstructured, for now)
                 is_deleted Bool DEFAULT false,
-                updated_at DateTime DEFAULT now()
+                updated_at DateTime64(6, 'UTC') DEFAULT now()
             ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;

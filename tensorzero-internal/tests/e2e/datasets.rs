@@ -9,6 +9,8 @@ use crate::common::{
     select_json_datapoint_clickhouse,
 };
 
+const DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%f";
+
 #[tokio::test]
 async fn test_datapoint_insert_output_inherit_chat() {
     let clickhouse = get_clickhouse().await;
@@ -64,7 +66,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
         .remove("updated_at")
         .unwrap();
     let updated_at =
-        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), "%Y-%m-%d %H:%M:%S")
+        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), DATETIME_FORMAT)
             .unwrap()
             .and_utc();
     assert!(
@@ -145,7 +147,7 @@ async fn test_datapoint_insert_output_none_chat() {
         .remove("updated_at")
         .unwrap();
     let updated_at =
-        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), "%Y-%m-%d %H:%M:%S")
+        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), DATETIME_FORMAT)
             .unwrap()
             .and_utc();
     assert!(
@@ -243,7 +245,7 @@ async fn test_datapoint_insert_output_demonstration_chat() {
         .remove("updated_at")
         .unwrap();
     let updated_at =
-        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), "%Y-%m-%d %H:%M:%S")
+        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), DATETIME_FORMAT)
             .unwrap()
             .and_utc();
     assert!(
@@ -329,7 +331,7 @@ async fn test_datapoint_insert_output_inherit_json() {
         .remove("updated_at")
         .unwrap();
     let updated_at =
-        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), "%Y-%m-%d %H:%M:%S")
+        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), DATETIME_FORMAT)
             .unwrap()
             .and_utc();
     assert!(
@@ -410,7 +412,7 @@ async fn test_datapoint_insert_output_none_json() {
         .remove("updated_at")
         .unwrap();
     let updated_at =
-        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), "%Y-%m-%d %H:%M:%S")
+        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), DATETIME_FORMAT)
             .unwrap()
             .and_utc();
     assert!(
@@ -508,7 +510,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
         .remove("updated_at")
         .unwrap();
     let updated_at =
-        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), "%Y-%m-%d %H:%M:%S")
+        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), DATETIME_FORMAT)
             .unwrap()
             .and_utc();
     assert!(

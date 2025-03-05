@@ -20,8 +20,8 @@ use tensorzero_internal::clickhouse_migration_manager::migrations::migration_000
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0009::Migration0009;
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0013::Migration0013;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0014::Migration0014;
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0015::Migration0015;
+use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0016::Migration0016;
 use tensorzero_internal::clickhouse_migration_manager::{self};
 
 fn get_clean_clickhouse() -> ClickHouseConnectionInfo {
@@ -111,10 +111,10 @@ async fn test_clickhouse_migration_manager() {
             clickhouse: &clickhouse,
             clean_start: true,
         }),
-        Box::new(Migration0014 {
+        Box::new(Migration0015 {
             clickhouse: &clickhouse,
         }),
-        Box::new(Migration0015 {
+        Box::new(Migration0016 {
             clickhouse: &clickhouse,
         }),
     ];

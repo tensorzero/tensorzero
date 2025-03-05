@@ -15,17 +15,9 @@ pub struct Migration0009<'a> {
 
 #[async_trait]
 impl Migration for Migration0009<'_> {
-    /// Check if you can connect to the database
-    /// Then check if the four feedback tables exist
+    /// Check if the four feedback tables exist
     /// If all of this is OK, then we can apply the migration
     async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse.health().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0009".to_string(),
-                message: e.to_string(),
-            })
-        })?;
-
         let tables = vec![
             "BooleanMetricFeedback",
             "CommentFeedback",

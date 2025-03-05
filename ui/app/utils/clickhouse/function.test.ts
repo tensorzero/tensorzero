@@ -1,5 +1,9 @@
 import { expect, test, describe } from "vitest";
-import { getVariantCounts, getVariantPerformances } from "./function";
+import {
+  getUsedVariants,
+  getVariantCounts,
+  getVariantPerformances,
+} from "./function";
 import type { FunctionConfig } from "../config/function";
 import type { MetricConfig } from "../config/metric";
 
@@ -530,5 +534,24 @@ describe("getVariantCounts", () => {
         variant_name: "initial_prompt_gpt4o_mini",
       },
     ]);
+  });
+});
+
+describe("getUsedVariants", () => {
+  test("getUsedVariants for extract_entities", async () => {
+    const function_name = "extract_entities";
+    const result = await getUsedVariants(function_name);
+    console.log(result);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        "baseline",
+        "dicl",
+        "llama_8b_initial_prompt",
+        "gpt4o_mini_initial_prompt",
+        "gpt4o_initial_prompt",
+        "turbo",
+      ]),
+    );
+    expect(result.length).toBe(6);
   });
 });

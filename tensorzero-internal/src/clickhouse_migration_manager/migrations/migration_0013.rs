@@ -26,17 +26,9 @@ pub struct Migration0013<'a> {
 
 #[async_trait]
 impl Migration for Migration0013<'_> {
-    /// Check if you can connect to the database
-    /// Then check if the two inference tables exist as the sources for the materialized views
+    /// Check if the two inference tables exist as the sources for the materialized views
     /// If all of this is OK, then we can apply the migration
     async fn can_apply(&self) -> Result<(), Error> {
-        self.clickhouse.health().await.map_err(|e| {
-            Error::new(ErrorDetails::ClickHouseMigration {
-                id: "0013".to_string(),
-                message: e.to_string(),
-            })
-        })?;
-
         let tables = vec!["ChatInference", "JsonInference"];
 
         for table in tables {
