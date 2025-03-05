@@ -15,7 +15,7 @@ use tensorzero_internal::{
             DUMMY_JSON_RESPONSE_RAW, DUMMY_RAW_REQUEST, DUMMY_STREAMING_RESPONSE,
             DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
         },
-        types::{ContentBlock, Image, ImageKind, RequestMessage, Role, Text},
+        types::{ContentBlock, Image, ImageKind, RequestMessage, Role, Text, TextKind},
     },
     tool::ToolCall,
 };
@@ -890,7 +890,7 @@ async fn e2e_test_inference_json_success() {
                 "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Japan"}}]
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -1978,11 +1978,9 @@ async fn test_embedded_gateway_no_config() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text {
-                        value: "What is the name of the capital city of Japan?"
-                            .to_string()
-                            .into(),
-                    }],
+                    content: vec![InputMessageContent::Text(TextKind::Text {
+                        text: "What is the name of the capital city of Japan?".to_string(),
+                    })],
                 }],
             },
             ..Default::default()
@@ -2203,9 +2201,9 @@ async fn test_image_inference_without_object_store() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text {
-                            value: "Describe the contents of the image".to_string().into(),
-                        },
+                        InputMessageContent::Text(TextKind::Text {
+                            text: "Describe the contents of the image".to_string(),
+                        }),
                         InputMessageContent::Image(Image::Base64 {
                             mime_type: ImageKind::Png,
                             data: BASE64_STANDARD.encode(FERRIS_PNG),
