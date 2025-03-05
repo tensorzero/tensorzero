@@ -60,6 +60,9 @@ pub struct ModelConfig {
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
 }
 
+// We want `ModelProvider` to know its own name (from the 'providers' config section).
+// We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
+// build `ModelProvider`s using the name keys from the map.
 pub fn deserialize_model_providers<'de, D>(
     deserializer: D,
 ) -> Result<HashMap<Arc<str>, ModelProvider>, D::Error>

@@ -69,7 +69,7 @@ async fn test_dicl_reject_unknown_content_block() {
         .await
         .unwrap();
 
-    // Check that the API response is ok
+    // Check that the API response is correct
     assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
     let response_json = response.json::<Value>().await.unwrap();
     assert!(

@@ -132,7 +132,7 @@ async fn test_redacted_thinking() {
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
-    let mut tensorzero_content_blocks = content_blocks.clone();
+    let tensorzero_content_blocks = content_blocks.clone();
     assert!(
         content_blocks.len() == 2,
         "Unexpected content blocks: {:?}",
@@ -249,13 +249,6 @@ async fn test_redacted_thinking() {
         }
     ]);
     let array = new_messages.as_array_mut().unwrap();
-    // TODO - remove this once we support 'text' in the input
-    tensorzero_content_blocks[1]["value"] = tensorzero_content_blocks[1]
-        .as_object_mut()
-        .unwrap()
-        .remove("text")
-        .unwrap();
-
     array.push(serde_json::json!({
         "role": "assistant",
         "content": tensorzero_content_blocks,

@@ -251,6 +251,14 @@ pub enum ContentBlock {
 
 /// A helper type for dealing with `ContentBlock::Unknown` in model providers.
 /// This flattens the wrapped `Value` when serializing and deserializing.
+///
+/// During deserialization, we'll first attempt to deserialize a `T`
+/// (e.g. `AnthropicContentBlock`), and fall back to `Unknown` with the raw
+/// json `Value` if that fails.
+///
+/// During serialization, a `FlattenUnknown::Unknown` will have the wrapped
+/// `Value` serialized, allowing us to send an arbitrary json value to
+/// a provider.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum FlattenUnknown<'a, T> {
