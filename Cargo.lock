@@ -1280,6 +1280,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "futures",
  "serde",
  "serde_json",
  "tensorzero",
@@ -1288,6 +1289,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "uuid",
 ]
 
 [[package]]

@@ -283,6 +283,20 @@ impl Datapoint {
             Datapoint::JsonInference(datapoint) => &datapoint.input,
         }
     }
+
+    pub fn tool_call_config(&self) -> Option<&ToolCallConfigDatabaseInsert> {
+        match self {
+            Datapoint::ChatInference(datapoint) => datapoint.tool_params.as_ref(),
+            Datapoint::JsonInference(_datapoint) => None,
+        }
+    }
+
+    pub fn output_schema(&self) -> Option<&serde_json::Value> {
+        match self {
+            Datapoint::ChatInference(_datapoint) => None,
+            Datapoint::JsonInference(datapoint) => Some(&datapoint.output_schema),
+        }
+    }
 }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ChatInferenceDatapoint {
