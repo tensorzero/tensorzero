@@ -45,7 +45,9 @@ jobs:
           args: --find-interpreter
 
   validate:
-    runs-on: namespace-profile-tensorzero-8x16
+    # runs-on: namespace-profile-tensorzero-8x16
+    runs-on: macos-15
+    target: aarch64
 
     timeout-minutes: 15
 
