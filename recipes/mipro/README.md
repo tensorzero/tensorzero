@@ -6,7 +6,7 @@ The [mipro.ipynb](mipro.ipynb) notebook provides a step-by-step recipe to perfor
 
 MIPRO is an optimization framework designed for multi-stage Language Model (LM) applications. It enhances prompt effectiveness by systematically searching over instructions and few-shot demonstrations to maximize downstream task performance. Unlike traditional prompt engineering, which relies on manual trial-and-error methods, MIPRO introduces algorithmic strategies for optimizing LM programs under constraints such as black-box model access.
 
-High-Level Structure
+## High-Level Structure
 
 MIPRO operates within a structured optimization framework:
 
