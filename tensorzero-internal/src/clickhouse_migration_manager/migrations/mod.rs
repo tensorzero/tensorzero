@@ -13,7 +13,6 @@ pub mod migration_0008;
 pub mod migration_0009;
 pub mod migration_0011;
 pub mod migration_0013;
-pub mod migration_0014;
 pub mod migration_0015;
 pub mod migration_0016;
 

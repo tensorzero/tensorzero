@@ -20,7 +20,6 @@ use tensorzero_internal::clickhouse_migration_manager::migrations::migration_000
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0009::Migration0009;
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0013::Migration0013;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0014::Migration0014;
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0015::Migration0015;
 use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0016::Migration0016;
 use tensorzero_internal::clickhouse_migration_manager::{self};
@@ -79,7 +78,7 @@ async fn test_clickhouse_migration_manager() {
 
     // When creating a new migration, add it to the end of this array,
     // and adjust the call to `invoke_all!` to include the new array index.
-    let migrations: [Box<dyn Migration + '_>; 13] = [
+    let migrations: [Box<dyn Migration + '_>; 12] = [
         Box::new(Migration0000 {
             clickhouse: &clickhouse,
         }),
@@ -111,9 +110,6 @@ async fn test_clickhouse_migration_manager() {
         Box::new(Migration0013 {
             clickhouse: &clickhouse,
             clean_start: true,
-        }),
-        Box::new(Migration0014 {
-            clickhouse: &clickhouse,
         }),
         Box::new(Migration0015 {
             clickhouse: &clickhouse,
@@ -197,7 +193,7 @@ async fn test_clickhouse_migration_manager() {
         // will throw an error if it doesn't.
         // This must be an array literal, so that the macro can generate a function
         // for each element in the array.
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     );
     run_all(&migrations).await;
 
