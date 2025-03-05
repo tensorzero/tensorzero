@@ -47,6 +47,11 @@ filter = 'binary(e2e) and test(providers::xai::)'
 test-group = 'e2e_xai'
 
 [[profile.default.overrides]]
+# Settings for running batch tests
+filter = 'binary(batch)'
+slow-timeout = { period = "15s", terminate-after = 1 }
+
+[[profile.default.overrides]]
 # Settings for running unit tests
 filter = 'not binary(e2e)'
 retries = 0
