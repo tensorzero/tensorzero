@@ -347,6 +347,8 @@ impl BaseTensorZeroGateway {
             credentials: credentials.unwrap_or_default(),
             cache_options: cache_options.unwrap_or_default(),
             output_schema,
+            // This is currently unsupported in the Python client
+            include_original_response: false,
         })
     }
 }

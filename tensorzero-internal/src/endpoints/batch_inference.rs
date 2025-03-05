@@ -870,6 +870,7 @@ pub async fn write_completed_batch_inference<'a>(
                 vec![model_inference_response],
                 &inference_config,
                 inference_params.into_owned(),
+                None,
             )
             .await?;
         let inference_response = InferenceResponse::new(
@@ -1175,6 +1176,8 @@ impl TryFrom<ChatInferenceResponseDatabaseRead> for ChatInferenceResponse {
             variant_name: value.variant_name,
             content: output,
             usage,
+            // This is currently unsupported in the batch API
+            original_response: None,
         })
     }
 }
@@ -1208,6 +1211,8 @@ impl TryFrom<JsonInferenceResponseDatabaseRead> for JsonInferenceResponse {
             variant_name: value.variant_name,
             output,
             usage,
+            // This is currently unsupported in the batch API
+            original_response: None,
         })
     }
 }

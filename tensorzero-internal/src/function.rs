@@ -162,6 +162,7 @@ impl FunctionConfig {
     }
 
     #[instrument(skip_all, fields(inference_id))]
+    #[allow(clippy::too_many_arguments)]
     pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
@@ -170,6 +171,7 @@ impl FunctionConfig {
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         inference_config: &'request InferenceConfig<'a, 'request>,
         inference_params: InferenceParams,
+        original_response: Option<String>,
     ) -> Result<InferenceResult, Error> {
         match self {
             FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(
@@ -180,6 +182,7 @@ impl FunctionConfig {
                     model_inference_results,
                     inference_config.tool_config,
                     inference_params,
+                    original_response,
                 )
                 .await,
             )),
@@ -233,6 +236,7 @@ impl FunctionConfig {
                     model_inference_results,
                     output_schema.value().clone(),
                     inference_params,
+                    original_response,
                 )))
             }
         }
@@ -1544,6 +1548,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1593,6 +1598,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1642,6 +1648,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1692,6 +1699,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1743,6 +1751,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1791,6 +1800,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap_err();
@@ -1854,6 +1864,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1900,6 +1911,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1950,6 +1962,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -2001,6 +2014,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -2058,6 +2072,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();

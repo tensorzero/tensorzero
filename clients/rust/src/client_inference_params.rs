@@ -14,7 +14,7 @@ use uuid::Uuid;
 // This is a copy-paste of the `Params` struct from `tensorzero_internal::endpoints::inference::Params`.
 // with just the `credentials` field adjusted to allow serialization.
 /// The expected payload is a JSON object with the following fields:
-#[derive(Debug, Serialize, Default)]
+#[derive(Clone, Debug, Serialize, Default)]
 pub struct ClientInferenceParams {
     // The function name. Exactly one of `function_name` or `model_name` must be provided.
     pub function_name: Option<String>,
@@ -54,6 +54,11 @@ pub struct ClientInferenceParams {
     pub output_schema: Option<Value>,
     pub credentials: HashMap<String, ClientSecretString>,
     pub cache_options: CacheParamsOptions,
+    /// If `true`, add an `original_response` field to the response, containing the raw string response from the model.
+    /// Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `original_response`
+    /// if the fuser/judge model failed
+    #[serde(default)]
+    pub include_original_response: bool,
 }
 
 impl From<ClientInferenceParams> for Params {
@@ -77,6 +82,7 @@ impl From<ClientInferenceParams> for Params {
                 .map(|(k, v)| (k, v.0))
                 .collect(),
             cache_options: this.cache_options,
+            include_original_response: this.include_original_response,
         }
     }
 }
@@ -100,6 +106,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         output_schema,
         credentials,
         cache_options,
+        include_original_response,
     } = client_params;
     let _ = Params {
         function_name,
@@ -115,10 +122,11 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         output_schema,
         credentials: credentials.into_iter().map(|(k, v)| (k, v.0)).collect(),
         cache_options,
+        include_original_response,
     };
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 /// A `SecretString` wrapper that implements `Serialize`, allowing it to be used in
 /// the client request input.
 pub struct ClientSecretString(pub SecretString);

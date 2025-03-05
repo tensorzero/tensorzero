@@ -33,7 +33,7 @@ impl CacheEnabledMode {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CacheParamsOptions {
     #[serde(default)]
     pub max_age_s: Option<u32>,

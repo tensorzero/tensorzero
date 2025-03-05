@@ -1,4 +1,4 @@
-use crate::providers::common::FERRIS_PNG;
+use crate::providers::common::{make_embedded_gateway_with_config, FERRIS_PNG};
 use base64::prelude::*;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
@@ -71,6 +71,248 @@ async fn e2e_test_inference_dryrun() {
     let clickhouse = get_clickhouse().await;
     let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
     assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
+}
+
+#[tokio::test]
+async fn e2e_test_inference_original_response_non_stream() {
+    let payload = json!({
+        "function_name": "basic_test",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": false,
+        "include_original_response": true,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    let original = &response_json["original_response"];
+    assert_eq!(original, DUMMY_INFER_RESPONSE_RAW);
+    // Don't both checking ClickHouse, as we do that in lots of other tests.
+}
+
+#[tokio::test]
+async fn e2e_test_inference_original_response_stream() {
+    let payload = json!({
+        "function_name": "basic_test",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                }
+            ]
+        },
+        "stream": true,
+        "include_original_response": true,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let response_json = response.json::<Value>().await.unwrap();
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "Expected bad request: {response_json}"
+    );
+
+    assert_eq!(
+        response_json,
+        serde_json::json!({
+            "error": "Cannot set both `include_original_response` and `stream` to `true`",
+        })
+    );
+    // Don't both checking ClickHouse, as we do that in lots of other tests.
+}
+
+#[tokio::test]
+async fn test_original_response_best_of_n_flaky_judge() {
+    // We use an embedded client so that we can control the number of
+    // requests to the flaky judge.
+    let gateway = make_embedded_gateway_with_config(
+        r#"
+
+[functions.best_of_n]
+type = "chat"
+
+[functions.best_of_n.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "test"
+
+[functions.best_of_n.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "json"
+
+[functions.best_of_n.variants.flaky_best_of_n_variant]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["variant0", "variant1"]
+
+[functions.best_of_n.variants.flaky_best_of_n_variant.evaluator]
+model = "flaky_best_of_n_judge"
+retries = { num_retries = 0, max_delay_s = 0 }
+
+[models.flaky_best_of_n_judge]
+routing = ["dummy"]
+
+[models.flaky_best_of_n_judge.providers.dummy]
+type = "dummy"
+model_name = "flaky_best_of_n_judge"
+
+[models.test]
+routing = ["good"]
+
+[models.test.providers.good]
+type = "dummy"
+model_name = "good"
+
+[models.json]
+routing = ["json"]
+
+[models.json.providers.json]
+type = "dummy"
+model_name = "json"
+    "#,
+    )
+    .await;
+
+    let params = ClientInferenceParams {
+        function_name: Some("best_of_n".to_string()),
+        input: Input {
+            messages: vec![InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::Text(TextKind::Text {
+                    text: "Please write me a sentence about Megumin making an explosion."
+                        .to_string(),
+                })],
+            }],
+            ..Default::default()
+        },
+        include_original_response: true,
+        ..Default::default()
+    };
+
+    // First request to the flaky judge should succeed
+    let good_response = gateway.inference(params.clone()).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(good_response)) = good_response
+    else {
+        panic!("Expected non-streaming response, got {:?}", good_response);
+    };
+
+    assert_eq!(
+        good_response.original_response.unwrap(),
+        DUMMY_INFER_RESPONSE_RAW,
+    );
+
+    // Second request to the flaky judge should fail
+    let bad_response = gateway.inference(params).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(bad_response)) = bad_response else {
+        panic!("Expected non-streaming response, got {:?}", bad_response);
+    };
+
+    assert!(
+        bad_response.original_response.is_none(),
+        "Expected no original response"
+    );
+}
+
+#[tokio::test]
+async fn test_original_response_mixture_of_n_flaky_fuser() {
+    // We use an embedded client so that we can control the number of
+    // requests to the flaky judge.
+    let gateway = make_embedded_gateway_with_config(
+        r#"
+
+[functions.mixture_of_n]
+type = "chat"
+
+[functions.mixture_of_n.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "dummy::test"
+
+[functions.mixture_of_n.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "dummy::alternate"
+
+[functions.mixture_of_n.variants.mixture_of_n_variant]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0", "variant1"]
+
+[functions.mixture_of_n.variants.mixture_of_n_variant.fuser]
+model = "dummy::flaky_model"
+    "#,
+    )
+    .await;
+
+    let params = ClientInferenceParams {
+        function_name: Some("mixture_of_n".to_string()),
+        input: Input {
+            messages: vec![InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::Text(TextKind::Text {
+                    text: "Please write me a sentence about Megumin making an explosion."
+                        .to_string(),
+                })],
+            }],
+            ..Default::default()
+        },
+        include_original_response: true,
+        ..Default::default()
+    };
+
+    // First request to the flaky judge should succeed
+    let good_response = gateway.inference(params.clone()).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(good_response)) = good_response
+    else {
+        panic!("Expected non-streaming response, got {:?}", good_response);
+    };
+
+    assert_eq!(
+        good_response.original_response.unwrap(),
+        DUMMY_INFER_RESPONSE_RAW,
+    );
+
+    // Second request to the flaky judge should fail
+    let bad_response = gateway.inference(params).await.unwrap();
+    let InferenceOutput::NonStreaming(InferenceResponse::Chat(bad_response)) = bad_response else {
+        panic!("Expected non-streaming response, got {:?}", bad_response);
+    };
+
+    assert!(
+        bad_response.original_response.is_none(),
+        "Expected no original response"
+    );
+
+    // Don't check ClickHouse, as we do that in lots of other tests.
 }
 
 /// This test calls a function which calls a model where the first provider is broken but

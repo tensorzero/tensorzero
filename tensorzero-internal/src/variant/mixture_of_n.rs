@@ -299,7 +299,10 @@ impl MixtureOfNConfig {
                         message: "Failed to get random candidate (should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                     }));
                 }
-                candidates.swap_remove(random_index)
+                // If the fuser fails, don't provide any 'original_response' to the user
+                let mut candidate = candidates.swap_remove(random_index);
+                candidate.set_original_response(None);
+                candidate
             }
         };
 
@@ -725,6 +728,7 @@ mod tests {
                 vec![model_inference_response],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -760,6 +764,7 @@ mod tests {
                 vec![model_inference_response2],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -823,6 +828,7 @@ mod tests {
             vec![model_inference_response_valid],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
+            None,
         ));
 
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
@@ -858,6 +864,7 @@ mod tests {
             vec![model_inference_response_malformed],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
+            None,
         ));
 
         let candidates = vec![candidate1, candidate2];
@@ -934,6 +941,7 @@ mod tests {
                 vec![model_inference_response0],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -969,6 +977,7 @@ mod tests {
                 vec![model_inference_response1],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );

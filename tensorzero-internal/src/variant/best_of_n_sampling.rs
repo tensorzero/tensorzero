@@ -338,6 +338,11 @@ impl BestOfNSamplingConfig {
         if let Some(inference_result) = &inference_result {
             total_usage.input_tokens += inference_result.usage.input_tokens;
             total_usage.output_tokens += inference_result.usage.output_tokens;
+            // Pass the evaluator response back to the user as 'original_response'
+            selected_candidate.set_original_response(Some(inference_result.raw_response.clone()));
+        } else {
+            // If the evaluator failed, don't provide an 'original_response' to the uesr
+            selected_candidate.set_original_response(None);
         }
         selected_candidate.set_usage(total_usage);
         for candidate in candidates {
@@ -889,6 +894,7 @@ mod tests {
                 vec![model_inference_response],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -927,6 +933,7 @@ mod tests {
                 vec![model_inference_response2],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -993,6 +1000,7 @@ mod tests {
             vec![model_inference_response_valid],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
+            None,
         ));
 
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
@@ -1031,6 +1039,7 @@ mod tests {
             vec![model_inference_response_malformed],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
+            None,
         ));
 
         let candidates = vec![candidate1, candidate2];
@@ -1102,6 +1111,7 @@ mod tests {
                 vec![model_inference_response0],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -1140,6 +1150,7 @@ mod tests {
                 vec![model_inference_response1],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
