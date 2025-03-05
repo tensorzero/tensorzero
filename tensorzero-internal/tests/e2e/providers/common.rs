@@ -1398,7 +1398,7 @@ pub async fn check_simple_inference_response(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
-        400
+        1000
     } else {
         100
     };
@@ -1672,7 +1672,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        400
+        1000
     } else {
         100
     };
@@ -6104,7 +6104,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
-        400
+        1000
     } else {
         100
     };
@@ -8032,7 +8032,7 @@ pub async fn check_json_mode_inference_response(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
-        400
+        1000
     } else {
         100
     };
@@ -8287,7 +8287,7 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
     let max_tokens = if provider.model_name.starts_with("o1") {
-        400
+        1000
     } else {
         100
     };
