@@ -52,14 +52,6 @@ impl Migration for Migration0016<'_> {
             "0016",
         )
         .await?;
-        println!(
-            "chat_inference_dataset_output_type: {}",
-            chat_inference_dataset_output_type
-        );
-        println!(
-            "json_inference_dataset_output_type: {}",
-            json_inference_dataset_output_type
-        );
         if chat_inference_dataset_output_type != "DateTime64(6, \\'UTC\\')"
             || json_inference_dataset_output_type != "DateTime64(6, \\'UTC\\')"
         {
