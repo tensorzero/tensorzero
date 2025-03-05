@@ -18,6 +18,8 @@ import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
 import { splitValidationData, type SFTJobStatus } from "./common";
 import { render_message } from "./rendering";
 import { SFTJob } from "./common";
+import { validateMessage } from "./validation";
+import type { OpenAIMessage, OpenAIRole } from "./types";
 
 export const client = process.env.OPENAI_API_KEY
   ? new OpenAI({
@@ -194,12 +196,54 @@ export async function start_sft_openai(
     inferences,
     validationSplitPercent,
   );
-  const trainMessages = trainInferences.map((inference) =>
-    tensorzero_inference_to_openai_messages(inference, templateEnv),
-  );
-  const valMessages = valInferences.map((inference) =>
-    tensorzero_inference_to_openai_messages(inference, templateEnv),
-  );
+  // Convert inferences to messages and validate each message set
+  const trainMessages = trainInferences.map((inference) => {
+    const messages = tensorzero_inference_to_openai_messages(
+      inference,
+      templateEnv,
+    );
+    const validation = validateMessage(messages, modelName);
+
+    if (!validation.isValid) {
+      const errors = [];
+      if (!validation.lengthValidation.isValid) {
+        errors.push(
+          `Token count (${validation.lengthValidation.tokenCount}) exceeds maximum allowed`,
+        );
+      }
+      if (!validation.rolesValidation.isValid) {
+        errors.push(
+          `Missing required roles: ${validation.rolesValidation.missingRoles.join(", ")}`,
+        );
+      }
+      throw new Error(`Invalid training messages: ${errors.join("; ")}`);
+    }
+    return messages;
+  });
+
+  const valMessages = valInferences.map((inference) => {
+    const messages = tensorzero_inference_to_openai_messages(
+      inference,
+      templateEnv,
+    );
+    const validation = validateMessage(messages, modelName);
+
+    if (!validation.isValid) {
+      const errors = [];
+      if (!validation.lengthValidation.isValid) {
+        errors.push(
+          `Token count (${validation.lengthValidation.tokenCount}) exceeds maximum allowed`,
+        );
+      }
+      if (!validation.rolesValidation.isValid) {
+        errors.push(
+          `Missing required roles: ${validation.rolesValidation.missingRoles.join(", ")}`,
+        );
+      }
+      throw new Error(`Invalid validation messages: ${errors.join("; ")}`);
+    }
+    return messages;
+  });
   const [file_id, val_file_id] = await Promise.all([
     upload_examples_to_openai(trainMessages),
     upload_examples_to_openai(valMessages),
@@ -309,19 +353,6 @@ export function content_block_to_openai_message(
       );
   }
 }
-
-type OpenAIRole = "system" | "user" | "assistant" | "tool";
-
-type OpenAIMessage = {
-  role: OpenAIRole;
-  content?: string;
-  tool_calls?: {
-    id: string;
-    type: string;
-    function: { name: string; arguments: string };
-  }[];
-  tool_call_id?: string;
-};
 
 async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
   // Convert samples to JSONL format
