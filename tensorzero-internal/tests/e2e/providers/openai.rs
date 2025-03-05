@@ -1024,7 +1024,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     endpoint = "{endpoint}"
     bucket_name = "{test_bucket}"
     prefix = "{prefix}"
-    
+
     [functions]
     "#
         ),
@@ -1210,7 +1210,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     endpoint = "{endpoint}"
     bucket_name = "{test_bucket}"
     prefix = "{prefix}"
-    
+
     [functions]
     "#
         ),
