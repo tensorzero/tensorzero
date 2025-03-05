@@ -7,6 +7,8 @@ dependencies = [
     "pandas",
     "tensorzero",
     "tiktoken",
+    "pydantic",
+    "toml",
 ]
 
 [tool.uv.workspace]
