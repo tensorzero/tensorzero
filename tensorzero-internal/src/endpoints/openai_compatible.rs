@@ -423,6 +423,9 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                     system = Some(match system_content.remove(0) {
                         InputMessageContent::Text(TextKind::LegacyValue { value }) => value,
                         InputMessageContent::Text(TextKind::Text { text }) => Value::String(text),
+                        InputMessageContent::Text(TextKind::Arguments { arguments }) => {
+                            Value::Object(arguments)
+                        }
                         InputMessageContent::RawText { value } => Value::String(value),
                         _ => {
                             return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
