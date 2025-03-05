@@ -18,6 +18,7 @@ uv run pytest
 ```
 """
 
+import base64
 import json
 import os
 import threading
@@ -25,6 +26,7 @@ import time
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
+from os import path
 from uuid import UUID
 
 import pytest
@@ -33,6 +35,8 @@ from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
     FeedbackResponse,
+    ImageBase64,
+    ImageUrl,
     JsonInferenceResponse,
     RawText,
     TensorZeroError,
@@ -920,6 +924,94 @@ def test_default_function_inference(sync_client):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
+
+
+def test_image_inference_base64(sync_client):
+    basepath = path.dirname(__file__)
+    with open(
+        f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/ferris.png", "rb"
+    ) as f:
+        ferris_png = base64.b64encode(f.read()).decode("ascii")
+
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    ImageBase64(
+                        data=ferris_png,
+                        mime_type="image/png",
+                    )
+                ],
+            }
+        ],
+    }
+    input_copy = deepcopy(input)
+    result = sync_client.inference(
+        model_name="dummy::extract_images",
+        input=input,
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
+    )
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::extract_images"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    json_content = json.loads(content[0].text)
+    assert json_content == [
+        {
+            "image": {"url": None, "mime_type": "image/png"},
+            "storage_path": {
+                "kind": {"type": "disabled"},
+                "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+            },
+        }
+    ]
+
+
+def test_image_inference_url(sync_client):
+    input = {
+        "system": "You are a helpful assistant named Alfred Pennyworth.",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    ImageUrl(
+                        url="https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png"
+                    )
+                ],
+            }
+        ],
+    }
+    input_copy = deepcopy(input)
+    result = sync_client.inference(
+        model_name="dummy::extract_images",
+        input=input,
+        episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+        # because the gateway validates some of the properties needed
+    )
+    assert input == input_copy, "Input should not be modified by the client"
+    assert result.variant_name == "dummy::extract_images"
+    assert isinstance(result, ChatInferenceResponse)
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    json_content = json.loads(content[0].text)
+    assert json_content == [
+        {
+            "image": {
+                "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                "mime_type": "image/png",
+            },
+            "storage_path": {
+                "kind": {"type": "disabled"},
+                "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
+            },
+        }
+    ]
 
 
 def test_sync_malformed_inference(sync_client):
