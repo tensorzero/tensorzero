@@ -12,8 +12,11 @@ env:
 
 jobs:
   validate:
+    strategy:
+      matrix:
+        os: [macos-15-large, macos-15-xlarge]
     # runs-on: namespace-profile-tensorzero-8x16
-    runs-on: macos-15
+    runs-on: ${{ matrix.os }}
 
     timeout-minutes: 15
 
