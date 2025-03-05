@@ -31,7 +31,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "role": "user",
                     "content": [
                         {"type": "text", "value": "Please write me a sentence about Megumin making an explosion."},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input"}},
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
                         {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-1.5-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
                     ]
                 }
@@ -90,7 +90,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "role": "user",
                     "content": [
                         {"type": "text", "value": "Please write me a sentence about Megumin making an explosion."},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input"}},
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
                         {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-1.5-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
                     ]
                 }
@@ -266,7 +266,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                             model_provider_name: Some(
                                 "tensorzero::model_name::json::provider_name::json".into()
                             ),
-                            data: serde_json::json!({"type": "text", "text": "My extra json-model input"})
+                            data: serde_json::json!({"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}})
                         }
                     ],
                 }
