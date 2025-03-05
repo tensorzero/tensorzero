@@ -20,14 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure Namespace cache for Rust, Python (pip), and pnpm
-        uses: namespacelabs/nscloud-cache-action@v1
-        with:
-          cache: |
-            pnpm
-            rust
-            uv
-
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
         uses: taiki-e/install-action@v2
         with:
