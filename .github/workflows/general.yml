@@ -19,6 +19,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-nextest, cargo-deny, and cargo-hack
         uses: taiki-e/install-action@v2
