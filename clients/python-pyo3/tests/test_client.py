@@ -1519,7 +1519,7 @@ def test_prepare_inference_request(sync_client):
         },
     )
     assert request["input"]["messages"][0]["content"] == [
-        {"type": "text", "value": "Hello"}
+        {"type": "text", "text": "Hello"}
     ]
     assert request["input"]["system"] == {"assistant_name": "Alfred Pennyworth"}
     assert request["function_name"] == "basic_test"

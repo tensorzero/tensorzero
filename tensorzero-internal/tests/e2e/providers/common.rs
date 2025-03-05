@@ -21,6 +21,7 @@ use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
     InputMessage, InputMessageContent,
 };
+use tensorzero_internal::inference::types::TextKind;
 use tensorzero_internal::{
     cache::CacheEnabledMode,
     inference::types::{
@@ -693,9 +694,9 @@ pub async fn test_url_image_inference_with_provider_and_store(
                     messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![
-                            InputMessageContent::Text {
-                                value: "Describe the contents of the image".to_string().into(),
-                            },
+                            InputMessageContent::Text(TextKind::Text {
+                                text: "Describe the contents of the image".to_string(),
+                            }),
                             InputMessageContent::Image(Image::Url {
                                 url: image_url.clone(),
                             }),
@@ -751,9 +752,9 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                     messages: vec![InputMessage {
                         role: Role::User,
                         content: vec![
-                            InputMessageContent::Text {
-                                value: "Describe the contents of the image".to_string().into(),
-                            },
+                            InputMessageContent::Text(TextKind::Text {
+                                text: "Describe the contents of the image".to_string(),
+                            }),
                             InputMessageContent::Image(Image::Base64 {
                                 mime_type: ImageKind::Png,
                                 data: image_data.clone(),
@@ -6545,7 +6546,13 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
             messages: vec![tensorzero::InputMessage {
                 role: Role::User,
-                content: vec![tensorzero::InputMessageContent::Text { value: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string().into() }],
+                content: vec![
+                    tensorzero::InputMessageContent::Text(
+                        TextKind::Text {
+                            text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string()
+                        }
+                    )
+                ],
             }],
         },
         stream: Some(false),
@@ -6851,7 +6858,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
             messages: vec![tensorzero::InputMessage {
                 role: Role::User,
-                content: vec![tensorzero::InputMessageContent::Text { value: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string().into() }],
+                content: vec![tensorzero::InputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
             }],
         },
         stream: Some(true),
