@@ -667,7 +667,7 @@ struct GCPVertexGeminiToolConfig<'a> {
 
 // Auto is the default mode where a tool could be called but it isn't required.
 // Any is a mode where a tool is required and if allowed_function_names is Some it has to be from that list.
-// See [the documentation](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/ToolConfig) for details.
+// See [the documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/function-calling) for details.
 const MODELS_SUPPORTING_ANY_MODE: &[&str] = &[
     "gemini-1.5-pro-001",
     "gemini-1.5-flash-001",
