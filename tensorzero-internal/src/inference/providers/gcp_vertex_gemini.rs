@@ -3,6 +3,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use futures::StreamExt;
+use itertools::Itertools;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
@@ -12,6 +13,7 @@ use serde_json::Value;
 use tokio::time::Instant;
 use uuid::Uuid;
 
+use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
@@ -22,8 +24,8 @@ use crate::inference::types::{
     ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
-    ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, FlattenUnknown, Latency,
+    ModelInferenceRequestJsonMode, ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
 use crate::model::{
     build_creds_caching_default_with_fn, Credential, CredentialLocation, ModelProvider,
@@ -261,7 +263,11 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     /// GCP Vertex Gemini non-streaming API request
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -501,14 +507,14 @@ enum GCPVertexGeminiContentPart<'a> {
     // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
 }
 
-impl<'a> TryFrom<&'a ContentBlock> for Option<GCPVertexGeminiContentPart<'a>> {
+impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGeminiContentPart<'a>>> {
     type Error = Error;
 
     fn try_from(block: &'a ContentBlock) -> Result<Self, Error> {
         match block {
-            ContentBlock::Text(Text { text }) => {
-                Ok(Some(GCPVertexGeminiContentPart::Text { text }))
-            }
+            ContentBlock::Text(Text { text }) => Ok(Some(FlattenUnknown::Normal(
+                GCPVertexGeminiContentPart::Text { text },
+            ))),
             ContentBlock::ToolResult(tool_result) => {
                 // Convert the tool result from String to JSON Value (GCP expects an object)
                 let response: Value = serde_json::from_str(&tool_result.result).map_err(|e| {
@@ -527,12 +533,14 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GCPVertexGeminiContentPart<'a>> {
                     "content": response,
                 });
 
-                Ok(Some(GCPVertexGeminiContentPart::FunctionResponse {
-                    function_response: GCPVertexGeminiFunctionResponse {
-                        name: &tool_result.name,
-                        response,
+                Ok(Some(FlattenUnknown::Normal(
+                    GCPVertexGeminiContentPart::FunctionResponse {
+                        function_response: GCPVertexGeminiFunctionResponse {
+                            name: &tool_result.name,
+                            response,
+                        },
                     },
-                }))
+                )))
             }
             ContentBlock::ToolCall(tool_call) => {
                 // Convert the tool call arguments from String to JSON Value (GCP expects an object)
@@ -557,12 +565,14 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GCPVertexGeminiContentPart<'a>> {
                     .into());
                 };
 
-                Ok(Some(GCPVertexGeminiContentPart::FunctionCall {
-                    function_call: GCPVertexGeminiFunctionCall {
-                        name: &tool_call.name,
-                        args,
+                Ok(Some(FlattenUnknown::Normal(
+                    GCPVertexGeminiContentPart::FunctionCall {
+                        function_call: GCPVertexGeminiFunctionCall {
+                            name: &tool_call.name,
+                            args,
+                        },
                     },
-                }))
+                )))
             }
             ContentBlock::Image(_) => Err(ErrorDetails::UnsupportedContentBlockType {
                 content_block_type: "image".to_string(),
@@ -575,6 +585,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GCPVertexGeminiContentPart<'a>> {
             // i.e. a judge or something.
             // We don't think the thoughts should be passed in in this case.
             ContentBlock::Thought(_thought) => Ok(None),
+            ContentBlock::Unknown {
+                data,
+                model_provider_name: _,
+            } => Ok(Some(FlattenUnknown::Unknown(Cow::Borrowed(data)))),
         }
     }
 }
@@ -582,19 +596,19 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<GCPVertexGeminiContentPart<'a>> {
 #[derive(Debug, PartialEq, Serialize)]
 struct GCPVertexGeminiContent<'a> {
     role: GCPVertexGeminiRole,
-    parts: Vec<GCPVertexGeminiContentPart<'a>>,
+    parts: Vec<FlattenUnknown<'a, GCPVertexGeminiContentPart<'a>>>,
 }
 
 impl<'a> TryFrom<&'a RequestMessage> for GCPVertexGeminiContent<'a> {
     type Error = Error;
 
-    fn try_from(message: &'a RequestMessage) -> Result<Self, Self::Error> {
+    fn try_from(message: &'a RequestMessage) -> Result<Self, Error> {
         let role = GCPVertexGeminiRole::from(message.role);
-        let parts: Vec<GCPVertexGeminiContentPart> = message
+        let parts: Vec<FlattenUnknown<GCPVertexGeminiContentPart>> = message
             .content
             .iter()
             .map(|block| block.try_into())
-            .collect::<Result<Vec<Option<GCPVertexGeminiContentPart>>, _>>()?
+            .collect::<Result<Vec<Option<FlattenUnknown<GCPVertexGeminiContentPart>>>, _>>()?
             .into_iter()
             .flatten()
             .collect();
@@ -783,6 +797,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
             .messages
             .iter()
             .map(GCPVertexGeminiContent::try_from)
+            .filter_ok(|m| !m.parts.is_empty())
             .collect::<Result<_, _>>()?;
         let (tools, tool_config) = prepare_tools(request, model_name);
         let (response_mime_type, response_schema) = match request.json_mode {
@@ -826,7 +841,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
             generation_config,
             system_instruction: system_instruction.map(|content| GCPVertexGeminiContent {
                 role: GCPVertexGeminiRole::Model,
-                parts: vec![content],
+                parts: vec![FlattenUnknown::Normal(content)],
             }),
         })
     }
@@ -1146,9 +1161,9 @@ mod tests {
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
             content.parts[0],
-            GCPVertexGeminiContentPart::Text {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text {
                 text: "Hello, world!"
-            }
+            })
         );
 
         let message = RequestMessage {
@@ -1160,9 +1175,9 @@ mod tests {
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
             content.parts[0],
-            GCPVertexGeminiContentPart::Text {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text {
                 text: "Hello, world!"
-            }
+            })
         );
         let message = RequestMessage {
             role: Role::Assistant,
@@ -1180,18 +1195,18 @@ mod tests {
         assert_eq!(content.parts.len(), 2);
         assert_eq!(
             content.parts[0],
-            GCPVertexGeminiContentPart::Text {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text {
                 text: "Here's the result of the function call:"
-            }
+            })
         );
         assert_eq!(
             content.parts[1],
-            GCPVertexGeminiContentPart::FunctionCall {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::FunctionCall {
                 function_call: GCPVertexGeminiFunctionCall {
                     name: "get_temperature",
                     args: json!({"location": "New York", "unit": "celsius"}),
                 }
-            }
+            })
         );
 
         let message = RequestMessage {
@@ -1207,7 +1222,7 @@ mod tests {
         assert_eq!(content.parts.len(), 1);
         assert_eq!(
             content.parts[0],
-            GCPVertexGeminiContentPart::FunctionResponse {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::FunctionResponse {
                 function_response: GCPVertexGeminiFunctionResponse {
                     name: "get_temperature",
                     response: json!({
@@ -1215,7 +1230,7 @@ mod tests {
                         "content": json!({"temperature": 25, "conditions": "sunny"})
                     }),
                 }
-            }
+            })
         );
     }
 
@@ -1411,15 +1426,15 @@ mod tests {
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
         assert_eq!(
             request.contents[0].parts[0],
-            GCPVertexGeminiContentPart::Text { text: "test_user" }
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text: "test_user" })
         );
         assert_eq!(request.contents[1].role, GCPVertexGeminiRole::Model);
         assert_eq!(request.contents[1].parts.len(), 1);
         assert_eq!(
             request.contents[1].parts[0],
-            GCPVertexGeminiContentPart::Text {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text {
                 text: "test_assistant"
-            }
+            })
         );
 
         // Test case 3: Messages with system message and some of the optional fields are tested
@@ -1467,17 +1482,17 @@ mod tests {
         assert_eq!(request.contents[2].parts.len(), 1);
         assert_eq!(
             request.contents[0].parts[0],
-            GCPVertexGeminiContentPart::Text { text: "test_user" }
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text: "test_user" })
         );
         assert_eq!(
             request.contents[1].parts[0],
-            GCPVertexGeminiContentPart::Text { text: "test_user2" }
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text: "test_user2" })
         );
         assert_eq!(
             request.contents[2].parts[0],
-            GCPVertexGeminiContentPart::Text {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text {
                 text: "test_assistant"
-            }
+            })
         );
         assert_eq!(
             request.generation_config.as_ref().unwrap().temperature,
@@ -1534,17 +1549,17 @@ mod tests {
         assert_eq!(request.contents[2].parts.len(), 1);
         assert_eq!(
             request.contents[0].parts[0],
-            GCPVertexGeminiContentPart::Text { text: "test_user" }
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text: "test_user" })
         );
         assert_eq!(
             request.contents[1].parts[0],
-            GCPVertexGeminiContentPart::Text { text: "test_user2" }
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text: "test_user2" })
         );
         assert_eq!(
             request.contents[2].parts[0],
-            GCPVertexGeminiContentPart::Text {
+            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text {
                 text: "test_assistant"
-            }
+            })
         );
         assert_eq!(
             request.generation_config.as_ref().unwrap().temperature,

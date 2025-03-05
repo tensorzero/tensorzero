@@ -1151,6 +1151,7 @@ mod tests {
                 providers: HashMap::from([(
                     "best_of_n_1".into(),
                     ModelProvider {
+                        name: "best_of_n_1".into(),
                         config: ProviderConfig::Dummy(DummyProvider {
                             model_name: "best_of_n_1".into(),
                             ..Default::default()
@@ -1242,6 +1243,7 @@ mod tests {
                     providers: HashMap::from([(
                         "error".into(),
                         ModelProvider {
+                            name: "error".into(),
                             config: ProviderConfig::Dummy(DummyProvider {
                                 model_name: "error".into(),
                                 ..Default::default()
@@ -1304,6 +1306,7 @@ mod tests {
                     providers: HashMap::from([(
                         "regular".into(),
                         ModelProvider {
+                            name: "regular".into(),
                             config: ProviderConfig::Dummy(DummyProvider {
                                 model_name: "regular".into(),
                                 ..Default::default()
@@ -1383,6 +1386,7 @@ mod tests {
                 providers: HashMap::from([(
                     "best_of_n_big".into(),
                     ModelProvider {
+                        name: "best_of_n_big".into(),
                         config: ProviderConfig::Dummy(DummyProvider {
                             model_name: "best_of_n_big".into(),
                             ..Default::default()

@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use tokio::time::Instant;
 use url::Url;
 
+use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
@@ -116,7 +117,11 @@ fn default_api_key_location() -> CredentialLocation {
 impl InferenceProvider for AzureProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,

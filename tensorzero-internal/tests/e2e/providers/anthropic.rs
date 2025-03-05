@@ -1,6 +1,16 @@
 use std::collections::HashMap;
 
-use crate::providers::common::{E2ETestProvider, E2ETestProviders};
+use reqwest::{Client, StatusCode};
+use serde_json::{json, Value};
+use uuid::Uuid;
+
+use crate::{
+    common::{
+        get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
+        select_model_inference_clickhouse,
+    },
+    providers::common::{E2ETestProvider, E2ETestProviders},
+};
 
 #[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);
@@ -86,4 +96,188 @@ async fn get_providers() -> E2ETestProviders {
         #[cfg(feature = "batch_tests")]
         supports_batch_inference: false,
     }
+}
+
+#[cfg_attr(not(feature = "e2e_tests"), ignore)]
+#[tokio::test]
+async fn test_redacted_thinking() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "model_name": "claude-3-7-sonnet-20250219-thinking",
+        "episode_id": episode_id,
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    // This forces a 'redacted_thinking' response - see https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
+                    "content": "ANTHROPIC_MAGIC_STRING_TRIGGER_REDACTED_THINKING_46C9A13E193C177646C7398A98432ECCCE4C1253D5E2D82641AC0E52CC2876CB"
+                },
+                {
+                    "role": "user",
+                    "content": "What is the capital of Japan?"
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    let tensorzero_content_blocks = content_blocks.clone();
+    assert!(
+        content_blocks.len() == 2,
+        "Unexpected content blocks: {:?}",
+        content_blocks
+    );
+    let first_block = &content_blocks[0];
+    let first_block_type = first_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(first_block_type, "unknown");
+    assert_eq!(
+        first_block["model_provider_name"],
+        "tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body"
+    );
+    assert_eq!(first_block["data"]["type"], "redacted_thinking");
+
+    let second_block = &content_blocks[1];
+    assert_eq!(second_block["type"], "text");
+    let content = second_block.get("text").unwrap().as_str().unwrap();
+    // Assert that Tokyo is in the content
+    assert!(content.contains("Tokyo"), "Content should mention Tokyo");
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+
+    // First, check Inference table
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "tensorzero::default");
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": "ANTHROPIC_MAGIC_STRING_TRIGGER_REDACTED_THINKING_46C9A13E193C177646C7398A98432ECCCE4C1253D5E2D82641AC0E52CC2876CB"}]
+            },
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+    let content_blocks = result.get("output").unwrap().as_str().unwrap();
+    // Check that content_blocks is a list of blocks length 1
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 2);
+    let first_block = &content_blocks[0];
+    // Check the type and content in the block
+    assert_eq!(first_block["type"], "unknown");
+    assert_eq!(first_block["data"]["type"], "redacted_thinking");
+    assert_eq!(first_block["model_provider_name"], "tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body");
+    let second_block = &content_blocks[1];
+    assert_eq!(second_block["type"], "text");
+    let clickhouse_content = second_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(clickhouse_content, content);
+    // Check that episode_id is here and correct
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "claude-3-7-sonnet-20250219-thinking");
+    // Check the processing time
+    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(processing_time_ms > 0);
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, "claude-3-7-sonnet-20250219-thinking");
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, "anthropic-extra-body");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    // Check that raw_request is valid JSON
+    let _: Value = serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 5);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 5);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
+
+    // Feed content blocks back in
+
+    let mut new_messages = json!([
+        {
+            "role": "user",
+            // This forces a 'redacted_thinking' response - see https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
+            "content": "ANTHROPIC_MAGIC_STRING_TRIGGER_REDACTED_THINKING_46C9A13E193C177646C7398A98432ECCCE4C1253D5E2D82641AC0E52CC2876CB"
+        },
+        {
+            "role": "user",
+            "content": "What is the capital of Japan?"
+        }
+    ]);
+    let array = new_messages.as_array_mut().unwrap();
+    array.push(serde_json::json!({
+        "role": "assistant",
+        "content": tensorzero_content_blocks,
+    }));
+
+    let payload = json!({
+        "model_name": "claude-3-7-sonnet-20250219-thinking",
+        "episode_id": episode_id,
+        "input": {
+            "messages": new_messages
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(
+        content_blocks.len() == 2,
+        "Unexpected content blocks: {:?}",
+        content_blocks
+    );
+    assert_eq!(content_blocks[1]["type"], "text");
 }
