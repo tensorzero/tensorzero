@@ -1,14 +1,14 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "type": "object",
-    "properties": {
-      "observation": {
-        "type": "string"
-      },
-      "history": {
-        "type": "string"
-      }
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "observation": {
+      "type": "string"
     },
-    "required": ["observation"],
-    "additionalProperties": false
-  }
+    "history": {
+      "type": "string"
+    }
+  },
+  "required": ["observation"],
+  "additionalProperties": false
+}
