@@ -137,7 +137,7 @@ impl InferenceProvider for TGIProvider {
                     message: format!("Error serializing TGI request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -227,7 +227,7 @@ impl InferenceProvider for TGIProvider {
                     message: format!("Error serializing TGI request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
         // TGI integration does not support tools in streaming mode
         if request_body.get("tools").is_some() {
             return Err(ErrorDetails::InvalidTool {

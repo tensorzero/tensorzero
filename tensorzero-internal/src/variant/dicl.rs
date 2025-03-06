@@ -10,6 +10,7 @@ use crate::config_parser::PathWithContents;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::ContentBlock;
+use crate::inference::types::FullExtraBodyConfig;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::{
@@ -514,7 +515,9 @@ impl DiclConfig {
             stream,
             inference_params,
             self.json_mode,
-            self.extra_body.as_ref(),
+            self.extra_body
+                .clone()
+                .map(|extra_body| FullExtraBodyConfig { extra_body }),
         )
     }
 }

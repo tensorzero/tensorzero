@@ -13,7 +13,8 @@ use crate::inference::types::{
     ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::inference::types::{
-    InferenceResult, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
+    FullExtraBodyConfig, InferenceResult, ResolvedInput, ResolvedInputMessage,
+    ResolvedInputMessageContent,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
@@ -223,7 +224,9 @@ impl ChatCompletionConfig {
             stream,
             inference_params,
             self.json_mode,
-            self.extra_body.as_ref(),
+            self.extra_body
+                .clone()
+                .map(|extra_body| FullExtraBodyConfig { extra_body }),
         )
     }
 }

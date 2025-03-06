@@ -131,7 +131,7 @@ impl InferenceProvider for AzureProvider {
                 message: format!("Error serializing Azure request: {e}"),
             })
         })?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_azure_chat_url(&self.endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
@@ -212,7 +212,7 @@ impl InferenceProvider for AzureProvider {
                 message: format!("Error serializing Azure request: {e}"),
             })
         })?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),

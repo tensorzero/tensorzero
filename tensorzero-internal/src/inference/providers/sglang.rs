@@ -127,7 +127,7 @@ impl InferenceProvider for SGLangProvider {
                     message: format!("Error serializing SGLang request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&self.api_base)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -213,7 +213,7 @@ impl InferenceProvider for SGLangProvider {
                     message: format!("Error serializing SGLang request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),

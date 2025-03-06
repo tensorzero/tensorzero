@@ -147,7 +147,7 @@ impl InferenceProvider for FireworksProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
         let request_url = get_chat_url(&FIREWORKS_API_BASE)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
@@ -232,7 +232,7 @@ impl InferenceProvider for FireworksProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body: {e}"),

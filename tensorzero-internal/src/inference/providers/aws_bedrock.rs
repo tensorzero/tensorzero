@@ -30,6 +30,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::FullExtraBodyConfig;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, FunctionType, Latency, ModelInferenceRequest,
@@ -40,7 +41,6 @@ use crate::inference::types::{
 use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs};
 use crate::model::{ModelProvider, ModelProviderRequestInfo};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
-use crate::variant::chat_completion::ExtraBodyConfig;
 
 #[allow(unused)]
 const PROVIDER_NAME: &str = "AWS Bedrock";
@@ -98,14 +98,14 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
     model_provider: &ModelProvider,
 ) -> WithRawRequest<T, E, S, impl FnOnce() -> Result<String, Error>> {
     let raw_request = Arc::new(Mutex::new(None));
-    let extra_body = request.extra_body.cloned();
+    let extra_body = request.extra_body.clone();
 
     #[derive(Debug)]
     struct TensorZeroInterceptor {
         /// Captures the raw request from `modify_before_signing`.
         /// After the request is executed, we use this to retrieve the raw request.
         raw_request: Arc<Mutex<Option<String>>>,
-        extra_body: Option<ExtraBodyConfig>,
+        extra_body: Option<FullExtraBodyConfig>,
         model_provider_info: ModelProviderRequestInfo,
     }
     impl Intercept for TensorZeroInterceptor {
@@ -132,7 +132,7 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
                 })
             })?;
             inject_extra_body(
-                self.extra_body.as_ref(),
+                &self.extra_body,
                 self.model_provider_info.clone(),
                 &mut body_json,
             )?;

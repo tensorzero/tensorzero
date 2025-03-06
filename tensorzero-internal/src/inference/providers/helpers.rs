@@ -5,13 +5,12 @@ use serde_json::{map::Entry, Map, Value};
 
 use crate::{
     error::{Error, ErrorDetails},
-    inference::types::ProviderInferenceResponseChunk,
+    inference::types::{FullExtraBodyConfig, ProviderInferenceResponseChunk},
     model::ModelProviderRequestInfo,
-    variant::chat_completion::ExtraBodyConfig,
 };
 
 pub fn inject_extra_body(
-    config: Option<&ExtraBodyConfig>,
+    config: &Option<FullExtraBodyConfig>,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
     body: &mut serde_json::Value,
 ) -> Result<(), Error> {
@@ -24,9 +23,12 @@ pub fn inject_extra_body(
     // Write the variant extra_body first, then the model_provider extra_body.
     // This way, the model_provider extra_body will overwrite any keys in the
     // variant extra_body.
-    for extra_body in [config, model_provider.extra_body.as_ref()]
-        .into_iter()
-        .flatten()
+    for extra_body in [
+        config.as_ref().map(|c| &c.extra_body),
+        model_provider.extra_body.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
     {
         for replacement in &extra_body.data {
             write_json_pointer_with_parent_creation(
@@ -184,7 +186,7 @@ mod tests {
 
     use crate::{
         inference::types::{ContentBlockChunk, TextChunk},
-        variant::chat_completion::ExtraBodyReplacement,
+        variant::chat_completion::{ExtraBodyConfig, ExtraBodyReplacement},
     };
 
     use super::*;
@@ -252,7 +254,7 @@ mod tests {
     fn test_inject_nothing() {
         let mut body = serde_json::json!({});
         inject_extra_body(
-            None,
+            &None,
             ModelProviderRequestInfo { extra_body: None },
             &mut body,
         )
@@ -263,7 +265,7 @@ mod tests {
     #[test]
     fn test_inject_to_non_map() {
         let err = inject_extra_body(
-            None,
+            &None,
             ModelProviderRequestInfo { extra_body: None },
             &mut serde_json::Value::String("test".to_string()),
         )
@@ -284,19 +286,21 @@ mod tests {
             }
         });
         inject_extra_body(
-            Some(&ExtraBodyConfig {
-                data: vec![
-                    ExtraBodyReplacement {
-                        pointer: "/generationConfig".to_string(),
-                        value: serde_json::json!({
-                            "otherNestedKey": "otherNestedValue"
-                        }),
-                    },
-                    ExtraBodyReplacement {
-                        pointer: "/generationConfig/temperature".to_string(),
-                        value: serde_json::json!(0.123),
-                    },
-                ],
+            &Some(FullExtraBodyConfig {
+                extra_body: ExtraBodyConfig {
+                    data: vec![
+                        ExtraBodyReplacement {
+                            pointer: "/generationConfig".to_string(),
+                            value: serde_json::json!({
+                                "otherNestedKey": "otherNestedValue"
+                            }),
+                        },
+                        ExtraBodyReplacement {
+                            pointer: "/generationConfig/temperature".to_string(),
+                            value: serde_json::json!(0.123),
+                        },
+                    ],
+                },
             }),
             ModelProviderRequestInfo { extra_body: None },
             &mut body,
@@ -326,17 +330,19 @@ mod tests {
             }
         });
         inject_extra_body(
-            Some(&ExtraBodyConfig {
-                data: vec![
-                    ExtraBodyReplacement {
-                        pointer: "/generationConfig/otherNestedKey".to_string(),
-                        value: Value::String("otherNestedValue".to_string()),
-                    },
-                    ExtraBodyReplacement {
-                        pointer: "/variantKey".to_string(),
-                        value: Value::String("variantValue".to_string()),
-                    },
-                ],
+            &Some(FullExtraBodyConfig {
+                extra_body: ExtraBodyConfig {
+                    data: vec![
+                        ExtraBodyReplacement {
+                            pointer: "/generationConfig/otherNestedKey".to_string(),
+                            value: Value::String("otherNestedValue".to_string()),
+                        },
+                        ExtraBodyReplacement {
+                            pointer: "/variantKey".to_string(),
+                            value: Value::String("variantValue".to_string()),
+                        },
+                    ],
+                },
             }),
             ModelProviderRequestInfo {
                 extra_body: Some(ExtraBodyConfig {

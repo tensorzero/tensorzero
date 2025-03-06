@@ -146,7 +146,7 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let res = http_client
@@ -246,7 +246,7 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),

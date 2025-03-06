@@ -282,7 +282,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
         let api_key = self
             .credentials
             .get_api_key(&self.audience, dynamic_api_keys)?;
@@ -365,7 +365,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),

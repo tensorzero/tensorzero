@@ -17,7 +17,7 @@ use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
-use crate::inference::types::{ContentBlockOutput, ResolvedInput};
+use crate::inference::types::{ContentBlockOutput, FullExtraBodyConfig, ResolvedInput};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::model::ModelTable;
 use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
@@ -659,7 +659,11 @@ impl EvaluatorConfig {
                 json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
-                extra_body: self.inner.extra_body.as_ref(),
+                extra_body: self
+                    .inner
+                    .extra_body
+                    .clone()
+                    .map(|c| FullExtraBodyConfig { extra_body: c }),
             },
             skipped_indices,
         ))

@@ -351,6 +351,11 @@ pub enum ModelInferenceRequestJsonMode {
     Strict,
 }
 
+#[derive(Builder, Clone, Debug, Default, PartialEq, Serialize)]
+pub struct FullExtraBodyConfig {
+    pub extra_body: ExtraBodyConfig,
+}
+
 /// Top-level TensorZero type for an inference request to a particular model.
 /// This should contain all the information required to make a valid inference request
 /// for a provider, except for information about what model to actually request,
@@ -374,7 +379,7 @@ pub struct ModelInferenceRequest<'a> {
     pub json_mode: ModelInferenceRequestJsonMode,
     pub function_type: FunctionType,
     pub output_schema: Option<&'a Value>,
-    pub extra_body: Option<&'a ExtraBodyConfig>,
+    pub extra_body: Option<FullExtraBodyConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

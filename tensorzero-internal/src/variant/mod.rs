@@ -1,6 +1,5 @@
 use backon::ExponentialBuilder;
 use backon::Retryable;
-use chat_completion::ExtraBodyConfig;
 use futures::StreamExt;
 use itertools::izip;
 use serde::Deserialize;
@@ -19,6 +18,7 @@ use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
+use crate::inference::types::FullExtraBodyConfig;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
@@ -399,7 +399,7 @@ fn prepare_model_inference_request<'a, 'request>(
     stream: bool,
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
-    extra_body: Option<&'request ExtraBodyConfig>,
+    extra_body: Option<FullExtraBodyConfig>,
 ) -> Result<ModelInferenceRequest<'request>, Error>
 where
     'a: 'request,
