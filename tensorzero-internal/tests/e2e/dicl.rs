@@ -39,6 +39,98 @@ pub async fn test_dicl_inference_request_no_examples_empty_dicl_shorthand() {
     test_dicl_inference_request_no_examples("empty_dicl_shorthand").await;
 }
 
+#[tokio::test]
+async fn test_dicl_reject_unknown_content_block() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "empty_dicl",
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "value": "What is the name of the capital city of Japan?"},
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai", "data": {"type": "text", "text": "My extra openai text"}}
+                    ]
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is correct
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let response_json = response.json::<Value>().await.unwrap();
+    assert!(
+        response_json
+            .get("error")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains(" Unsupported content block type `unknown` for provider `dicl`"),
+        "Unexpected error message: {response_json:#?}"
+    );
+
+    println!("API response: {response_json:#?}");
+}
+
+#[tokio::test]
+async fn test_dicl_reject_image_content_block() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "empty_dicl",
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "value": "What is the name of the capital city of Japan?"},
+                        {"type": "image", "mime_type": "image/jpeg", "data": "abc"}
+                    ]
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let response_json = response.json::<Value>().await.unwrap();
+    assert!(
+        response_json
+            .get("error")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains(" Unsupported content block type `image` for provider `dicl`"),
+        "Unexpected error message: {response_json:#?}"
+    );
+
+    println!("API response: {response_json:#?}");
+}
+
 pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
     let episode_id = Uuid::now_v7();
 

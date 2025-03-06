@@ -463,6 +463,28 @@ impl DiclConfig {
     where
         'a: 'request,
     {
+        for message in &input.messages {
+            for content in &message.content {
+                match content {
+                    // We cannot meaningfully embed images into dicl inputs, so reject the request.
+                    ResolvedInputMessageContent::Image(..) => {
+                        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                            content_block_type: "image".to_string(),
+                            provider_type: "dicl".to_string(),
+                        }));
+                    }
+                    // 'Unknown' blocks will need special handling (we don't want the literal string "unknown")
+                    // to show up in the LLM input, so reject the request for now.
+                    ResolvedInputMessageContent::Unknown { .. } => {
+                        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                            content_block_type: "unknown".to_string(),
+                            provider_type: "dicl".to_string(),
+                        }));
+                    }
+                    _ => {}
+                }
+            }
+        }
         let messages = examples
             .iter()
             .map(|example| self.prepare_message(example))

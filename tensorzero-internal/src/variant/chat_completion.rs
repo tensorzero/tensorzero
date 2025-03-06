@@ -145,6 +145,15 @@ impl ChatCompletionConfig {
                 ResolvedInputMessageContent::Image(image) => {
                     content.push(ContentBlock::Image(image.clone()));
                 }
+                ResolvedInputMessageContent::Unknown {
+                    data,
+                    model_provider_name,
+                } => {
+                    content.push(ContentBlock::Unknown {
+                        data: data.clone(),
+                        model_provider_name: model_provider_name.clone(),
+                    });
+                }
             }
         }
 
@@ -855,6 +864,7 @@ mod tests {
             providers: HashMap::from([(
                 "good".into(),
                 ModelProvider {
+                    name: "good".into(),
                     config: good_provider_config,
                     extra_body: None,
                 },
@@ -865,6 +875,7 @@ mod tests {
             providers: HashMap::from([(
                 "json_provider".into(),
                 ModelProvider {
+                    name: "json_provider".into(),
                     config: json_provider_config,
                     extra_body: None,
                 },
@@ -879,6 +890,7 @@ mod tests {
             providers: HashMap::from([(
                 "tool_provider".into(),
                 ModelProvider {
+                    name: "tool_provider".into(),
                     config: tool_provider_config,
                     extra_body: None,
                 },
@@ -889,6 +901,7 @@ mod tests {
             providers: HashMap::from([(
                 "error".into(),
                 ModelProvider {
+                    name: "error".into(),
                     config: error_provider_config,
                     extra_body: None,
                 },
@@ -1068,6 +1081,7 @@ mod tests {
             providers: HashMap::from([(
                 "good_provider".into(),
                 ModelProvider {
+                    name: "good_provider".into(),
                     config: good_provider_config,
                     extra_body: None,
                 },
@@ -1612,6 +1626,7 @@ mod tests {
             providers: HashMap::from([(
                 "good_provider".into(),
                 ModelProvider {
+                    name: "good_provider".into(),
                     config: good_provider_config,
                     extra_body: None,
                 },
@@ -1622,6 +1637,7 @@ mod tests {
             providers: HashMap::from([(
                 "error_provider".into(),
                 ModelProvider {
+                    name: "error_provider".into(),
                     config: error_provider_config,
                     extra_body: None,
                 },
