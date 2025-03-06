@@ -321,7 +321,8 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
                     })
                     .and_then(|s| {
                         Uuid::parse_str(s).map_err(|_| {
-                            Error::new(ErrorDetails::InvalidEpisodeId {
+                            Error::new(ErrorDetails::InvalidTensorzeroUuid {
+                                kind: "Episode".to_string(),
                                 message: "episode_id header is not a valid UUID".to_string(),
                             })
                         })
