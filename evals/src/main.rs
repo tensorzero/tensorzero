@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::{anyhow, bail, Result};
 use clap::Parser;
+use evals::evaluators::evaluate_inference;
 use evals::helpers::{get_tool_params_args, resolved_input_to_input};
 use tensorzero::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
@@ -52,9 +53,7 @@ struct Args {
 
 /*
 Outstanding TODOs:
- - eval_run_id tags
  - unit tests all over
- - LLM judge
  - documentation
  - concurrency
  - well-behaved error handling
@@ -62,6 +61,7 @@ Outstanding TODOs:
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let eval_run_id = Uuid::now_v7();
     let subscriber = tracing_subscriber::FmtSubscriber::new();
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))?;
@@ -101,9 +101,8 @@ async fn main() -> Result<()> {
     )
     .await?;
 
-    let eval_run_id = Uuid::now_v7();
-
     let mut inference_responses = Vec::new();
+    let mut eval_results = Vec::new();
     for datapoint in dataset {
         let inference_response = infer_datapoint(
             &tensorzero_client,
@@ -114,7 +113,17 @@ async fn main() -> Result<()> {
             function_config,
         )
         .await?;
+        let eval_result = evaluate_inference(
+            &inference_response,
+            &datapoint,
+            eval_config,
+            &args.name,
+            &tensorzero_client,
+            eval_run_id,
+        )
+        .await?;
         inference_responses.push(inference_response);
+        eval_results.push(eval_result);
     }
 
     Ok(())

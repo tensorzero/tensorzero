@@ -11,6 +11,7 @@ use tensorzero_internal::evals::{EvalConfig, EvaluatorConfig};
 
 mod llm_judge;
 use llm_judge::run_llm_judge_evaluator;
+use uuid::Uuid;
 
 pub async fn evaluate_inference(
     inference_response: &InferenceResponse,
@@ -18,6 +19,7 @@ pub async fn evaluate_inference(
     eval_config: &EvalConfig,
     eval_name: &str,
     tensorzero_client: &Client,
+    eval_run_id: Uuid,
 ) -> Result<HashMap<String, Value>> {
     let mut results = HashMap::new();
     for (evaluator_name, evaluator_config) in &eval_config.evaluators {
@@ -28,6 +30,7 @@ pub async fn evaluate_inference(
             datapoint,
             eval_name,
             evaluator_name,
+            eval_run_id,
         )
         .await?
         {
@@ -39,7 +42,10 @@ pub async fn evaluate_inference(
                     inference_id: Some(inference_response.inference_id()),
                     dryrun: Some(false),
                     episode_id: None,
-                    tags: HashMap::new(),
+                    tags: HashMap::from([(
+                        "tensorzero::eval_run_id".to_string(),
+                        eval_run_id.to_string(),
+                    )]),
                 })
                 .await?;
         }
@@ -54,6 +60,7 @@ async fn run_evaluator(
     datapoint: &Datapoint,
     eval_name: &str,
     evaluator_name: &str,
+    eval_run_id: Uuid,
 ) -> Result<Option<Value>> {
     match evaluator_config {
         EvaluatorConfig::ExactMatch => run_exact_match_evaluator(inference_response, datapoint),
@@ -65,6 +72,7 @@ async fn run_evaluator(
                 llm_judge_config,
                 eval_name,
                 evaluator_name,
+                eval_run_id,
             )
             .await
         }

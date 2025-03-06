@@ -13,6 +13,7 @@ use tensorzero_internal::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessageContent,
     TextKind,
 };
+use uuid::Uuid;
 
 pub async fn run_llm_judge_evaluator(
     inference_response: &InferenceResponse,
@@ -21,6 +22,7 @@ pub async fn run_llm_judge_evaluator(
     llm_judge_config: &LLMJudgeConfig,
     eval_name: &str,
     evaluator_name: &str,
+    eval_run_id: Uuid,
 ) -> Result<Option<Value>> {
     let function_name = get_llm_judge_function_name(eval_name, evaluator_name);
     let resolved_input = datapoint.input();
@@ -61,7 +63,10 @@ pub async fn run_llm_judge_evaluator(
         params: InferenceParams::default(),
         variant_name: None,
         dryrun: Some(false),
-        tags: HashMap::new(), // TODO: add tags
+        tags: HashMap::from([(
+            "tensorzero::eval_run_id".to_string(),
+            eval_run_id.to_string(),
+        )]),
         dynamic_tool_params: DynamicToolParams::default(),
         output_schema: None,
         credentials: HashMap::new(),
