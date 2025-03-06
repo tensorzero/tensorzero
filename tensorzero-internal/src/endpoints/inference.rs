@@ -224,6 +224,17 @@ pub async fn inference(
             }
             .into());
         }
+    } else {
+        // Remove all zero-weight variants - these can only be used if explicitly pinned above
+        candidate_variant_names.retain(|name| {
+            if let Some(variant) = function.variants().get(*name) {
+                // Retain 'None' and positive-weight variants, discarding zero-weight variants
+                variant.weight().is_none_or(|w| w > 0.0)
+            } else {
+                // Keep missing variants - later code will error if we try to use them
+                true
+            }
+        });
     }
 
     // Should we store the results?

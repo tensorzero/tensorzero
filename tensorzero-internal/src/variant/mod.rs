@@ -163,12 +163,12 @@ pub trait Variant {
 }
 
 impl VariantConfig {
-    pub fn weight(&self) -> f64 {
+    pub fn weight(&self) -> Option<f64> {
         match self {
-            VariantConfig::ChatCompletion(params) => params.weight.unwrap_or(0.0),
-            VariantConfig::BestOfNSampling(params) => params.weight.unwrap_or(0.0),
-            VariantConfig::Dicl(params) => params.weight.unwrap_or(0.0),
-            VariantConfig::MixtureOfN(params) => params.weight.unwrap_or(0.0),
+            VariantConfig::ChatCompletion(params) => params.weight,
+            VariantConfig::BestOfNSampling(params) => params.weight,
+            VariantConfig::Dicl(params) => params.weight,
+            VariantConfig::MixtureOfN(params) => params.weight,
         }
     }
 }
@@ -1234,7 +1234,7 @@ mod tests {
             _ => panic!("Expected Chat inference result"),
         }
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider."#
+            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 
@@ -1529,7 +1529,7 @@ mod tests {
         assert_eq!(full_response, expected_response);
 
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider."#
+            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 }

@@ -193,9 +193,12 @@ impl InferenceProvider for DummyProvider {
             }
         }
 
-        if self.model_name == "error" {
+        if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
-                message: "Error sending request to Dummy provider.".to_string(),
+                message: format!(
+                    "Error sending request to Dummy provider for model '{}'.",
+                    self.model_name
+                ),
                 raw_request: Some("raw request".to_string()),
                 raw_response: None,
                 status_code: None,
@@ -388,9 +391,12 @@ impl InferenceProvider for DummyProvider {
             .await;
         }
 
-        if self.model_name == "error" {
+        if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
-                message: "Error sending request to Dummy provider.".to_string(),
+                message: format!(
+                    "Error sending request to Dummy provider for model '{}'.",
+                    self.model_name
+                ),
                 raw_request: Some("raw request".to_string()),
                 raw_response: None,
                 status_code: None,
@@ -507,9 +513,12 @@ impl EmbeddingProvider for DummyProvider {
         _http_client: &reqwest::Client,
         _dynamic_api_keys: &InferenceCredentials,
     ) -> Result<EmbeddingProviderResponse, Error> {
-        if self.model_name == "error" {
+        if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
-                message: "Error sending request to Dummy provider.".to_string(),
+                message: format!(
+                    "Error sending request to Dummy provider for model '{}'.",
+                    self.model_name
+                ),
                 raw_request: Some("raw request".to_string()),
                 raw_response: None,
                 status_code: None,
