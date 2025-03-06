@@ -416,6 +416,10 @@ pub struct ModelInferenceResponseWithMetadata {
 }
 
 impl ModelInferenceResponseWithMetadata {
+    /// We return the actual usage (meaning the number of tokens the user would be billed for)
+    /// in the HTTP response.
+    /// However, we store the number of tokens that would have been used in the database.
+    /// So we need this function to compute the actual usage in order to send it in the HTTP response.
     pub fn actual_usage(&self) -> Usage {
         if self.cached {
             Usage {
