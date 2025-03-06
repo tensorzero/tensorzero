@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Result};
 use clap::Parser;
@@ -18,7 +19,7 @@ use tensorzero_internal::function::FunctionConfig;
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
-// use tokio::task::JoinSet;
+use tokio::task::JoinSet;
 use url::Url;
 
 use evals::dataset::query_dataset;
@@ -57,7 +58,6 @@ Outstanding TODOs:
  - unit tests all over
  - documentation
  - concurrency
- - well-behaved error handling
 */
 
 #[tokio::main]
@@ -90,12 +90,13 @@ async fn main() -> Result<()> {
     .build()
     .await
     .map_err(|e| anyhow!("Failed to build client: {}", e))?;
-    let tensorzero_client_with_semaphore =
-        TensorZeroClientWithSemaphore::new(tensorzero_client, semaphore);
+    let tensorzero_client_with_semaphore = Arc::new(TensorZeroClientWithSemaphore::new(
+        tensorzero_client,
+        semaphore,
+    ));
 
-    // let semaphore = Semaphore::new(args.concurrency);
     let clickhouse_client = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
-    // let mut join_set = JoinSet::new();
+    let mut join_set = JoinSet::new();
 
     let dataset = query_dataset(
         &clickhouse_client,
@@ -104,46 +105,66 @@ async fn main() -> Result<()> {
         function_config,
     )
     .await?;
+    let variant = Arc::new(args.variant);
+    let eval_name = Arc::new(args.name);
 
+    // Spawn concurrent tasks for each datapoint
+    for datapoint in dataset {
+        let client_clone = tensorzero_client_with_semaphore.clone();
+        let variant = variant.clone();
+        let function_config = function_config.clone();
+        let eval_config = eval_config.clone();
+        let eval_name = eval_name.clone();
+        let eval_run_id_clone = eval_run_id;
+
+        join_set.spawn(async move {
+            let inference_response = infer_datapoint(
+                &client_clone,
+                &eval_config.function_name,
+                &variant,
+                eval_run_id_clone,
+                &datapoint,
+                &function_config,
+            )
+            .await?;
+
+            let eval_result = evaluate_inference(
+                &inference_response,
+                &datapoint,
+                &eval_config,
+                &eval_name,
+                &client_clone,
+                eval_run_id_clone,
+            )
+            .await?;
+
+            Ok::<(InferenceResponse, evals::evaluators::EvalResult), anyhow::Error>((
+                inference_response,
+                eval_result,
+            ))
+        });
+    }
+
+    // Collect results
     let mut inference_responses = Vec::new();
     let mut eval_results = Vec::new();
-    for datapoint in dataset {
-        match infer_datapoint(
-            &tensorzero_client_with_semaphore,
-            &eval_config.function_name,
-            &args.variant,
-            eval_run_id,
-            &datapoint,
-            function_config,
-        )
-        .await
-        {
-            Ok(inference_response) => {
-                match evaluate_inference(
-                    &inference_response,
-                    &datapoint,
-                    eval_config,
-                    &args.name,
-                    &tensorzero_client_with_semaphore,
-                    eval_run_id,
-                )
-                .await
-                {
-                    Ok(eval_result) => {
-                        inference_responses.push(inference_response);
-                        eval_results.push(eval_result);
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to evaluate inference: {}", e);
-                    }
-                }
+
+    while let Some(result) = join_set.join_next().await {
+        match result {
+            Ok(Ok((inference_response, eval_result))) => {
+                inference_responses.push(inference_response);
+                eval_results.push(eval_result);
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("Task error: {}", e);
             }
             Err(e) => {
-                tracing::warn!("Failed to infer datapoint: {}", e);
+                tracing::warn!("Failed to join task: {}", e);
             }
         }
     }
 
+    // TODO: what should we do with stdout here?
     Ok(())
 }
 

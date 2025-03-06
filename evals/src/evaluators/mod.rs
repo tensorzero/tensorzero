@@ -14,6 +14,8 @@ use uuid::Uuid;
 
 use crate::TensorZeroClientWithSemaphore;
 
+pub type EvalResult = HashMap<String, Value>;
+
 pub async fn evaluate_inference(
     inference_response: &InferenceResponse,
     datapoint: &Datapoint,
@@ -21,8 +23,8 @@ pub async fn evaluate_inference(
     eval_name: &str,
     tensorzero_client: &TensorZeroClientWithSemaphore,
     eval_run_id: Uuid,
-) -> Result<HashMap<String, Value>> {
-    let mut results = HashMap::new();
+) -> Result<EvalResult> {
+    let mut results = EvalResult::new();
     for (evaluator_name, evaluator_config) in &eval_config.evaluators {
         if let Some(value) = run_evaluator(
             evaluator_config,
