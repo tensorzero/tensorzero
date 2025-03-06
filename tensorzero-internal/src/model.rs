@@ -98,9 +98,12 @@ impl StreamResponse {
         cache_lookup: CacheData<StreamingCacheData>,
         model_provider_name: Arc<str>,
     ) -> Self {
+        let chunks = cache_lookup.output.chunks;
+        let chunks_len = chunks.len();
+
         Self {
-            stream: (Box::pin(futures::stream::iter(
-                cache_lookup.output.chunks.into_iter().map(|c| {
+            stream: (Box::pin(futures::stream::iter(chunks.into_iter().enumerate().map(
+                move |(index, c)| {
                     Ok(ProviderInferenceResponseChunk {
                         content: c.content,
                         raw_response: c.raw_response,
@@ -108,16 +111,20 @@ impl StreamResponse {
                         // request:
                         // The new result was 'created' now
                         created: current_timestamp(),
-                        // Since the result was cached, it didn't actually cost any tokens
-                        usage: Some(Usage {
-                            input_tokens: 0,
-                            output_tokens: 0,
-                        }),
+                        // Only include usage in the last chunk, None for all others
+                        usage: if index == chunks_len - 1 {
+                            Some(Usage {
+                                input_tokens: cache_lookup.input_tokens,
+                                output_tokens: cache_lookup.output_tokens,
+                            })
+                        } else {
+                            None
+                        },
                         // We didn't make any network calls to the model provider, so the latency is 0
                         latency: Duration::from_secs(0),
                     })
-                }),
-            )) as ProviderInferenceResponseStreamInner)
+                },
+            ))) as ProviderInferenceResponseStreamInner)
                 .peekable(),
             raw_request: cache_lookup.raw_request,
             model_provider_name,
@@ -245,6 +252,7 @@ impl ModelConfig {
                             &response.output,
                             &response.raw_request,
                             &response.raw_response,
+                            &response.usage,
                         );
                     }
                     // We already checked the cache above (and returned early if it was a hit), so this response was not from the cache
@@ -408,14 +416,31 @@ async fn stream_with_cache_write(
             yield chunk;
         }
         if !errored {
+            let usage = consolidate_usage(&buffer);
             let _ = start_cache_write_streaming(
                 &clickhouse_info,
                 cache_key,
                 buffer,
                 &raw_request,
+                &usage,
             );
         }
     }) as ProviderInferenceResponseStreamInner).peekable())
+}
+
+fn consolidate_usage(chunks: &[ProviderInferenceResponseChunk]) -> Usage {
+    let mut input_tokens = 0;
+    let mut output_tokens = 0;
+    for chunk in chunks {
+        if let Some(usage) = &chunk.usage {
+            input_tokens += usage.input_tokens;
+            output_tokens += usage.output_tokens;
+        }
+    }
+    Usage {
+        input_tokens,
+        output_tokens,
+    }
 }
 
 #[derive(Debug, Deserialize)]
