@@ -48,13 +48,18 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
     @classmethod
     def build_embedded(
-        cls, *, config_file: Optional[str] = None, clickhouse_url: Optional[str] = None
+        cls,
+        *,
+        config_file: Optional[str] = None,
+        clickhouse_url: Optional[str] = None,
+        timeout: Optional[float] = None,
     ) -> "TensorZeroGateway":
         """
         Build a TensorZeroGateway instance.
 
         :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
+        :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
         """
 
     def inference(
@@ -176,13 +181,18 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
     @classmethod
     async def build_embedded(
-        cls, *, config_file: Optional[str] = None, clickhouse_url: Optional[str] = None
+        cls,
+        *,
+        config_file: Optional[str] = None,
+        clickhouse_url: Optional[str] = None,
+        timeout: Optional[float] = None,
     ) -> "AsyncTensorZeroGateway":
         """
         Build an AsyncTensorZeroGateway instance.
 
         :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
+        :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
         """
 
     async def inference(  # type: ignore[override]

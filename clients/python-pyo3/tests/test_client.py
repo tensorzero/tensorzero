@@ -1784,7 +1784,7 @@ async def test_async_err_in_stream(async_client):
 
 
 @pytest.mark.asyncio
-async def test_async_timeout_int():
+async def test_async_timeout_int_http():
     async with await AsyncTensorZeroGateway.build_http(
         gateway_url="http://localhost:3000",
         timeout=1,
@@ -1802,7 +1802,26 @@ async def test_async_timeout_int():
 
 
 @pytest.mark.asyncio
-async def test_async_timeout_float():
+async def test_async_timeout_int_embedded():
+    async with await AsyncTensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        timeout=1,
+    ) as async_client:
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            await async_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={
+                    "system": {"assistant_name": "TensorZero bot"},
+                    "messages": [{"role": "user", "content": "Hello"}],
+                },
+            )
+        assert "HTTP request timed out" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_async_timeout_float_http():
     async with await AsyncTensorZeroGateway.build_http(
         gateway_url="http://localhost:3000",
         timeout=0.1,
@@ -1819,7 +1838,26 @@ async def test_async_timeout_float():
         assert "HTTP request timed out" in str(exc_info.value)
 
 
-def test_sync_timeout_int():
+@pytest.mark.asyncio
+async def test_async_timeout_float_embedded():
+    async with await AsyncTensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        timeout=0.1,
+    ) as async_client:
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            await async_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={
+                    "system": {"assistant_name": "TensorZero bot"},
+                    "messages": [{"role": "user", "content": "Hello"}],
+                },
+            )
+        assert "HTTP request timed out" in str(exc_info.value)
+
+
+def test_sync_timeout_int_http():
     with TensorZeroGateway.build_http(
         gateway_url="http://localhost:3000", timeout=1
     ) as sync_client:
@@ -1835,9 +1873,45 @@ def test_sync_timeout_int():
         assert "HTTP request timed out" in str(exc_info.value)
 
 
-def test_sync_timeout_float():
+def test_sync_timeout_int_embedded():
+    with TensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        timeout=1,
+    ) as sync_client:
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            sync_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={
+                    "system": {"assistant_name": "TensorZero bot"},
+                    "messages": [{"role": "user", "content": "Hello"}],
+                },
+            )
+        assert "HTTP request timed out" in str(exc_info.value)
+
+
+def test_sync_timeout_float_http():
     with TensorZeroGateway.build_http(
         gateway_url="http://localhost:3000", timeout=0.1
+    ) as sync_client:
+        with pytest.raises(TensorZeroInternalError) as exc_info:
+            sync_client.inference(
+                function_name="basic_test",
+                variant_name="slow",
+                input={
+                    "system": {"assistant_name": "TensorZero bot"},
+                    "messages": [{"role": "user", "content": "Hello"}],
+                },
+            )
+        assert "HTTP request timed out" in str(exc_info.value)
+
+
+def test_sync_timeout_float_embedded():
+    with TensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        timeout=0.1,
     ) as sync_client:
         with pytest.raises(TensorZeroInternalError) as exc_info:
             sync_client.inference(
