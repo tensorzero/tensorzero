@@ -7,6 +7,15 @@ This example shows how to optimize a TensorZero function using an arbitrary tool
 
 **Here, we achieve a massive boost in performance in the GSM8K dataset by optimizing a naive baseline prompt by incorporating in-context examples automatically curated by DSPy.**
 
+> [!INFO]
+>
+> In practice, most of the performance gains will come from formatting the LLM's response to fit GSM8K's idiosyncratic output format.
+> Regardless, it demonstrates that in-context learning is a powerful technique for prompt engineering.
+
+> [!TIP]
+>
+> See our [Dynamic In-Context Learning (DICL)](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#dynamic-in-context-learning-dicl) inference-time optimization for an even more powerful technique that curates in-context examples at inference time based on the input.
+
 <p align="center"><img src="results.svg" alt="Results"/></p>
 
 ## Background
