@@ -3,9 +3,9 @@ repos:
     rev: v4.6.0
     hooks:
       - id: check-added-large-files
+        args: ["--maxkb=1024"]
         exclude: |
           (?x)^(
-              examples/data-extraction-ner/data/clickhouse/fixture\.zip$|
               examples/haiku-hidden-preferences/data/clickhouse/fixture\.zip$
           )$
       - id: check-case-conflict
