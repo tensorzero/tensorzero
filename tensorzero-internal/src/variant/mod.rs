@@ -63,12 +63,12 @@ pub enum InferenceExtraBody {
     Provider {
         provider_name: String,
         pointer: String,
-        value: String,
+        value: serde_json::Value,
     },
     Variant {
         variant_name: String,
         pointer: String,
-        value: String,
+        value: serde_json::Value,
     },
 }
 

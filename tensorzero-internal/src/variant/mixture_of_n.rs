@@ -523,7 +523,9 @@ impl FuserConfig {
             self.inner
                 .extra_body
                 .clone()
-                .map(|extra_body| FullExtraBodyConfig { extra_body }),
+                .map(|extra_body| FullExtraBodyConfig { extra_body, 
+                    // TODO - decide how to expose 
+                    inference_extra_body: vec![]}),
         )?;
         Ok((model_inference_request, included_indices))
     }

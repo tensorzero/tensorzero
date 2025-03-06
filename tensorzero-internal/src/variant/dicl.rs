@@ -517,7 +517,11 @@ impl DiclConfig {
             self.json_mode,
             self.extra_body
                 .clone()
-                .map(|extra_body| FullExtraBodyConfig { extra_body }),
+                .map(|extra_body| FullExtraBodyConfig {
+                    extra_body,
+                    // TODO - expose this to dicl
+                    inference_extra_body: vec![],
+                }),
         )
     }
 }

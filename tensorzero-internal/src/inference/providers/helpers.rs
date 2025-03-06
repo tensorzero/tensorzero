@@ -7,6 +7,7 @@ use crate::{
     error::{Error, ErrorDetails},
     inference::types::{FullExtraBodyConfig, ProviderInferenceResponseChunk},
     model::ModelProviderRequestInfo,
+    variant::InferenceExtraBody,
 };
 
 pub fn inject_extra_body(
@@ -36,6 +37,26 @@ pub fn inject_extra_body(
                 &replacement.pointer,
                 replacement.value.clone(),
             )?;
+        }
+    }
+
+    for extra_body in config.as_ref().iter().flat_map(|c| &c.inference_extra_body) {
+        match extra_body {
+            InferenceExtraBody::Variant {
+                variant_name,
+                pointer,
+                value,
+            } => {
+                write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
+            }
+            InferenceExtraBody::Provider {
+                provider_name,
+                pointer,
+                value,
+            } => {
+                // TODO - check provider name
+                write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
+            }
         }
     }
     Ok(())

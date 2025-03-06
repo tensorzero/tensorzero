@@ -659,11 +659,11 @@ impl EvaluatorConfig {
                 json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
-                extra_body: self
-                    .inner
-                    .extra_body
-                    .clone()
-                    .map(|c| FullExtraBodyConfig { extra_body: c }),
+                extra_body: self.inner.extra_body.clone().map(|c| FullExtraBodyConfig {
+                    extra_body: c,
+                    // TODO  - expose this to best_of_n
+                    inference_extra_body: vec![],
+                }),
             },
             skipped_indices,
         ))
