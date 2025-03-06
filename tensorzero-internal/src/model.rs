@@ -1653,12 +1653,15 @@ mod tests {
                 },
             )]),
         };
-        let StreamResponse {
-            mut stream,
-            raw_request,
-            model_provider_name,
-            cached: _,
-        } = model_config
+        let (
+            StreamResponse {
+                mut stream,
+                raw_request,
+                model_provider_name,
+                cached: _,
+            },
+            _input,
+        ) = model_config
             .infer_stream(
                 &request,
                 &InferenceClients {
@@ -1811,12 +1814,15 @@ mod tests {
                 ),
             ]),
         };
-        let StreamResponse {
-            mut stream,
-            raw_request,
-            model_provider_name,
-            cached: _,
-        } = model_config
+        let (
+            StreamResponse {
+                mut stream,
+                raw_request,
+                model_provider_name,
+                cached: _,
+            },
+            _input,
+        ) = model_config
             .infer_stream(
                 &request,
                 &InferenceClients {
