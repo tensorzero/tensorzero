@@ -1,14 +1,20 @@
-# Example: SFT improves BabyAI performance with experience
+# Example: LLMs Learn to Navigate Mazes from Experience (BabyAI Benchmark)
 
 ## Background: BabyAI
 
-[BabyAI](https://github.com/mila-iqia/babyai) is a grid world environment designed to test the sample efficiency of grounded language acquisition. Each task is described in natural language (e.g., "put the red ball next to the blue ball"). To complete a task, the agent must execute a sequence of actions given partial observations of the environment. The set of actions are "go forward," "turn right," "turn left," "pick up," "drop," and "toggle." An example observation is, "you carry a yellow ball\n a wall 2 steps right\n a red ball 1 step forward".
+[BabyAI](https://github.com/mila-iqia/babyai) is a grid world environment designed to test the sample efficiency of grounded language acquisition.
+Each task is described in natural language (e.g. `put the red ball next to the blue ball`).
+To complete a task, the agent must execute a sequence of actions given partial observations of the environment.
+The set of actions are `go forward`, `turn right`, `turn left`, `pick up`, `drop`, and `toggle`.
+An example observation is `you carry a yellow ball\n a wall 2 steps right\n a red ball 1 step forward`.
 
 <p align="center">
-  <img src=https://github.com/mila-iqia/babyai/blob/master/media/GoTo.png?raw=true alt="BabyAI">
+  <img src=img/babyai.png width="400" height="400" alt="BabyAI">
 </p>
 
 We use the [BALROG agentic LLM benchmark](https://github.com/balrog-ai/BALROG) implementation of the BabyAI environment to demonstrate how you can use TensorZero to develop an LLM application to solve such tasks.
+
+------- TODO --------
 
 ## Setup
 

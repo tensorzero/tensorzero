@@ -1,0 +1,14 @@
+[project]
+name = "tensorzero-examples-maze-navigation-game-babyai"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "balrog @ git+ssh://git@github.com/balrog-ai/BALROG.git",
+    "ipykernel",
+    "jupyter",
+    "pandas",
+    "scipy",
+    "seaborn",
+    "tensorzero",
+]
