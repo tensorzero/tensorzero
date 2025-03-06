@@ -1506,7 +1506,7 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
-                        message: "Error sending request to Dummy provider for model 'error'"
+                        message: "Error sending request to Dummy provider for model 'error'."
                             .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
