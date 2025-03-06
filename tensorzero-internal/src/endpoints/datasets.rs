@@ -257,7 +257,7 @@ pub async fn delete_datapoint_handler(
     Path(path_params): Path<DeletePathParams>,
 ) -> Result<Json<DeleteDatapointResponse>, Error> {
     let datapoint = app_state.clickhouse_connection_info.run_query(
-        "SELECT * FROM {table_name:Identifier} WHERE dataset_name={dataset_name:String} and function_name={function_name:String} and id = {id:String} FORMAT JSONEachRow;".to_string(),
+        "SELECT * FROM {table_name:Identifier} WHERE dataset_name={dataset_name:String} AND function_name={function_name:String} AND id = {id:String} LIMIT 1 FORMAT JSONEachRow;".to_string(),
         Some(&HashMap::from([
             ("table_name", path_params.kind.table_name()),
             ("function_name", path_params.function.as_str()),
@@ -280,11 +280,8 @@ pub async fn delete_datapoint_handler(
     // We delete datapoints by writing a new row (which ClickHouse will merge)
     // with the 'is_deleted' and 'updated_at' fields modified.
     datapoint_json["is_deleted"] = serde_json::Value::Bool(true);
-    datapoint_json["updated_at"] = dbg!(format!(
-        "{}",
-        chrono::Utc::now().format(CLICKHOUSE_DATETIME_FORMAT)
-    ))
-    .into();
+    datapoint_json["updated_at"] =
+        format!("{}", chrono::Utc::now().format(CLICKHOUSE_DATETIME_FORMAT)).into();
 
     app_state
         .clickhouse_connection_info
