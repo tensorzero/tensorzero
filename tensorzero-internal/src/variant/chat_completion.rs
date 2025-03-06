@@ -226,7 +226,10 @@ impl ChatCompletionConfig {
             self.json_mode,
             self.extra_body
                 .clone()
-                .map(|extra_body| FullExtraBodyConfig { extra_body }),
+                .map(|extra_body| FullExtraBodyConfig {
+                    extra_body,
+                    inference_extra_body: inference_config.extra_body.clone(),
+                }),
         )
     }
 }
@@ -930,6 +933,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: None,
         };
         let models = ModelTable::default();
         let inference_models = InferenceModels {
@@ -982,6 +986,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: vec![],
         };
         let result = chat_completion_config
             .infer(
@@ -1031,6 +1036,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: vec![],
         };
         let err = chat_completion_config
             .infer(
@@ -1108,6 +1114,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: vec![],
         };
         let result = chat_completion_config
             .infer(
@@ -1184,6 +1191,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: vec![],
         };
         let result = chat_completion_config
             .infer(
@@ -1268,6 +1276,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: vec![],
         };
         let inference_params = InferenceParams::default();
         let result = chat_completion_config
@@ -1327,6 +1336,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            extra_body: vec![],
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
@@ -1430,6 +1440,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: Some(&output_schema),
+            extra_body: vec![],
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
@@ -1523,6 +1534,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: Some(&output_schema),
+            extra_body: vec![],
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
@@ -1690,6 +1702,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: Some(""),
+            extra_body: vec![],
         };
         let result = chat_completion_config
             .infer_stream(
@@ -1752,6 +1765,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            extra_body: vec![],
         };
         let (mut stream, models_used) = chat_completion_config
             .infer_stream(
@@ -1851,6 +1865,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            extra_body: vec![],
         };
         let model_request = chat_completion_config
             .prepare_request(
@@ -1954,6 +1969,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: Some(""),
+            extra_body: vec![],
         };
         let mut inference_params = InferenceParams::default();
         let model_request = chat_completion_config
@@ -2031,6 +2047,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: vec![],
         };
         let model_request = chat_completion_config
             .prepare_request(

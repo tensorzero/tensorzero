@@ -1,5 +1,6 @@
 use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::batch::deserialize_optional_json_string;
+use crate::variant::InferenceExtraBody;
 use derive_builder::Builder;
 use futures::stream::Peekable;
 use futures::Stream;
@@ -354,6 +355,7 @@ pub enum ModelInferenceRequestJsonMode {
 #[derive(Builder, Clone, Debug, Default, PartialEq, Serialize)]
 pub struct FullExtraBodyConfig {
     pub extra_body: ExtraBodyConfig,
+    pub inference_extra_body: Vec<InferenceExtraBody>,
 }
 
 /// Top-level TensorZero type for an inference request to a particular model.
@@ -1467,6 +1469,8 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         tool_config,
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
+        // TODO: get the real extra_body
+        extra_body: vec![],
     };
     function
         .prepare_response(

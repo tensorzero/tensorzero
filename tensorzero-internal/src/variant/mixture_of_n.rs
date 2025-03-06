@@ -1035,6 +1035,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: Some(""),
+            extra_body: vec![],
         };
 
         let fused = mixture_of_n_variant

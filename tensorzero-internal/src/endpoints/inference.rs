@@ -41,7 +41,7 @@ use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::uuid_util::validate_episode_id;
 use crate::variant::chat_completion::ChatCompletionConfig;
-use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig};
+use crate::variant::{InferenceConfig, InferenceExtraBody, JsonMode, Variant, VariantConfig};
 
 use super::validate_tags;
 
@@ -275,6 +275,8 @@ pub async fn inference(
     // Keep track of which variants failed
     let mut variant_errors = std::collections::HashMap::new();
 
+    let unfiltered_inference_extra_body: &[InferenceExtraBody] = &[];
+
     // Set up inference config
     let output_schema = params.output_schema.map(DynamicJSONSchema::new);
     let mut inference_config = InferenceConfig {
@@ -287,6 +289,7 @@ pub async fn inference(
             inference_id,
             episode_id,
         },
+        extra_body: vec![],
     };
     let inference_clients = InferenceClients {
         http_client,
@@ -318,6 +321,11 @@ pub async fn inference(
         let variant_inference_params = params.params.clone();
 
         inference_config.variant_name = Some(variant_name);
+        inference_config.extra_body = unfiltered_inference_extra_body
+            .iter()
+            .cloned()
+            .filter(|config| config.should_apply_variant(variant_name))
+            .collect();
         if stream {
             let result = variant
                 .infer_stream(

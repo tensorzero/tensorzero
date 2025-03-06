@@ -1541,6 +1541,7 @@ mod tests {
             variant_name: Some(""),
             templates: &templates,
             dynamic_output_schema: None,
+            extra_body: vec![],
         };
         let response = function_config
             .prepare_response(
@@ -1842,6 +1843,7 @@ mod tests {
             variant_name: Some(""),
             templates: &templates,
             dynamic_output_schema: Some(&dynamic_output_schema),
+            extra_body: vec![],
         };
         // Test with a correct content block
         let inference_id = Uuid::now_v7();

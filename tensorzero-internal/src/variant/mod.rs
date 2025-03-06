@@ -57,6 +57,32 @@ pub enum JsonMode {
     ImplicitTool,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum InferenceExtraBody {
+    Provider {
+        provider_name: String,
+        pointer: String,
+        value: String,
+    },
+    Variant {
+        variant_name: String,
+        pointer: String,
+        value: String,
+    },
+}
+
+impl InferenceExtraBody {
+    pub fn should_apply_variant(&self, variant_name: &str) -> bool {
+        match self {
+            InferenceExtraBody::Provider { .. } => true,
+            InferenceExtraBody::Variant {
+                variant_name: v, ..
+            } => v == variant_name,
+        }
+    }
+}
+
 /// Configuration that applies to the current inference request.
 #[derive(Debug)]
 pub struct InferenceConfig<'a, 'request> {
@@ -66,6 +92,7 @@ pub struct InferenceConfig<'a, 'request> {
     pub function_name: &'request str,
     pub variant_name: Option<&'request str>,
     pub ids: InferenceIds,
+    pub extra_body: Vec<InferenceExtraBody>,
 }
 
 /// Maps to the subset of Config that applies to the current inference request.
@@ -100,6 +127,7 @@ impl<'a> BatchInferenceConfig<'a> {
                     inference_id: *inference_id,
                     episode_id: *episode_id,
                 },
+                extra_body: vec![],
             },
         )
         .collect()
@@ -645,6 +673,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: vec![],
         };
 
         // Define common inference parameters
@@ -775,6 +804,7 @@ mod tests {
             function_name: "test_function",
             variant_name: Some("test_variant"),
             dynamic_output_schema: Some(&dynamic_output_schema),
+            extra_body: vec![],
         };
         let json_mode = JsonMode::ImplicitTool;
 
@@ -864,6 +894,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: vec![],
         };
 
         // Test case 1: Successful inference with ChatCompletionConfig and FunctionConfigChat
@@ -1128,6 +1159,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: vec![],
         };
 
         let model_name = "dummy_chat_model";
