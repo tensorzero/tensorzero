@@ -61,6 +61,7 @@ async fn main() -> Result<()> {
 
     let config = Config::load_and_verify_from_path(&args.config_file).await?;
     let function_config = config.get_function(&args.name)?;
+    let eval_config = config.evals.get(&args.name)?;
     #[allow(unused)]
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
@@ -81,8 +82,8 @@ async fn main() -> Result<()> {
 
     let dataset = query_dataset(
         &clickhouse_client,
-        &args.name,
-        &args.variant,
+        &eval_config.dataset_name,
+        &eval_config.function_name,
         function_config,
     )
     .await?;
@@ -93,7 +94,7 @@ async fn main() -> Result<()> {
     for datapoint in dataset {
         let inference_response = infer_datapoint(
             &tensorzero_client,
-            &args.name,
+            &eval_config.function_name,
             &args.variant,
             eval_run_id,
             &datapoint,
