@@ -96,6 +96,15 @@ export function VariantResponseModal({
       try {
         const inferenceOutput =
           variantInferenceFetcher.data as InferenceResponse;
+
+        // Check if the response contains an error using type guard
+        if ("error" in inferenceOutput && inferenceOutput.error) {
+          setError(
+            `Inference Failed: ${typeof inferenceOutput.error === "string" ? inferenceOutput.error : JSON.stringify(inferenceOutput.error)}`,
+          );
+          return;
+        }
+
         const variantResponse: VariantResponseInfo = {
           output:
             "content" in inferenceOutput
@@ -120,34 +129,49 @@ export function VariantResponseModal({
   const ResponseColumn = ({
     title,
     response,
+    errorMessage,
   }: {
     title: string;
     response: VariantResponseInfo | null;
+    errorMessage?: string | null;
   }) => (
     <div className="flex flex-1 flex-col">
       <h3 className="mb-2 text-sm font-semibold">{title}</h3>
-      {response && (
-        <>
-          <div className="flex-1">
-            <h4 className="mb-1 text-xs font-semibold">Output</h4>
-            <Card>
-              <CardContent className="pt-8">
-                <OutputContent output={response.output} />
-              </CardContent>
-            </Card>
-          </div>
-          {response.usage && (
-            <div className="mt-4">
-              <h4 className="mb-1 text-xs font-semibold">Usage</h4>
-              <p className="text-xs">
-                Input tokens: {response.usage.input_tokens}
-              </p>
-              <p className="text-xs">
-                Output tokens: {response.usage.output_tokens}
-              </p>
+      {errorMessage ? (
+        <div className="flex-1">
+          <Card>
+            <CardContent className="pt-8">
+              <div className="text-red-600">
+                <p className="font-semibold">Error</p>
+                <p>{errorMessage}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        response && (
+          <>
+            <div className="flex-1">
+              <h4 className="mb-1 text-xs font-semibold">Output</h4>
+              <Card>
+                <CardContent className="pt-8">
+                  <OutputContent output={response.output} />
+                </CardContent>
+              </Card>
             </div>
-          )}
-        </>
+            {response.usage && (
+              <div className="mt-4">
+                <h4 className="mb-1 text-xs font-semibold">Usage</h4>
+                <p className="text-xs">
+                  Input tokens: {response.usage.input_tokens}
+                </p>
+                <p className="text-xs">
+                  Output tokens: {response.usage.output_tokens}
+                </p>
+              </div>
+            )}
+          </>
+        )
       )}
     </div>
   );
@@ -183,7 +207,11 @@ export function VariantResponseModal({
             <>
               <div className="flex min-h-[300px] space-x-4">
                 <ResponseColumn title="Original" response={baselineResponse} />
-                <ResponseColumn title="New" response={variantResponse} />
+                <ResponseColumn
+                  title="New"
+                  response={variantResponse}
+                  errorMessage={error}
+                />
               </div>
               <Separator className="my-4" />
               <div>
