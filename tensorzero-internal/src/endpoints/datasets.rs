@@ -153,7 +153,7 @@ FORMAT JSONEachRow;"#
 }
 
 /// The handler for the `/datasets/:dataset/datapoints` endpoint.
-/// This inserts a new datapoint into `ChatInferenceDataset`/`JsonInferenceDataset`
+/// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`
 /// based on an existing inference (specified by `inference_id`).
 ///
 /// The inference is mostly copied as-is, except for the 'output' field.
@@ -204,7 +204,7 @@ pub async fn create_datapoint_handler(
             };
             app_state
                 .clickhouse_connection_info
-                .write(&[datapoint], "JsonInferenceDataset")
+                .write(&[datapoint], "JsonInferenceDatapoint")
                 .await?;
         }
         TaggedInferenceDatabaseInsert::Chat(inference) => {
@@ -242,7 +242,7 @@ pub async fn create_datapoint_handler(
             };
             app_state
                 .clickhouse_connection_info
-                .write(&[datapoint], "ChatInferenceDataset")
+                .write(&[datapoint], "ChatInferenceDatapoint")
                 .await?;
         }
     }
