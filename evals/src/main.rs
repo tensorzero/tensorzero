@@ -104,7 +104,7 @@ async fn main() -> Result<()> {
     let mut inference_responses = Vec::new();
     let mut eval_results = Vec::new();
     for datapoint in dataset {
-        let inference_response = infer_datapoint(
+        match infer_datapoint(
             &tensorzero_client,
             &eval_config.function_name,
             &args.variant,
@@ -112,18 +112,32 @@ async fn main() -> Result<()> {
             &datapoint,
             function_config,
         )
-        .await?;
-        let eval_result = evaluate_inference(
-            &inference_response,
-            &datapoint,
-            eval_config,
-            &args.name,
-            &tensorzero_client,
-            eval_run_id,
-        )
-        .await?;
-        inference_responses.push(inference_response);
-        eval_results.push(eval_result);
+        .await
+        {
+            Ok(inference_response) => {
+                match evaluate_inference(
+                    &inference_response,
+                    &datapoint,
+                    eval_config,
+                    &args.name,
+                    &tensorzero_client,
+                    eval_run_id,
+                )
+                .await
+                {
+                    Ok(eval_result) => {
+                        inference_responses.push(inference_response);
+                        eval_results.push(eval_result);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to evaluate inference: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to infer datapoint: {}", e);
+            }
+        }
     }
 
     Ok(())
