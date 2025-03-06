@@ -165,10 +165,10 @@ pub trait Variant {
 impl VariantConfig {
     pub fn weight(&self) -> f64 {
         match self {
-            VariantConfig::ChatCompletion(params) => params.weight,
-            VariantConfig::BestOfNSampling(params) => params.weight,
-            VariantConfig::Dicl(params) => params.weight,
-            VariantConfig::MixtureOfN(params) => params.weight,
+            VariantConfig::ChatCompletion(params) => params.weight.unwrap_or(0.0),
+            VariantConfig::BestOfNSampling(params) => params.weight.unwrap_or(0.0),
+            VariantConfig::Dicl(params) => params.weight.unwrap_or(0.0),
+            VariantConfig::MixtureOfN(params) => params.weight.unwrap_or(0.0),
         }
     }
 }
