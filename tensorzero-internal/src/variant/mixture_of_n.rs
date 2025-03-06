@@ -989,6 +989,7 @@ mod tests {
                 providers: HashMap::from([(
                     "json".into(),
                     ModelProvider {
+                        name: "json".into(),
                         config: ProviderConfig::Dummy(DummyProvider {
                             model_name: "json".into(),
                             ..Default::default()
@@ -1080,6 +1081,7 @@ mod tests {
                     providers: HashMap::from([(
                         "error".into(),
                         ModelProvider {
+                            name: "error".into(),
                             config: ProviderConfig::Dummy(DummyProvider {
                                 model_name: "error".into(),
                                 ..Default::default()
@@ -1143,6 +1145,7 @@ mod tests {
                     providers: HashMap::from([(
                         "regular".into(),
                         ModelProvider {
+                            name: "regular".into(),
                             config: ProviderConfig::Dummy(DummyProvider {
                                 model_name: "regular".into(),
                                 ..Default::default()

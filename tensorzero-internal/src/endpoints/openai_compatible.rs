@@ -687,6 +687,14 @@ fn process_chat_content(
                 // OpenAI compatible endpoint does not support thought blocks
                 // Users of this endpoint will need to check observability to see them
             }
+            ContentBlockChatOutput::Unknown {
+                data: _,
+                model_provider_name: _,
+            } => {
+                tracing::warn!(
+                    "Ignoring 'unknown' content block when constructing OpenAI-compatible response"
+                );
+            }
         }
     }
     (content_str, tool_calls)

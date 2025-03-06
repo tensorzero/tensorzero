@@ -64,7 +64,7 @@ pub struct CacheOptions {
     pub enabled: CacheEnabledMode,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ModelProviderRequest<'request> {
     pub request: &'request ModelInferenceRequest<'request>,
     pub model_name: &'request str,

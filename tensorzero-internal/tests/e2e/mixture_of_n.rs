@@ -24,7 +24,10 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge() {
             "messages": [
                 {
                     "role": "user",
-                    "content": "Please write me a sentence about the anime character Megumin."
+                    "content": [
+                        {"type": "text", "value": "Please write me a sentence about the anime character Megumin."},
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"type": "text", "text": "My extra test-model input"}}
+                    ]
                 }
             ]},
         "stream": false,
@@ -79,7 +82,10 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Please write me a sentence about the anime character Megumin."}]
+                    "content": [
+                        {"type": "text", "value": "Please write me a sentence about the anime character Megumin."},
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"type": "text", "text": "My extra test-model input"}},
+                    ]
                 }
             ]
         }
@@ -192,6 +198,42 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge() {
                     panic!("Expected a text block, got {:?}", output[0]);
                 }
             }
+        } else if model_name == "test" {
+            let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+            let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+            assert_eq!(input_messages.len(), 1);
+            assert_eq!(
+                input_messages[0],
+                RequestMessage {
+                    role: Role::User,
+                    content: vec![
+                        "Please write me a sentence about the anime character Megumin."
+                            .to_string()
+                            .into(),
+                        ContentBlock::Unknown {
+                            model_provider_name: Some(
+                                "tensorzero::model_name::test::provider_name::good".to_string()
+                            ),
+                            data: serde_json::json!({"type": "text", "text": "My extra test-model input"})
+                        }
+                    ],
+                }
+            );
+        } else if model_name == "alternate" {
+            let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+            let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+            assert_eq!(input_messages.len(), 1);
+            assert_eq!(
+                input_messages[0],
+                RequestMessage {
+                    role: Role::User,
+                    content: vec![
+                        "Please write me a sentence about the anime character Megumin."
+                            .to_string()
+                            .into(),
+                    ],
+                }
+            );
         }
 
         let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();

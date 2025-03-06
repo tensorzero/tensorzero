@@ -650,7 +650,7 @@ pub async fn test_start_simple_batch_inference_request_with_provider(provider: E
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        400
+        1000
     } else {
         100
     };
@@ -1584,7 +1584,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
     ];
 
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        400
+        1000
     } else {
         100
     };
@@ -2097,7 +2097,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        400
+        1000
     } else {
         100
     };
@@ -2504,7 +2504,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        400
+        1000
     } else {
         100
     };
@@ -2890,7 +2890,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        400
+        1000
     } else {
         100
     };
@@ -3598,7 +3598,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
     let inference_params = inference_params.get("chat_completion").unwrap();
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        400
+        1000
     } else {
         100
     };
@@ -3953,7 +3953,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
         .as_u64()
         .unwrap();
     let expected_max_tokens = if provider.model_name.starts_with("o1") {
-        400
+        1000
     } else {
         100
     };

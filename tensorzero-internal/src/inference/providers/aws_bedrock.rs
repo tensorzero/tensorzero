@@ -24,6 +24,7 @@ use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
 use super::helpers::{inject_extra_body, peek_first_chunk};
+use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
@@ -192,7 +193,11 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
 impl InferenceProvider for AWSBedrockProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -696,6 +701,13 @@ impl TryFrom<&ContentBlock> for Option<BedrockContentBlock> {
             // i.e. a judge or something.
             // We don't think the thoughts should be passed in in this case.
             ContentBlock::Thought(_thought) => Ok(None),
+            ContentBlock::Unknown {
+                data: _,
+                model_provider_name: _,
+            } => Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                content_block_type: "unknown".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+            })),
         }
     }
 }

@@ -911,6 +911,7 @@ mod tests {
             providers: HashMap::from([(
                 model_name.into(),
                 ModelProvider {
+                    name: model_name.into(),
                     config: dummy_provider_config,
                     extra_body: None,
                 },
@@ -1013,6 +1014,7 @@ mod tests {
             providers: HashMap::from([(
                 model_name_json.into(),
                 ModelProvider {
+                    name: model_name_json.into(),
                     config: dummy_provider_config_json,
                     extra_body: None,
                 },
@@ -1066,6 +1068,7 @@ mod tests {
             providers: HashMap::from([(
                 error_model_name.into(),
                 ModelProvider {
+                    name: error_model_name.into(),
                     config: error_provider_config,
                     extra_body: None,
                 },
@@ -1179,6 +1182,7 @@ mod tests {
                 (
                     error_model_name.into(),
                     ModelProvider {
+                        name: error_model_name.into(),
                         config: error_provider_config,
                         extra_body: None,
                     },
@@ -1186,6 +1190,7 @@ mod tests {
                 (
                     model_name.into(),
                     ModelProvider {
+                        name: model_name.into(),
                         config: dummy_provider_config,
                         extra_body: None,
                     },
@@ -1280,6 +1285,7 @@ mod tests {
             providers: HashMap::from([(
                 "good_provider".into(),
                 ModelProvider {
+                    name: "good_provider".into(),
                     config: dummy_provider_config,
                     extra_body: None,
                 },
@@ -1444,6 +1450,7 @@ mod tests {
                 (
                     error_model_name.into(),
                     ModelProvider {
+                        name: error_model_name.into(),
                         config: error_provider_config,
                         extra_body: None,
                     },
@@ -1451,6 +1458,7 @@ mod tests {
                 (
                     model_name.into(),
                     ModelProvider {
+                        name: model_name.into(),
                         config: dummy_provider_config,
                         extra_body: None,
                     },
