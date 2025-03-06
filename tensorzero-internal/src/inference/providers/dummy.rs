@@ -341,7 +341,11 @@ impl InferenceProvider for DummyProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        _request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request: _,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
         _model_provider: &'a ModelProvider,
