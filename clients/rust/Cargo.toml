@@ -17,6 +17,7 @@ url = { workspace = true }
 thiserror = "2.0.11"
 pyo3 = { workspace = true, optional = true }
 tracing = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true

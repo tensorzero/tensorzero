@@ -197,15 +197,14 @@ export default function BasicVariantInfo({
                     seed={config.evaluator.seed}
                   />
                   <div>
-                    <dt className="text-lg font-semibold">Timeout (s)</dt>
-                    <dd>{config.timeout_s}</dd>
+                    <dt className="text-lg font-semibold">Timeout</dt>
+                    <dd>{config.timeout_s}s</dd>
                   </div>
                   <div className="col-span-2">
                     <dt className="text-lg font-semibold">Candidates</dt>
                     <dd>
-                      {config.candidates.map((candidate, i) => (
+                      {config.candidates.map((candidate) => (
                         <>
-                          {i > 0 && ", "}
                           <Link
                             to={`/observability/functions/${function_name}/variants/${candidate}`}
                             className="block no-underline"
@@ -277,15 +276,14 @@ export default function BasicVariantInfo({
                     seed={config.fuser.seed}
                   />
                   <div>
-                    <dt className="text-lg font-semibold">Timeout (s)</dt>
-                    <dd>{config.timeout_s}</dd>
+                    <dt className="text-lg font-semibold">Timeout</dt>
+                    <dd>{config.timeout_s}s</dd>
                   </div>
                   <div className="col-span-2">
                     <dt className="text-lg font-semibold">Candidates</dt>
                     <dd>
-                      {config.candidates.map((candidate, i) => (
+                      {config.candidates.map((candidate) => (
                         <>
-                          {i > 0 && ", "}
                           <Link
                             to={`/observability/functions/${function_name}/variants/${candidate}`}
                             className="block no-underline"

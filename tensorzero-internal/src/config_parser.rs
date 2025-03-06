@@ -886,7 +886,7 @@ mod tests {
                 let variant = json_config.variants.get("variant_with_variables").unwrap();
                 match variant {
                     VariantConfig::ChatCompletion(chat_config) => {
-                        assert_eq!(chat_config.weight, 0.0); // Default weight should be 0
+                        assert_eq!(chat_config.weight, None); // Default weight should be None
                     }
                     _ => panic!("Expected a chat completion variant"),
                 }
@@ -917,7 +917,7 @@ mod tests {
                 match &json_config.variants["anthropic_promptA"] {
                     VariantConfig::ChatCompletion(chat_config) => {
                         assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
-                        assert_eq!(chat_config.weight, 1.0);
+                        assert_eq!(chat_config.weight, Some(1.0));
                         assert_eq!(
                             *chat_config.system_template.as_ref().unwrap(),
                             PathWithContents {

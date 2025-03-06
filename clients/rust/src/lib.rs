@@ -1,4 +1,4 @@
-use std::{fmt::Display, path::PathBuf, sync::Arc};
+use std::{fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use std::fmt::Debug;
@@ -8,6 +8,7 @@ use tensorzero_internal::{
     gateway_util::{setup_clickhouse, setup_http_client, AppStateData},
 };
 use thiserror::Error;
+use tokio::time::error::Elapsed;
 use tokio_stream::StreamExt;
 use url::Url;
 
@@ -28,14 +29,22 @@ pub use tensorzero_internal::tool::{DynamicToolParams, Tool};
 
 enum ClientMode {
     HTTPGateway(HTTPGateway),
-    EmbeddedGateway(EmbeddedGateway),
+    EmbeddedGateway {
+        gateway: EmbeddedGateway,
+        timeout: Option<Duration>,
+    },
 }
 
 impl Debug for ClientMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ClientMode::HTTPGateway(_) => write!(f, "HTTPGateway"),
-            ClientMode::EmbeddedGateway(_) => write!(f, "EmbeddedGateway"),
+            ClientMode::EmbeddedGateway {
+                gateway: _,
+                timeout,
+            } => {
+                write!(f, "EmbeddedGateway {{ timeout: {:?} }}", timeout)
+            }
         }
     }
 }
@@ -128,6 +137,9 @@ pub enum ClientBuilderMode {
     EmbeddedGateway {
         config_file: Option<PathBuf>,
         clickhouse_url: Option<String>,
+        /// A timeout for all TensorZero gateway processing.
+        /// If this timeout is hit, any in-progress LLM requests may be aborted.
+        timeout: Option<std::time::Duration>,
     },
 }
 
@@ -167,6 +179,7 @@ impl ClientBuilder {
             ClientBuilderMode::EmbeddedGateway {
                 config_file,
                 clickhouse_url,
+                timeout,
             } => {
                 let config = if let Some(config_file) = config_file {
                     Arc::new(
@@ -200,13 +213,16 @@ impl ClientBuilder {
                     })?
                 };
                 Ok(Client {
-                    mode: ClientMode::EmbeddedGateway(EmbeddedGateway {
-                        state: AppStateData {
-                            config,
-                            http_client,
-                            clickhouse_connection_info,
+                    mode: ClientMode::EmbeddedGateway {
+                        gateway: EmbeddedGateway {
+                            state: AppStateData {
+                                config,
+                                http_client,
+                                clickhouse_connection_info,
+                            },
                         },
-                    }),
+                        timeout: *timeout,
+                    },
                     verbose_errors: self.verbose_errors,
                 })
             }
@@ -242,7 +258,10 @@ impl Client {
     pub async fn clickhouse_health(&self) -> Result<(), TensorZeroError> {
         match &self.mode {
             ClientMode::HTTPGateway(_) => Ok(()),
-            ClientMode::EmbeddedGateway(client) => client
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => gateway
                 .state
                 .clickhouse_connection_info
                 .health()
@@ -276,12 +295,18 @@ impl Client {
                 let builder = client.http_client.post(url).json(&params);
                 self.parse_http_response(builder.send().await).await
             }
-            ClientMode::EmbeddedGateway(client) => Ok(
-                tensorzero_internal::endpoints::feedback::feedback(client.state.clone(), params)
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_internal::endpoints::feedback::feedback(
+                        gateway.state.clone(),
+                        params,
+                    )
                     .await
-                    .map_err(err_to_http)?
-                    .0,
-            ),
+                    .map_err(err_to_http)
+                })
+                .await?
+                .0)
+            }
         }
     }
 
@@ -328,15 +353,18 @@ impl Client {
                     ))
                 }
             }
-            ClientMode::EmbeddedGateway(client) => {
-                Ok(tensorzero_internal::endpoints::inference::inference(
-                    client.state.config.clone(),
-                    &client.state.http_client,
-                    client.state.clickhouse_connection_info.clone(),
-                    params.into(),
-                )
-                .await
-                .map_err(err_to_http)?)
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_internal::endpoints::inference::inference(
+                        gateway.state.config.clone(),
+                        &gateway.state.http_client,
+                        gateway.state.clickhouse_connection_info.clone(),
+                        params.into(),
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
             }
         }
     }
@@ -492,6 +520,19 @@ impl Client {
     }
 }
 
+async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroError>>>(
+    timeout: Option<Duration>,
+    fut: F,
+) -> Result<R, TensorZeroError> {
+    if let Some(timeout) = timeout {
+        tokio::time::timeout(timeout, fut)
+            .await
+            .map_err(|_: Elapsed| TensorZeroError::RequestTimeout)?
+    } else {
+        fut.await
+    }
+}
+
 // This is intentionally not a `From` impl, since we only want to make fake HTTP
 // errors for certain embedded gateway errors. For example, a config parsing error
 // should be `TensorZeroError::Other`, not `TensorZeroError::Http`.
@@ -521,6 +562,7 @@ mod tests {
                 "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
             )),
             clickhouse_url: None,
+            timeout: None,
         })
         .build()
         .await
@@ -541,6 +583,7 @@ mod tests {
                 "../../examples/haiku-hidden-preferences/config/tensorzero.toml",
             )),
             clickhouse_url: None,
+            timeout: None,
         })
         .build()
         .await
@@ -557,6 +600,7 @@ mod tests {
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: None,
             clickhouse_url: None,
+            timeout: None,
         })
         .build()
         .await

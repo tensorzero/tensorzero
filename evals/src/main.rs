@@ -85,6 +85,7 @@ async fn main() -> Result<()> {
         None => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(args.config_file),
             clickhouse_url: Some(clickhouse_url.clone()),
+            timeout: None,
         }),
     }
     .build()

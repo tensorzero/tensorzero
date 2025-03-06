@@ -344,7 +344,7 @@ impl UninitializedLLMJudgeVariantConfig {
                     contents: templated_system_instructions,
                 };
                 Ok(VariantConfig::ChatCompletion(ChatCompletionConfig {
-                    weight: if params.active { 1.0 } else { 0.0 },
+                    weight: Some(if params.active { 1.0 } else { 0.0 }),
                     model: params.model,
                     system_template: Some(system_template),
                     user_template: None,

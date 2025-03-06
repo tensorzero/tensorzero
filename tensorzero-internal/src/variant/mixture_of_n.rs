@@ -33,7 +33,7 @@ use super::{
 
 #[derive(Debug)]
 pub struct MixtureOfNConfig {
-    pub weight: f64,
+    pub weight: Option<f64>,
     pub timeout_s: f64,
     pub candidates: Vec<String>,
     pub fuser: FuserConfig,
@@ -43,7 +43,7 @@ pub struct MixtureOfNConfig {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedMixtureOfNConfig {
     #[serde(default)]
-    pub weight: f64,
+    pub weight: Option<f64>,
     #[serde(default = "default_timeout")]
     pub timeout_s: f64,
     pub candidates: Vec<String>,
@@ -558,7 +558,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -579,7 +579,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -598,7 +598,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -620,7 +620,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
                     contents: "".to_string(),
@@ -655,7 +655,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
                     contents: "".to_string(),
@@ -688,7 +688,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -786,7 +786,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy_json".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -887,7 +887,7 @@ mod tests {
             },
         };
         let mixture_of_n_variant = MixtureOfNConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             fuser: fuser_config,
@@ -1057,7 +1057,7 @@ mod tests {
             },
         };
         let mixture_of_n_variant = MixtureOfNConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             fuser: fuser_config,
@@ -1121,7 +1121,7 @@ mod tests {
             },
         };
         let mixture_of_n_variant = MixtureOfNConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             fuser: fuser_config,
