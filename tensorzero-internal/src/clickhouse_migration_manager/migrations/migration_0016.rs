@@ -3,13 +3,15 @@ use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
-use super::{check_table_exists, get_column_type, table_is_nonempty};
+use super::{check_table_exists, table_is_nonempty};
 
 /// This migration is used to set up the ClickHouse database for the datasets feature.
-/// It creates two tables: `ChatInferenceDataset` and `JsonInferenceDataset`
+/// It creates two tables: `ChatInferenceDatapoint` and `JsonInferenceDatapoint`
 /// These tables store the information required to do things like run evals,
 /// implement dynamic in-context learning, and run curated SFT jobs.
 /// We anticipate unpredictable future uses for datasets as well.
+///
+/// We'll also drop `ChatInferenceDataset` and `JsonInferenceDataset` if they exist and are empty (they should be).
 ///
 /// This migration should subsume migration 0014.
 /// They should have been removed from the binary upon merging of this migration.
@@ -26,35 +28,15 @@ impl Migration for Migration0016<'_> {
     }
 
     /// Check if the migration needs to be applied
-    /// This should be equivalent to checking if `ChatInferenceDataset` is missing
-    /// or if `JsonInferenceDataset` is missing
+    /// This should be equivalent to checking if `ChatInferenceDatapoint` is missing
+    /// or if `JsonInferenceDatapoint` is missing
     /// OR if they exist and either `output` column is not Nullable(String)
     async fn should_apply(&self) -> Result<bool, Error> {
         let chat_inference_dataset_table_exists =
-            check_table_exists(self.clickhouse, "ChatInferenceDataset", "0016").await?;
+            check_table_exists(self.clickhouse, "ChatInferenceDatapoint", "0016").await?;
         let json_inference_dataset_table_exists =
-            check_table_exists(self.clickhouse, "JsonInferenceDataset", "0016").await?;
+            check_table_exists(self.clickhouse, "JsonInferenceDatapoint", "0016").await?;
         if !chat_inference_dataset_table_exists || !json_inference_dataset_table_exists {
-            return Ok(true);
-        }
-
-        let chat_inference_dataset_output_type = get_column_type(
-            self.clickhouse,
-            "ChatInferenceDataset",
-            "updated_at",
-            "0016",
-        )
-        .await?;
-        let json_inference_dataset_output_type = get_column_type(
-            self.clickhouse,
-            "JsonInferenceDataset",
-            "updated_at",
-            "0016",
-        )
-        .await?;
-        if chat_inference_dataset_output_type != "DateTime64(6, \\'UTC\\')"
-            || json_inference_dataset_output_type != "DateTime64(6, \\'UTC\\')"
-        {
             return Ok(true);
         }
 
@@ -86,16 +68,16 @@ impl Migration for Migration0016<'_> {
             }
         }
 
-        // First, drop the tables if they were created in 0014
+        // First, drop the ChatInferenceDataset and JsonInferenceDataset tables if they were created in 0014
         let query = "DROP TABLE IF EXISTS ChatInferenceDataset";
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
         let query = "DROP TABLE IF EXISTS JsonInferenceDataset";
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Create the `ChatInferenceDataset` table
+        // Create the `ChatInferenceDatapoint` table
         let query = r#"
-            CREATE TABLE IF NOT EXISTS ChatInferenceDataset
+            CREATE TABLE IF NOT EXISTS ChatInferenceDatapoint
             (
                 dataset_name LowCardinality(String),
                 function_name LowCardinality(String),
@@ -118,9 +100,9 @@ impl Migration for Migration0016<'_> {
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
-        // Create the `JsonInferenceDataset` table
+        // Create the `JsonInferenceDatapoint` table
         let query = r#"
-            CREATE TABLE IF NOT EXISTS JsonInferenceDataset
+            CREATE TABLE IF NOT EXISTS JsonInferenceDatapoint
             (
                 dataset_name LowCardinality(String),
                 function_name LowCardinality(String),
@@ -144,8 +126,8 @@ impl Migration for Migration0016<'_> {
     fn rollback_instructions(&self) -> String {
         "\
             -- Drop the tables\n\
-            DROP TABLE IF EXISTS ChatInferenceDataset;\n\
-            DROP TABLE IF EXISTS JsonInferenceDataset;\n\
+            DROP TABLE IF EXISTS ChatInferenceDatapoint;\n\
+            DROP TABLE IF EXISTS JsonInferenceDatapoint;\n\
             "
         .to_string()
     }
