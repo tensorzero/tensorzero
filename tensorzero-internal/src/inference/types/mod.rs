@@ -415,6 +415,19 @@ pub struct ModelInferenceResponseWithMetadata {
     pub cached: bool,
 }
 
+impl ModelInferenceResponseWithMetadata {
+    pub fn actual_usage(&self) -> Usage {
+        if self.cached {
+            Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+            }
+        } else {
+            self.usage.clone()
+        }
+    }
+}
+
 /* As a Variant might make use of multiple model inferences, we then combine
  * one or more ModelInferenceResults into a single InferenceResult (but we keep the original ModelInferenceResults around for storage).
  * In the non-streaming case, this InferenceResult is converted into an InferenceResponse and sent to the client.

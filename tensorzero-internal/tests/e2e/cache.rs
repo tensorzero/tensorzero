@@ -409,8 +409,13 @@ pub async fn check_test_streaming_cache_with_err(
         );
     }
 
-    assert_eq!(input_tokens, 10);
-    assert_eq!(output_tokens, 16);
+    if expect_cached {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert_eq!(input_tokens, 10);
+        assert_eq!(output_tokens, 16);
+    }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
