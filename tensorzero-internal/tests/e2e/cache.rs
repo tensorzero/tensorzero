@@ -86,6 +86,10 @@ async fn test_cache_write_and_read() {
         &["test content".to_string().into()],
         "raw request",
         "raw response",
+        &Usage {
+            input_tokens: 10,
+            output_tokens: 16,
+        },
     )
     .unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -100,9 +104,17 @@ async fn test_cache_write_and_read() {
     .unwrap();
     assert!(result.is_some());
     let result = result.unwrap();
+
     assert_eq!(result.output, vec!["test content".to_string().into()]);
     assert_eq!(result.raw_request, "raw request");
     assert_eq!(result.raw_response, "raw response");
+    assert_eq!(
+        result.usage,
+        Usage {
+            input_tokens: 10,
+            output_tokens: 16,
+        }
+    );
     assert_eq!(*result.model_provider_name, *"test_provider");
     assert_eq!(result.system, Some("test system".to_string()));
     assert_eq!(
@@ -115,8 +127,8 @@ async fn test_cache_write_and_read() {
     assert_eq!(
         result.usage,
         Usage {
-            input_tokens: 0,
-            output_tokens: 0
+            input_tokens: 10,
+            output_tokens: 16
         }
     );
     assert_eq!(
@@ -201,6 +213,10 @@ async fn test_cache_stream_write_and_read() {
         model_provider_request.get_cache_key().unwrap(),
         initial_chunks.clone(),
         "raw request",
+        &Usage {
+            input_tokens: 20,
+            output_tokens: 40,
+        },
     )
     .unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -230,8 +246,8 @@ async fn test_cache_stream_write_and_read() {
     assert_eq!(
         usage,
         &Some(Usage {
-            input_tokens: 0,
-            output_tokens: 0,
+            input_tokens: 20,
+            output_tokens: 40,
         })
     );
     assert_eq!(raw_response, &initial_chunks[0].raw_response);
@@ -393,13 +409,8 @@ pub async fn check_test_streaming_cache_with_err(
         );
     }
 
-    if expect_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
-    } else {
-        assert_eq!(input_tokens, 10);
-        assert_eq!(output_tokens, 16);
-    }
+    assert_eq!(input_tokens, 10);
+    assert_eq!(output_tokens, 16);
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -510,13 +521,8 @@ pub async fn check_test_streaming_cache_with_err(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    if expect_cached {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else {
-        assert_eq!(input_tokens.as_u64().unwrap(), 10);
-        assert_eq!(output_tokens.as_u64().unwrap(), 16);
-    }
+    assert_eq!(input_tokens.as_u64().unwrap(), 10);
+    assert_eq!(output_tokens.as_u64().unwrap(), 16);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     if expect_cached {

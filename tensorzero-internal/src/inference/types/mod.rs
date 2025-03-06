@@ -686,8 +686,8 @@ impl ModelInferenceResponse {
             raw_request: cache_lookup.raw_request,
             raw_response: cache_lookup.raw_response,
             usage: Usage {
-                input_tokens: 0,
-                output_tokens: 0,
+                input_tokens: cache_lookup.input_tokens,
+                output_tokens: cache_lookup.output_tokens,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),
