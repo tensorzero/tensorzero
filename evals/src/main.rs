@@ -5,16 +5,17 @@ use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use evals::evaluators::evaluate_inference;
 use evals::helpers::{get_tool_params_args, resolved_input_to_input};
+use evals::TensorZeroClientWithSemaphore;
 use tensorzero::{
-    CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
-    DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
+    CacheParamsOptions, ClientBuilder, ClientBuilderMode, ClientInferenceParams, DynamicToolParams,
+    InferenceOutput, InferenceParams, InferenceResponse,
 };
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::config_parser::Config;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::function::FunctionConfig;
-// use tokio::sync::Semaphore;
+use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 // use tokio::task::JoinSet;
@@ -66,6 +67,7 @@ async fn main() -> Result<()> {
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))?;
     let args = Args::parse();
+    let semaphore = Semaphore::new(args.concurrency);
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
 
@@ -88,6 +90,8 @@ async fn main() -> Result<()> {
     .build()
     .await
     .map_err(|e| anyhow!("Failed to build client: {}", e))?;
+    let tensorzero_client_with_semaphore =
+        TensorZeroClientWithSemaphore::new(tensorzero_client, semaphore);
 
     // let semaphore = Semaphore::new(args.concurrency);
     let clickhouse_client = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
@@ -105,7 +109,7 @@ async fn main() -> Result<()> {
     let mut eval_results = Vec::new();
     for datapoint in dataset {
         match infer_datapoint(
-            &tensorzero_client,
+            &tensorzero_client_with_semaphore,
             &eval_config.function_name,
             &args.variant,
             eval_run_id,
@@ -120,7 +124,7 @@ async fn main() -> Result<()> {
                     &datapoint,
                     eval_config,
                     &args.name,
-                    &tensorzero_client,
+                    &tensorzero_client_with_semaphore,
                     eval_run_id,
                 )
                 .await
@@ -144,7 +148,7 @@ async fn main() -> Result<()> {
 }
 
 async fn infer_datapoint(
-    tensorzero_client: &Client,
+    tensorzero_client: &TensorZeroClientWithSemaphore,
     function_name: &str,
     variant_name: &str,
     eval_run_id: Uuid,

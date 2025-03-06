@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use anyhow::{bail, Result};
 use serde_json::Value;
-use tensorzero::Client;
 use tensorzero::InferenceResponse;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::endpoints::feedback::Params;
@@ -13,12 +12,14 @@ mod llm_judge;
 use llm_judge::run_llm_judge_evaluator;
 use uuid::Uuid;
 
+use crate::TensorZeroClientWithSemaphore;
+
 pub async fn evaluate_inference(
     inference_response: &InferenceResponse,
     datapoint: &Datapoint,
     eval_config: &EvalConfig,
     eval_name: &str,
-    tensorzero_client: &Client,
+    tensorzero_client: &TensorZeroClientWithSemaphore,
     eval_run_id: Uuid,
 ) -> Result<HashMap<String, Value>> {
     let mut results = HashMap::new();
@@ -56,7 +57,7 @@ pub async fn evaluate_inference(
 async fn run_evaluator(
     evaluator_config: &EvaluatorConfig,
     inference_response: &InferenceResponse,
-    tensorzero_client: &Client,
+    tensorzero_client: &TensorZeroClientWithSemaphore,
     datapoint: &Datapoint,
     eval_name: &str,
     evaluator_name: &str,

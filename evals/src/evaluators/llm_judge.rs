@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use anyhow::{bail, Result};
 use serde_json::{json, Value};
 use tensorzero::{
-    Client, ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams,
-    InferenceResponse, Input, InputMessage, InputMessageContent, Role,
+    ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
+    Input, InputMessage, InputMessageContent, Role,
 };
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::endpoints::datasets::Datapoint;
@@ -15,10 +15,12 @@ use tensorzero_internal::inference::types::{
 };
 use uuid::Uuid;
 
+use crate::TensorZeroClientWithSemaphore;
+
 pub async fn run_llm_judge_evaluator(
     inference_response: &InferenceResponse,
     datapoint: &Datapoint,
-    tensorzero_client: &Client,
+    tensorzero_client: &TensorZeroClientWithSemaphore,
     llm_judge_config: &LLMJudgeConfig,
     eval_name: &str,
     evaluator_name: &str,
