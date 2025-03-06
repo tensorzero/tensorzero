@@ -1966,7 +1966,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Call a function."
+                    "content": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
                 }
             ]}],
         "tool_choice": ["required"],
@@ -2045,7 +2045,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the weather like in Tokyo? Call a function."}]
+                "content": [{"type": "text", "value": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
             }
         ]
     });
@@ -2055,7 +2055,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![RequestMessage {
         role: Role::User,
-        content: vec!["What is the weather like in Tokyo? Call a function."
+        content: vec!["What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."
             .to_string()
             .into()],
     }];

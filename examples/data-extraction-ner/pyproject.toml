@@ -1,0 +1,12 @@
+[project]
+name = "tensorzero-examples-data-extraction-ner"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "altair",
+    "ipykernel",
+    "notebook",
+    "pandas",
+    "tensorzero",
+]
