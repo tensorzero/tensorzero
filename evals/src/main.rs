@@ -50,6 +50,16 @@ struct Args {
     concurrency: usize,
 }
 
+/*
+Outstanding TODOs:
+ - eval_run_id tags
+ - unit tests all over
+ - LLM judge
+ - documentation
+ - concurrency
+ - well-behaved error handling
+*/
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let subscriber = tracing_subscriber::FmtSubscriber::new();
@@ -61,7 +71,10 @@ async fn main() -> Result<()> {
 
     let config = Config::load_and_verify_from_path(&args.config_file).await?;
     let function_config = config.get_function(&args.name)?;
-    let eval_config = config.evals.get(&args.name)?;
+    let eval_config = config
+        .evals
+        .get(&args.name)
+        .ok_or(anyhow!("Eval not found"))?;
     #[allow(unused)]
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
