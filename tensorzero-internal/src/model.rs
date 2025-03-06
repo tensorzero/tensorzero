@@ -275,9 +275,11 @@ impl ModelConfig {
         request: &'request ModelInferenceRequest<'request>,
         clients: &'request InferenceClients<'request>,
         model_name: &'request str,
-    ) -> Result<StreamResponse, Error> {
+    ) -> Result<(StreamResponse, Vec<RequestMessage>), Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
+            let request = self.filter_content_blocks(request, model_name, provider_name);
+            let request = &*request;
             // TODO: think about how to best handle errors here
             if clients.cache_options.enabled.read() {
                 let cache_lookup = cache_lookup_streaming(
@@ -293,7 +295,7 @@ impl ModelConfig {
                 .ok()
                 .flatten();
                 if let Some(cache_lookup) = cache_lookup {
-                    return Ok(cache_lookup);
+                    return Ok((cache_lookup, request.messages.clone()));
                 }
             }
 
@@ -334,12 +336,15 @@ impl ModelConfig {
                     // Get a single chunk from the stream and make sure it is OK then send to client.
                     // We want to do this here so that we can tell that the request is working.
                     peek_first_chunk(&mut stream, &raw_request, provider_name).await?;
-                    return Ok(StreamResponse {
-                        stream,
-                        raw_request,
-                        model_provider_name: provider_name.clone(),
-                        cached: false,
-                    });
+                    return Ok((
+                        StreamResponse {
+                            stream,
+                            raw_request,
+                            model_provider_name: provider_name.clone(),
+                            cached: false,
+                        },
+                        request.messages.clone(),
+                    ));
                 }
                 Err(error) => {
                     provider_errors.insert(provider_name.to_string(), error);
