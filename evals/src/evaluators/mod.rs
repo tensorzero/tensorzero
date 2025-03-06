@@ -21,7 +21,16 @@ pub async fn evaluate_inference(
 ) -> Result<HashMap<String, Value>> {
     let mut results = HashMap::new();
     for (evaluator_name, evaluator_config) in &eval_config.evaluators {
-        if let Some(value) = run_evaluator(evaluator_config, inference_response, datapoint).await? {
+        if let Some(value) = run_evaluator(
+            evaluator_config,
+            inference_response,
+            tensorzero_client,
+            datapoint,
+            eval_name,
+            evaluator_name,
+        )
+        .await?
+        {
             results.insert(evaluator_name.clone(), value.clone());
             tensorzero_client
                 .feedback(Params {
@@ -41,12 +50,23 @@ pub async fn evaluate_inference(
 async fn run_evaluator(
     evaluator_config: &EvaluatorConfig,
     inference_response: &InferenceResponse,
+    tensorzero_client: &Client,
     datapoint: &Datapoint,
+    eval_name: &str,
+    evaluator_name: &str,
 ) -> Result<Option<Value>> {
     match evaluator_config {
         EvaluatorConfig::ExactMatch => run_exact_match_evaluator(inference_response, datapoint),
         EvaluatorConfig::LLMJudge(llm_judge_config) => {
-            run_llm_judge_evaluator(inference_response, datapoint, llm_judge_config).await
+            run_llm_judge_evaluator(
+                inference_response,
+                datapoint,
+                tensorzero_client,
+                llm_judge_config,
+                eval_name,
+                evaluator_name,
+            )
+            .await
         }
     }
 }
@@ -58,9 +78,7 @@ fn run_exact_match_evaluator(
     match (inference_response, datapoint) {
         (InferenceResponse::Chat(response), Datapoint::ChatInference(datapoint)) => {
             match &datapoint.output {
-                Some(output) => {
-                    return Ok(Some(Value::Bool(output == &response.content)));
-                }
+                Some(output) => Ok(Some(Value::Bool(output == &response.content))),
                 None => Ok(None),
             }
         }
