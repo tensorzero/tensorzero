@@ -1350,7 +1350,7 @@ mod tests {
                     (
                         name.to_string(),
                         VariantConfig::ChatCompletion(ChatCompletionConfig {
-                            weight,
+                            weight: Some(weight),
                             model: "model-name".into(),
                             ..Default::default()
                         }),
