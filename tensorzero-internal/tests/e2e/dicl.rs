@@ -517,6 +517,7 @@ pub async fn test_dicl_inference_request() {
                 }
             ]},
         "stream": false,
+        "include_original_response": true,
     });
 
     let response = Client::new()
@@ -556,6 +557,15 @@ pub async fn test_dicl_inference_request() {
     assert!(input_tokens > 0);
     let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
     assert!(output_tokens > 0);
+
+    let original_response = response_json.get("original_response").unwrap();
+    let original_response_json: serde_json::Value =
+        serde_json::from_str(original_response.as_str().unwrap()).unwrap();
+    assert_eq!(original_response_json["model"], "gpt-4o-mini-2024-07-18");
+    assert!(
+        original_response_json.get("choices").is_some(),
+        "Unexpected original_response: {original_response}"
+    );
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;

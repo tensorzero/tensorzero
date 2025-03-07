@@ -33,7 +33,7 @@ use super::{
 
 #[derive(Debug)]
 pub struct MixtureOfNConfig {
-    pub weight: f64,
+    pub weight: Option<f64>,
     pub timeout_s: f64,
     pub candidates: Vec<String>,
     pub fuser: FuserConfig,
@@ -43,7 +43,7 @@ pub struct MixtureOfNConfig {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedMixtureOfNConfig {
     #[serde(default)]
-    pub weight: f64,
+    pub weight: Option<f64>,
     #[serde(default = "default_timeout")]
     pub timeout_s: f64,
     pub candidates: Vec<String>,
@@ -299,7 +299,10 @@ impl MixtureOfNConfig {
                         message: "Failed to get random candidate (should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                     }));
                 }
-                candidates.swap_remove(random_index)
+                // If the fuser fails, don't provide any 'original_response' to the user
+                let mut candidate = candidates.swap_remove(random_index);
+                candidate.set_original_response(None);
+                candidate
             }
         };
 
@@ -558,7 +561,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -579,7 +582,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -598,7 +601,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -620,7 +623,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
                     contents: "".to_string(),
@@ -655,7 +658,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
                     contents: "".to_string(),
@@ -688,7 +691,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -725,6 +728,7 @@ mod tests {
                 vec![model_inference_response],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -760,6 +764,7 @@ mod tests {
                 vec![model_inference_response2],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -786,7 +791,7 @@ mod tests {
         let fuser_config = FuserConfig {
             inner: ChatCompletionConfig {
                 model: "dummy_json".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -823,6 +828,7 @@ mod tests {
             vec![model_inference_response_valid],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
+            None,
         ));
 
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
@@ -858,6 +864,7 @@ mod tests {
             vec![model_inference_response_malformed],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
+            None,
         ));
 
         let candidates = vec![candidate1, candidate2];
@@ -887,7 +894,7 @@ mod tests {
             },
         };
         let mixture_of_n_variant = MixtureOfNConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             fuser: fuser_config,
@@ -934,6 +941,7 @@ mod tests {
                 vec![model_inference_response0],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -969,6 +977,7 @@ mod tests {
                 vec![model_inference_response1],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -1057,7 +1066,7 @@ mod tests {
             },
         };
         let mixture_of_n_variant = MixtureOfNConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             fuser: fuser_config,
@@ -1121,7 +1130,7 @@ mod tests {
             },
         };
         let mixture_of_n_variant = MixtureOfNConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             fuser: fuser_config,

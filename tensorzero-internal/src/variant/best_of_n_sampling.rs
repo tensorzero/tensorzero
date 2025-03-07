@@ -35,7 +35,7 @@ use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
 
 #[derive(Debug)]
 pub struct BestOfNSamplingConfig {
-    pub weight: f64,
+    pub weight: Option<f64>,
     pub timeout_s: f64,
     pub candidates: Vec<String>,
     pub evaluator: EvaluatorConfig,
@@ -45,7 +45,7 @@ pub struct BestOfNSamplingConfig {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default)]
-    pub weight: f64,
+    pub weight: Option<f64>,
     #[serde(default = "default_timeout")]
     pub timeout_s: f64,
     pub candidates: Vec<String>,
@@ -338,6 +338,11 @@ impl BestOfNSamplingConfig {
         if let Some(inference_result) = &inference_result {
             total_usage.input_tokens += inference_result.usage.input_tokens;
             total_usage.output_tokens += inference_result.usage.output_tokens;
+            // Pass the evaluator response back to the user as 'original_response'
+            selected_candidate.set_original_response(Some(inference_result.raw_response.clone()));
+        } else {
+            // If the evaluator failed, don't provide an 'original_response' to the uesr
+            selected_candidate.set_original_response(None);
         }
         selected_candidate.set_usage(total_usage);
         for candidate in candidates {
@@ -719,7 +724,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -740,7 +745,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -759,7 +764,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -781,7 +786,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
                     contents: "".to_string(),
@@ -816,7 +821,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
                     contents: "".to_string(),
@@ -849,7 +854,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -889,6 +894,7 @@ mod tests {
                 vec![model_inference_response],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -927,6 +933,7 @@ mod tests {
                 vec![model_inference_response2],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -953,7 +960,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy_json".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -993,6 +1000,7 @@ mod tests {
             vec![model_inference_response_valid],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
+            None,
         ));
 
         let model_inference_response_malformed = ModelInferenceResponseWithMetadata {
@@ -1031,6 +1039,7 @@ mod tests {
             vec![model_inference_response_malformed],
             json!({"type": "object", "properties": {"response": {"type": "string"}}}),
             InferenceParams::default(),
+            None,
         ));
 
         let candidates = vec![candidate1, candidate2];
@@ -1060,7 +1069,7 @@ mod tests {
             },
         };
         let best_of_n_variant = BestOfNSamplingConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             evaluator: evaluator_config,
@@ -1102,6 +1111,7 @@ mod tests {
                 vec![model_inference_response0],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -1140,6 +1150,7 @@ mod tests {
                 vec![model_inference_response1],
                 None,
                 InferenceParams::default(),
+                None,
             )
             .await,
         );
@@ -1228,7 +1239,7 @@ mod tests {
             },
         };
         let best_of_n_variant = BestOfNSamplingConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             evaluator: evaluator_config,
@@ -1291,7 +1302,7 @@ mod tests {
             },
         };
         let best_of_n_variant = BestOfNSamplingConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             evaluator: evaluator_config,
@@ -1366,13 +1377,13 @@ mod tests {
 
         // Test case: Index returned too large (should return an error)
         let best_of_n_big_variant = BestOfNSamplingConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             evaluator: EvaluatorConfig {
                 inner: ChatCompletionConfig {
                     model: "best_of_n_big".into(),
-                    weight: 1.0,
+                    weight: Some(1.0),
                     ..Default::default()
                 },
             },

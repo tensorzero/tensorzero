@@ -1,4 +1,4 @@
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::Router;
 use clap::Parser;
 use mimalloc::MiMalloc;
@@ -106,6 +106,10 @@ async fn main() {
         .route(
             "/datasets/:dataset/datapoints",
             post(endpoints::datasets::create_datapoint_handler),
+        )
+        .route(
+            "/datasets/:dataset/function/:function/kind/:kind/datapoint/:id",
+            delete(endpoints::datasets::delete_datapoint_handler),
         )
         .route(
             "/metrics",

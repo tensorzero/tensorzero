@@ -40,7 +40,7 @@ use super::{
 /// load() step to get the fully qualified path.
 #[derive(Debug, Default)]
 pub struct DiclConfig {
-    pub weight: f64,
+    pub weight: Option<f64>,
     pub embedding_model: Arc<str>,
     pub k: u32, // k as in k-nearest neighbors
     pub model: Arc<str>,
@@ -60,7 +60,7 @@ pub struct DiclConfig {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedDiclConfig {
     #[serde(default)]
-    pub weight: f64,
+    pub weight: Option<f64>,
     pub embedding_model: String,
     pub k: u32, // k as in k-nearest neighbors
     pub model: String,
@@ -222,7 +222,7 @@ impl Variant for DiclConfig {
         // Make sure that the count is positive
 
         // Validate that weight is non-negative
-        if self.weight < 0.0 {
+        if self.weight.is_some_and(|w| w < 0.0) {
             return Err(ErrorDetails::Config {
                 message: format!(
                 "`functions.{function_name}.variants.{variant_name}`: `weight` must be non-negative"

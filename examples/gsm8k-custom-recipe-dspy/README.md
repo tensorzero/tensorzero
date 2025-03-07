@@ -5,75 +5,52 @@ But you can also easily create your own recipes and workflows!
 
 This example shows how to optimize a TensorZero function using an arbitrary tool — here, [DSPy](https://github.com/stanfordnlp/dspy).
 
-As a bonus, we also include configuration for using our experimental best-of-n variant type to improve performance — try evaluating the variants named `gpt-35-turbo-baseline` and `gpt-35-turbo-best-of-5` in the notebook!
-The latter makes five parallel calls to GPT 3.5 Turbo and a sixth to choose the best answer. It improves performance from ~60% to ~70% without any data or labels at the cost of increased latency and token usage.
+**Here, we achieve a massive boost in performance in the GSM8K dataset by optimizing a naive baseline prompt by incorporating in-context examples automatically curated by DSPy.**
+
+> [!NOTE]
+>
+> In practice, most of the performance gains come from formatting the LLM's response to fit GSM8K's idiosyncratic output format.
+> Regardless, this example demonstrates that in-context learning is a powerful technique for prompt engineering.
+
+> [!TIP]
+>
+> See our [Dynamic In-Context Learning (DICL)](https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#dynamic-in-context-learning-dicl) inference-time optimization for an even more powerful technique that curates in-context examples at inference time based on the input.
+
+<p align="center"><img src="results.svg" alt="Results"/></p>
 
 ## Background
 
-The GSM8K [dataset](https://github.com/openai/grade-school-math), introduced in a [paper](https://arxiv.org/abs/2110.14168) from OpenAI, is a collection of ~8,000 grade school math word problems and their solutions.
+The [GSM8K dataset](https://github.com/openai/grade-school-math) from OpenAI is a collection of ~8,000 grade school math word problems and their solutions.
 It has lately seen extensive use as a simple benchmark for evaluating LLMs.
 We include an example of a very simple implementation of a TensorZero function for solving GSM8K in this example.
 Since this benchmark is relatively easy, we have configured this example to use the Llama 3.1 8B model (zero-shot) served on Together's API.
 
 After running the example and generating some data, we show how to query a dataset of inferences from the ClickHouse database in order to optimize the prompt using a DSPy teleprompter.
 
-## Setup
+## Getting Started
 
 ### TensorZero
 
-We've written TensorZero configuration files to accomplish this example and have provided them in the `config` directory.
-See `tensorzero.toml` for the main configuration details.
+We provide a TensorZero configuration file (`config/tensorzero.toml`) to get you started.
+The configuration includes a function `solve_math_problem` with variants for GPT-4o Mini (OpenAI) with a naive baseline prompt and a DSPy-optimized prompt.
 
-To get started, create a `.env` file with your Together API key (`TOGETHER_API_KEY`) and run the following command.
-Docker Compose will launch the TensorZero gateway and a test ClickHouse database.
-Set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero` and `TOGETHER_API_KEY` in the shell your notebook will run in.
+### Prerequisites
 
-```bash
-docker compose up
-```
+1. Install Docker.
+2. Install Python 3.10+.
+3. Install the Python dependencies with `pip install -r requirements.txt`.
+4. Generate an API key for OpenAI (`OPENAI_API_KEY`).
 
-### Python Environment
+### Setup
 
-#### Using [`uv`](https://github.com/astral-sh/uv) (Recommended)
-
-```bash
-uv venv  # Create a new virtual environment
-uv pip sync requirements.txt  # Install the dependencies
-```
-
-#### Using `pip`
-
-We recommend using Python 3.10+ and a virtual environment.
-
-```bash
-pip install -r requirements.txt
-```
+1. Create a `.env` file with the `OPENAI_API_KEY` environment variable (see `.env.example` for an example).
+2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI, and a development ClickHouse database.
+3. Run the `gsm8k_dspy.ipynb` Jupyter notebook.
 
 ## Running the Example
 
-You can run the example in the `gsm8k_dspy.ipynb` notebook.
-Make sure to install the dependencies in the `requirements.txt` file.
-It should not require any changes to run and will automatically connect to the TensorZero Gateway you started.
+The `gsm8k_dspy.ipynb` notebook will first attempt to tackle the GSM8K dataset using a naive baseline prompt.
+After collecting some binary feedback data (not the complete labels!), we use DSPy to generate an optimized variant.
 
-Llama 3.1 8B with a very basic zero-shot prompt should score around 60% on this dataset out of the box.
-
-## Improving the GSM8K Solver
-
-At this point, your ClickHouse database will include inferences in a structured format along with feedback on how they went.
-You can now use TensorZero recipes or DSPy itself to learn from this experience to produce better variants of the GSM8K solver.
-Each recipe should print some additional elements to add to the `tensorzero.toml` file.
-
-If you follow along further in the notebook, we use DSPy to generate an prompt using in-context learning that you can also evaluate.
-
-You can also easily experiment with other models, prompts you think might be better, or combinations thereof by editing the configuration.
-
-## Experimenting with Improved Variants
-
-Once you've generated one or more improved variants (and, critically, given them some positive weight), you should restart the TensorZero gateway with the new configuration:
-
-```bash
-docker compose up
-```
-
-You can then re-run the test evaluation cell in the `gsm8k_dspy.ipynb` notebook to see how the new variants perform.
-If you use the DSPy code in the notebook, you should see an improvement in performance from ~60% to ~80%!
+Under the hood, DSPy curates a dataset of in-context examples to optimize the prompt for the task.
+After this process, we see a massive boost in performance!

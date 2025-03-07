@@ -114,8 +114,7 @@ macro_rules! generate_batch_inference_tests {
         #[tokio::test]
         async fn test_start_inference_params_batch_inference_request() {
             let all_providers = $func().await;
-            // We use the simple inference providers for batch inference params inference because they do not require dynamic credentials
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.inference_params_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_start_inference_params_batch_inference_request_with_provider(provider).await;
@@ -126,8 +125,7 @@ macro_rules! generate_batch_inference_tests {
         #[tokio::test]
         async fn test_poll_existing_inference_params_batch_inference_request() {
             let all_providers = $func().await;
-            // We use the simple inference providers for batch inference params inference because they do not require dynamic credentials
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.inference_params_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_existing_inference_params_batch_inference_request_with_provider(provider).await;

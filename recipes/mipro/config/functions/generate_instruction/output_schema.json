@@ -1,0 +1,12 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "instructions": {
+        "type": "string",
+        "description": "The system prompt instructions."
+      }
+    },
+    "required": ["instructions"],
+    "additionalProperties": false
+}

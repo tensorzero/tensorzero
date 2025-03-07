@@ -91,6 +91,11 @@ pub struct Params {
     pub cache_options: CacheParamsOptions,
     #[serde(default)]
     pub credentials: InferenceCredentials,
+    /// If `true`, add an `original_response` field to the response, containing the raw string response from the model.
+    /// Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `original_response`
+    /// if the fuser/judge model failed
+    #[serde(default)]
+    pub include_original_response: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -188,6 +193,14 @@ pub async fn inference(
     let start_time = Instant::now();
     let inference_id = Uuid::now_v7();
     tracing::Span::current().record("inference_id", inference_id.to_string());
+
+    if params.include_original_response && params.stream.unwrap_or(false) {
+        return Err(ErrorDetails::InvalidRequest {
+            message: "Cannot set both `include_original_response` and `stream` to `true`"
+                .to_string(),
+        }
+        .into());
+    }
 
     // Retrieve or generate the episode ID
     let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
@@ -361,7 +374,7 @@ pub async fn inference(
                 )
                 .await;
 
-            let result = match result {
+            let mut result = match result {
                 Ok(result) => result,
                 Err(e) => {
                     tracing::warn!(
@@ -409,6 +422,10 @@ pub async fn inference(
                         })
                     })?;
                 }
+            }
+
+            if !params.include_original_response {
+                result.set_original_response(None);
             }
 
             let response = InferenceResponse::new(result, episode_id, variant_name.to_string());
@@ -761,6 +778,8 @@ pub struct ChatInferenceResponse {
     pub variant_name: String,
     pub content: Vec<ContentBlockChatOutput>,
     pub usage: Usage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_response: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -770,6 +789,8 @@ pub struct JsonInferenceResponse {
     pub variant_name: String,
     pub output: JsonInferenceOutput,
     pub usage: Usage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_response: Option<String>,
 }
 
 impl InferenceResponse {
@@ -781,6 +802,7 @@ impl InferenceResponse {
                 variant_name,
                 content: result.content,
                 usage: result.usage,
+                original_response: result.original_response,
             }),
             InferenceResult::Json(result) => InferenceResponse::Json(JsonInferenceResponse {
                 inference_id: result.inference_id,
@@ -788,6 +810,7 @@ impl InferenceResponse {
                 variant_name,
                 output: result.output,
                 usage: result.usage,
+                original_response: result.original_response,
             }),
         }
     }
