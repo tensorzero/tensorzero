@@ -323,8 +323,8 @@ pub enum DatapointKind {
 impl DatapointKind {
     fn table_name(&self) -> &'static str {
         match self {
-            DatapointKind::Chat => "ChatInferenceDataset",
-            DatapointKind::Json => "JsonInferenceDataset",
+            DatapointKind::Chat => "ChatInferenceDatapoint",
+            DatapointKind::Json => "JsonInferenceDatapoint",
         }
     }
 }
