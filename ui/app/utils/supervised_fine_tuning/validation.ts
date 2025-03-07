@@ -1,11 +1,15 @@
-import { encoding_for_model } from "tiktoken";
 import type { OpenAIMessage, Distribution } from "./types";
-import { convertToTiktokenModel, getModelTokenLimit } from "./utils";
+import {
+  getModelTokenLimit,
+  getTokensFromMessages,
+  countAssistantTokens,
+} from "./openAITokenCounter";
 import {
   OPENAI_ROLES,
   REQUIRED_ROLES,
   RECOMMENDED_ROLES,
   VALID_MESSAGE_KEYS,
+  CURRENT_MODEL_VERSIONS,
 } from "./constants";
 
 /**
@@ -33,25 +37,22 @@ export function validateMessageLength(
   model: string,
   maxTokens?: number,
 ): { isValid: boolean; tokenCount: number } {
-  const enc = encoding_for_model(convertToTiktokenModel(model));
-  const tokenLimit = maxTokens ?? getModelTokenLimit(model);
-
-  let totalTokens = 0;
-  for (const message of messages) {
-    if (message.content) {
-      totalTokens += enc.encode(message.content).length;
-    }
-    // Add tokens for message format overhead:
-    // - 3 tokens at the start of the message
-    // - 1 token at the end of the message
-    totalTokens += 4;
+  // Validate model version
+  const isValidModel = CURRENT_MODEL_VERSIONS.includes(
+    model as (typeof CURRENT_MODEL_VERSIONS)[number],
+  );
+  if (!isValidModel) {
+    throw new Error(
+      `Unsupported model: ${model}. Supported models are: ${CURRENT_MODEL_VERSIONS.join(", ")}`,
+    );
   }
 
-  enc.free(); // Free up memory
+  const tokenCount = getTokensFromMessages(messages, model);
+  const tokenLimit = maxTokens ?? getModelTokenLimit(model);
 
   return {
-    isValid: totalTokens <= tokenLimit,
-    tokenCount: totalTokens,
+    isValid: tokenCount <= tokenLimit,
+    tokenCount,
   };
 }
 
@@ -236,74 +237,6 @@ export function validateMessage(
 }
 
 /**
- * Calculates the number of tokens in assistant messages only
- * @param messages Array of messages
- * @param model Model name for token counting
- * @returns Number of tokens in assistant messages
- */
-export function countAssistantTokens(
-  messages: OpenAIMessage[],
-  model: string,
-): number {
-  const enc = encoding_for_model(convertToTiktokenModel(model));
-
-  let assistantTokens = 0;
-  for (const message of messages) {
-    if (message.role === "assistant" && message.content) {
-      assistantTokens += enc.encode(message.content).length;
-    }
-  }
-
-  enc.free();
-  return assistantTokens;
-}
-
-/**
- * Calculates statistical distribution of numeric values
- * @param values Array of numeric values
- * @returns Distribution statistics
- */
-export function calculateDistribution(values: number[]): Distribution {
-  if (values.length === 0) {
-    return {
-      min: 0,
-      max: 0,
-      mean: 0,
-      median: 0,
-      p5: 0,
-      p95: 0,
-    };
-  }
-
-  // Sort values for percentile calculations
-  const sortedValues = [...values].sort((a, b) => a - b);
-
-  // Calculate mean
-  const sum = sortedValues.reduce((acc, val) => acc + val, 0);
-  const mean = sum / sortedValues.length;
-
-  // Calculate median
-  const midIndex = Math.floor(sortedValues.length / 2);
-  const median =
-    sortedValues.length % 2 === 0
-      ? (sortedValues[midIndex - 1] + sortedValues[midIndex]) / 2
-      : sortedValues[midIndex];
-
-  // Calculate percentiles
-  const p5Index = Math.floor(sortedValues.length * 0.05);
-  const p95Index = Math.floor(sortedValues.length * 0.95);
-
-  return {
-    min: sortedValues[0],
-    max: sortedValues[sortedValues.length - 1],
-    mean,
-    median,
-    p5: sortedValues[p5Index],
-    p95: sortedValues[p95Index],
-  };
-}
-
-/**
  * Analyzes dataset for warnings and token statistics
  * @param dataset Array of dataset entries
  * @param model Model name for token counting
@@ -362,6 +295,51 @@ export function analyzeDataset(
     tokenCounts: calculateDistribution(tokenCounts),
     assistantTokenCounts: calculateDistribution(assistantTokenCounts),
     tooLongCount,
+  };
+}
+
+/**
+ * Calculates statistical distribution of numeric values
+ * @param values Array of numeric values
+ * @returns Distribution statistics
+ */
+export function calculateDistribution(values: number[]): Distribution {
+  if (values.length === 0) {
+    return {
+      min: 0,
+      max: 0,
+      mean: 0,
+      median: 0,
+      p5: 0,
+      p95: 0,
+    };
+  }
+
+  // Sort values for percentile calculations
+  const sortedValues = [...values].sort((a, b) => a - b);
+
+  // Calculate mean
+  const sum = sortedValues.reduce((acc, val) => acc + val, 0);
+  const mean = sum / sortedValues.length;
+
+  // Calculate median
+  const midIndex = Math.floor(sortedValues.length / 2);
+  const median =
+    sortedValues.length % 2 === 0
+      ? (sortedValues[midIndex - 1] + sortedValues[midIndex]) / 2
+      : sortedValues[midIndex];
+
+  // Calculate percentiles
+  const p5Index = Math.floor(sortedValues.length * 0.05);
+  const p95Index = Math.floor(sortedValues.length * 0.95);
+
+  return {
+    min: sortedValues[0],
+    max: sortedValues[sortedValues.length - 1],
+    mean,
+    median,
+    p5: sortedValues[p5Index],
+    p95: sortedValues[p95Index],
   };
 }
 

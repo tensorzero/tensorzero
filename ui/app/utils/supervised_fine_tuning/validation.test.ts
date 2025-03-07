@@ -5,37 +5,26 @@ import {
   validateMessage,
   validateDataFormat,
   validateDataset,
-  countAssistantTokens,
   calculateDistribution,
   analyzeDataset,
 } from "./validation";
 import { MODEL_TOKEN_LIMITS } from "./constants";
-import { getModelTokenLimit } from "./utils";
+import { getModelTokenLimit, countAssistantTokens } from "./openAITokenCounter";
 import type { OpenAIMessage, OpenAIRole } from "./types";
+import { CURRENT_MODEL_VERSIONS } from "./constants";
 
 describe("getModelTokenLimit", () => {
   it("should return correct token limits for specific models", () => {
-    // GPT-4o models
     expect(getModelTokenLimit("gpt-4o-2024-08-06")).toBe(65536);
     expect(getModelTokenLimit("gpt-4o-mini-2024-07-18")).toBe(65536);
-
-    // GPT-4 models
     expect(getModelTokenLimit("gpt-4-0613")).toBe(8192);
-
-    // GPT-3.5 models
     expect(getModelTokenLimit("gpt-3.5-turbo-0125")).toBe(16385);
-    expect(getModelTokenLimit("gpt-3.5-turbo-1106")).toBe(16385);
-    expect(getModelTokenLimit("gpt-3.5-turbo-0613")).toBe(4096);
   });
 
   it("should return default limits for model families", () => {
-    // Default for GPT-4o models
+    // Default for model families
     expect(getModelTokenLimit("gpt-4o-future-version")).toBe(65536);
-
-    // Default for GPT-4 models
     expect(getModelTokenLimit("gpt-4-future-version")).toBe(8192);
-
-    // Default for GPT-3.5 models
     expect(getModelTokenLimit("gpt-3.5-turbo-future-version")).toBe(16385);
   });
 
@@ -47,7 +36,7 @@ describe("getModelTokenLimit", () => {
 describe("convertToTiktokenModel", () => {
   it("should handle gpt-4 and gpt-4o models", () => {
     const messages: OpenAIMessage[] = [
-      { role: "system" as OpenAIRole, content: "Test" },
+      { role: "assistant" as OpenAIRole, content: "Test" },
     ];
     expect(() =>
       validateMessageLength(messages, "gpt-4o-2024-08-06"),
@@ -60,25 +49,18 @@ describe("convertToTiktokenModel", () => {
 
   it("should handle gpt-3.5-turbo models", () => {
     const messages: OpenAIMessage[] = [
-      { role: "system" as OpenAIRole, content: "Test" },
+      { role: "assistant" as OpenAIRole, content: "Test" },
     ];
-    expect(() =>
-      validateMessageLength(messages, "gpt-3.5-turbo-0125"),
-    ).not.toThrow();
-    expect(() =>
-      validateMessageLength(messages, "gpt-3.5-turbo-1106"),
-    ).not.toThrow();
-    expect(() =>
-      validateMessageLength(messages, "gpt-3.5-turbo-0613"),
-    ).not.toThrow();
+    expect(() => validateMessageLength(messages, "gpt-4-0613")).not.toThrow();
   });
 
   it("should throw error for unsupported models", () => {
+    const model = "unsupported-model";
     const messages: OpenAIMessage[] = [
-      { role: "system" as OpenAIRole, content: "Test" },
+      { role: "assistant" as OpenAIRole, content: "Test" },
     ];
-    expect(() => validateMessageLength(messages, "unsupported-model")).toThrow(
-      "Unsupported model: unsupported-model. Supported models are: gpt-4o-*, gpt-4-*, gpt-3.5-turbo*",
+    expect(() => validateMessageLength(messages, model)).toThrow(
+      `Unsupported model: ${model}. Supported models are: ${CURRENT_MODEL_VERSIONS.join(", ")}`,
     );
   });
 });
@@ -94,11 +76,11 @@ describe("validateMessageLength", () => {
       },
     ];
 
-    // Test with gpt-3.5-turbo-0613 (4096 token limit)
-    const result1 = validateMessageLength(messages, "gpt-3.5-turbo-0613");
+    // Test with gpt-4o-2024-08-06 (65536 token limit)
+    const result1 = validateMessageLength(messages, "gpt-4o-2024-08-06");
     expect(result1.isValid).toBe(true);
     expect(result1.tokenCount).toBeLessThan(
-      MODEL_TOKEN_LIMITS["gpt-3.5-turbo-0613"],
+      MODEL_TOKEN_LIMITS["gpt-4o-2024-08-06"],
     );
 
     // Test with gpt-3.5-turbo-0125 (16385 token limit)
@@ -124,7 +106,7 @@ describe("validateMessageLength", () => {
       },
     ];
 
-    const result = validateMessageLength(messages, "gpt-3.5-turbo");
+    const result = validateMessageLength(messages, "gpt-4-0613");
     expect(result.isValid).toBe(true);
   });
 
@@ -134,7 +116,7 @@ describe("validateMessageLength", () => {
       { role: "user" as OpenAIRole, content: "Hello!" },
     ];
 
-    const result = validateMessageLength(messages, "gpt-3.5-turbo", 10);
+    const result = validateMessageLength(messages, "gpt-4-0613", 10);
     expect(result.isValid).toBe(false);
   });
 });
@@ -246,13 +228,13 @@ describe("countAssistantTokens", () => {
       },
     ];
 
-    const assistantTokens = countAssistantTokens(messages, "gpt-3.5-turbo");
+    const assistantTokens = countAssistantTokens(messages, "gpt-4-0613");
     expect(assistantTokens).toBeGreaterThan(0);
 
     // Only assistant message should be counted
     const totalTokens = validateMessageLength(
       messages,
-      "gpt-3.5-turbo",
+      "gpt-4-0613",
     ).tokenCount;
     expect(assistantTokens).toBeLessThan(totalTokens);
   });
@@ -266,7 +248,7 @@ describe("countAssistantTokens", () => {
       { role: "user" as OpenAIRole, content: "Hello!" },
     ];
 
-    const assistantTokens = countAssistantTokens(messages, "gpt-3.5-turbo");
+    const assistantTokens = countAssistantTokens(messages, "gpt-4-0613");
     expect(assistantTokens).toBe(0);
   });
 });
@@ -333,7 +315,7 @@ describe("analyzeDataset", () => {
       },
     ];
 
-    const analysis = analyzeDataset(dataset, "gpt-3.5-turbo");
+    const analysis = analyzeDataset(dataset, "gpt-4-0613");
 
     expect(analysis.missingSystemCount).toBe(2);
     expect(analysis.missingUserCount).toBe(0);
@@ -355,16 +337,16 @@ describe("analyzeDataset", () => {
     ];
 
     // Test with different models
-    const analysis1 = analyzeDataset(dataset, "gpt-3.5-turbo-0613");
-    const analysis2 = analyzeDataset(dataset, "gpt-3.5-turbo-0125");
+    const analysis1 = analyzeDataset(dataset, "gpt-4-0613");
+    const analysis2 = analyzeDataset(dataset, "gpt-4o-2024-08-06");
 
     // Both should pass with the small test messages
     expect(analysis1.tooLongCount).toBe(0);
     expect(analysis2.tooLongCount).toBe(0);
 
     // But they should use different token limits
-    expect(getModelTokenLimit("gpt-3.5-turbo-0613")).toBe(4096);
-    expect(getModelTokenLimit("gpt-3.5-turbo-0125")).toBe(16385);
+    expect(getModelTokenLimit("gpt-4-0613")).toBe(8192);
+    expect(getModelTokenLimit("gpt-4o-2024-08-06")).toBe(65536);
   });
 
   it("should detect examples exceeding token limit", () => {
@@ -378,7 +360,7 @@ describe("analyzeDataset", () => {
     ];
 
     // Set a very low token limit to force examples to exceed it
-    const analysis = analyzeDataset(dataset, "gpt-3.5-turbo", 5);
+    const analysis = analyzeDataset(dataset, "gpt-4-0613", 5);
 
     expect(analysis.tooLongCount).toBe(1);
   });
@@ -491,7 +473,7 @@ describe("validateMessage", () => {
       },
     ];
 
-    const result = validateMessage(messages, "gpt-3.5-turbo");
+    const result = validateMessage(messages, "gpt-4-0613");
     expect(result.isValid).toBe(true);
     expect(result.lengthValidation.isValid).toBe(true);
     expect(result.rolesValidation.isValid).toBe(true);
@@ -508,7 +490,7 @@ describe("validateMessage", () => {
       },
     ];
 
-    const result = validateMessage(messages, "gpt-3.5-turbo", 10);
+    const result = validateMessage(messages, "gpt-4-0613", 10);
     expect(result.isValid).toBe(false);
     expect(result.lengthValidation.isValid).toBe(false);
     expect(result.rolesValidation.isValid).toBe(true);
@@ -523,7 +505,7 @@ describe("validateMessage", () => {
       },
     ];
 
-    const result = validateMessage(messages, "gpt-3.5-turbo");
+    const result = validateMessage(messages, "gpt-4-0613");
     expect(result.isValid).toBe(true); // Should be valid since assistant is present
     expect(result.lengthValidation.isValid).toBe(true);
     expect(result.rolesValidation.isValid).toBe(true); // Should be true since only assistant is required
@@ -545,7 +527,7 @@ describe("validateDataset", () => {
       },
     ];
 
-    const result = validateDataset(dataset, "gpt-3.5-turbo");
+    const result = validateDataset(dataset, "gpt-4-0613");
     expect(result.isValid).toBe(false);
     expect(result.invalidEntries).toBe(0);
     expect(result.errorCounts.insufficient_examples).toBe(1);
@@ -585,7 +567,7 @@ describe("validateDataset", () => {
       },
     ];
 
-    const result = validateDataset(dataset, "gpt-3.5-turbo");
+    const result = validateDataset(dataset, "gpt-4-0613");
     expect(result.isValid).toBe(true);
     expect(result.invalidEntries).toBe(0);
     expect(result.errorCounts.insufficient_examples).toBe(0);
@@ -642,7 +624,7 @@ describe("validateDataset", () => {
       },
     ];
 
-    const result = validateDataset(dataset, "gpt-3.5-turbo");
+    const result = validateDataset(dataset, "gpt-4-0613");
     expect(result.isValid).toBe(false);
     expect(result.invalidEntries).toBe(2);
     expect(result.errorCounts.data_type).toBe(1);

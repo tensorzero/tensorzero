@@ -4,6 +4,7 @@ import * as path from "path";
 import { createReadStream } from "fs";
 import OpenAI from "openai";
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
+import type { AnalysisData } from "~/routes/optimization/supervised-fine-tuning/SFTAnalysis";
 import {
   type ContentBlockOutput,
   type InputMessageContent,
@@ -19,7 +20,7 @@ import { splitValidationData, type SFTJobStatus } from "./common";
 import { render_message } from "./rendering";
 import { SFTJob } from "./common";
 import { validateMessage, analyzeDataset } from "./validation";
-import { getModelTokenLimit } from "./utils";
+import { getModelTokenLimit } from "./openAITokenCounter";
 import type { OpenAIMessage, OpenAIRole } from "./types";
 
 export const client = process.env.OPENAI_API_KEY
@@ -48,6 +49,7 @@ interface OpenAISFTJobParams {
   fineTunedModel?: string;
   job: JobInfo;
   formData: SFTFormValues;
+  analysisData?: AnalysisData;
 }
 
 export class OpenAISFTJob extends SFTJob {
@@ -56,6 +58,8 @@ export class OpenAISFTJob extends SFTJob {
   public fineTunedModel?: string;
   public job: JobInfo;
   public formData: SFTFormValues;
+  public analysisData?: AnalysisData;
+
   constructor(params: OpenAISFTJobParams) {
     super();
     this.jobId = params.jobId;
@@ -63,6 +67,7 @@ export class OpenAISFTJob extends SFTJob {
     this.fineTunedModel = params.fineTunedModel;
     this.job = params.job;
     this.formData = params.formData;
+    this.analysisData = params.analysisData;
   }
 
   static async from_form_data(data: SFTFormValues): Promise<OpenAISFTJob> {
@@ -126,6 +131,7 @@ export class OpenAISFTJob extends SFTJob {
         jobUrl: this.jobUrl,
         rawData: this.job,
         result: this.fineTunedModel,
+        analysisData: this.analysisData,
       };
     }
     const estimatedCompletionTime =
@@ -139,6 +145,7 @@ export class OpenAISFTJob extends SFTJob {
       estimatedCompletionTime: estimatedCompletionTime
         ? new Date(estimatedCompletionTime * 1000)
         : undefined,
+      analysisData: this.analysisData,
     };
   }
 
@@ -162,6 +169,7 @@ export class OpenAISFTJob extends SFTJob {
           info: jobInfo,
         },
         formData: this.formData,
+        analysisData: this.analysisData,
       });
     } catch (error) {
       return new OpenAISFTJob({
@@ -174,6 +182,7 @@ export class OpenAISFTJob extends SFTJob {
           message: error instanceof Error ? error.message : String(error),
         },
         formData: this.formData,
+        analysisData: this.analysisData,
       });
     }
   }
@@ -371,59 +380,22 @@ export async function start_sft_openai(
 
   // Analyze dataset for model improvement insights
   const analysis = analyzeDataset(trainMessagesForAnalysis, modelName);
-  // Dataset Analysis
-  console.log("Num examples:", trainInferences.length);
-  console.log("First example:", JSON.stringify(trainInferences[0]));
-
-  // Warnings and token counts
-  console.log(
-    "Num examples missing system message:",
-    analysis.missingSystemCount,
-  );
-  console.log("Num examples missing user message:", analysis.missingUserCount);
-
-  // Distribution of message counts
-  console.log("\n#### Distribution of num_messages_per_example:");
-  console.log(
-    `min / max: ${analysis.messageCounts.min}, ${analysis.messageCounts.max}`,
-  );
-  console.log(
-    `mean / median: ${analysis.messageCounts.mean.toFixed(2)}, ${analysis.messageCounts.median}`,
-  );
-  console.log(
-    `p5 / p95: ${analysis.tokenCounts.p5}, ${analysis.tokenCounts.p95}`,
-  );
-
-  // Distribution of token counts
-  console.log("\n#### Distribution of num_total_tokens_per_example:");
-  console.log(
-    `min / max: ${analysis.tokenCounts.min}, ${analysis.tokenCounts.max}`,
-  );
-  console.log(
-    `mean / median: ${analysis.tokenCounts.mean.toFixed(2)}, ${analysis.tokenCounts.median}`,
-  );
-  console.log(
-    `p5 / p95: ${analysis.tokenCounts.p5}, ${analysis.tokenCounts.p95}`,
-  );
-
-  // Distribution of assistant token counts
-  console.log("\n#### Distribution of num_assistant_tokens_per_example:");
-  console.log(
-    `min / max: ${analysis.assistantTokenCounts.min}, ${analysis.assistantTokenCounts.max}`,
-  );
-  console.log(
-    `mean / median: ${analysis.assistantTokenCounts.mean.toFixed(2)}, ${analysis.assistantTokenCounts.median}`,
-  );
-  console.log(
-    `p5 / p95: ${analysis.assistantTokenCounts.p5}, ${analysis.assistantTokenCounts.p95}`,
-  );
-
-  // Token limit warning
   const tokenLimit = getModelTokenLimit(modelName);
-  const nTooLong = analysis.tooLongCount;
-  console.log(
-    `\n${nTooLong} examples may be over the ${tokenLimit} token limit, they will be truncated during fine-tuning`,
-  );
+
+  const analysisData: AnalysisData = {
+    firstExample: trainMessagesForAnalysis[0]?.messages.map((msg) => ({
+      role: msg.role,
+      content: msg.content || "",
+    })),
+    numExamples: trainInferences.length,
+    missingSystemCount: analysis.missingSystemCount,
+    missingUserCount: analysis.missingUserCount,
+    messageCounts: analysis.messageCounts,
+    tokenCounts: analysis.tokenCounts,
+    assistantTokenCounts: analysis.assistantTokenCounts,
+    tooLongCount: analysis.tooLongCount,
+    tokenLimit: tokenLimit,
+  };
 
   // Validate and convert messages
   const trainMessages = validateAndConvertMessages(
@@ -461,6 +433,7 @@ export async function start_sft_openai(
       info: job,
     },
     formData,
+    analysisData,
   });
 }
 

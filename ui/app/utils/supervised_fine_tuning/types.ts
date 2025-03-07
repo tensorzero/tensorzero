@@ -5,6 +5,11 @@ export type OpenAIRole = (typeof OPENAI_ROLES)[number];
 export type OpenAIMessage = {
   role: OpenAIRole;
   content?: string;
+  name?: string;
+  function_call?: {
+    name: string;
+    arguments: string;
+  };
   tool_calls?: {
     id: string;
     type: string;
@@ -24,4 +29,27 @@ export interface Distribution {
   median: number;
   p5: number;
   p95: number;
+}
+
+/**
+ * Function parameter types for token calculation
+ */
+export interface FunctionParameter {
+  type: string;
+  description: string;
+  enum?: string[];
+}
+
+export interface FunctionDefinition {
+  name: string;
+  description: string;
+  parameters: {
+    type: string;
+    properties: Record<string, FunctionParameter>;
+  };
+}
+
+export interface ToolFunction {
+  type: string;
+  function: FunctionDefinition;
 }
