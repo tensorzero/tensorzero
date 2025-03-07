@@ -196,7 +196,7 @@ pub async fn create_datapoint_handler(
                 dataset_name: path_params.dataset,
                 function_name: inference.function_name,
                 id: inference.id,
-                episode_id: inference.episode_id,
+                episode_id: Some(inference.episode_id),
                 input: inference.input,
                 output,
                 output_schema: inference.output_schema,
@@ -234,7 +234,7 @@ pub async fn create_datapoint_handler(
                 dataset_name: path_params.dataset,
                 function_name: inference.function_name,
                 id: inference.id,
-                episode_id: inference.episode_id,
+                episode_id: Some(inference.episode_id),
                 input: inference.input,
                 output,
                 tool_params: inference.tool_params,
@@ -358,7 +358,7 @@ pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
     pub id: Uuid,
-    pub episode_id: Uuid,
+    pub episode_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -377,7 +377,7 @@ pub struct JsonInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
     pub id: Uuid,
-    pub episode_id: Uuid,
+    pub episode_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
     #[serde(deserialize_with = "deserialize_optional_json_string")]

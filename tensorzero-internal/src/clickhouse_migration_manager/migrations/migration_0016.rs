@@ -58,6 +58,28 @@ impl Migration for Migration0016<'_> {
             return Ok(true);
         }
 
+        let chat_inference_dataset_episode_id_type = get_column_type(
+            self.clickhouse,
+            "ChatInferenceDataset",
+            "episode_id",
+            "0016",
+        )
+        .await?;
+
+        let json_inference_dataset_episode_id_type = get_column_type(
+            self.clickhouse,
+            "JsonInferenceDataset",
+            "episode_id",
+            "0016",
+        )
+        .await?;
+
+        if chat_inference_dataset_episode_id_type != "Nullable(UUID)"
+            || json_inference_dataset_episode_id_type != "Nullable(UUID)"
+        {
+            return Ok(true);
+        }
+
         Ok(false)
     }
 
@@ -103,7 +125,9 @@ impl Migration for Migration0016<'_> {
                         -- sort and sorting expected dataset sizes should be cheap
                         -- If this example is generated from an inference then this
                         -- should be the inference ID
-                episode_id UUID,
+                episode_id Nullable(UUID), -- If this is a synthetic datapoint
+                                           -- (not based on an existing inference),
+                                           -- then this will be null
                 input String,
                 output Nullable(String),
                 tool_params String,
@@ -125,7 +149,7 @@ impl Migration for Migration0016<'_> {
                 dataset_name LowCardinality(String),
                 function_name LowCardinality(String),
                 id UUID, -- same comment as above
-                episode_id UUID,
+                episode_id Nullable(UUID), -- same comment as above
                 input String,
                 output Nullable(String),
                 output_schema String,
