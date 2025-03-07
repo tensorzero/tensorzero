@@ -1319,6 +1319,86 @@ async fn e2e_test_variant_failover() {
     assert_eq!(output, vec!["Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.".to_string().into()]);
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_test_variant_zero_weight_skip_zero() {
+    let client = make_embedded_gateway().await;
+    let error = client
+        .inference(ClientInferenceParams {
+            function_name: Some("variant_failover_zero_weight".to_string()),
+            input: Input {
+                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                        arguments: serde_json::json!({"type": "tacos", "quantity": 13})
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    })],
+                }],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("Error sending request to Dummy provider for model 'error_1'"),
+        "Missing 'error_1' in `{error}`"
+    );
+    assert!(
+        error.contains("Error sending request to Dummy provider for model 'error_2'"),
+        "Missing 'error_2' in `{error}`"
+    );
+    assert!(
+        error.contains("Error sending request to Dummy provider for model 'error_no_weight'"),
+        "Missing 'error_3' in `{error}`"
+    );
+    assert!(
+        !error.contains("error_zero_weight"),
+        "error_zero_weight should not have been called: `{error}`"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_test_variant_zero_weight_pin_zero() {
+    let client = make_embedded_gateway().await;
+    let error = client
+        .inference(ClientInferenceParams {
+            function_name: Some("variant_failover_zero_weight".to_string()),
+            variant_name: Some("zero_weight".to_string()),
+            input: Input {
+                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                        arguments: serde_json::json!({"type": "tacos", "quantity": 13})
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    })],
+                }],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("Error sending request to Dummy provider for model 'error_zero_weight'"),
+        "Missing 'error_zero_weight' in `{error}`"
+    );
+
+    assert!(!error.contains("error_1"), "Found 'error_1' in `{error}`");
+    assert!(!error.contains("error_2"), "Found 'error_2' in `{error}`");
+    assert!(
+        !error.contains("error_no_weight"),
+        "Found 'error_no_weight' in `{error}`"
+    );
+}
+
 /// This test checks that streaming inference works as expected.
 #[tokio::test]
 async fn e2e_test_streaming() {

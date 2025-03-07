@@ -305,6 +305,8 @@ mod tests {
             .embed(&request, &client, &inference_credentials)
             .await;
         assert!(response.is_ok());
-        assert!(logs_contain("Error sending request to Dummy provider."))
+        assert!(logs_contain(
+            "Error sending request to Dummy provider for model 'error'"
+        ))
     }
 }

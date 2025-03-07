@@ -1047,7 +1047,8 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
                     Error::new(ErrorDetails::InferenceClient {
-                        message: "Error sending request to Dummy provider.".to_string(),
+                        message: "Error sending request to Dummy provider for model 'error'."
+                            .to_string(),
                         status_code: None,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
