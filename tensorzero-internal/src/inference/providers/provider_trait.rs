@@ -1,3 +1,4 @@
+use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::Error;
 use crate::inference::types::batch::BatchRequestRow;
@@ -13,7 +14,7 @@ use reqwest::Client;
 pub trait InferenceProvider {
     fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest,
+        request: ModelProviderRequest<'a>,
         client: &'a Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,

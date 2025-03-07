@@ -46,6 +46,7 @@ todo = "deny"
 unimplemented = "deny"
 unreachable = "deny"
 unwrap_used = "deny"
+dbg_macro = "deny"
 
 
 [profile.performance]

@@ -15,7 +15,7 @@ use tensorzero_internal::{
             DUMMY_JSON_RESPONSE_RAW, DUMMY_RAW_REQUEST, DUMMY_STREAMING_RESPONSE,
             DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
         },
-        types::{ContentBlock, Image, ImageKind, RequestMessage, Role, TextKind},
+        types::{ContentBlock, Image, ImageKind, RequestMessage, Role, Text, TextKind},
     },
     tool::ToolCall,
 };
@@ -71,6 +71,145 @@ async fn e2e_test_inference_dryrun() {
     let clickhouse = get_clickhouse().await;
     let result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
     assert!(result.is_none()); // No inference should be written to ClickHouse when dryrun is true
+}
+
+#[tokio::test]
+async fn e2e_test_inference_chat_strip_unknown_block() {
+    let payload = json!({
+        "function_name": "basic_test",
+        "episode_id": Uuid::now_v7(),
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, world!"
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "unknown", "model_provider_name": "bad_model_provider", "data": {} },
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"my": "custom data"}},
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
+                        {"type": "unknown", "data": "Non-provider-specific unknown block"}
+                    ]
+                }
+            ]
+        },
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let episode_id = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id = Uuid::parse_str(episode_id).unwrap();
+
+    // Sleep for 100ms second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+
+    // The input in ChatInference should have *all* of the unknown blocks present
+    let correct_input: Value = json!(
+        {
+            "system": {
+                "assistant_name": "AskJeeves"
+            },
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "value": "Hello, world!"}]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "unknown", "model_provider_name": "bad_model_provider", "data": {} },
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"my": "custom data"}},
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
+                        {"type": "unknown", "model_provider_name": null, "data": "Non-provider-specific unknown block"}
+                    ]
+                }
+            ]
+        }
+    );
+    assert_eq!(input, correct_input);
+    // Check that content blocks are correct
+    let content_blocks = result.get("output").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(content, DUMMY_INFER_RESPONSE_CONTENT);
+    // Check that episode_id is here and correct
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "test");
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let _ = Uuid::parse_str(id).unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    assert_eq!(
+        input_messages,
+        vec![
+            RequestMessage {
+                role: Role::User,
+                content: vec![ContentBlock::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })]
+            },
+            RequestMessage {
+                role: Role::User,
+                content: vec![
+                    ContentBlock::Unknown {
+                        model_provider_name: Some(
+                            "tensorzero::model_name::test::provider_name::good".to_string()
+                        ),
+                        data: json!({"my": "custom data"})
+                    },
+                    ContentBlock::Unknown {
+                        model_provider_name: None,
+                        data: "Non-provider-specific unknown block".into()
+                    }
+                ]
+            },
+        ]
+    );
 }
 
 /// This test calls a function which calls a model where the first provider is broken but

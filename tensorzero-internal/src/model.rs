@@ -2,6 +2,7 @@ use futures::StreamExt;
 use reqwest::Client;
 use secrecy::SecretString;
 use serde::de::Error as SerdeError;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -29,8 +30,8 @@ use crate::inference::types::batch::{
     StartBatchProviderInferenceResponse,
 };
 use crate::inference::types::{
-    current_timestamp, PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, Usage,
+    current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
 use crate::model_table::{BaseModelTable, ShorthandModelConfig};
 use crate::variant::chat_completion::ExtraBodyConfig;
@@ -55,7 +56,34 @@ use serde::Deserialize;
 #[serde(deny_unknown_fields)]
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
+    #[serde(deserialize_with = "deserialize_model_providers")]
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
+}
+
+// We want `ModelProvider` to know its own name (from the 'providers' config section).
+// We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
+// build `ModelProvider`s using the name keys from the map.
+pub fn deserialize_model_providers<'de, D>(
+    deserializer: D,
+) -> Result<HashMap<Arc<str>, ModelProvider>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let providers: HashMap<Arc<str>, UninitializedModelProvider> =
+        HashMap::deserialize(deserializer)?;
+    Ok(providers
+        .into_iter()
+        .map(|(name, provider)| {
+            (
+                name.clone(),
+                ModelProvider {
+                    name,
+                    config: provider.config,
+                    extra_body: provider.extra_body,
+                },
+            )
+        })
+        .collect())
 }
 
 pub struct StreamResponse {
@@ -70,9 +98,12 @@ impl StreamResponse {
         cache_lookup: CacheData<StreamingCacheData>,
         model_provider_name: Arc<str>,
     ) -> Self {
+        let chunks = cache_lookup.output.chunks;
+        let chunks_len = chunks.len();
+
         Self {
-            stream: (Box::pin(futures::stream::iter(
-                cache_lookup.output.chunks.into_iter().map(|c| {
+            stream: (Box::pin(futures::stream::iter(chunks.into_iter().enumerate().map(
+                move |(index, c)| {
                     Ok(ProviderInferenceResponseChunk {
                         content: c.content,
                         raw_response: c.raw_response,
@@ -80,16 +111,20 @@ impl StreamResponse {
                         // request:
                         // The new result was 'created' now
                         created: current_timestamp(),
-                        // Since the result was cached, it didn't actually cost any tokens
-                        usage: Some(Usage {
-                            input_tokens: 0,
-                            output_tokens: 0,
-                        }),
+                        // Only include usage in the last chunk, None for all others
+                        usage: if index == chunks_len - 1 {
+                            Some(Usage {
+                                input_tokens: cache_lookup.input_tokens,
+                                output_tokens: cache_lookup.output_tokens,
+                            })
+                        } else {
+                            None
+                        },
                         // We didn't make any network calls to the model provider, so the latency is 0
                         latency: Duration::from_secs(0),
                     })
-                }),
-            )) as ProviderInferenceResponseStreamInner)
+                },
+            ))) as ProviderInferenceResponseStreamInner)
                 .peekable(),
             raw_request: cache_lookup.raw_request,
             model_provider_name,
@@ -98,7 +133,70 @@ impl StreamResponse {
     }
 }
 
+/// Creates a fully-qualified name from a model and provider name, suitable for using
+/// in `ContentBlock::Unknown.model_provider_name`
+/// Note that 'model_name' is a name from `[models]`, which is not necessarily
+/// the same as the underlying name passed to a specific provider api
+pub fn fully_qualified_name(model_name: &str, provider_name: &str) -> String {
+    format!("tensorzero::model_name::{model_name}::provider_name::{provider_name}")
+}
+
 impl ModelConfig {
+    fn filter_content_blocks<'a>(
+        &self,
+        request: &'a ModelInferenceRequest<'a>,
+        model_name: &str,
+        provider_name: &str,
+    ) -> Cow<'a, ModelInferenceRequest<'a>> {
+        let name = fully_qualified_name(model_name, provider_name);
+        let needs_filter = request.messages.iter().any(|m| {
+            m.content.iter().any(|c| {
+                if let ContentBlock::Unknown {
+                    model_provider_name,
+                    data: _,
+                } = c
+                {
+                    model_provider_name.as_ref().is_some_and(|n| n != &name)
+                } else {
+                    false
+                }
+            })
+        });
+        if needs_filter {
+            let new_messages = request
+                .messages
+                .iter()
+                .map(|m| RequestMessage {
+                    content: m
+                        .content
+                        .iter()
+                        .flat_map(|c| {
+                            if let ContentBlock::Unknown {
+                                model_provider_name,
+                                data: _,
+                            } = c
+                            {
+                                if model_provider_name.as_ref().is_some_and(|n| n != &name) {
+                                    None
+                                } else {
+                                    Some(c.clone())
+                                }
+                            } else {
+                                Some(c.clone())
+                            }
+                        })
+                        .collect(),
+                    ..m.clone()
+                })
+                .collect();
+            Cow::Owned(ModelInferenceRequest {
+                messages: new_messages,
+                ..request.clone()
+            })
+        } else {
+            Cow::Borrowed(request)
+        }
+    }
     pub async fn infer<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
@@ -107,15 +205,17 @@ impl ModelConfig {
     ) -> Result<ModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
+            let request = self.filter_content_blocks(request, model_name, provider_name);
+            let model_provider_request = ModelProviderRequest {
+                request: &request,
+                model_name,
+                provider_name,
+            };
             // TODO: think about how to best handle errors here
             if clients.cache_options.enabled.read() {
                 let cache_lookup = cache_lookup(
                     clients.clickhouse_connection_info,
-                    ModelProviderRequest {
-                        request,
-                        model_name,
-                        provider_name,
-                    },
+                    model_provider_request,
                     clients.cache_options.max_age_s,
                 )
                 .await
@@ -131,7 +231,11 @@ impl ModelConfig {
                 })
             })?;
             let response = provider
-                .infer(request, clients.http_client, clients.credentials)
+                .infer(
+                    model_provider_request,
+                    clients.http_client,
+                    clients.credentials,
+                )
                 .instrument(span!(
                     Level::INFO,
                     "infer",
@@ -144,14 +248,11 @@ impl ModelConfig {
                     if clients.cache_options.enabled.write() {
                         let _ = start_cache_write(
                             clients.clickhouse_connection_info,
-                            ModelProviderRequest {
-                                request,
-                                model_name,
-                                provider_name,
-                            },
+                            model_provider_request,
                             &response.output,
                             &response.raw_request,
                             &response.raw_response,
+                            &response.usage,
                         );
                     }
                     // We already checked the cache above (and returned early if it was a hit), so this response was not from the cache
@@ -315,19 +416,43 @@ async fn stream_with_cache_write(
             yield chunk;
         }
         if !errored {
+            let usage = consolidate_usage(&buffer);
             let _ = start_cache_write_streaming(
                 &clickhouse_info,
                 cache_key,
                 buffer,
                 &raw_request,
+                &usage,
             );
         }
     }) as ProviderInferenceResponseStreamInner).peekable())
 }
 
+fn consolidate_usage(chunks: &[ProviderInferenceResponseChunk]) -> Usage {
+    let mut input_tokens = 0;
+    let mut output_tokens = 0;
+    for chunk in chunks {
+        if let Some(usage) = &chunk.usage {
+            input_tokens += usage.input_tokens;
+            output_tokens += usage.output_tokens;
+        }
+    }
+    Usage {
+        input_tokens,
+        output_tokens,
+    }
+}
+
 #[derive(Debug, Deserialize)]
-pub struct ModelProvider {
+pub struct UninitializedModelProvider {
     #[serde(flatten)]
+    pub config: ProviderConfig,
+    pub extra_body: Option<ExtraBodyConfig>,
+}
+
+#[derive(Debug)]
+pub struct ModelProvider {
+    pub name: Arc<str>,
     pub config: ProviderConfig,
     pub extra_body: Option<ExtraBodyConfig>,
 }
@@ -635,7 +760,7 @@ impl<'de> Deserialize<'de> for ProviderConfig {
 impl ModelProvider {
     async fn infer(
         &self,
-        request: &ModelInferenceRequest<'_>,
+        request: ModelProviderRequest<'_>,
         client: &Client,
         api_keys: &InferenceCredentials,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -1203,6 +1328,7 @@ impl ShorthandModelConfig for ModelConfig {
             providers: HashMap::from([(
                 provider_type.to_string().into(),
                 ModelProvider {
+                    name: provider_type.into(),
                     config: provider_config,
                     extra_body: None,
                 },
@@ -1300,6 +1426,7 @@ mod tests {
             providers: HashMap::from([(
                 "good_provider".into(),
                 ModelProvider {
+                    name: "good_provider".into(),
                     config: good_provider_config,
                     extra_body: None,
                 },
@@ -1363,6 +1490,7 @@ mod tests {
             providers: HashMap::from([(
                 "error".into(),
                 ModelProvider {
+                    name: "error".into(),
                     config: bad_provider_config,
                     extra_body: None,
                 },
@@ -1444,6 +1572,7 @@ mod tests {
                 (
                     "error_provider".to_string().into(),
                     ModelProvider {
+                        name: "error_provider".into(),
                         config: bad_provider_config,
                         extra_body: None,
                     },
@@ -1451,6 +1580,7 @@ mod tests {
                 (
                     "good_provider".to_string().into(),
                     ModelProvider {
+                        name: "good_provider".into(),
                         config: good_provider_config,
                         extra_body: None,
                     },
@@ -1512,6 +1642,7 @@ mod tests {
             providers: HashMap::from([(
                 "good_provider".to_string().into(),
                 ModelProvider {
+                    name: "good_provider".into(),
                     config: good_provider_config,
                     extra_body: None,
                 },
@@ -1576,6 +1707,7 @@ mod tests {
             providers: HashMap::from([(
                 "error".to_string().into(),
                 ModelProvider {
+                    name: "error".to_string().into(),
                     config: bad_provider_config,
                     extra_body: None,
                 },
@@ -1659,6 +1791,7 @@ mod tests {
                 (
                     "error_provider".to_string().into(),
                     ModelProvider {
+                        name: "error_provider".to_string().into(),
                         config: bad_provider_config,
                         extra_body: None,
                     },
@@ -1666,6 +1799,7 @@ mod tests {
                 (
                     "good_provider".to_string().into(),
                     ModelProvider {
+                        name: "good_provider".to_string().into(),
                         config: good_provider_config,
                         extra_body: None,
                     },
@@ -1737,6 +1871,7 @@ mod tests {
             providers: HashMap::from([(
                 "model".into(),
                 ModelProvider {
+                    name: "model".into(),
                     config: provider_config,
                     extra_body: None,
                 },
@@ -1840,6 +1975,7 @@ mod tests {
             providers: HashMap::from([(
                 "model".to_string().into(),
                 ModelProvider {
+                    name: "model".to_string().into(),
                     config: provider_config,
                     extra_body: None,
                 },
@@ -1957,6 +2093,7 @@ mod tests {
             providers: HashMap::from([(
                 "anthropic".into(),
                 ModelProvider {
+                    name: "anthropic".into(),
                     config: anthropic_provider_config,
                     extra_body: None,
                 },

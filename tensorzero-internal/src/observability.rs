@@ -16,9 +16,7 @@ pub fn setup_logs(debug: bool) {
         .with(
             tracing_subscriber::fmt::layer()
                 .json()
-                .flatten_event(true)
-                .with_current_span(false)
-                .with_target(false),
+                .with_current_span(false),
         )
         .init();
 }

@@ -16,6 +16,7 @@ use tracing::instrument;
 use url::Url;
 use uuid::Uuid;
 
+use crate::cache::ModelProviderRequest;
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
@@ -129,7 +130,11 @@ impl OpenAICredentials {
 impl InferenceProvider for OpenAIProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -814,11 +819,11 @@ pub(super) struct OpenAISystemRequestMessage<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIUserRequestMessage<'a> {
-    #[serde(serialize_with = "serialize_user_content")]
+    #[serde(serialize_with = "serialize_user_content_vec")]
     pub(super) content: Vec<OpenAIUserContent<'a>>,
 }
 
-fn serialize_user_content<S>(
+fn serialize_user_content_vec<S>(
     content: &Vec<OpenAIUserContent<'_>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
@@ -834,11 +839,32 @@ where
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug, PartialEq)]
 pub enum OpenAIUserContent<'a> {
     Text { text: Cow<'a, str> },
     ImageUrl { image_url: OpenAIImageUrl },
+    Unknown { data: Cow<'a, Value> },
+}
+
+impl Serialize for OpenAIUserContent<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        #[derive(Serialize)]
+        #[serde(tag = "type", rename_all = "snake_case")]
+        enum Helper<'a> {
+            Text { text: &'a str },
+            ImageUrl { image_url: &'a OpenAIImageUrl },
+        }
+        match self {
+            OpenAIUserContent::Text { text } => Helper::Text { text }.serialize(serializer),
+            OpenAIUserContent::ImageUrl { image_url } => {
+                Helper::ImageUrl { image_url }.serialize(serializer)
+            }
+            OpenAIUserContent::Unknown { data } => data.serialize(serializer),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -904,6 +930,8 @@ impl OpenAIRequestMessage<'_> {
             OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenAIUserContent::Text { text } => text.to_lowercase().contains(value),
                 OpenAIUserContent::ImageUrl { .. } => false,
+                // Don't inspect the contents of 'unknown' blocks
+                OpenAIUserContent::Unknown { data: _ } => false,
             }),
             OpenAIRequestMessage::Assistant(msg) => msg
                 .content
@@ -1080,6 +1108,16 @@ pub(super) fn tensorzero_to_openai_messages(
                 // output of a chat completion is used as an input to another model inference,
                 // i.e. a judge or something.
                 // We don't think the thoughts should be passed in in this case.
+            }
+            ContentBlock::Unknown {
+                data,
+                model_provider_name: _,
+            } => {
+                messages.push(OpenAIRequestMessage::User(OpenAIUserRequestMessage {
+                    content: vec![OpenAIUserContent::Unknown {
+                        data: Cow::Borrowed(data),
+                    }],
+                }));
             }
         }
     }

@@ -600,6 +600,7 @@ fn prepare_response_chunk(
         metadata.inference_id,
         metadata.episode_id,
         metadata.variant_name.clone(),
+        metadata.cached,
     )
 }
 
@@ -846,6 +847,7 @@ impl InferenceResponseChunk {
         inference_id: Uuid,
         episode_id: Uuid,
         variant_name: String,
+        cached: bool,
     ) -> Option<Self> {
         Some(match inference_result {
             InferenceResultChunk::Chat(result) => {
@@ -854,7 +856,7 @@ impl InferenceResponseChunk {
                     episode_id,
                     variant_name,
                     content: result.content,
-                    usage: result.usage,
+                    usage: if cached { None } else { result.usage },
                 })
             }
             InferenceResultChunk::Json(result) => {
@@ -866,7 +868,7 @@ impl InferenceResponseChunk {
                     episode_id,
                     variant_name,
                     raw: result.raw.unwrap_or_default(),
-                    usage: result.usage,
+                    usage: if cached { None } else { result.usage },
                 })
             }
         })

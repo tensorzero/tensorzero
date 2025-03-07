@@ -50,6 +50,25 @@ class RawText:
 
 
 @dataclass
+class ImageBase64:
+    # This class does not subclass ContentBlock since it cannot be output by the API.
+    data: str
+    mime_type: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(type="image", data=self.data, mime_type=self.mime_type)
+
+
+@dataclass
+class ImageUrl:
+    # This class does not subclass ContentBlock since it cannot be output by the API.
+    url: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(type="image", url=self.url)
+
+
+@dataclass
 class ToolCall(ContentBlock):
     arguments: Optional[Dict[str, Any]]
     id: str
@@ -116,7 +135,7 @@ class Message(TypedDict):
 
 class InferenceInput(TypedDict):
     messages: List[Message]
-    system: Optional[str]
+    system: Optional[Union[str, Dict[str, Any]]]
 
 
 InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]

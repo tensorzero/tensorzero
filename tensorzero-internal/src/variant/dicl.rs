@@ -40,7 +40,7 @@ use super::{
 /// load() step to get the fully qualified path.
 #[derive(Debug, Default)]
 pub struct DiclConfig {
-    pub weight: f64,
+    pub weight: Option<f64>,
     pub embedding_model: Arc<str>,
     pub k: u32, // k as in k-nearest neighbors
     pub model: Arc<str>,
@@ -60,7 +60,7 @@ pub struct DiclConfig {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedDiclConfig {
     #[serde(default)]
-    pub weight: f64,
+    pub weight: Option<f64>,
     pub embedding_model: String,
     pub k: u32, // k as in k-nearest neighbors
     pub model: String,
@@ -222,7 +222,7 @@ impl Variant for DiclConfig {
         // Make sure that the count is positive
 
         // Validate that weight is non-negative
-        if self.weight < 0.0 {
+        if self.weight.is_some_and(|w| w < 0.0) {
             return Err(ErrorDetails::Config {
                 message: format!(
                 "`functions.{function_name}.variants.{variant_name}`: `weight` must be non-negative"
@@ -463,6 +463,28 @@ impl DiclConfig {
     where
         'a: 'request,
     {
+        for message in &input.messages {
+            for content in &message.content {
+                match content {
+                    // We cannot meaningfully embed images into dicl inputs, so reject the request.
+                    ResolvedInputMessageContent::Image(..) => {
+                        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                            content_block_type: "image".to_string(),
+                            provider_type: "dicl".to_string(),
+                        }));
+                    }
+                    // 'Unknown' blocks will need special handling (we don't want the literal string "unknown")
+                    // to show up in the LLM input, so reject the request for now.
+                    ResolvedInputMessageContent::Unknown { .. } => {
+                        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+                            content_block_type: "unknown".to_string(),
+                            provider_type: "dicl".to_string(),
+                        }));
+                    }
+                    _ => {}
+                }
+            }
+        }
         let messages = examples
             .iter()
             .map(|example| self.prepare_message(example))

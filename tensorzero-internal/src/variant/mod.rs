@@ -165,10 +165,10 @@ pub trait Variant {
 impl VariantConfig {
     pub fn weight(&self) -> f64 {
         match self {
-            VariantConfig::ChatCompletion(params) => params.weight,
-            VariantConfig::BestOfNSampling(params) => params.weight,
-            VariantConfig::Dicl(params) => params.weight,
-            VariantConfig::MixtureOfN(params) => params.weight,
+            VariantConfig::ChatCompletion(params) => params.weight.unwrap_or(0.0),
+            VariantConfig::BestOfNSampling(params) => params.weight.unwrap_or(0.0),
+            VariantConfig::Dicl(params) => params.weight.unwrap_or(0.0),
+            VariantConfig::MixtureOfN(params) => params.weight.unwrap_or(0.0),
         }
     }
 }
@@ -496,7 +496,7 @@ async fn infer_model_request<'a, 'request>(
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, args.model_name);
     let raw_content = model_inference_result.output.clone();
-    let usage = model_inference_result.usage.clone();
+    let usage = model_inference_result.actual_usage();
     let model_inference_results = vec![model_inference_result];
 
     args.function
@@ -909,6 +909,7 @@ mod tests {
             providers: HashMap::from([(
                 model_name.into(),
                 ModelProvider {
+                    name: model_name.into(),
                     config: dummy_provider_config,
                     extra_body: None,
                 },
@@ -1011,6 +1012,7 @@ mod tests {
             providers: HashMap::from([(
                 model_name_json.into(),
                 ModelProvider {
+                    name: model_name_json.into(),
                     config: dummy_provider_config_json,
                     extra_body: None,
                 },
@@ -1064,6 +1066,7 @@ mod tests {
             providers: HashMap::from([(
                 error_model_name.into(),
                 ModelProvider {
+                    name: error_model_name.into(),
                     config: error_provider_config,
                     extra_body: None,
                 },
@@ -1177,6 +1180,7 @@ mod tests {
                 (
                     error_model_name.into(),
                     ModelProvider {
+                        name: error_model_name.into(),
                         config: error_provider_config,
                         extra_body: None,
                     },
@@ -1184,6 +1188,7 @@ mod tests {
                 (
                     model_name.into(),
                     ModelProvider {
+                        name: model_name.into(),
                         config: dummy_provider_config,
                         extra_body: None,
                     },
@@ -1278,6 +1283,7 @@ mod tests {
             providers: HashMap::from([(
                 "good_provider".into(),
                 ModelProvider {
+                    name: "good_provider".into(),
                     config: dummy_provider_config,
                     extra_body: None,
                 },
@@ -1442,6 +1448,7 @@ mod tests {
                 (
                     error_model_name.into(),
                     ModelProvider {
+                        name: error_model_name.into(),
                         config: error_provider_config,
                         extra_body: None,
                     },
@@ -1449,6 +1456,7 @@ mod tests {
                 (
                     model_name.into(),
                     ModelProvider {
+                        name: model_name.into(),
                         config: dummy_provider_config,
                         extra_body: None,
                     },

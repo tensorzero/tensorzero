@@ -10,17 +10,18 @@ use uuid::Uuid;
 
 use super::provider_trait::InferenceProvider;
 
+use crate::cache::ModelProviderRequest;
 use crate::embeddings::{EmbeddingProvider, EmbeddingProviderResponse, EmbeddingRequest};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
-use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, current_timestamp, ContentBlockChunk,
     ContentBlockOutput, Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
+use crate::inference::types::{ContentBlock, ProviderInferenceResponseStreamInner};
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk};
@@ -154,7 +155,11 @@ pub static DUMMY_RAW_REQUEST: &str = "raw request";
 impl InferenceProvider for DummyProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         _http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         _model_provider: &'a ModelProvider,
@@ -262,6 +267,28 @@ impl InferenceProvider for DummyProvider {
                 vec![r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string().into()]
             }
             "alternate" => vec![ALTERNATE_INFER_RESPONSE_CONTENT.to_string().into()],
+            "extract_images" => {
+                let images: Vec<_> = request
+                    .messages
+                    .iter()
+                    .flat_map(|m| {
+                        m.content.iter().flat_map(|block| {
+                            if let ContentBlock::Image(image) = block {
+                                Some(image.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .collect();
+                vec![ContentBlockOutput::Text(Text {
+                    text: serde_json::to_string(&images).map_err(|e| {
+                        ErrorDetails::Serialization {
+                            message: format!("Failed to serialize collected images: {e:?}"),
+                        }
+                    })?,
+                })]
+            }
             _ => vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()],
         };
         let raw_request = DUMMY_RAW_REQUEST.to_string();

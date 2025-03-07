@@ -10,6 +10,7 @@ use tokio::time::Instant;
 use url::Url;
 
 use crate::{
+    cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     inference::types::{
@@ -127,7 +128,11 @@ fn default_api_key_location() -> CredentialLocation {
 impl InferenceProvider for FireworksProvider {
     async fn infer<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
