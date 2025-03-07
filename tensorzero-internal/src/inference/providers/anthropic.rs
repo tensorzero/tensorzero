@@ -229,7 +229,11 @@ impl InferenceProvider for AnthropicProvider {
     /// Anthropic streaming API request
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,

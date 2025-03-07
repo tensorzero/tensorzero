@@ -275,25 +275,27 @@ impl ModelConfig {
         request: &'request ModelInferenceRequest<'request>,
         clients: &'request InferenceClients<'request>,
         model_name: &'request str,
-    ) -> Result<StreamResponse, Error> {
+    ) -> Result<(StreamResponse, Vec<RequestMessage>), Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
+            let request = self.filter_content_blocks(request, model_name, provider_name);
+            let model_provider_request = ModelProviderRequest {
+                request: &request,
+                model_name,
+                provider_name,
+            };
             // TODO: think about how to best handle errors here
             if clients.cache_options.enabled.read() {
                 let cache_lookup = cache_lookup_streaming(
                     clients.clickhouse_connection_info,
-                    ModelProviderRequest {
-                        request,
-                        model_name,
-                        provider_name,
-                    },
+                    model_provider_request,
                     clients.cache_options.max_age_s,
                 )
                 .await
                 .ok()
                 .flatten();
                 if let Some(cache_lookup) = cache_lookup {
-                    return Ok(cache_lookup);
+                    return Ok((cache_lookup, request.messages.clone()));
                 }
             }
 
@@ -303,7 +305,11 @@ impl ModelConfig {
                 })
             })?;
             let response = provider
-                .infer_stream(request, clients.http_client, clients.credentials)
+                .infer_stream(
+                    model_provider_request,
+                    clients.http_client,
+                    clients.credentials,
+                )
                 .instrument(span!(
                     Level::INFO,
                     "infer_stream",
@@ -319,11 +325,7 @@ impl ModelConfig {
                     let mut stream = if clients.cache_options.enabled.write() {
                         stream_with_cache_write(
                             raw_request.clone(),
-                            ModelProviderRequest {
-                                request,
-                                model_name,
-                                provider_name,
-                            },
+                            model_provider_request,
                             clients,
                             stream,
                         )
@@ -334,12 +336,15 @@ impl ModelConfig {
                     // Get a single chunk from the stream and make sure it is OK then send to client.
                     // We want to do this here so that we can tell that the request is working.
                     peek_first_chunk(&mut stream, &raw_request, provider_name).await?;
-                    return Ok(StreamResponse {
-                        stream,
-                        raw_request,
-                        model_provider_name: provider_name.clone(),
-                        cached: false,
-                    });
+                    return Ok((
+                        StreamResponse {
+                            stream,
+                            raw_request,
+                            model_provider_name: provider_name.clone(),
+                            cached: false,
+                        },
+                        request.messages.clone(),
+                    ));
                 }
                 Err(error) => {
                     provider_errors.insert(provider_name.to_string(), error);
@@ -816,7 +821,7 @@ impl ModelProvider {
 
     async fn infer_stream(
         &self,
-        request: &ModelInferenceRequest<'_>,
+        request: ModelProviderRequest<'_>,
         client: &Client,
         api_keys: &InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -1648,12 +1653,15 @@ mod tests {
                 },
             )]),
         };
-        let StreamResponse {
-            mut stream,
-            raw_request,
-            model_provider_name,
-            cached: _,
-        } = model_config
+        let (
+            StreamResponse {
+                mut stream,
+                raw_request,
+                model_provider_name,
+                cached: _,
+            },
+            _input,
+        ) = model_config
             .infer_stream(
                 &request,
                 &InferenceClients {
@@ -1806,12 +1814,15 @@ mod tests {
                 ),
             ]),
         };
-        let StreamResponse {
-            mut stream,
-            raw_request,
-            model_provider_name,
-            cached: _,
-        } = model_config
+        let (
+            StreamResponse {
+                mut stream,
+                raw_request,
+                model_provider_name,
+                cached: _,
+            },
+            _input,
+        ) = model_config
             .infer_stream(
                 &request,
                 &InferenceClients {

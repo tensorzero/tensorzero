@@ -22,7 +22,7 @@ pub trait InferenceProvider {
 
     fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest,
+        request: ModelProviderRequest<'a>,
         client: &'a Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,

@@ -521,12 +521,15 @@ async fn infer_model_request_stream<'request>(
     inference_params: InferenceParams,
     retry_config: RetryConfig,
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-    let StreamResponse {
-        stream,
-        raw_request,
-        model_provider_name,
-        cached,
-    } = (|| async {
+    let (
+        StreamResponse {
+            stream,
+            raw_request,
+            model_provider_name,
+            cached,
+        },
+        input_messages,
+    ) = (|| async {
         model_config
             .infer_stream(&request, clients, &model_name)
             .await
@@ -534,7 +537,6 @@ async fn infer_model_request_stream<'request>(
     .retry(retry_config.get_backoff())
     .await?;
     let system = request.system.clone();
-    let input_messages = request.messages.clone();
     let model_used_info = ModelUsedInfo {
         model_name,
         model_provider_name,
