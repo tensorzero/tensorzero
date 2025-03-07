@@ -820,6 +820,7 @@ pub async fn write_completed_batch_inference<'a>(
             output,
             raw_response,
             usage,
+            finish_reason,
         } = match response.elements.remove(&inference_id) {
             Some(inference_response) => inference_response,
             None => {
@@ -842,6 +843,7 @@ pub async fn write_completed_batch_inference<'a>(
             model_name: batch_request.model_name.clone(),
             model_provider_name: batch_request.model_provider_name.clone().into(),
             cached: false,
+            finish_reason,
         };
         let tool_config: Option<ToolCallConfig> = tool_params.map(|t| t.into());
         let output_schema = match output_schema

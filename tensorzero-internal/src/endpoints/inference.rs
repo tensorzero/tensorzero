@@ -31,10 +31,10 @@ use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
     collect_chunks, Base64Image, ChatInferenceDatabaseInsert, CollectChunksArgs,
-    ContentBlockChatOutput, ContentBlockChunk, FetchContext, InferenceResult, InferenceResultChunk,
-    InferenceResultStream, Input, JsonInferenceDatabaseInsert, JsonInferenceOutput,
-    ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput, ResolvedInputMessageContent,
-    Usage,
+    ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
+    InferenceResultChunk, InferenceResultStream, Input, JsonInferenceDatabaseInsert,
+    JsonInferenceOutput, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
+    ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
@@ -852,6 +852,8 @@ pub struct ChatInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -862,6 +864,8 @@ pub struct JsonInferenceResponseChunk {
     pub raw: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
 }
 
 impl InferenceResponseChunk {
@@ -880,6 +884,7 @@ impl InferenceResponseChunk {
                     variant_name,
                     content: result.content,
                     usage: if cached { None } else { result.usage },
+                    finish_reason: result.finish_reason,
                 })
             }
             InferenceResultChunk::Json(result) => {
@@ -892,6 +897,7 @@ impl InferenceResponseChunk {
                     variant_name,
                     raw: result.raw.unwrap_or_default(),
                     usage: if cached { None } else { result.usage },
+                    finish_reason: result.finish_reason,
                 })
             }
         })
@@ -993,6 +999,7 @@ mod tests {
             content: content.clone(),
             created: 0,
             usage: None,
+            finish_reason: Some(FinishReason::Stop),
             raw_response: "".to_string(),
             latency: Duration::from_millis(100),
         });
@@ -1029,6 +1036,7 @@ mod tests {
                 assert_eq!(c.variant_name, inference_metadata.variant_name);
                 assert_eq!(c.content, content);
                 assert!(c.usage.is_none());
+                assert_eq!(c.finish_reason, Some(FinishReason::Stop));
             }
             InferenceResponseChunk::Json(_) => {
                 panic!("Expected ChatInferenceResponseChunk, got JsonInferenceResponseChunk");
@@ -1047,6 +1055,7 @@ mod tests {
             usage: None,
             raw_response: "".to_string(),
             latency: Duration::from_millis(100),
+            finish_reason: Some(FinishReason::Stop),
         });
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),
@@ -1080,6 +1089,7 @@ mod tests {
                 assert_eq!(c.variant_name, inference_metadata.variant_name);
                 assert_eq!(c.raw, "Test content".to_string());
                 assert!(c.usage.is_none());
+                assert_eq!(c.finish_reason, Some(FinishReason::Stop));
             }
             InferenceResponseChunk::Chat(_) => {
                 panic!("Expected JsonInferenceResponseChunk, got ChatInferenceResponseChunk");

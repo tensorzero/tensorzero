@@ -122,6 +122,13 @@ impl StreamResponse {
                         },
                         // We didn't make any network calls to the model provider, so the latency is 0
                         latency: Duration::from_secs(0),
+                        // For all chunks but the last one, the finish reason is None
+                        // For the last chunk, the finish reason is the same as the cache lookup
+                        finish_reason: if index == chunks_len - 1 {
+                            cache_lookup.finish_reason.clone()
+                        } else {
+                            None
+                        },
                     })
                 },
             ))) as ProviderInferenceResponseStreamInner)
@@ -253,6 +260,7 @@ impl ModelConfig {
                             &response.raw_request,
                             &response.raw_response,
                             &response.usage,
+                            response.finish_reason.as_ref(),
                         );
                     }
                     // We already checked the cache above (and returned early if it was a hit), so this response was not from the cache
