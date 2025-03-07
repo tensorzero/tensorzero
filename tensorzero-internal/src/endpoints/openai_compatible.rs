@@ -386,6 +386,8 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             credentials: InferenceCredentials::default(),
             cache_options: CacheParamsOptions::default(),
             tags: HashMap::new(),
+            // OpenAI compatible endpoint does not support 'include_original_response'
+            include_original_response: false,
         })
     }
 }

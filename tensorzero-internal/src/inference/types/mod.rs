@@ -439,32 +439,36 @@ impl ModelInferenceResponseWithMetadata {
  */
 
 /// This type contains the result of running a variant of a function
-#[derive(Clone, Debug, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug)]
+//#[serde(tag = "type", rename_all = "snake_case")]
 pub enum InferenceResult {
     Chat(ChatInferenceResult),
     Json(JsonInferenceResult),
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 pub struct ChatInferenceResult {
     pub inference_id: Uuid,
+    #[allow(dead_code)]
     created: u64,
     pub content: Vec<ContentBlockChatOutput>,
     pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub inference_params: InferenceParams,
+    pub original_response: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 pub struct JsonInferenceResult {
     pub inference_id: Uuid,
+    #[allow(dead_code)]
     created: u64,
     pub output: JsonInferenceOutput,
     pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub output_schema: Value,
     pub inference_params: InferenceParams,
+    pub original_response: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -859,6 +863,13 @@ impl InferenceResult {
         }
     }
 
+    pub fn set_original_response(&mut self, original_response: Option<String>) {
+        match self {
+            InferenceResult::Chat(chat_result) => chat_result.original_response = original_response,
+            InferenceResult::Json(json_result) => json_result.original_response = original_response,
+        }
+    }
+
     pub fn mut_model_inference_results(&mut self) -> &mut Vec<ModelInferenceResponseWithMetadata> {
         match self {
             InferenceResult::Chat(chat_result) => &mut chat_result.model_inference_results,
@@ -884,6 +895,7 @@ impl JsonInferenceResult {
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         output_schema: Value,
         inference_params: InferenceParams,
+        original_response: Option<String>,
     ) -> Self {
         let output = JsonInferenceOutput { raw, parsed };
         Self {
@@ -894,6 +906,7 @@ impl JsonInferenceResult {
             model_inference_results,
             output_schema,
             inference_params,
+            original_response,
         }
     }
 }
@@ -906,6 +919,7 @@ impl ChatInferenceResult {
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         tool_config: Option<&ToolCallConfig>,
         inference_params: InferenceParams,
+        original_response: Option<String>,
     ) -> Self {
         let created = current_timestamp();
         let content = parse_chat_output(raw_content, tool_config).await;
@@ -916,6 +930,7 @@ impl ChatInferenceResult {
             usage,
             model_inference_results,
             inference_params,
+            original_response,
         }
     }
 }
@@ -1336,6 +1351,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
     );
     let model_inference_response =
         ModelInferenceResponse::new(model_response, model_provider_name, cached);
+    let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, model_name);
     let inference_config = InferenceConfig {
@@ -1357,6 +1373,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
             vec![model_inference_result],
             &inference_config,
             inference_params,
+            Some(original_response),
         )
         .await
 }
@@ -1527,6 +1544,7 @@ mod tests {
             model_inference_responses,
             None,
             InferenceParams::default(),
+            None,
         )
         .await;
         let output_content = ["Hello, world!".to_string().into()];
@@ -1576,6 +1594,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -1622,6 +1641,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -1668,6 +1688,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -1730,6 +1751,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 2);
@@ -1814,6 +1836,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 2);
@@ -1905,6 +1928,7 @@ mod tests {
             model_inference_responses,
             Some(&additional_tool_config),
             InferenceParams::default(),
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -1954,6 +1978,7 @@ mod tests {
             model_inference_responses,
             Some(&additional_tool_config),
             InferenceParams::default(),
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2025,6 +2050,7 @@ mod tests {
             model_inference_responses,
             Some(&restricted_tool_config),
             InferenceParams::default(),
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2080,6 +2106,7 @@ mod tests {
             model_inference_responses,
             Some(&restricted_tool_config),
             InferenceParams::default(),
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);

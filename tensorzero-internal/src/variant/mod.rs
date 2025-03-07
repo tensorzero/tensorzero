@@ -493,6 +493,7 @@ async fn infer_model_request<'a, 'request>(
     .retry(args.retry_config.get_backoff())
     .await?;
 
+    let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, args.model_name);
     let raw_content = model_inference_result.output.clone();
@@ -507,6 +508,7 @@ async fn infer_model_request<'a, 'request>(
             model_inference_results,
             args.inference_config,
             args.inference_params,
+            Some(original_response),
         )
         .await
 }
