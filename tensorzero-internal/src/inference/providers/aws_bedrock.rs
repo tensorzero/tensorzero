@@ -8,7 +8,7 @@ use aws_sdk_bedrockruntime::types::{
     AnyToolChoice, AutoToolChoice, ContentBlock as BedrockContentBlock, ContentBlockDelta,
     ContentBlockStart, ConversationRole, ConverseOutput as ConverseOutputType,
     ConverseStreamOutput as ConverseStreamOutputType, InferenceConfiguration, Message,
-    SpecificToolChoice, SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice,
+    SpecificToolChoice, StopReason, SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice,
     ToolConfiguration, ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification,
     ToolUseBlock,
 };
@@ -30,6 +30,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::FinishReason;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, FunctionType, Latency, ModelInferenceRequest,
@@ -504,6 +505,7 @@ fn bedrock_to_tensorzero_stream_message(
                         None,
                         raw_message,
                         message_latency,
+                        None,
                     ))),
                     ContentBlockDelta::ToolUse(tool_use) => {
                         Ok(Some(ProviderInferenceResponseChunk::new(
@@ -528,6 +530,7 @@ fn bedrock_to_tensorzero_stream_message(
                             None,
                             raw_message,
                             message_latency,
+                            None,
                         )))
                     }
                     _ => Err(ErrorDetails::InferenceServer {
@@ -559,6 +562,7 @@ fn bedrock_to_tensorzero_stream_message(
                         None,
                         raw_message,
                         message_latency,
+                        None,
                     )))
                 }
                 _ => Err(ErrorDetails::InferenceServer {
@@ -572,7 +576,16 @@ fn bedrock_to_tensorzero_stream_message(
         }
         ConverseStreamOutputType::ContentBlockStop(_) => Ok(None),
         ConverseStreamOutputType::MessageStart(_) => Ok(None),
-        ConverseStreamOutputType::MessageStop(_) => Ok(None),
+        ConverseStreamOutputType::MessageStop(message_stop) => {
+            let raw_message = serialize_aws_bedrock_struct(&message_stop)?;
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![],
+                None,
+                raw_message,
+                message_latency,
+                aws_stop_reason_to_tensorzero_finish_reason(message_stop.stop_reason),
+            )))
+        }
         ConverseStreamOutputType::Metadata(message) => {
             let raw_message = serialize_aws_bedrock_struct(&message)?;
 
@@ -591,6 +604,7 @@ fn bedrock_to_tensorzero_stream_message(
                         usage,
                         raw_message,
                         message_latency,
+                        None,
                     )))
                 }
             }
@@ -783,6 +797,18 @@ struct ConverseOutputWithMetadata<'a> {
     json_mode: &'a ModelInferenceRequestJsonMode,
 }
 
+fn aws_stop_reason_to_tensorzero_finish_reason(stop_reason: StopReason) -> Option<FinishReason> {
+    match stop_reason {
+        StopReason::ContentFiltered => Some(FinishReason::ContentFilter),
+        StopReason::EndTurn => Some(FinishReason::Stop),
+        StopReason::GuardrailIntervened => Some(FinishReason::ContentFilter),
+        StopReason::MaxTokens => Some(FinishReason::Length),
+        StopReason::StopSequence => Some(FinishReason::Stop),
+        StopReason::ToolUse => Some(FinishReason::ToolCall),
+        _ => Some(FinishReason::Unknown),
+    }
+}
+
 impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
     type Error = Error;
 
@@ -859,6 +885,7 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             raw_response,
             usage,
             latency,
+            aws_stop_reason_to_tensorzero_finish_reason(output.stop_reason),
         ))
     }
 }

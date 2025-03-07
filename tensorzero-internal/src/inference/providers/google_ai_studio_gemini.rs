@@ -18,7 +18,6 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::resolved_input::ImageWithPath;
-use crate::inference::types::FlattenUnknown;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -28,6 +27,7 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
+use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -767,9 +767,43 @@ struct GeminiResponseContent {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum GeminiFinishReason {
+    FinishReasonUnspecified,
+    Stop,
+    MaxTokens,
+    Safety,
+    Recitation,
+    Other,
+    Blocklist,
+    ProhibitedContent,
+    #[serde(rename = "SPII")]
+    SPII,
+    MalformedFunctionCall,
+}
+
+impl From<GeminiFinishReason> for FinishReason {
+    fn from(finish_reason: GeminiFinishReason) -> Self {
+        match finish_reason {
+            GeminiFinishReason::Stop => FinishReason::Stop,
+            GeminiFinishReason::MaxTokens => FinishReason::Length,
+            GeminiFinishReason::Safety => FinishReason::ContentFilter,
+            GeminiFinishReason::Recitation => FinishReason::ToolCall,
+            GeminiFinishReason::Other => FinishReason::Unknown,
+            GeminiFinishReason::Blocklist => FinishReason::ContentFilter,
+            GeminiFinishReason::ProhibitedContent => FinishReason::ContentFilter,
+            GeminiFinishReason::SPII => FinishReason::ContentFilter,
+            GeminiFinishReason::MalformedFunctionCall => FinishReason::ToolCall,
+            GeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 struct GeminiResponseCandidate {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<GeminiResponseContent>,
+    finish_reason: GeminiFinishReason,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -865,6 +899,7 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
             raw_response,
             usage,
             latency,
+            Some(first_candidate.finish_reason.into()),
         ))
     }
 }
@@ -914,6 +949,7 @@ impl TryFrom<GoogleAIStudioGeminiResponseWithMetadata> for ProviderInferenceResp
                 .map(|usage_metadata| usage_metadata.into()),
             raw,
             latency,
+            Some(first_candidate.finish_reason.into()),
         ))
     }
 }
@@ -1296,6 +1332,7 @@ mod tests {
         let content = GeminiResponseContent { parts: vec![part] };
         let candidate = GeminiResponseCandidate {
             content: Some(content),
+            finish_reason: GeminiFinishReason::Stop,
         };
         let response = GeminiResponse {
             candidates: vec![candidate],
@@ -1359,6 +1396,10 @@ mod tests {
         assert_eq!(model_inference_response.latency, latency);
         assert_eq!(model_inference_response.raw_request, raw_request);
         assert_eq!(model_inference_response.raw_response, raw_response);
+        assert_eq!(
+            model_inference_response.finish_reason,
+            Some(FinishReason::Stop)
+        );
         assert_eq!(model_inference_response.system, None);
         assert_eq!(
             model_inference_response.input_messages,
@@ -1379,6 +1420,7 @@ mod tests {
         };
         let candidate = GeminiResponseCandidate {
             content: Some(content),
+            finish_reason: GeminiFinishReason::Stop,
         };
         let response = GeminiResponse {
             candidates: vec![candidate],
@@ -1449,6 +1491,10 @@ mod tests {
             }
         );
         assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(
+            model_inference_response.finish_reason,
+            Some(FinishReason::Stop)
+        );
         assert_eq!(model_inference_response.raw_request, raw_request);
         assert_eq!(
             model_inference_response.system,
@@ -1486,6 +1532,7 @@ mod tests {
         };
         let candidate = GeminiResponseCandidate {
             content: Some(content),
+            finish_reason: GeminiFinishReason::Stop,
         };
         let response = GeminiResponse {
             candidates: vec![candidate],

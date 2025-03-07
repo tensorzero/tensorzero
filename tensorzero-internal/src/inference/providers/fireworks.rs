@@ -26,7 +26,8 @@ use super::{
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
         tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse,
-        OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType,
+        OpenAIResponseChoice, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
+        OpenAIToolType,
     },
     provider_trait::InferenceProvider,
 };
@@ -428,7 +429,11 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             .into());
         }
         let usage = response.usage.into();
-        let message = response
+        let OpenAIResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
@@ -437,8 +442,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: Some(raw_response.clone()),
             }
-            ))?
-            .message;
+            ))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
@@ -463,6 +467,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             raw_response,
             usage,
             latency,
+            Some(finish_reason.into()),
         ))
     }
 }
@@ -586,6 +591,7 @@ mod tests {
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
+                finish_reason: Some(OpenAIFinishReason::Stop),
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,

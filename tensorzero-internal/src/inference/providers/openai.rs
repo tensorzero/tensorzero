@@ -26,7 +26,6 @@ use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
 use crate::inference::types::resolved_input::ImageWithPath;
-use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -34,6 +33,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
     TextChunk, Usage,
 };
+use crate::inference::types::{FinishReason, ProviderInferenceResponseStreamInner};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -1469,11 +1469,37 @@ pub(super) struct OpenAIResponseMessage {
     pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum OpenAIFinishReason {
+    Stop,
+    Length,
+    ContentFilter,
+    ToolCalls,
+    FunctionCall,
+    #[serde(other)]
+    Unknown,
+}
+
+impl From<OpenAIFinishReason> for FinishReason {
+    fn from(finish_reason: OpenAIFinishReason) -> Self {
+        match finish_reason {
+            OpenAIFinishReason::Stop => FinishReason::Stop,
+            OpenAIFinishReason::Length => FinishReason::Length,
+            OpenAIFinishReason::ContentFilter => FinishReason::ContentFilter,
+            OpenAIFinishReason::ToolCalls => FinishReason::ToolCall,
+            OpenAIFinishReason::FunctionCall => FinishReason::ToolCall,
+            OpenAIFinishReason::Unknown => FinishReason::Unknown,
+        }
+    }
+}
+
 // Leaving out logprobs and finish_reason for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct OpenAIResponseChoice {
     pub(super) index: u8,
     pub(super) message: OpenAIResponseMessage,
+    pub(super) finish_reason: OpenAIFinishReason,
 }
 
 // Leaving out id, created, model, service_tier, system_fingerprint, object for now
@@ -1513,7 +1539,11 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
             .into());
         }
-        let message = response
+        let OpenAIResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
@@ -1521,8 +1551,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
-            }))?
-            .message;
+            }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
@@ -1551,6 +1580,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             raw_response,
             usage,
             latency,
+            Some(finish_reason.into()),
         ))
     }
 }
@@ -1586,6 +1616,7 @@ struct OpenAIDelta {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIChatChunkChoice {
     delta: OpenAIDelta,
+    finish_reason: Option<OpenAIFinishReason>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1621,7 +1652,11 @@ fn openai_to_tensorzero_chunk(
     }
     let usage = chunk.usage.map(|u| u.into());
     let mut content = vec![];
+    let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
+        if let Some(choice_finish_reason) = choice.finish_reason {
+            finish_reason = Some(choice_finish_reason.into());
+        }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {
                 text,
@@ -1679,6 +1714,7 @@ fn openai_to_tensorzero_chunk(
         usage,
         raw_message,
         latency,
+        finish_reason,
     ))
 }
 
@@ -1847,7 +1883,11 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
         })?;
 
         // Extract the message from choices
-        let message = response
+        let OpenAIResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
@@ -1855,8 +1895,7 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
                 raw_request: None,
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
-            }))?
-            .message;
+            }))?;
 
         // Convert message content to ContentBlocks
         let mut content: Vec<ContentBlockOutput> = Vec::new();
@@ -1874,6 +1913,7 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
             output: content,
             raw_response,
             usage: response.usage.into(),
+            finish_reason: Some(finish_reason.into()),
         })
     }
 }
@@ -2331,6 +2371,7 @@ mod tests {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: Some(OpenAIFinishReason::Stop),
             }],
             usage: OpenAIUsage {
                 prompt_tokens: 10,
@@ -2394,6 +2435,7 @@ mod tests {
         );
         assert_eq!(inference_response.usage.input_tokens, 10);
         assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
@@ -2414,6 +2456,7 @@ mod tests {
         let valid_response_with_tools = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
+                finish_reason: Some(OpenAIFinishReason::Stop),
                 message: OpenAIResponseMessage {
                     content: None,
                     tool_calls: Some(vec![OpenAIResponseToolCall {
@@ -2491,6 +2534,10 @@ mod tests {
         );
         assert_eq!(inference_response.usage.input_tokens, 15);
         assert_eq!(inference_response.usage.output_tokens, 25);
+        assert_eq!(
+            inference_response.finish_reason,
+            Some(FinishReason::ToolCall)
+        );
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
