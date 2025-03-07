@@ -40,7 +40,7 @@ pub(crate) async fn select_chat_datapoint_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM ChatInferenceDataset WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
+        "SELECT * FROM ChatInferenceDatapoint WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
         inference_id
     );
 
@@ -61,7 +61,7 @@ pub(crate) async fn select_json_datapoint_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM JsonInferenceDataset WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
+        "SELECT * FROM JsonInferenceDatapoint WHERE id = '{}' LIMIT 1 FORMAT JSONEachRow",
         inference_id
     );
 

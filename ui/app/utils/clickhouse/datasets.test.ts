@@ -1,8 +1,8 @@
 import {
   DatasetQueryParamsSchema,
   type DatasetDetailRow,
-  type ParsedJsonInferenceDatasetRow,
-  type ParsedChatInferenceDatasetRow,
+  type ParsedJsonInferenceDatapointRow,
+  type ParsedChatInferenceDatapointRow,
 } from "./datasets";
 import {
   countRowsForDataset,
@@ -485,7 +485,7 @@ describe("getDatapoint", () => {
 
 describe("datapoint operations", () => {
   test("chat datapoint lifecycle - insert, get, delete", async () => {
-    const chatDatapoint: ParsedChatInferenceDatasetRow = {
+    const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
       id: "01934fc5-ea98-71f0-8191-9fd88f34c28b",
@@ -547,7 +547,7 @@ describe("datapoint operations", () => {
   });
 
   test("json datapoint lifecycle - insert, get, delete", async () => {
-    const jsonDatapoint: ParsedJsonInferenceDatasetRow = {
+    const jsonDatapoint: ParsedJsonInferenceDatapointRow = {
       dataset_name: "test_json_dataset",
       function_name: "extract_entities",
       id: "01934fc5-ea98-71f0-8191-9fd88f34c29c",
@@ -631,7 +631,7 @@ describe("datapoint operations", () => {
   });
 
   test("handles duplicate insertions gracefully", async () => {
-    const chatDatapoint: ParsedChatInferenceDatasetRow = {
+    const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
       id: "01934fc5-ea98-71f0-8191-9fd88f34c31e",
@@ -670,7 +670,7 @@ describe("datapoint operations", () => {
   });
 
   test("handles deletion of non-existent datapoint", async () => {
-    const nonExistentDatapoint: ParsedChatInferenceDatasetRow = {
+    const nonExistentDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "non_existent_dataset",
       function_name: "non_existent_function",
       id: "01934fc5-ea98-71f0-8191-9fd88f34c32f",
