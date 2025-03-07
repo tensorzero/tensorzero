@@ -189,7 +189,7 @@ jobs:
           echo "FIREWORKS_API_KEY=not_used" >> .env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> .env
-          docker compose -f fixtures/docker-compose.yml up -d --build
+          docker compose -f fixtures/docker-compose.yml up -d --build --force-recreate
 
       - name: Run ui tests
         working-directory: ui
