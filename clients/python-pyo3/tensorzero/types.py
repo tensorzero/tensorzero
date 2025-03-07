@@ -135,7 +135,7 @@ class Message(TypedDict):
 
 class InferenceInput(TypedDict):
     messages: List[Message]
-    system: Optional[str]
+    system: Optional[Union[str, Dict[str, Any]]]
 
 
 InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]

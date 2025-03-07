@@ -415,6 +415,23 @@ pub struct ModelInferenceResponseWithMetadata {
     pub cached: bool,
 }
 
+impl ModelInferenceResponseWithMetadata {
+    /// We return the actual usage (meaning the number of tokens the user would be billed for)
+    /// in the HTTP response.
+    /// However, we store the number of tokens that would have been used in the database.
+    /// So we need this function to compute the actual usage in order to send it in the HTTP response.
+    pub fn actual_usage(&self) -> Usage {
+        if self.cached {
+            Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+            }
+        } else {
+            self.usage.clone()
+        }
+    }
+}
+
 /* As a Variant might make use of multiple model inferences, we then combine
  * one or more ModelInferenceResults into a single InferenceResult (but we keep the original ModelInferenceResults around for storage).
  * In the non-streaming case, this InferenceResult is converted into an InferenceResponse and sent to the client.
@@ -686,8 +703,8 @@ impl ModelInferenceResponse {
             raw_request: cache_lookup.raw_request,
             raw_response: cache_lookup.raw_response,
             usage: Usage {
-                input_tokens: 0,
-                output_tokens: 0,
+                input_tokens: cache_lookup.input_tokens,
+                output_tokens: cache_lookup.output_tokens,
             },
             latency: Latency::NonStreaming {
                 response_time: Duration::from_secs(0),

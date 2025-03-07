@@ -93,6 +93,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
+        timeout: None,
     })
     .build()
     .await
@@ -104,6 +105,7 @@ pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: None,
         clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
+        timeout: None,
     })
     .build()
     .await
@@ -117,6 +119,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
         clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
+        timeout: None,
     })
     .build()
     .await
@@ -1449,13 +1452,8 @@ pub async fn check_simple_inference_response(
 
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
-    if should_be_cached {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else {
-        assert!(input_tokens.as_u64().unwrap() > 0);
-        assert!(output_tokens.as_u64().unwrap() > 0);
-    }
+    assert!(input_tokens.as_u64().unwrap() > 0);
+    assert!(output_tokens.as_u64().unwrap() > 0);
     if !is_batch && !should_be_cached {
         let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
         assert!(response_time_ms > 0);
@@ -1730,7 +1728,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     let output_tokens = result.get("output_tokens").unwrap();
 
     // NB: Azure doesn't support input/output tokens during streaming
-    if provider.variant_name.contains("azure") || check_cache {
+    if provider.variant_name.contains("azure") {
         assert!(input_tokens.is_null());
         assert!(output_tokens.is_null());
     } else {

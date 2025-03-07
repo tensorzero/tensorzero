@@ -35,7 +35,7 @@ use super::{InferenceConfig, JsonMode, ModelUsedInfo, Variant};
 
 #[derive(Debug)]
 pub struct BestOfNSamplingConfig {
-    pub weight: f64,
+    pub weight: Option<f64>,
     pub timeout_s: f64,
     pub candidates: Vec<String>,
     pub evaluator: EvaluatorConfig,
@@ -45,7 +45,7 @@ pub struct BestOfNSamplingConfig {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNSamplingConfig {
     #[serde(default)]
-    pub weight: f64,
+    pub weight: Option<f64>,
     #[serde(default = "default_timeout")]
     pub timeout_s: f64,
     pub candidates: Vec<String>,
@@ -719,7 +719,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -740,7 +740,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -759,7 +759,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -781,7 +781,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
                     contents: "".to_string(),
@@ -816,7 +816,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 system_template: Some(PathWithContents {
                     path: system_template_name.into(),
                     contents: "".to_string(),
@@ -849,7 +849,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -953,7 +953,7 @@ mod tests {
         let evaluator_config = EvaluatorConfig {
             inner: ChatCompletionConfig {
                 model: "dummy_json".into(),
-                weight: 1.0,
+                weight: Some(1.0),
                 ..Default::default()
             },
         };
@@ -1060,7 +1060,7 @@ mod tests {
             },
         };
         let best_of_n_variant = BestOfNSamplingConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             evaluator: evaluator_config,
@@ -1228,7 +1228,7 @@ mod tests {
             },
         };
         let best_of_n_variant = BestOfNSamplingConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             evaluator: evaluator_config,
@@ -1291,7 +1291,7 @@ mod tests {
             },
         };
         let best_of_n_variant = BestOfNSamplingConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             evaluator: evaluator_config,
@@ -1366,13 +1366,13 @@ mod tests {
 
         // Test case: Index returned too large (should return an error)
         let best_of_n_big_variant = BestOfNSamplingConfig {
-            weight: 1.0,
+            weight: Some(1.0),
             timeout_s: 10.0,
             candidates: vec![],
             evaluator: EvaluatorConfig {
                 inner: ChatCompletionConfig {
                     model: "best_of_n_big".into(),
-                    weight: 1.0,
+                    weight: Some(1.0),
                     ..Default::default()
                 },
             },
