@@ -15,6 +15,7 @@ import { Code } from "~/components/ui/code";
 import { Link } from "react-router";
 import { FunctionInfo } from "~/components/function/FunctionInfo";
 import type { FunctionType } from "~/utils/config/function";
+import { VariantLink } from "~/components/function/variant/VariantLink";
 
 interface BasicVariantInfoProps {
   variantConfig: VariantConfig;
@@ -232,12 +233,12 @@ export default function BasicVariantInfo({
                     <dd>
                       {config.candidates.map((candidate) => (
                         <>
-                          <Link
-                            to={`/observability/functions/${function_name}/variants/${candidate}`}
-                            className="block no-underline"
+                          <VariantLink
+                            variantName={candidate}
+                            functionName={function_name}
                           >
                             <Code>{candidate}</Code>
-                          </Link>
+                          </VariantLink>
                         </>
                       ))}
                     </dd>
@@ -313,12 +314,12 @@ export default function BasicVariantInfo({
                     <dd>
                       {config.candidates.map((candidate) => (
                         <>
-                          <Link
-                            to={`/observability/functions/${function_name}/variants/${candidate}`}
-                            className="block no-underline"
+                          <VariantLink
+                            variantName={candidate}
+                            functionName={function_name}
                           >
                             <Code>{candidate}</Code>
-                          </Link>
+                          </VariantLink>
                         </>
                       ))}
                     </dd>

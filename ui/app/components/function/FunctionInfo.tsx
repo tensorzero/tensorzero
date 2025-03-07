@@ -1,8 +1,8 @@
-import { Link } from "react-router";
 import { Code } from "~/components/ui/code";
 import { useConfig } from "~/context/config";
 import { AlertDialog } from "~/components/ui/AlertDialog";
 import type { FunctionType } from "~/utils/config/function";
+import { FunctionLink } from "./FunctionLink";
 
 type FunctionInfoProps = {
   functionName: string;
@@ -20,9 +20,9 @@ export function FunctionInfo({
     <>
       <dd>
         {functionConfig ? (
-          <Link to={`/observability/functions/${functionName}`}>
+          <FunctionLink functionName={functionName}>
             <Code>{functionName}</Code>
-          </Link>
+          </FunctionLink>
         ) : (
           <AlertDialog
             message="This function is not present in your configuration file"
