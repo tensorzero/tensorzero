@@ -20,6 +20,8 @@ use crate::{
 };
 use tracing::instrument;
 
+pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OutputKind {
@@ -161,7 +163,7 @@ FORMAT JSONEachRow;"#
 #[instrument(name = "create_datapoint", skip(app_state))]
 pub async fn create_datapoint_handler(
     State(app_state): AppState,
-    Path(path_params): Path<PathParams>,
+    Path(path_params): Path<CreatePathParams>,
     StructuredJson(params): StructuredJson<CreateDatapointParams>,
 ) -> Result<Json<CreateDatapointResponse>, Error> {
     let inference_data =
@@ -249,15 +251,82 @@ pub async fn create_datapoint_handler(
     Ok(Json(CreateDatapointResponse {}))
 }
 
+#[instrument(name = "delete_datapoint", skip(app_state))]
+pub async fn delete_datapoint_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<DeletePathParams>,
+) -> Result<Json<DeleteDatapointResponse>, Error> {
+    let datapoint = app_state.clickhouse_connection_info.run_query(
+        "SELECT * FROM {table_name:Identifier} WHERE dataset_name={dataset_name:String} AND function_name={function_name:String} AND id = {id:String} ORDER BY updated_at DESC LIMIT 1 FORMAT JSONEachRow;".to_string(),
+        Some(&HashMap::from([
+            ("table_name", path_params.kind.table_name()),
+            ("function_name", path_params.function.as_str()),
+            ("dataset_name", path_params.dataset.as_str()),
+            ("id", path_params.id.to_string().as_str())
+        ]))).await?;
+
+    if datapoint.is_empty() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: format!("Datapoint not found with params {path_params:?}",),
+        }));
+    }
+
+    let mut datapoint_json: serde_json::Value = serde_json::from_str(&datapoint).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to deserialize datapoint: {}", e),
+        })
+    })?;
+
+    // We delete datapoints by writing a new row (which ClickHouse will merge)
+    // with the 'is_deleted' and 'updated_at' fields modified.
+    datapoint_json["is_deleted"] = serde_json::Value::Bool(true);
+    datapoint_json["updated_at"] =
+        format!("{}", chrono::Utc::now().format(CLICKHOUSE_DATETIME_FORMAT)).into();
+
+    app_state
+        .clickhouse_connection_info
+        .write(&[datapoint_json], path_params.kind.table_name())
+        .await?;
+
+    Ok(Json(DeleteDatapointResponse {}))
+}
+
+#[derive(Debug, Serialize)]
+pub struct DeleteDatapointResponse {}
+
 #[derive(Debug, Deserialize)]
-pub struct PathParams {
+pub struct CreatePathParams {
     pub dataset: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeletePathParams {
+    pub dataset: String,
+    pub function: String,
+    pub kind: DatapointKind,
+    pub id: Uuid,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateDatapointParams {
     pub output: OutputKind,
     pub inference_id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DatapointKind {
+    Chat,
+    Json,
+}
+
+impl DatapointKind {
+    fn table_name(&self) -> &'static str {
+        match self {
+            DatapointKind::Chat => "ChatInferenceDataset",
+            DatapointKind::Json => "JsonInferenceDataset",
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
