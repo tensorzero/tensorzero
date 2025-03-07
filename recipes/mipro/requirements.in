@@ -5,6 +5,7 @@ minijinja
 openai
 optuna
 pandas
+pydantic
 seaborn
 tensorzero
 toml

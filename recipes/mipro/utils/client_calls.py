@@ -1,7 +1,12 @@
 import asyncio
-from typing import Any, Dict, Optional
+from typing import AsyncGenerator, Optional, Union
 
-from tensorzero import AsyncTensorZeroGateway, InferenceResponse
+from tensorzero import (
+    AsyncTensorZeroGateway,
+    InferenceChunk,
+    InferenceInput,
+    InferenceResponse,
+)
 
 
 async def get_instructions(
@@ -11,24 +16,24 @@ async def get_instructions(
     semaphore: asyncio.Semaphore,
     variant_name: str = "baseline",
     dryrun: bool = True,
-) -> Optional["InferenceResponse"]:
+) -> Optional[Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]]:
     """
     Get instructions from the client with retries.
     """
-    input_args = {
-        "system": {
-            "example_instructions": example_instructions,
-        }
+    system_args = {
+        "example_instructions": example_instructions,
     }
 
     if example_schema:
-        input_args["system"]["example_schema"] = example_schema
+        system_args["example_schema"] = example_schema
+
+    inputs = InferenceInput(system=system_args, messages=[])
 
     try:
         async with semaphore:
             return await client.inference(
                 function_name="generate_instruction",
-                input=input_args,
+                input=inputs,
                 variant_name=variant_name,
                 dryrun=dryrun,
             )
@@ -40,11 +45,11 @@ async def get_instructions(
 async def candidate_inference(
     client: AsyncTensorZeroGateway,
     function_name: str,
-    input: Dict[str, Any],
+    input: InferenceInput,
     variant_name: str,
     semaphore: asyncio.Semaphore,
     dryrun: bool = True,
-) -> Optional["InferenceResponse"]:
+) -> Optional[Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]]:
     try:
         async with semaphore:
             return await client.inference(
@@ -67,23 +72,25 @@ async def judge_answer(
     semaphore: asyncio.Semaphore,
     variant_name: str = "baseline",
     dryrun: bool = True,
-) -> Optional["InferenceResponse"]:
+) -> Optional[Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]]:
     try:
         async with semaphore:
+            system_args = {
+                "task_description": task_description,
+                "metric_properties": metric_properties,
+            }
+            inputs = InferenceInput(
+                system=system_args,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": {"prediction": prediction, "truth": truth},
+                    },
+                ],
+            )
             return await client.inference(
                 function_name="judge_answer",
-                input={
-                    "system": {
-                        "task_description": task_description,
-                        "metric_properties": metric_properties,
-                    },
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": {"prediction": prediction, "truth": truth},
-                        },
-                    ],
-                },
+                input=inputs,
                 variant_name=variant_name,
                 dryrun=dryrun,
             )

@@ -37,7 +37,7 @@ class ToolConfig(BaseModel):
         if schema_path.is_file():
             with open(schema_path, "r") as f:
                 schema_dict = json.load(f)
-                parameters_dict = {}
+                parameters_dict: Dict[str, Any] = {}
                 parameters_dict["type"] = schema_dict.get("type")
                 parameters_dict["properties"] = schema_dict.get("properties")
                 parameters_dict["required"] = schema_dict.get("required")
