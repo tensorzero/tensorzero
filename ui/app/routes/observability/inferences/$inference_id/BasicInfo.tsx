@@ -11,6 +11,7 @@ import { AddToDatasetButton } from "./AddToDatasetButton";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import { FunctionInfo } from "~/components/function/FunctionInfo";
+import { VariantInfo } from "~/components/function/variant/VariantInfo";
 
 const FF_ENABLE_DATASETS =
   import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
@@ -65,14 +66,11 @@ export default function BasicInfo({
           </div>
           <div>
             <dt className="text-lg font-semibold">Variant</dt>
-            <dd>
-              <Link
-                to={`/observability/functions/${inference.function_name}/variants/${inference.variant_name}`}
-              >
-                <Code>{inference.variant_name}</Code>
-              </Link>
-            </dd>
-            <Code>{variantType}</Code>
+            <VariantInfo
+              variantName={inference.variant_name}
+              functionName={inference.function_name}
+              variantType={variantType}
+            />
           </div>
           <div className="col-span-2">
             <dt className="text-lg font-semibold">Episode ID</dt>

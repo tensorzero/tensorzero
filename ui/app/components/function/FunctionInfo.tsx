@@ -2,10 +2,11 @@ import { Link } from "react-router";
 import { Code } from "~/components/ui/code";
 import { useConfig } from "~/context/config";
 import { AlertDialog } from "~/components/ui/AlertDialog";
+import type { FunctionType } from "~/utils/config/function";
 
 type FunctionInfoProps = {
   functionName: string;
-  functionType: "chat" | "json";
+  functionType: FunctionType;
 };
 
 export function FunctionInfo({
