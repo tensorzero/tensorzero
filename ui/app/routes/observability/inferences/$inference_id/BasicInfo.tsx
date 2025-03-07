@@ -10,6 +10,7 @@ import {
 import { AddToDatasetButton } from "./AddToDatasetButton";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
+import { FunctionInfo } from "~/components/function/FunctionInfo";
 
 const FF_ENABLE_DATASETS =
   import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
@@ -57,11 +58,10 @@ export default function BasicInfo({
         <dl className="grid grid-cols-2 gap-4">
           <div>
             <dt className="text-lg font-semibold">Function</dt>
-            <dd>
-              <Link to={`/observability/functions/${inference.function_name}`}>
-                <Code>{inference.function_name}</Code>
-              </Link>
-            </dd>
+            <FunctionInfo
+              functionName={inference.function_name}
+              functionType={inference.function_type}
+            />
           </div>
           <div>
             <dt className="text-lg font-semibold">Variant</dt>
