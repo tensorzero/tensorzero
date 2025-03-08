@@ -999,7 +999,8 @@ impl From<GCPVertexGeminiFinishReason> for FinishReason {
 struct GCPVertexGeminiResponseCandidate {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<GCPVertexGeminiResponseContent>,
-    finish_reason: GCPVertexGeminiFinishReason,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    finish_reason: Option<GCPVertexGeminiFinishReason>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1097,7 +1098,9 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
                 raw_response,
                 usage,
                 latency,
-                finish_reason: Some(first_candidate.finish_reason.into()),
+                finish_reason: first_candidate
+                    .finish_reason
+                    .map(|finish_reason| finish_reason.into()),
             },
         ))
     }
@@ -1148,7 +1151,9 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceRes
                 .map(|usage_metadata| usage_metadata.into()),
             raw,
             latency,
-            Some(first_candidate.finish_reason.into()),
+            first_candidate
+                .finish_reason
+                .map(|finish_reason| finish_reason.into()),
         ))
     }
 }
@@ -1647,7 +1652,7 @@ mod tests {
         let content = GCPVertexGeminiResponseContent { parts: vec![part] };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
-            finish_reason: GCPVertexGeminiFinishReason::Stop,
+            finish_reason: Some(GCPVertexGeminiFinishReason::Stop),
         };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
@@ -1729,7 +1734,7 @@ mod tests {
         };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
-            finish_reason: GCPVertexGeminiFinishReason::Stop,
+            finish_reason: Some(GCPVertexGeminiFinishReason::Stop),
         };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
@@ -1840,7 +1845,7 @@ mod tests {
         };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
-            finish_reason: GCPVertexGeminiFinishReason::Stop,
+            finish_reason: Some(GCPVertexGeminiFinishReason::Stop),
         };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],

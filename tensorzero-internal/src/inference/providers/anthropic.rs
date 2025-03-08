@@ -845,7 +845,7 @@ struct AnthropicResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum AnthropicStopReason {
     EndTurn,
     MaxTokens,

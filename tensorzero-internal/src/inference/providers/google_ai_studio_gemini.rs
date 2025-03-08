@@ -800,10 +800,12 @@ impl From<GeminiFinishReason> for FinishReason {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct GeminiResponseCandidate {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<GeminiResponseContent>,
-    finish_reason: GeminiFinishReason,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    finish_reason: Option<GeminiFinishReason>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -900,7 +902,9 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_response: raw_response.clone(),
                 usage,
                 latency,
-                finish_reason: Some(first_candidate.finish_reason.into()),
+                finish_reason: first_candidate
+                    .finish_reason
+                    .map(|finish_reason| finish_reason.into()),
             },
         ))
     }
@@ -951,7 +955,9 @@ impl TryFrom<GoogleAIStudioGeminiResponseWithMetadata> for ProviderInferenceResp
                 .map(|usage_metadata| usage_metadata.into()),
             raw,
             latency,
-            Some(first_candidate.finish_reason.into()),
+            first_candidate
+                .finish_reason
+                .map(|finish_reason| finish_reason.into()),
         ))
     }
 }
@@ -1334,7 +1340,7 @@ mod tests {
         let content = GeminiResponseContent { parts: vec![part] };
         let candidate = GeminiResponseCandidate {
             content: Some(content),
-            finish_reason: GeminiFinishReason::Stop,
+            finish_reason: Some(GeminiFinishReason::Stop),
         };
         let response = GeminiResponse {
             candidates: vec![candidate],
@@ -1422,7 +1428,7 @@ mod tests {
         };
         let candidate = GeminiResponseCandidate {
             content: Some(content),
-            finish_reason: GeminiFinishReason::Stop,
+            finish_reason: Some(GeminiFinishReason::Stop),
         };
         let response = GeminiResponse {
             candidates: vec![candidate],
@@ -1534,7 +1540,7 @@ mod tests {
         };
         let candidate = GeminiResponseCandidate {
             content: Some(content),
-            finish_reason: GeminiFinishReason::Stop,
+            finish_reason: Some(GeminiFinishReason::Stop),
         };
         let response = GeminiResponse {
             candidates: vec![candidate],

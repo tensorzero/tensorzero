@@ -321,7 +321,8 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
                 raw_request,
                 raw_response,
                 input_tokens,
-                output_tokens
+                output_tokens,
+                finish_reason
             FROM ModelInferenceCache
             WHERE short_cache_key = {short_cache_key:UInt64}
                 AND long_cache_key = {long_cache_key:String}
@@ -337,7 +338,8 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
                 raw_request,
                 raw_response,
                 input_tokens,
-                output_tokens
+                output_tokens,
+                finish_reason
             FROM ModelInferenceCache
             WHERE short_cache_key = {short_cache_key:UInt64}
                 AND long_cache_key = {long_cache_key:String}

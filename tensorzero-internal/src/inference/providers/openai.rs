@@ -4,7 +4,8 @@ use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use serde::de::IntoDeserializer;
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -1616,10 +1617,33 @@ struct OpenAIDelta {
     tool_calls: Option<Vec<OpenAIToolCallChunk>>,
 }
 
-// This doesn't include logprobs, finish_reason, and index
+// Custom deserializer function for empty string to None
+// This is required because SGLang (which depends on this code) returns "" in streaming chunks instead of null
+fn empty_string_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    let opt = Option::<String>::deserialize(deserializer)?;
+    if let Some(s) = opt {
+        if s.is_empty() {
+            return Ok(None);
+        }
+        // Convert serde_json::Error to D::Error
+        Ok(Some(
+            T::deserialize(serde_json::Value::String(s).into_deserializer())
+                .map_err(|e| serde::de::Error::custom(e.to_string()))?,
+        ))
+    } else {
+        Ok(None)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIChatChunkChoice {
     delta: OpenAIDelta,
+    #[serde(default)]
+    #[serde(deserialize_with = "empty_string_as_none")]
     finish_reason: Option<OpenAIFinishReason>,
 }
 
