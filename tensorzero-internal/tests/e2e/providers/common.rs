@@ -8769,6 +8769,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     check_short_inference_response(response_json, Some(episode_id), &provider, true).await;
 }
 
+#[cfg(feature = "e2e_tests")]
 async fn check_short_inference_response(
     response_json: Value,
     episode_id: Option<Uuid>,
