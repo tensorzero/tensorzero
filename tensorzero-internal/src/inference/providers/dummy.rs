@@ -326,6 +326,10 @@ impl InferenceProvider for DummyProvider {
         };
         let system = request.system.clone();
         let input_messages = request.messages.clone();
+        let finish_reason = match self.model_name.contains("tool") {
+            true => Some(FinishReason::ToolCall),
+            false => Some(FinishReason::Stop),
+        };
         Ok(ProviderInferenceResponse {
             id,
             created,
@@ -336,7 +340,7 @@ impl InferenceProvider for DummyProvider {
             latency,
             system,
             input_messages,
-            finish_reason: Some(FinishReason::Stop),
+            finish_reason,
         })
     }
 
@@ -412,6 +416,10 @@ impl InferenceProvider for DummyProvider {
 
         let total_tokens = content_chunks.len() as u32;
         let content_chunk_len = content_chunks.len();
+        let finish_reason = match is_tool_call {
+            true => Some(FinishReason::ToolCall),
+            false => Some(FinishReason::Stop),
+        };
         let stream: ProviderInferenceResponseStreamInner = Box::pin(
             tokio_stream::iter(content_chunks.into_iter().enumerate())
                 .map(move |(i, chunk)| {
@@ -451,7 +459,7 @@ impl InferenceProvider for DummyProvider {
                         input_tokens: 10,
                         output_tokens: total_tokens,
                     }),
-                    finish_reason: Some(FinishReason::Stop),
+                    finish_reason,
                     raw_response: "".to_string(),
                     latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
                 })))

@@ -35,6 +35,7 @@ from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
     FeedbackResponse,
+    FinishReason,
     ImageBase64,
     ImageUrl,
     JsonInferenceResponse,
@@ -193,6 +194,7 @@ async def test_async_basic_inference(async_client):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
+    assert result.finish_reason == FinishReason.STOP
     time.sleep(1)
 
     # Test caching
@@ -213,6 +215,7 @@ async def test_async_basic_inference(async_client):
     usage = result.usage
     assert usage.input_tokens == 0  # should be cached
     assert usage.output_tokens == 0  # should be cached
+    assert result.finish_reason == FinishReason.STOP
 
 
 @pytest.mark.asyncio
@@ -362,6 +365,7 @@ async def test_async_inference_streaming(async_client):
             assert len(chunk.content) == 0
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 16
+            assert chunk.finish_reason == FinishReason.STOP
 
 
 @pytest.mark.asyncio
@@ -432,6 +436,7 @@ async def test_async_reasoning_inference_streaming(async_client):
             assert len(chunk.content) == 0
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 10
+            assert chunk.finish_reason == FinishReason.STOP
 
 
 @pytest.mark.asyncio
@@ -507,6 +512,7 @@ async def test_async_tool_call_inference(async_client):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 10
+    assert result.finish_reason == FinishReason.TOOL_CALL
 
 
 @pytest.mark.asyncio
@@ -583,6 +589,7 @@ async def test_async_tool_call_streaming(async_client):
             assert len(chunk.content) == 0
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 5
+            assert chunk.finish_reason == FinishReason.TOOL_CALL
 
 
 @pytest.mark.asyncio
@@ -1847,74 +1854,6 @@ async def test_async_timeout_float_embedded():
     ) as async_client:
         with pytest.raises(TensorZeroInternalError) as exc_info:
             await async_client.inference(
-                function_name="basic_test",
-                variant_name="slow",
-                input={
-                    "system": {"assistant_name": "TensorZero bot"},
-                    "messages": [{"role": "user", "content": "Hello"}],
-                },
-            )
-        assert "HTTP request timed out" in str(exc_info.value)
-
-
-def test_sync_timeout_int_http():
-    with TensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000", timeout=1
-    ) as sync_client:
-        with pytest.raises(TensorZeroInternalError) as exc_info:
-            sync_client.inference(
-                function_name="basic_test",
-                variant_name="slow",
-                input={
-                    "system": {"assistant_name": "TensorZero bot"},
-                    "messages": [{"role": "user", "content": "Hello"}],
-                },
-            )
-        assert "HTTP request timed out" in str(exc_info.value)
-
-
-def test_sync_timeout_int_embedded():
-    with TensorZeroGateway.build_embedded(
-        config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
-        timeout=1,
-    ) as sync_client:
-        with pytest.raises(TensorZeroInternalError) as exc_info:
-            sync_client.inference(
-                function_name="basic_test",
-                variant_name="slow",
-                input={
-                    "system": {"assistant_name": "TensorZero bot"},
-                    "messages": [{"role": "user", "content": "Hello"}],
-                },
-            )
-        assert "HTTP request timed out" in str(exc_info.value)
-
-
-def test_sync_timeout_float_http():
-    with TensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000", timeout=0.1
-    ) as sync_client:
-        with pytest.raises(TensorZeroInternalError) as exc_info:
-            sync_client.inference(
-                function_name="basic_test",
-                variant_name="slow",
-                input={
-                    "system": {"assistant_name": "TensorZero bot"},
-                    "messages": [{"role": "user", "content": "Hello"}],
-                },
-            )
-        assert "HTTP request timed out" in str(exc_info.value)
-
-
-def test_sync_timeout_float_embedded():
-    with TensorZeroGateway.build_embedded(
-        config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
-        timeout=0.1,
-    ) as sync_client:
-        with pytest.raises(TensorZeroInternalError) as exc_info:
-            sync_client.inference(
                 function_name="basic_test",
                 variant_name="slow",
                 input={

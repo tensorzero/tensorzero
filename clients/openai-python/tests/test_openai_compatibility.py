@@ -64,6 +64,7 @@ async def test_async_basic_inference_old_model_format(async_client):
     assert usage.prompt_tokens == 10
     assert usage.completion_tokens == 10
     assert usage.total_tokens == 20
+    assert result.choices[0].finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -90,6 +91,7 @@ async def test_async_basic_inference(async_client):
     assert usage.prompt_tokens == 10
     assert usage.completion_tokens == 10
     assert usage.total_tokens == 20
+    assert result.choices[0].finish_reason == "stop"
 
 
 class DummyModel(BaseModel):
@@ -170,11 +172,13 @@ async def test_async_inference_streaming(async_client):
         if i + 1 < len(chunks):
             assert len(chunk.choices) == 1
             assert chunk.choices[0].delta.content == expected_text[i]
+            assert chunk.choices[0].finish_reason is None
         else:
             assert chunk.choices[0].delta.content is None
             assert chunk.usage.prompt_tokens == 10
             assert chunk.usage.completion_tokens == 16
             assert chunk.usage.total_tokens == 26
+            assert chunk.choices[0].finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -307,6 +311,7 @@ async def test_async_tool_call_inference(async_client):
     usage = result.usage
     assert usage.prompt_tokens == 10
     assert usage.completion_tokens == 10
+    assert result.choices[0].finish_reason == "tool_calls"
 
 
 @pytest.mark.asyncio
@@ -388,6 +393,7 @@ async def test_async_tool_call_streaming(async_client):
             assert len(chunk.choices[0].delta.tool_calls) == 0
             assert chunk.usage.prompt_tokens == 10
             assert chunk.usage.completion_tokens == 5
+            assert chunk.choices[0].finish_reason == "tool_calls"
 
 
 @pytest.mark.asyncio
