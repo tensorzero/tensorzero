@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::TensorZeroClientWithSemaphore;
 
-pub async fn run_llm_judge_evaluator(
+pub(crate) async fn run_llm_judge_evaluator(
     inference_response: &InferenceResponse,
     datapoint: &Datapoint,
     tensorzero_client: &TensorZeroClientWithSemaphore,
