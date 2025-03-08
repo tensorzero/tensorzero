@@ -814,29 +814,31 @@ impl ModelInferenceDatabaseInsert {
     }
 }
 
+pub struct ProviderInferenceResponseArgs {
+    pub output: Vec<ContentBlockOutput>,
+    pub system: Option<String>,
+    pub input_messages: Vec<RequestMessage>,
+    pub raw_request: String,
+    pub raw_response: String,
+    pub usage: Usage,
+    pub latency: Latency,
+    pub finish_reason: Option<FinishReason>,
+}
+
 impl ProviderInferenceResponse {
-    pub fn new(
-        output: Vec<ContentBlockOutput>,
-        system: Option<String>,
-        input_messages: Vec<RequestMessage>,
-        raw_request: String,
-        raw_response: String,
-        usage: Usage,
-        latency: Latency,
-        finish_reason: Option<FinishReason>,
-    ) -> Self {
-        let sanitized_raw_request = sanitize_raw_request(&input_messages, raw_request);
+    pub fn new(args: ProviderInferenceResponseArgs) -> Self {
+        let sanitized_raw_request = sanitize_raw_request(&args.input_messages, args.raw_request);
         Self {
             id: Uuid::now_v7(),
             created: current_timestamp(),
-            output,
-            system,
-            input_messages,
+            output: args.output,
+            system: args.system,
+            input_messages: args.input_messages,
             raw_request: sanitized_raw_request,
-            raw_response,
-            usage,
-            latency,
-            finish_reason,
+            raw_response: args.raw_response,
+            usage: args.usage,
+            latency: args.latency,
+            finish_reason: args.finish_reason,
         }
     }
 }
@@ -967,14 +969,13 @@ impl ChatInferenceResult {
 
 /// Get the finish reason from the last model inference result sorted by created time (or None if it is not present)
 fn get_finish_reason(
-    model_inference_results: &Vec<ModelInferenceResponseWithMetadata>,
+    model_inference_results: &[ModelInferenceResponseWithMetadata],
 ) -> Option<FinishReason> {
     model_inference_results
         .iter()
         .sorted_by_key(|r| r.created)
         .last()
-        .map(|r| r.finish_reason.clone())
-        .flatten()
+        .and_then(|r| r.finish_reason.clone())
 }
 
 pub async fn parse_chat_output(
@@ -1401,16 +1402,16 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
     let mut content_blocks: Vec<ContentBlockOutput> = tool_call_blocks.into_values().collect();
     content_blocks.extend(thought_blocks.into_values());
     content_blocks.extend(text_blocks.into_values());
-    let model_response = ProviderInferenceResponse::new(
-        content_blocks.clone(),
+    let model_response = ProviderInferenceResponse::new(ProviderInferenceResponseArgs {
+        output: content_blocks.clone(),
         system,
         input_messages,
         raw_request,
         raw_response,
-        usage.clone(),
-        latency.clone(),
+        usage: usage.clone(),
+        latency: latency.clone(),
         finish_reason,
-    );
+    });
     let model_inference_response =
         ModelInferenceResponse::new(model_response, model_provider_name, cached);
     let original_response = model_inference_response.raw_response.clone();
@@ -2723,7 +2724,7 @@ mod tests {
                 created,
                 usage: Some(usage2.clone()),
                 finish_reason: Some(FinishReason::ToolCall),
-                raw_response: "\"John\",\"age\":30}".to_strng(),
+                raw_response: "\"John\",\"age\":30}".to_string(),
                 latency: Duration::from_millis(250),
             }),
         ];

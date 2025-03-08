@@ -23,7 +23,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
@@ -397,14 +397,16 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            input_messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
-            Some(finish_reason.into()),
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                usage,
+                latency,
+                finish_reason: Some(finish_reason.into()),
+            },
         ))
     }
 }
@@ -442,7 +444,9 @@ mod tests {
     use crate::inference::{
         providers::{
             common::WEATHER_TOOL_CONFIG,
-            openai::{OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage},
+            openai::{
+                OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
+            },
         },
         types::{FunctionType, RequestMessage, Role},
     };
@@ -559,7 +563,7 @@ mod tests {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
-                finish_reason: Some(OpenAIFinishReason::Stop),
+                finish_reason: OpenAIFinishReason::Stop,
             }],
             usage: OpenAIUsage {
                 prompt_tokens: 10,

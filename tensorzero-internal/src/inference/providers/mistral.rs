@@ -17,7 +17,7 @@ use crate::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
         ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-        ProviderInferenceResponse, ProviderInferenceResponseChunk,
+        ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStreamInner, TextChunk, Usage,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
@@ -648,14 +648,16 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            input_messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
-            Some(finish_reason.into()),
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                usage,
+                latency,
+                finish_reason: Some(finish_reason.into()),
+            },
         ))
     }
 }

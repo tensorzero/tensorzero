@@ -36,7 +36,7 @@ use crate::inference::types::batch::{
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Usage,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
@@ -481,14 +481,16 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            input_messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
-            finish_reason.map(|r| r.into()),
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                usage,
+                latency,
+                finish_reason: finish_reason.map(|r| r.into()),
+            },
         ))
     }
 }
@@ -898,9 +900,9 @@ mod tests {
             vec![ContentBlockChunk::Text(TextChunk {
                 text: "Hello".to_string(),
                 id: "0".to_string(),
-            })],
-            finish_reason: Some(FinishReason::Stop),
+            })]
         );
+        assert_eq!(message.finish_reason, Some(FinishReason::Stop));
     }
     #[test]
     fn test_tgi_response_with_metadata_try_into() {

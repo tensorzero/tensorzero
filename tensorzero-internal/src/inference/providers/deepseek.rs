@@ -18,8 +18,8 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ProviderInferenceResponse,
 };
 use crate::inference::types::{
-    ContentBlockChunk, ContentBlockOutput, ProviderInferenceResponseStreamInner, TextChunk,
-    Thought, ThoughtChunk,
+    ContentBlockChunk, ContentBlockOutput, ProviderInferenceResponseArgs,
+    ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,
 };
 use crate::inference::types::{
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
@@ -692,14 +692,16 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
-            finish_reason.map(|r| r.into()),
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages: messages,
+                raw_request,
+                raw_response,
+                usage,
+                latency,
+                finish_reason: finish_reason.map(|r| r.into()),
+            },
         ))
     }
 }

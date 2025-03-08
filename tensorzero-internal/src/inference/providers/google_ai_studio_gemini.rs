@@ -25,7 +25,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
-    ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
@@ -778,7 +778,7 @@ enum GeminiFinishReason {
     Blocklist,
     ProhibitedContent,
     #[serde(rename = "SPII")]
-    SPII,
+    Spii,
     MalformedFunctionCall,
 }
 
@@ -792,7 +792,7 @@ impl From<GeminiFinishReason> for FinishReason {
             GeminiFinishReason::Other => FinishReason::Unknown,
             GeminiFinishReason::Blocklist => FinishReason::ContentFilter,
             GeminiFinishReason::ProhibitedContent => FinishReason::ContentFilter,
-            GeminiFinishReason::SPII => FinishReason::ContentFilter,
+            GeminiFinishReason::Spii => FinishReason::ContentFilter,
             GeminiFinishReason::MalformedFunctionCall => FinishReason::ToolCall,
             GeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown,
         }
@@ -892,14 +892,16 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
-            Some(first_candidate.finish_reason.into()),
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages: messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                usage,
+                latency,
+                finish_reason: Some(first_candidate.finish_reason.into()),
+            },
         ))
     }
 }

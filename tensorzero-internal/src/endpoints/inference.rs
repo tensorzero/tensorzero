@@ -780,6 +780,8 @@ pub struct ChatInferenceResponse {
     pub usage: Usage,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -791,6 +793,8 @@ pub struct JsonInferenceResponse {
     pub usage: Usage,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
 }
 
 impl InferenceResponse {
@@ -803,6 +807,7 @@ impl InferenceResponse {
                 content: result.content,
                 usage: result.usage,
                 original_response: result.original_response,
+                finish_reason: result.finish_reason,
             }),
             InferenceResult::Json(result) => InferenceResponse::Json(JsonInferenceResponse {
                 inference_id: result.inference_id,
@@ -811,6 +816,7 @@ impl InferenceResponse {
                 output: result.output,
                 usage: result.usage,
                 original_response: result.original_response,
+                finish_reason: result.finish_reason,
             }),
         }
     }

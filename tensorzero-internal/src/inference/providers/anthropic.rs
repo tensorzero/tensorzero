@@ -25,8 +25,8 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ImageKind, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
-    TextChunk, Usage,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Usage,
 };
 use crate::model::{
     build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
@@ -917,17 +917,19 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
         };
 
         Ok(ProviderInferenceResponse::new(
-            content,
-            request_body
-                .get("system")
-                .and_then(|s| s.as_str())
-                .map(|s| s.to_owned()),
-            input_messages,
-            raw_request,
-            raw_response,
-            response.usage.into(),
-            latency,
-            response.stop_reason.map(|s| s.into()),
+            ProviderInferenceResponseArgs {
+                output: content,
+                system: request_body
+                    .get("system")
+                    .and_then(|s| s.as_str())
+                    .map(|s| s.to_owned()),
+                input_messages,
+                raw_request,
+                raw_response,
+                usage: response.usage.into(),
+                latency,
+                finish_reason: response.stop_reason.map(|s| s.into()),
+            },
         ))
     }
 }
@@ -1892,7 +1894,7 @@ mod tests {
                 text: "Response text".to_string(),
             })],
             model: "model-name".into(),
-            stop_reason: Some(AnthropicStopReason::Stop),
+            stop_reason: Some(AnthropicStopReason::EndTurn),
             stop_sequence: Some("stop sequence".to_string()),
             usage: AnthropicUsage {
                 input_tokens: 100,

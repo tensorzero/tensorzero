@@ -30,7 +30,6 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::FinishReason;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, FunctionType, Latency, ModelInferenceRequest,
@@ -38,6 +37,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, TextChunk, Usage,
 };
+use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs};
 use crate::model::{ModelProvider, ModelProviderRequestInfo};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 use crate::variant::chat_completion::ExtraBodyConfig;
@@ -878,14 +878,16 @@ impl TryFrom<ConverseOutputWithMetadata<'_>> for ProviderInferenceResponse {
             })?;
 
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            input_messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
-            aws_stop_reason_to_tensorzero_finish_reason(output.stop_reason),
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response,
+                usage,
+                latency,
+                finish_reason: aws_stop_reason_to_tensorzero_finish_reason(output.stop_reason),
+            },
         ))
     }
 }

@@ -17,6 +17,7 @@ use crate::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+        ProviderInferenceResponseArgs,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
 };
@@ -460,14 +461,16 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            input_messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
-            Some(finish_reason.into()),
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response,
+                usage,
+                latency,
+                finish_reason: Some(finish_reason.into()),
+            },
         ))
     }
 }

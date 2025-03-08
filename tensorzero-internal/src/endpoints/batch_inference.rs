@@ -31,8 +31,8 @@ use crate::inference::types::batch::{
 use crate::inference::types::{batch::StartBatchModelInferenceWithMetadata, Input};
 use crate::inference::types::{
     current_timestamp, ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext,
-    InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert, JsonInferenceOutput,
-    Latency, ModelInferenceResponseWithMetadata, Usage,
+    FinishReason, InferenceDatabaseInsert, InferenceResult, JsonInferenceDatabaseInsert,
+    JsonInferenceOutput, Latency, ModelInferenceResponseWithMetadata, Usage,
 };
 use crate::inference::types::{RequestMessage, ResolvedInput};
 use crate::jsonschema_util::DynamicJSONSchema;
@@ -975,7 +975,8 @@ pub async fn get_completed_batch_inference_response(
                         ci.variant_name as variant_name,
                         ci.output as output,
                         toUInt32(SUM(mi.input_tokens)) as input_tokens,
-                        toUInt32(SUM(mi.output_tokens)) as output_tokens
+                        toUInt32(SUM(mi.output_tokens)) as output_tokens,
+                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
                     FROM ChatInference ci
                     LEFT JOIN ModelInference mi ON ci.id = mi.inference_id
                     WHERE ci.id IN (SELECT inference_id FROM batch_inferences)
@@ -1018,7 +1019,8 @@ pub async fn get_completed_batch_inference_response(
                         ci.variant_name as variant_name,
                         ci.output as output,
                         toUInt32(SUM(mi.input_tokens)) as input_tokens,
-                        toUInt32(SUM(mi.output_tokens)) as output_tokens
+                        toUInt32(SUM(mi.output_tokens)) as output_tokens,
+                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
                     FROM ChatInference ci \
                     LEFT JOIN ModelInference mi ON ci.id = mi.inference_id \
                     JOIN inf_lookup ON ci.episode_id = inf_lookup.episode_id \
@@ -1068,7 +1070,8 @@ pub async fn get_completed_batch_inference_response(
                         ji.variant_name as variant_name,
                         ji.output as output,
                         toUInt32(SUM(mi.input_tokens)) as input_tokens,
-                        toUInt32(SUM(mi.output_tokens)) as output_tokens
+                        toUInt32(SUM(mi.output_tokens)) as output_tokens,
+                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
                     FROM JsonInference ji
                     LEFT JOIN ModelInference mi ON ji.id = mi.inference_id
                     WHERE ji.id IN (SELECT inference_id FROM batch_inferences)
@@ -1111,7 +1114,8 @@ pub async fn get_completed_batch_inference_response(
                         ji.variant_name as variant_name,
                         ji.output as output,
                         toUInt32(SUM(mi.input_tokens)) as input_tokens,
-                        toUInt32(SUM(mi.output_tokens)) as output_tokens
+                        toUInt32(SUM(mi.output_tokens)) as output_tokens,
+                        argMax(mi.finish_reason, toUInt128(mi.id)) as finish_reason
                     FROM JsonInference ji \
                     LEFT JOIN ModelInference mi ON ji.id = mi.inference_id \
                     JOIN inf_lookup ON ji.episode_id = inf_lookup.episode_id \
@@ -1156,6 +1160,7 @@ struct ChatInferenceResponseDatabaseRead {
     pub output: String,
     pub input_tokens: u32,
     pub output_tokens: u32,
+    pub finish_reason: Option<FinishReason>,
 }
 
 impl TryFrom<ChatInferenceResponseDatabaseRead> for ChatInferenceResponse {
@@ -1180,6 +1185,7 @@ impl TryFrom<ChatInferenceResponseDatabaseRead> for ChatInferenceResponse {
             usage,
             // This is currently unsupported in the batch API
             original_response: None,
+            finish_reason: value.finish_reason,
         })
     }
 }
@@ -1192,6 +1198,7 @@ struct JsonInferenceResponseDatabaseRead {
     pub output: String,
     pub input_tokens: u32,
     pub output_tokens: u32,
+    pub finish_reason: Option<FinishReason>,
 }
 
 impl TryFrom<JsonInferenceResponseDatabaseRead> for JsonInferenceResponse {
@@ -1215,6 +1222,7 @@ impl TryFrom<JsonInferenceResponseDatabaseRead> for JsonInferenceResponse {
             usage,
             // This is currently unsupported in the batch API
             original_response: None,
+            finish_reason: value.finish_reason,
         })
     }
 }

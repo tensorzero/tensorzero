@@ -33,7 +33,9 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
     TextChunk, Usage,
 };
-use crate::inference::types::{FinishReason, ProviderInferenceResponseStreamInner};
+use crate::inference::types::{
+    FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
+};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -1573,14 +1575,16 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
-            Some(finish_reason.into()),
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages: messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                usage,
+                latency,
+                finish_reason: Some(finish_reason.into()),
+            },
         ))
     }
 }
@@ -2371,7 +2375,7 @@ mod tests {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
-                finish_reason: Some(OpenAIFinishReason::Stop),
+                finish_reason: OpenAIFinishReason::Stop,
             }],
             usage: OpenAIUsage {
                 prompt_tokens: 10,
@@ -2456,7 +2460,7 @@ mod tests {
         let valid_response_with_tools = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
-                finish_reason: Some(OpenAIFinishReason::Stop),
+                finish_reason: OpenAIFinishReason::ToolCalls,
                 message: OpenAIResponseMessage {
                     content: None,
                     tool_calls: Some(vec![OpenAIResponseToolCall {
@@ -2602,11 +2606,11 @@ mod tests {
                         content: Some("Choice 1".to_string()),
                         tool_calls: None,
                     },
-                    finish_reason: Some(OpenAIFinishReason::Stop),
+                    finish_reason: OpenAIFinishReason::Stop,
                 },
                 OpenAIResponseChoice {
                     index: 1,
-                    finish_reason: Some(OpenAIFinishReason::Stop),
+                    finish_reason: OpenAIFinishReason::Stop,
                     message: OpenAIResponseMessage {
                         content: Some("Choice 2".to_string()),
                         tool_calls: None,
@@ -2843,7 +2847,7 @@ mod tests {
         // Test what an intermediate tool chunk should look like
         let chunk = OpenAIChatChunk {
             choices: vec![OpenAIChatChunkChoice {
-                finish_reason: Some(OpenAIFinishReason::ToolCall),
+                finish_reason: Some(OpenAIFinishReason::ToolCalls),
                 delta: OpenAIDelta {
                     content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
