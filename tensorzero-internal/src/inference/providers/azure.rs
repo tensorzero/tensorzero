@@ -485,11 +485,11 @@ mod tests {
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::providers::openai::{
-        OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType, OpenAIUsage,
-        SpecificToolFunction,
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType,
+        OpenAIUsage, SpecificToolFunction,
     };
     use crate::inference::types::{
-        FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
+        FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
 
     #[test]

@@ -986,7 +986,7 @@ pub(crate) struct AnthropicMessageDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) stop_reason: Option<AnthropicStopReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    stop_sequence: Option<String>,
+    pub(crate) stop_sequence: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Serialize)]
@@ -1892,7 +1892,7 @@ mod tests {
                 text: "Response text".to_string(),
             })],
             model: "model-name".into(),
-            stop_reason: Some("stop reason".to_string()),
+            stop_reason: Some(AnthropicStopReason::Stop),
             stop_sequence: Some("stop sequence".to_string()),
             usage: AnthropicUsage {
                 input_tokens: 100,

@@ -770,7 +770,7 @@ mod tests {
         OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
     };
     use crate::inference::types::{
-        FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
+        FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
 
     #[test]

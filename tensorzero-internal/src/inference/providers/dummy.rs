@@ -21,7 +21,7 @@ use crate::inference::types::{
     ContentBlockOutput, Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
-use crate::inference::types::{ContentBlock, ProviderInferenceResponseStreamInner};
+use crate::inference::types::{ContentBlock, FinishReason, ProviderInferenceResponseStreamInner};
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk};
@@ -336,6 +336,7 @@ impl InferenceProvider for DummyProvider {
             latency,
             system,
             input_messages,
+            finish_reason: Some(FinishReason::Stop),
         })
     }
 
@@ -438,6 +439,7 @@ impl InferenceProvider for DummyProvider {
                             })
                         }],
                         usage: None,
+                        finish_reason: None,
                         raw_response: chunk.to_string(),
                         latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                     })
@@ -449,6 +451,7 @@ impl InferenceProvider for DummyProvider {
                         input_tokens: 10,
                         output_tokens: total_tokens,
                     }),
+                    finish_reason: Some(FinishReason::Stop),
                     raw_response: "".to_string(),
                     latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
                 })))
@@ -568,6 +571,7 @@ async fn create_streaming_reasoning_response(
                 usage: None,
                 raw_response: "".to_string(),
                 latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
+                finish_reason: None,
             })
         })
         .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
@@ -577,6 +581,7 @@ async fn create_streaming_reasoning_response(
                 input_tokens: 10,
                 output_tokens: 10,
             }),
+            finish_reason: Some(FinishReason::Stop),
             raw_response: "".to_string(),
             latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
         })))

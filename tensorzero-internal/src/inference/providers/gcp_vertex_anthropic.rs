@@ -1761,7 +1761,7 @@ mod tests {
                 text: "Response text".to_string(),
             }],
             model: "model-name".into(),
-            stop_reason: Some("stop reason".to_string()),
+            stop_reason: Some(AnthropicStopReason::EndTurn),
             stop_sequence: Some("stop sequence".to_string()),
             usage: GCPVertexAnthropic {
                 input_tokens: 100,
@@ -1844,7 +1844,7 @@ mod tests {
                 input: json!({"location": "New York"}),
             }],
             model: "model-name".into(),
-            stop_reason: Some("tool_call".to_string()),
+            stop_reason: Some(AnthropicStopReason::ToolUse),
             stop_sequence: None,
             usage: GCPVertexAnthropic {
                 input_tokens: 100,
@@ -2221,7 +2221,10 @@ mod tests {
 
         // Test MessageDelta with usage
         let message_delta = GCPVertexAnthropicStreamMessage::MessageDelta {
-            delta: json!({}),
+            delta: AnthropicMessageDelta {
+                stop_reason: Some(AnthropicStopReason::EndTurn),
+                stop_sequence: None,
+            },
             usage: json!({"input_tokens": 10, "output_tokens": 20}),
         };
         let latency = Duration::from_millis(140);

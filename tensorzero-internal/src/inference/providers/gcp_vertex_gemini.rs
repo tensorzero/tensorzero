@@ -1726,7 +1726,7 @@ mod tests {
         };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
-            finish_reason: GCPVertexGeminiFinishReason::ToolCall,
+            finish_reason: GCPVertexGeminiFinishReason::Stop,
         };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],

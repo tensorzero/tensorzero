@@ -483,7 +483,8 @@ mod tests {
 
     use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::providers::openai::{
-        OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType, OpenAIUsage,
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType,
+        OpenAIUsage,
     };
     use crate::inference::providers::openai::{SpecificToolChoice, SpecificToolFunction};
     use crate::inference::types::{FunctionType, RequestMessage, Role};
@@ -591,7 +592,7 @@ mod tests {
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
-                finish_reason: Some(OpenAIFinishReason::Stop),
+                finish_reason: OpenAIFinishReason::Stop,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
