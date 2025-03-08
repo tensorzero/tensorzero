@@ -196,6 +196,7 @@ export default function VariantDetails() {
     searchParams.set("time_granularity", granularity);
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
+  const function_type = function_config.type;
   return (
     <div className="container mx-auto px-4 pb-8">
       <PageLayout>
@@ -206,6 +207,7 @@ export default function VariantDetails() {
             <BasicInfo
               variantConfig={variant_config}
               function_name={function_name}
+              function_type={function_type}
             />
           </SectionLayout>
 
