@@ -34,7 +34,7 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
 };
 use crate::inference::types::{
-    ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Usage,
@@ -451,7 +451,11 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .into());
         }
         let usage = response.usage.into();
-        let message = response
+        let TGIResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
@@ -459,8 +463,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: serde_json::to_string(&request_body).ok(),
                 raw_response: Some(raw_response.clone()),
-            }))?
-            .message;
+            }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
@@ -476,15 +479,16 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             })
         })?;
         let system = generic_request.system.clone();
-        let messages = generic_request.messages.clone();
+        let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             content,
             system,
-            messages,
+            input_messages,
             raw_request,
             raw_response,
             usage,
             latency,
+            finish_reason.map(|r| r.into()),
         ))
     }
 }
@@ -560,11 +564,38 @@ struct TGIResponseMessage {
     tool_calls: Option<Vec<TGIResponseToolCall>>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum TGIFinishReason {
+    Stop,
+    Length,
+    ContentFilter,
+    ToolCalls,
+    FunctionCall,
+    #[serde(other)]
+    Unknown,
+}
+
+impl From<TGIFinishReason> for FinishReason {
+    fn from(finish_reason: TGIFinishReason) -> Self {
+        match finish_reason {
+            TGIFinishReason::Stop => FinishReason::Stop,
+            TGIFinishReason::Length => FinishReason::Length,
+            TGIFinishReason::ContentFilter => FinishReason::ContentFilter,
+            TGIFinishReason::ToolCalls => FinishReason::ToolCall,
+            TGIFinishReason::FunctionCall => FinishReason::ToolCall,
+            TGIFinishReason::Unknown => FinishReason::Unknown,
+        }
+    }
+}
+
 // Leaving out logprobs and finish_reason for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct TGIResponseChoice {
     index: u8,
     message: TGIResponseMessage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    finish_reason: Option<TGIFinishReason>,
 }
 
 // Leaving out id, created, model, service_tier, system_fingerprint, object for now
@@ -605,6 +636,7 @@ struct TGIDelta {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct TGIChatChunkChoice {
     delta: TGIDelta,
+    finish_reason: Option<TGIFinishReason>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -638,7 +670,11 @@ fn tgi_to_tensorzero_chunk(
     }
     let usage = chunk.usage.map(|u| u.into());
     let mut content = vec![];
+    let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
+        if let Some(reason) = choice.finish_reason {
+            finish_reason = Some(reason.into());
+        }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {
                 text,
@@ -662,6 +698,7 @@ fn tgi_to_tensorzero_chunk(
         usage,
         raw_message,
         latency,
+        finish_reason,
     ))
 }
 
@@ -847,6 +884,7 @@ mod tests {
     fn test_tgi_to_tensorzero_chunk() {
         let chunk = TGIChatChunk {
             choices: vec![TGIChatChunkChoice {
+                finish_reason: Some(TGIFinishReason::Stop),
                 delta: TGIDelta {
                     content: Some("Hello".to_string()),
                     tool_calls: None,
@@ -861,6 +899,7 @@ mod tests {
                 text: "Hello".to_string(),
                 id: "0".to_string(),
             })],
+            finish_reason: Some(FinishReason::Stop),
         );
     }
     #[test]
@@ -868,6 +907,7 @@ mod tests {
         let valid_response = TGIResponse {
             choices: vec![TGIResponseChoice {
                 index: 0,
+                finish_reason: Some(TGIFinishReason::Stop),
                 message: TGIResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
@@ -920,6 +960,7 @@ mod tests {
         assert_eq!(inference_response.raw_response, "test_response");
         assert_eq!(inference_response.usage.input_tokens, 10);
         assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {

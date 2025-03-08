@@ -24,8 +24,8 @@ use crate::model::{build_creds_caching_default, Credential, CredentialLocation, 
 use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-    stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,
-    StreamOptions,
+    stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
+    OpenAIToolChoice, StreamOptions,
 };
 
 fn default_api_key_location() -> CredentialLocation {
@@ -401,16 +401,20 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
             .into());
         }
-        let message = response
+        let usage = response.usage.into();
+        let OpenAIResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
-            }))?
-            .message;
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
+            }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
@@ -427,17 +431,17 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 message: format!("Error serializing request body as JSON: {e}"),
             })
         })?;
-        let usage = response.usage.into();
         let system = generic_request.system.clone();
-        let messages = generic_request.messages.clone();
+        let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             content,
             system,
-            messages,
+            input_messages,
             raw_request,
             raw_response,
             usage,
             latency,
+            Some(finish_reason.into()),
         ))
     }
 }
@@ -594,6 +598,7 @@ mod tests {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: Some(OpenAIFinishReason::Stop),
             }],
             usage: OpenAIUsage {
                 prompt_tokens: 10,
@@ -644,6 +649,7 @@ mod tests {
         assert_eq!(inference_response.raw_response, "test_response");
         assert_eq!(inference_response.usage.input_tokens, 10);
         assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {

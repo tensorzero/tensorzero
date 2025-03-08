@@ -2602,9 +2602,11 @@ mod tests {
                         content: Some("Choice 1".to_string()),
                         tool_calls: None,
                     },
+                    finish_reason: Some(OpenAIFinishReason::Stop),
                 },
                 OpenAIResponseChoice {
                     index: 1,
+                    finish_reason: Some(OpenAIFinishReason::Stop),
                     message: OpenAIResponseMessage {
                         content: Some("Choice 2".to_string()),
                         tool_calls: None,
@@ -2817,6 +2819,7 @@ mod tests {
                     content: Some("Hello".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: Some(OpenAIFinishReason::Stop),
             }],
             usage: None,
         };
@@ -2836,9 +2839,11 @@ mod tests {
                 id: "0".to_string(),
             })],
         );
+        assert_eq!(message.finish_reason, Some(FinishReason::Stop));
         // Test what an intermediate tool chunk should look like
         let chunk = OpenAIChatChunk {
             choices: vec![OpenAIChatChunkChoice {
+                finish_reason: Some(OpenAIFinishReason::ToolCall),
                 delta: OpenAIDelta {
                     content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
@@ -2868,9 +2873,11 @@ mod tests {
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
+        assert_eq!(message.finish_reason, Some(FinishReason::ToolCall));
         // Test what a bad tool chunk would do (new ID but no names)
         let chunk = OpenAIChatChunk {
             choices: vec![OpenAIChatChunkChoice {
+                finish_reason: None,
                 delta: OpenAIDelta {
                     content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
@@ -2905,6 +2912,7 @@ mod tests {
         // Test a correct new tool chunk
         let chunk = OpenAIChatChunk {
             choices: vec![OpenAIChatChunkChoice {
+                finish_reason: Some(OpenAIFinishReason::Stop),
                 delta: OpenAIDelta {
                     content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
@@ -2934,6 +2942,7 @@ mod tests {
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
+        assert_eq!(message.finish_reason, Some(FinishReason::Stop));
         // Check that the lists were updated
         assert_eq!(tool_call_ids, vec!["id1".to_string(), "id2".to_string()]);
         assert_eq!(

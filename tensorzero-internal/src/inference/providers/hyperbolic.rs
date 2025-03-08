@@ -21,7 +21,7 @@ use url::Url;
 use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
-    OpenAIRequestMessage, OpenAIResponse,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
 };
 use super::provider_trait::InferenceProvider;
 
@@ -358,16 +358,19 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
         }
 
         let usage = response.usage.into();
-        let message = response
+        let OpenAIResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }))?
-            .message;
+            }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
@@ -383,15 +386,16 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
             })
         })?;
         let system = generic_request.system.clone();
-        let messages = generic_request.messages.clone();
+        let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
             content,
             system,
-            messages,
+            input_messages,
             raw_request,
             raw_response,
             usage,
             latency,
+            Some(finish_reason.into()),
         ))
     }
 }
@@ -489,6 +493,7 @@ mod tests {
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
+                finish_reason: Some(OpenAIFinishReason::Stop),
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
