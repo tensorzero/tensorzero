@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::ThrottledTensorZeroClient;
 
-pub(crate) async fn run_llm_judge_evaluator(
+pub(super) async fn run_llm_judge_evaluator(
     inference_response: &InferenceResponse,
     datapoint: &Datapoint,
     tensorzero_client: &ThrottledTensorZeroClient,

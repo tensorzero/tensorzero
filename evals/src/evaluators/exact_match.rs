@@ -3,7 +3,7 @@ use serde_json::Value;
 use tensorzero::InferenceResponse;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 
-pub(crate) fn run_exact_match_evaluator(
+pub(super) fn run_exact_match_evaluator(
     inference_response: &InferenceResponse,
     datapoint: &Datapoint,
 ) -> Result<Option<Value>> {
