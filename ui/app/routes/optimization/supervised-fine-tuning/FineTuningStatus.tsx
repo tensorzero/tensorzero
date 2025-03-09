@@ -14,11 +14,13 @@ import {
   MessageSquare,
 } from "lucide-react";
 import type { SFTJobStatus } from "~/utils/supervised_fine_tuning/common";
+import { SFTAnalysis } from "./SFTAnalysis";
 import { ModelBadge } from "~/components/model/ModelBadge";
 import { extractTimestampFromUUIDv7 } from "~/utils/common";
 import { MetadataItem } from "./MetadataItem";
 import { RawDataAccordion } from "./RawDataAccordion";
 import { ProgressIndicator } from "./ProgressIndicator";
+import { Separator } from "~/components/ui/separator";
 
 export default function LLMFineTuningStatus({
   status,
@@ -81,6 +83,19 @@ export default function LLMFineTuningStatus({
             isRaw
           />
         </div>
+        <a
+          href={status.jobUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center text-primary hover:underline"
+        >
+          View Job Details
+          <ExternalLink className="ml-1 h-4 w-4" />
+        </a>
+
+        <Separator />
+
+        <SFTAnalysis status={status} />
 
         {/* hide if not available from provider, eg fireworks */}
         {status.status === "running" &&
@@ -94,15 +109,6 @@ export default function LLMFineTuningStatus({
             </div>
           )}
 
-        <a
-          href={status.jobUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center text-primary hover:underline"
-        >
-          View Job Details
-          <ExternalLink className="ml-1 h-4 w-4" />
-        </a>
         <RawDataAccordion rawData={status.rawData} />
       </div>
     </div>
