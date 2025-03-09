@@ -15,12 +15,12 @@ use tensorzero_internal::inference::types::{
 };
 use uuid::Uuid;
 
-use crate::TensorZeroClientWithSemaphore;
+use crate::ThrottledTensorZeroClient;
 
 pub(crate) async fn run_llm_judge_evaluator(
     inference_response: &InferenceResponse,
     datapoint: &Datapoint,
-    tensorzero_client: &TensorZeroClientWithSemaphore,
+    tensorzero_client: &ThrottledTensorZeroClient,
     llm_judge_config: &LLMJudgeConfig,
     eval_name: &str,
     evaluator_name: &str,

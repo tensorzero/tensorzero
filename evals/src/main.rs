@@ -6,7 +6,7 @@ use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use evals::evaluators::evaluate_inference;
 use evals::helpers::{get_tool_params_args, resolved_input_to_input};
-use evals::TensorZeroClientWithSemaphore;
+use evals::ThrottledTensorZeroClient;
 use tensorzero::{
     CacheParamsOptions, ClientBuilder, ClientBuilderMode, ClientInferenceParams, DynamicToolParams,
     InferenceOutput, InferenceParams, InferenceResponse,
@@ -91,10 +91,8 @@ async fn main() -> Result<()> {
     .build()
     .await
     .map_err(|e| anyhow!("Failed to build client: {}", e))?;
-    let tensorzero_client_with_semaphore = Arc::new(TensorZeroClientWithSemaphore::new(
-        tensorzero_client,
-        semaphore,
-    ));
+    let tensorzero_client_with_semaphore =
+        Arc::new(ThrottledTensorZeroClient::new(tensorzero_client, semaphore));
 
     let clickhouse_client = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
     let mut join_set = JoinSet::new();
@@ -170,7 +168,7 @@ async fn main() -> Result<()> {
 }
 
 async fn infer_datapoint(
-    tensorzero_client: &TensorZeroClientWithSemaphore,
+    tensorzero_client: &ThrottledTensorZeroClient,
     function_name: &str,
     variant_name: &str,
     eval_run_id: Uuid,

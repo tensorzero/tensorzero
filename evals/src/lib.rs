@@ -6,12 +6,12 @@ pub mod dataset;
 pub mod evaluators;
 pub mod helpers;
 
-pub struct TensorZeroClientWithSemaphore {
+pub struct ThrottledTensorZeroClient {
     client: Client,
     semaphore: Semaphore,
 }
 
-impl TensorZeroClientWithSemaphore {
+impl ThrottledTensorZeroClient {
     pub fn new(client: Client, semaphore: Semaphore) -> Self {
         Self { client, semaphore }
     }

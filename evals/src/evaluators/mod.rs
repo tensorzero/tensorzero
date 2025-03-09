@@ -14,7 +14,7 @@ mod llm_judge;
 use llm_judge::run_llm_judge_evaluator;
 use uuid::Uuid;
 
-use crate::TensorZeroClientWithSemaphore;
+use crate::ThrottledTensorZeroClient;
 
 pub type EvalResult = HashMap<String, Value>;
 
@@ -23,7 +23,7 @@ pub async fn evaluate_inference(
     datapoint: &Datapoint,
     eval_config: &EvalConfig,
     eval_name: &str,
-    tensorzero_client: &TensorZeroClientWithSemaphore,
+    tensorzero_client: &ThrottledTensorZeroClient,
     eval_run_id: Uuid,
 ) -> Result<EvalResult> {
     let mut results = EvalResult::new();
@@ -61,7 +61,7 @@ pub async fn evaluate_inference(
 async fn run_evaluator(
     evaluator_config: &EvaluatorConfig,
     inference_response: &InferenceResponse,
-    tensorzero_client: &TensorZeroClientWithSemaphore,
+    tensorzero_client: &ThrottledTensorZeroClient,
     datapoint: &Datapoint,
     eval_name: &str,
     evaluator_name: &str,
