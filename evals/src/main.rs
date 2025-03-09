@@ -115,30 +115,33 @@ async fn main() -> Result<()> {
         let eval_config = eval_config.clone();
         let eval_name = eval_name.clone();
         let eval_run_id_clone = eval_run_id;
+        let datapoint = Arc::new(datapoint);
 
         join_set.spawn(async move {
-            let inference_response = infer_datapoint(
-                &client_clone,
-                &eval_config.function_name,
-                &variant,
-                eval_run_id_clone,
-                &datapoint,
-                &function_config,
-            )
-            .await?;
+            let inference_response = Arc::new(
+                infer_datapoint(
+                    &client_clone,
+                    &eval_config.function_name,
+                    &variant,
+                    eval_run_id_clone,
+                    &datapoint,
+                    &function_config,
+                )
+                .await?,
+            );
 
             let eval_result = evaluate_inference(
-                &inference_response,
-                &datapoint,
-                &eval_config,
-                &eval_name,
-                &client_clone,
+                inference_response.clone(),
+                datapoint,
+                eval_config,
+                eval_name,
+                client_clone,
                 eval_run_id_clone,
             )
             .await?;
 
             Ok::<(InferenceResponse, evals::evaluators::EvalResult), anyhow::Error>((
-                inference_response,
+                Arc::into_inner(inference_response).ok_or_else(|| anyhow!("Failed to get inference response for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
                 eval_result,
             ))
         });
