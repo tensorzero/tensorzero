@@ -18,6 +18,12 @@ use crate::ThrottledTensorZeroClient;
 
 pub type EvalResult = HashMap<String, Result<Option<Value>>>;
 
+/// Evaluates the inference response for the given datapoint using all the evaluators specified in the eval config.
+/// Returns a map from evaluator name to Result<Option<Value>>.
+/// The semantics of the Result<Option<Value>> are as follows:
+/// - Ok(Some(value)): The evaluator was run successfully and the result was a valid value.
+/// - Ok(None): The evaluator was run successfully but the result was None (if for example the evaluator requires a reference output but none is present).
+/// - Err(e): The evaluator failed to run due to some error (like the LLM Judge failed to infer).
 pub async fn evaluate_inference(
     inference_response: Arc<InferenceResponse>,
     datapoint: Arc<Datapoint>,
@@ -71,6 +77,17 @@ pub async fn evaluate_inference(
     Ok(results)
 }
 
+/// Runs the evaluator specified by evaluator_name on the given inference response and datapoint.
+/// Returns a tuple of (evaluator_name, Result<Option<Value>>).
+/// We return the evaluator_name in the tuple so that if we run this concurrently and take the results in order,
+/// we can match the results to the evaluator_name.
+///
+/// The semantics of the Result<Option<Value>> are as follows:
+/// - Ok(Some(value)): The evaluator was run successfully and the result was a valid value.
+/// - Ok(None): The evaluator was run successfully but the result was None (if for example the evaluator requires a reference output but none is present).
+/// - Err(e): The evaluator failed to run due to some error (like the LLM Judge failed to infer).
+///
+/// NOTE: Each evaluator we implement in the match statement below should follow this contract.
 async fn run_evaluator(
     eval_config: &EvalConfig,
     evaluator_name: String,
