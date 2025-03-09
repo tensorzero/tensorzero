@@ -975,6 +975,8 @@ enum GCPVertexGeminiFinishReason {
     #[serde(rename = "SPII")]
     Spii,
     MalformedFunctionCall,
+    #[serde(other)]
+    Unknown,
 }
 
 impl From<GCPVertexGeminiFinishReason> for FinishReason {
@@ -990,6 +992,7 @@ impl From<GCPVertexGeminiFinishReason> for FinishReason {
             GCPVertexGeminiFinishReason::Spii => FinishReason::ContentFilter,
             GCPVertexGeminiFinishReason::MalformedFunctionCall => FinishReason::ToolCall,
             GCPVertexGeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown,
+            GCPVertexGeminiFinishReason::Unknown => FinishReason::Unknown,
         }
     }
 }

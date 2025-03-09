@@ -780,6 +780,8 @@ enum GeminiFinishReason {
     #[serde(rename = "SPII")]
     Spii,
     MalformedFunctionCall,
+    #[serde(other)]
+    Unknown,
 }
 
 impl From<GeminiFinishReason> for FinishReason {
@@ -795,6 +797,7 @@ impl From<GeminiFinishReason> for FinishReason {
             GeminiFinishReason::Spii => FinishReason::ContentFilter,
             GeminiFinishReason::MalformedFunctionCall => FinishReason::ToolCall,
             GeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown,
+            GeminiFinishReason::Unknown => FinishReason::Unknown,
         }
     }
 }
