@@ -4,11 +4,11 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
 };
+use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -21,7 +21,7 @@ use url::Url;
 use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
-    OpenAIRequestMessage, OpenAIResponse,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
 };
 use super::provider_trait::InferenceProvider;
 
@@ -358,16 +358,19 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
         }
 
         let usage = response.usage.into();
-        let message = response
+        let OpenAIResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }))?
-            .message;
+            }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
@@ -383,15 +386,18 @@ impl<'a> TryFrom<HyperbolicResponseWithMetadata<'a>> for ProviderInferenceRespon
             })
         })?;
         let system = generic_request.system.clone();
-        let messages = generic_request.messages.clone();
+        let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                usage,
+                latency,
+                finish_reason: Some(finish_reason.into()),
+            },
         ))
     }
 }
@@ -407,7 +413,7 @@ mod tests {
 
     use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
     use crate::inference::providers::openai::{
-        OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
     };
     use crate::inference::types::{
         FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
@@ -489,6 +495,7 @@ mod tests {
         let valid_response = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
+                finish_reason: OpenAIFinishReason::Stop,
                 message: OpenAIResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,

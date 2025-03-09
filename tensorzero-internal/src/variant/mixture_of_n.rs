@@ -541,8 +541,8 @@ mod tests {
         inference::{
             providers::dummy::DummyProvider,
             types::{
-                ChatInferenceResult, JsonInferenceOutput, JsonInferenceResult, Latency,
-                ModelInferenceResponseWithMetadata,
+                ChatInferenceResult, FinishReason, JsonInferenceOutput, JsonInferenceResult,
+                Latency, ModelInferenceResponseWithMetadata,
             },
         },
         jsonschema_util::JSONSchemaFromPath,
@@ -714,6 +714,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            finish_reason: Some(FinishReason::Stop),
             cached: false,
         };
 
@@ -750,6 +751,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
+            finish_reason: Some(FinishReason::Stop),
             cached: false,
         };
 
@@ -814,6 +816,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            finish_reason: Some(FinishReason::Stop),
             cached: false,
         };
 
@@ -850,6 +853,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
+            finish_reason: Some(FinishReason::Stop),
             cached: false,
         };
 
@@ -927,6 +931,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
+            finish_reason: Some(FinishReason::Stop),
             cached: false,
         };
         let inference_id0 = Uuid::now_v7();
@@ -963,6 +968,7 @@ mod tests {
             },
             model_provider_name: "ExampleProvider1".into(),
             model_name: "ExampleModel1".into(),
+            finish_reason: Some(FinishReason::Stop),
             cached: false,
         };
         let inference_id1 = Uuid::now_v7();
