@@ -161,7 +161,7 @@ sqlalchemy==2.0.38
     #   optuna
 stack-data==0.6.3
     # via ipython
-tensorzero==2025.2.6
+tensorzero==2025.3.0
     # via -r requirements.in
 toml==0.10.2
     # via -r requirements.in

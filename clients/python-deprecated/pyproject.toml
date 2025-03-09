@@ -1,6 +1,6 @@
 [project]
 name = "tensorzero"
-version = "2025.02.6"
+version = "2025.03.0"
 description = "The Python client for TensorZero"
 readme = "README.md"
 requires-python = ">=3.9"
