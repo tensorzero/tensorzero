@@ -31,7 +31,7 @@ pub struct Config<'c> {
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
-    pub evals: HashMap<String, EvalConfig>,    // eval name => eval config
+    pub evals: HashMap<String, Arc<EvalConfig>>, // eval name => eval config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
 }
@@ -306,7 +306,7 @@ impl<'c> Config<'c> {
         for (name, eval_config) in uninitialized_config.evals {
             let (eval_config, eval_function_configs, eval_metric_configs) =
                 eval_config.load(&config.functions, &base_path, &name)?;
-            evals.insert(name, eval_config);
+            evals.insert(name, Arc::new(eval_config));
             for (eval_function_name, eval_function_config) in eval_function_configs {
                 if config.functions.contains_key(&eval_function_name) {
                     return Err(ErrorDetails::Config {
