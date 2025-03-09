@@ -14,11 +14,13 @@ import type {
 import { Code } from "~/components/ui/code";
 import { Link } from "react-router";
 import { FunctionInfo } from "~/components/function/FunctionInfo";
+import type { FunctionType } from "~/utils/config/function";
+import { VariantLink } from "~/components/function/variant/VariantLink";
 
 interface BasicVariantInfoProps {
   variantConfig: VariantConfig;
   function_name: string;
-  function_type: "chat" | "json";
+  function_type: FunctionType;
 }
 
 interface TemplateFieldProps {
@@ -83,7 +85,7 @@ function BaseField({ title, content, href }: BaseFieldProps) {
 interface FunctionFieldProps {
   title: string;
   functionName: string;
-  functionType: "chat" | "json";
+  functionType: FunctionType;
 }
 
 function FunctionField({
@@ -119,7 +121,7 @@ function BaseFields({
   presence_penalty?: number;
   frequency_penalty?: number;
   function_name: string;
-  function_type: "chat" | "json";
+  function_type: FunctionType;
   seed?: number;
 }) {
   return (
@@ -231,12 +233,12 @@ export default function BasicVariantInfo({
                     <dd>
                       {config.candidates.map((candidate) => (
                         <>
-                          <Link
-                            to={`/observability/functions/${function_name}/variants/${candidate}`}
-                            className="block no-underline"
+                          <VariantLink
+                            variantName={candidate}
+                            functionName={function_name}
                           >
                             <Code>{candidate}</Code>
-                          </Link>
+                          </VariantLink>
                         </>
                       ))}
                     </dd>
@@ -312,12 +314,12 @@ export default function BasicVariantInfo({
                     <dd>
                       {config.candidates.map((candidate) => (
                         <>
-                          <Link
-                            to={`/observability/functions/${function_name}/variants/${candidate}`}
-                            className="block no-underline"
+                          <VariantLink
+                            variantName={candidate}
+                            functionName={function_name}
                           >
                             <Code>{candidate}</Code>
-                          </Link>
+                          </VariantLink>
                         </>
                       ))}
                     </dd>
