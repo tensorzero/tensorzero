@@ -12,11 +12,11 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
-use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-    select_model_inference_clickhouse,
-};
+use crate::common::get_gateway_endpoint;
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
+};
 
 #[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);

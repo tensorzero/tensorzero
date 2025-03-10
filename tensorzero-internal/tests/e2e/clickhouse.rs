@@ -8,7 +8,6 @@ use tensorzero_internal::clickhouse::migration_manager::migration_trait::Migrati
 use tracing_test::traced_test;
 use uuid::Uuid;
 
-use crate::common::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0000::Migration0000;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0002::Migration0002;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0003::Migration0003;
@@ -24,6 +23,7 @@ use tensorzero_internal::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0017::Migration0017;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0018::Migration0018;
 use tensorzero_internal::clickhouse::migration_manager::{self};
+use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 
 fn get_clean_clickhouse() -> ClickHouseConnectionInfo {

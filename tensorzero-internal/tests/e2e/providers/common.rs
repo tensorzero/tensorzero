@@ -36,9 +36,9 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use crate::common::{
+use tensorzero_internal::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
-    select_json_inference_clickhouse, select_model_inference_clickhouse,
+    select_json_inference_clickhouse, select_model_inference_clickhouse, CLICKHOUSE_URL,
 };
 
 #[derive(Clone, Debug)]
@@ -92,7 +92,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
     config_path.push("tests/e2e/tensorzero.toml");
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
-        clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
     })
     .build()
@@ -104,7 +104,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
 pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: None,
-        clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
     })
     .build()
@@ -118,7 +118,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
     std::fs::write(tmp_config.path(), config).unwrap();
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
-        clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
     })
     .build()
