@@ -10,11 +10,16 @@ This directory contains the code for the **[Multimodal Inference](https://www.te
 export OPENAI_API_KEY="sk-..." # Replace with your OpenAI API key
 ```
 
-2. Launch the TensorZero Gateway:
+2. Launch the TensorZero Gateway, ClickHouse, and MinIO:
 
 ```bash
 docker compose up
 ```
+
+> [!IMPORTANT]
+>
+> In `docker-compose.yml`, we set `AWS_ALLOW_HTTP=true` to allow the TensorZero Gateway to communicate with the MinIO object storage service running locally.
+> For production environments, we recommend disabling this setting and using a secure method of authentication (such as TLS/HTTPS) in combination with a production-grade object storage service.
 
 3. Run the example:
 
