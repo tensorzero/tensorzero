@@ -1,18 +1,14 @@
 /**
- * Tests for the OpenAI compatibility interface using the OpenAI Node.js client
+ * Tests for the TensorZero OpenAI-compatible endpoint using the OpenAI Node.js client
  *
  * These tests cover the major functionality of the translation
  * layer between the OpenAI interface and TensorZero. They do not
  * attempt to comprehensively cover all of TensorZero's functionality.
  * See the tests across the Rust codebase for more comprehensive tests.
- *
- * To run:
- * ```
- * pnpm test
- * ```
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import OpenAI from "openai";
+import { ChatCompletionMessageParam } from "openai/resources";
 import { v7 as uuidv7 } from "uuid";
 import fs from "fs";
 import path from "path";
@@ -27,14 +23,21 @@ beforeAll(() => {
   client = new OpenAI({
     apiKey: "donotuse",
     baseURL: "http://localhost:3000/openai/v1",
-    dangerouslyAllowBrowser: true, // Required for test environment
   });
 });
 
 describe("OpenAI Compatibility", () => {
   it("should perform basic inference with old model format", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Alfred Pennyworth" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Alfred Pennyworth",
+          },
+        ],
+      },
       { role: "user", content: "Hello" },
     ];
 
@@ -67,8 +70,16 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should perform basic inference", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Alfred Pennyworth" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Alfred Pennyworth",
+          },
+        ],
+      },
       { role: "user", content: "Hello" },
     ];
 
@@ -101,8 +112,16 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle basic json schema parsing and throw proper validation error", async () => {
-    const messages: any = [
-      { role: "system", content: [{ name_of_assistant: "Alfred Pennyworth" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            name_of_assistant: "Alfred Pennyworth",
+          },
+        ],
+      },
       { role: "user", content: "Hello" },
     ];
 
@@ -125,8 +144,16 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle streaming inference", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Alfred Pennyworth" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Alfred Pennyworth",
+          },
+        ],
+      },
       { role: "user", content: "Hello" },
     ];
 
@@ -215,8 +242,16 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle streaming inference with nonexistent function", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Alfred Pennyworth" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Alfred Pennyworth",
+          },
+        ],
+      },
       { role: "user", content: "Hello" },
     ];
 
@@ -238,8 +273,16 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle streaming inference with missing function", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Alfred Pennyworth" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Alfred Pennyworth",
+          },
+        ],
+      },
       { role: "user", content: "Hello" },
     ];
 
@@ -261,8 +304,16 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle streaming inference with malformed function", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Alfred Pennyworth" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Alfred Pennyworth",
+          },
+        ],
+      },
       { role: "user", content: "Hello" },
     ];
 
@@ -284,13 +335,21 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle streaming inference with missing model", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Alfred Pennyworth" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Alfred Pennyworth",
+          },
+        ],
+      },
       { role: "user", content: "Hello" },
     ];
 
     await expect(
-      // @ts-ignore - intentionally missing model
+      // @ts-expect-error - missing model
       client.chat.completions.create({
         messages,
       })
@@ -298,8 +357,16 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle streaming inference with malformed input", async () => {
-    const messages: any = [
-      { role: "system", content: [{ name_of_assistant: "Alfred Pennyworth" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            name_of_assistant: "Alfred Pennyworth",
+          },
+        ],
+      },
       { role: "user", content: "Hello" },
     ];
 
@@ -322,8 +389,16 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle tool call inference", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Alfred Pennyworth" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Alfred Pennyworth",
+          },
+        ],
+      },
       {
         role: "user",
         content: "Hi I'm visiting Brooklyn from Brazil. What's the weather?",
@@ -365,8 +440,16 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle malformed tool call inference", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Alfred Pennyworth" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Alfred Pennyworth",
+          },
+        ],
+      },
       {
         role: "user",
         content: "Hi I'm visiting Brooklyn from Brazil. What's the weather?",
@@ -408,8 +491,16 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle tool call streaming", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Alfred Pennyworth" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Alfred Pennyworth",
+          },
+        ],
+      },
       {
         role: "user",
         content: "Hi I'm visiting Brooklyn from Brazil. What's the weather?",
@@ -482,9 +573,25 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle JSON streaming", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Alfred Pennyworth" }] },
-      { role: "user", content: [{ country: "Japan" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Alfred Pennyworth",
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            country: "Japan",
+          },
+        ],
+      },
     ];
 
     const episodeId = uuidv7();
@@ -555,12 +662,13 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle json success with non-deprecated format", async () => {
-    const messages: any = [
+    const messages: ChatCompletionMessageParam[] = [
       {
         role: "system",
         content: [
           {
             type: "text",
+            // @ts-expect-error - custom TensorZero property
             "tensorzero::arguments": { assistant_name: "Alfred Pennyworth" },
           },
         ],
@@ -568,7 +676,11 @@ describe("OpenAI Compatibility", () => {
       {
         role: "user",
         content: [
-          { type: "text", "tensorzero::arguments": { country: "Japan" } },
+          {
+            type: "text",
+            // @ts-expect-error - custom TensorZero property
+            "tensorzero::arguments": { country: "Japan" },
+          },
         ],
       },
     ];
@@ -596,11 +708,26 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle json success", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Alfred Pennyworth" }] },
-      { role: "user", content: [{ country: "Japan" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Alfred Pennyworth",
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            country: "Japan",
+          },
+        ],
+      },
     ];
-
     const episodeId = uuidv7();
     const result = await client.chat.completions.create(
       {
@@ -624,19 +751,27 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle json invalid system", async () => {
-    const messages: any = [
+    const messages: ChatCompletionMessageParam[] = [
       {
         role: "system",
         content: [
           {
             type: "image_url",
+            // @ts-expect-error - invalid system message
             image_url: { url: "https://example.com/image.jpg" },
           },
         ],
       },
-      { role: "user", content: [{ country: "Japan" }] },
+      {
+        role: "user",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            country: "Japan",
+          },
+        ],
+      },
     ];
-
     const episodeId = uuidv7();
 
     await expect(
@@ -655,8 +790,16 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle json failure", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Alfred Pennyworth" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Alfred Pennyworth",
+          },
+        ],
+      },
       { role: "user", content: "Hello, world!" },
     ];
 
@@ -683,8 +826,16 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle dynamic tool use inference with OpenAI", async () => {
-    const messages: any = [
-      { role: "system", content: [{ assistant_name: "Dr. Mehta" }] },
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "system",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Dr. Mehta",
+          },
+        ],
+      },
       {
         role: "user",
         content:
@@ -762,16 +913,27 @@ describe("OpenAI Compatibility", () => {
     };
 
     const serializedOutputSchema = JSON.stringify(outputSchema);
-    const messages: any = [
+    const messages: ChatCompletionMessageParam[] = [
       {
         role: "system",
         content: [
-          { assistant_name: "Dr. Mehta", schema: serializedOutputSchema },
+          {
+            // @ts-expect-error - custom TensorZero property
+            assistant_name: "Dr. Mehta",
+            schema: serializedOutputSchema,
+          },
         ],
       },
-      { role: "user", content: [{ country: "Japan" }] },
+      {
+        role: "user",
+        content: [
+          {
+            // @ts-expect-error - custom TensorZero property
+            country: "Japan",
+          },
+        ],
+      },
     ];
-
     const episodeId = uuidv7();
     const result = await client.chat.completions.create(
       {
@@ -803,7 +965,7 @@ describe("OpenAI Compatibility", () => {
   });
 
   it("should handle multi-block image_url", async () => {
-    const messages: any = [
+    const messages: ChatCompletionMessageParam[] = [
       {
         role: "user",
         content: [
@@ -845,7 +1007,7 @@ describe("OpenAI Compatibility", () => {
     );
     const ferrisPng = fs.readFileSync(imagePath).toString("base64");
 
-    const messages: any = [
+    const messages: ChatCompletionMessageParam[] = [
       {
         role: "user",
         content: [
