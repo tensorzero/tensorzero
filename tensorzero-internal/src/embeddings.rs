@@ -192,6 +192,7 @@ impl From<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetadata 
             model_provider_name: response.embedding_provider_name,
             model_name: response.embedding_model_name,
             cached: false,
+            finish_reason: None,
         }
     }
 }
@@ -305,6 +306,8 @@ mod tests {
             .embed(&request, &client, &inference_credentials)
             .await;
         assert!(response.is_ok());
-        assert!(logs_contain("Error sending request to Dummy provider."))
+        assert!(logs_contain(
+            "Error sending request to Dummy provider for model 'error'"
+        ))
     }
 }

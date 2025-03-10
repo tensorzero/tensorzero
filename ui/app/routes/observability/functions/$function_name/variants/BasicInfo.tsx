@@ -13,10 +13,14 @@ import type {
 } from "~/utils/config/variant";
 import { Code } from "~/components/ui/code";
 import { Link } from "react-router";
+import { FunctionInfo } from "~/components/function/FunctionInfo";
+import type { FunctionType } from "~/utils/config/function";
+import { VariantLink } from "~/components/function/variant/VariantLink";
 
 interface BasicVariantInfoProps {
   variantConfig: VariantConfig;
   function_name: string;
+  function_type: FunctionType;
 }
 
 interface TemplateFieldProps {
@@ -78,6 +82,25 @@ function BaseField({ title, content, href }: BaseFieldProps) {
   );
 }
 
+interface FunctionFieldProps {
+  title: string;
+  functionName: string;
+  functionType: FunctionType;
+}
+
+function FunctionField({
+  title,
+  functionName,
+  functionType,
+}: FunctionFieldProps) {
+  return (
+    <div>
+      <dt className="text-lg font-semibold">{title}</dt>
+      <FunctionInfo functionName={functionName} functionType={functionType} />
+    </div>
+  );
+}
+
 function BaseFields({
   weight,
   model,
@@ -87,6 +110,7 @@ function BaseFields({
   presence_penalty,
   frequency_penalty,
   function_name,
+  function_type,
   seed,
 }: {
   weight: number;
@@ -97,14 +121,15 @@ function BaseFields({
   presence_penalty?: number;
   frequency_penalty?: number;
   function_name: string;
+  function_type: FunctionType;
   seed?: number;
 }) {
   return (
     <>
-      <BaseField
+      <FunctionField
         title="Function"
-        content={function_name}
-        href={`/observability/functions/${function_name}`}
+        functionName={function_name}
+        functionType={function_type}
       />
       <BaseField title="Weight" content={weight} />
       <BaseField title="Model" content={model} />
@@ -121,6 +146,7 @@ function BaseFields({
 export default function BasicVariantInfo({
   variantConfig,
   function_name,
+  function_type,
 }: BasicVariantInfoProps) {
   return (
     <Card className="mb-4">
@@ -142,6 +168,7 @@ export default function BasicVariantInfo({
             <>
               <BaseFields
                 function_name={function_name}
+                function_type={function_type}
                 weight={variantConfig.weight}
                 model={variantConfig.model}
                 temperature={variantConfig.temperature}
@@ -187,6 +214,7 @@ export default function BasicVariantInfo({
                 <>
                   <BaseFields
                     function_name={function_name}
+                    function_type={function_type}
                     weight={config.weight}
                     model={config.evaluator.model}
                     temperature={config.evaluator.temperature}
@@ -205,12 +233,12 @@ export default function BasicVariantInfo({
                     <dd>
                       {config.candidates.map((candidate) => (
                         <>
-                          <Link
-                            to={`/observability/functions/${function_name}/variants/${candidate}`}
-                            className="block no-underline"
+                          <VariantLink
+                            variantName={candidate}
+                            functionName={function_name}
                           >
                             <Code>{candidate}</Code>
-                          </Link>
+                          </VariantLink>
                         </>
                       ))}
                     </dd>
@@ -227,6 +255,7 @@ export default function BasicVariantInfo({
                 <>
                   <BaseFields
                     function_name={function_name}
+                    function_type={function_type}
                     weight={config.weight}
                     model={config.model}
                     temperature={config.temperature}
@@ -266,6 +295,7 @@ export default function BasicVariantInfo({
                 <>
                   <BaseFields
                     function_name={function_name}
+                    function_type={function_type}
                     weight={config.weight}
                     model={config.fuser.model}
                     temperature={config.fuser.temperature}
@@ -284,12 +314,12 @@ export default function BasicVariantInfo({
                     <dd>
                       {config.candidates.map((candidate) => (
                         <>
-                          <Link
-                            to={`/observability/functions/${function_name}/variants/${candidate}`}
-                            className="block no-underline"
+                          <VariantLink
+                            variantName={candidate}
+                            functionName={function_name}
                           >
                             <Code>{candidate}</Code>
-                          </Link>
+                          </VariantLink>
                         </>
                       ))}
                     </dd>

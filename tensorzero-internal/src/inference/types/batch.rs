@@ -9,7 +9,9 @@ use crate::{
     uuid_util::validate_episode_id,
 };
 
-use super::{ContentBlockOutput, ModelInferenceRequest, RequestMessage, ResolvedInput, Usage};
+use super::{
+    ContentBlockOutput, FinishReason, ModelInferenceRequest, RequestMessage, ResolvedInput, Usage,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{borrow::Cow, collections::HashMap, sync::Arc};
@@ -190,6 +192,7 @@ pub struct ProviderBatchInferenceOutput {
     pub output: Vec<ContentBlockOutput>,
     pub raw_response: String,
     pub usage: Usage,
+    pub finish_reason: Option<FinishReason>,
 }
 
 #[derive(Debug)]

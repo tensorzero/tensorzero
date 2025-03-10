@@ -3,7 +3,7 @@
 # It's named 'tensorzero-python' to avoid confusion with the Rust client
 # (which has a crate name of 'tensorzero')
 name = "tensorzero-python"
-version = "2025.2.6"
+version = "2025.3.0"
 edition = "2021"
 license = "Apache-2.0"
 

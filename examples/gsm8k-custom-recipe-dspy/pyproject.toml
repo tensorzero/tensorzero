@@ -1,0 +1,19 @@
+[project]
+name = "tensorzero-examples-gsm8k-custom-recipe-dspy"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "altair",
+    "aiohttp",
+    "clickhouse_connect",
+    "dspy-ai==2.4.1",
+    "ipykernel",
+    "notebook",
+    "jupyter",
+    "ipywidgets",
+    "pandas",
+    "scipy",
+    "tensorzero",
+    "tqdm",
+]

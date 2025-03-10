@@ -122,6 +122,13 @@ impl StreamResponse {
                         },
                         // We didn't make any network calls to the model provider, so the latency is 0
                         latency: Duration::from_secs(0),
+                        // For all chunks but the last one, the finish reason is None
+                        // For the last chunk, the finish reason is the same as the cache lookup
+                        finish_reason: if index == chunks_len - 1 {
+                            cache_lookup.finish_reason.clone()
+                        } else {
+                            None
+                        },
                     })
                 },
             ))) as ProviderInferenceResponseStreamInner)
@@ -253,6 +260,7 @@ impl ModelConfig {
                             &response.raw_request,
                             &response.raw_response,
                             &response.usage,
+                            response.finish_reason.as_ref(),
                         );
                     }
                     // We already checked the cache above (and returned early if it was a hit), so this response was not from the cache
@@ -275,25 +283,27 @@ impl ModelConfig {
         request: &'request ModelInferenceRequest<'request>,
         clients: &'request InferenceClients<'request>,
         model_name: &'request str,
-    ) -> Result<StreamResponse, Error> {
+    ) -> Result<(StreamResponse, Vec<RequestMessage>), Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
+            let request = self.filter_content_blocks(request, model_name, provider_name);
+            let model_provider_request = ModelProviderRequest {
+                request: &request,
+                model_name,
+                provider_name,
+            };
             // TODO: think about how to best handle errors here
             if clients.cache_options.enabled.read() {
                 let cache_lookup = cache_lookup_streaming(
                     clients.clickhouse_connection_info,
-                    ModelProviderRequest {
-                        request,
-                        model_name,
-                        provider_name,
-                    },
+                    model_provider_request,
                     clients.cache_options.max_age_s,
                 )
                 .await
                 .ok()
                 .flatten();
                 if let Some(cache_lookup) = cache_lookup {
-                    return Ok(cache_lookup);
+                    return Ok((cache_lookup, request.messages.clone()));
                 }
             }
 
@@ -303,7 +313,11 @@ impl ModelConfig {
                 })
             })?;
             let response = provider
-                .infer_stream(request, clients.http_client, clients.credentials)
+                .infer_stream(
+                    model_provider_request,
+                    clients.http_client,
+                    clients.credentials,
+                )
                 .instrument(span!(
                     Level::INFO,
                     "infer_stream",
@@ -319,11 +333,7 @@ impl ModelConfig {
                     let mut stream = if clients.cache_options.enabled.write() {
                         stream_with_cache_write(
                             raw_request.clone(),
-                            ModelProviderRequest {
-                                request,
-                                model_name,
-                                provider_name,
-                            },
+                            model_provider_request,
                             clients,
                             stream,
                         )
@@ -334,12 +344,15 @@ impl ModelConfig {
                     // Get a single chunk from the stream and make sure it is OK then send to client.
                     // We want to do this here so that we can tell that the request is working.
                     peek_first_chunk(&mut stream, &raw_request, provider_name).await?;
-                    return Ok(StreamResponse {
-                        stream,
-                        raw_request,
-                        model_provider_name: provider_name.clone(),
-                        cached: false,
-                    });
+                    return Ok((
+                        StreamResponse {
+                            stream,
+                            raw_request,
+                            model_provider_name: provider_name.clone(),
+                            cached: false,
+                        },
+                        request.messages.clone(),
+                    ));
                 }
                 Err(error) => {
                     provider_errors.insert(provider_name.to_string(), error);
@@ -816,7 +829,7 @@ impl ModelProvider {
 
     async fn infer_stream(
         &self,
-        request: &ModelInferenceRequest<'_>,
+        request: ModelProviderRequest<'_>,
         client: &Client,
         api_keys: &InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -1506,7 +1519,8 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
-                        message: "Error sending request to Dummy provider.".to_string(),
+                        message: "Error sending request to Dummy provider for model 'error'."
+                            .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
                         raw_request: Some("raw request".to_string()),
@@ -1594,7 +1608,9 @@ mod tests {
             .await
             .unwrap();
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
-        assert!(logs_contain("Error sending request to Dummy provider"));
+        assert!(logs_contain(
+            "Error sending request to Dummy provider for model 'error'."
+        ));
         let content = response.output;
         assert_eq!(
             content,
@@ -1648,12 +1664,15 @@ mod tests {
                 },
             )]),
         };
-        let StreamResponse {
-            mut stream,
-            raw_request,
-            model_provider_name,
-            cached: _,
-        } = model_config
+        let (
+            StreamResponse {
+                mut stream,
+                raw_request,
+                model_provider_name,
+                cached: _,
+            },
+            _input,
+        ) = model_config
             .infer_stream(
                 &request,
                 &InferenceClients {
@@ -1739,7 +1758,8 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
-                        message: "Error sending request to Dummy provider.".to_string(),
+                        message: "Error sending request to Dummy provider for model 'error'."
+                            .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
                         raw_request: Some("raw request".to_string()),
@@ -1806,12 +1826,15 @@ mod tests {
                 ),
             ]),
         };
-        let StreamResponse {
-            mut stream,
-            raw_request,
-            model_provider_name,
-            cached: _,
-        } = model_config
+        let (
+            StreamResponse {
+                mut stream,
+                raw_request,
+                model_provider_name,
+                cached: _,
+            },
+            _input,
+        ) = model_config
             .infer_stream(
                 &request,
                 &InferenceClients {
@@ -1830,7 +1853,9 @@ mod tests {
         let initial_chunk = stream.next().await.unwrap().unwrap();
         assert_eq!(&*model_provider_name, "good_provider");
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
-        assert!(logs_contain("Error sending request to Dummy provider"));
+        assert!(logs_contain(
+            "Error sending request to Dummy provider for model 'error'"
+        ));
         assert_eq!(raw_request, "raw request");
 
         assert_eq!(

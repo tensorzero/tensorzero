@@ -13,6 +13,7 @@ use tensorzero::ContentBlockChunk;
 use tensorzero_internal::cache::cache_lookup_streaming;
 use tensorzero_internal::cache::start_cache_write_streaming;
 use tensorzero_internal::inference::types::ContentBlock;
+use tensorzero_internal::inference::types::FinishReason;
 use tensorzero_internal::inference::types::ProviderInferenceResponseChunk;
 use tensorzero_internal::inference::types::TextChunk;
 use uuid::Uuid;
@@ -90,6 +91,7 @@ async fn test_cache_write_and_read() {
             input_tokens: 10,
             output_tokens: 16,
         },
+        Some(&FinishReason::Stop),
     )
     .unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -205,6 +207,7 @@ async fn test_cache_stream_write_and_read() {
         }),
         raw_response: "raw response".to_string(),
         latency: Duration::from_secs(999),
+        finish_reason: Some(FinishReason::Stop),
     }];
 
     // Write
@@ -239,6 +242,7 @@ async fn test_cache_stream_write_and_read() {
         usage,
         raw_response,
         latency,
+        finish_reason,
     } = &chunks[0];
     assert_eq!(content, &initial_chunks[0].content);
     // 'created' should be different (current timestamp is different)
@@ -252,7 +256,7 @@ async fn test_cache_stream_write_and_read() {
     );
     assert_eq!(raw_response, &initial_chunks[0].raw_response);
     assert_eq!(latency, &Duration::from_secs(0));
-
+    assert_eq!(finish_reason, &Some(FinishReason::Stop));
     // Read (should be None)
     tokio::time::sleep(Duration::from_secs(2)).await;
     let result =

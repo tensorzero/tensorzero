@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use axum::response::Json;
 use serde_json::{json, Value};
 
-pub const TENSORZERO_VERSION: &str = "2025.02.6";
+pub const TENSORZERO_VERSION: &str = "2025.03.0";
 
 /// A handler for a simple liveness check
 #[debug_handler]

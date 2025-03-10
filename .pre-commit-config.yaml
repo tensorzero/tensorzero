@@ -3,11 +3,7 @@ repos:
     rev: v4.6.0
     hooks:
       - id: check-added-large-files
-        exclude: |
-          (?x)^(
-              examples/data-extraction-ner/data/clickhouse/fixture\.zip$|
-              examples/haiku-hidden-preferences/data/clickhouse/fixture\.zip$
-          )$
+        args: ["--maxkb=1024"]
       - id: check-case-conflict
       - id: check-executables-have-shebangs
       - id: check-json
