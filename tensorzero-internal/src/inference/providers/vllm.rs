@@ -447,10 +447,10 @@ mod tests {
 
     use crate::inference::{
         providers::{
-            common::WEATHER_TOOL_CONFIG,
             openai::{
                 OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
             },
+            test_helpers::WEATHER_TOOL_CONFIG,
         },
         types::{FunctionType, RequestMessage, Role},
     };

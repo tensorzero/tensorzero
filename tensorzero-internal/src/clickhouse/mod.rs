@@ -7,6 +7,8 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockWriteGuard;
 use url::Url;
 
+pub mod migration_manager;
+
 use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug, Clone)]

@@ -4,27 +4,27 @@ use paste::paste;
 use reqwest::Client;
 use secrecy::SecretString;
 use serde_json::json;
-use tensorzero_internal::clickhouse_migration_manager::migration_trait::Migration;
+use tensorzero_internal::clickhouse::migration_manager::migration_trait::Migration;
 use tracing_test::traced_test;
 use uuid::Uuid;
 
 use crate::common::{get_clickhouse, CLICKHOUSE_URL};
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0000::Migration0000;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0002::Migration0002;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0003::Migration0003;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0004::Migration0004;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0005::Migration0005;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0006::Migration0006;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0008::Migration0008;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0009::Migration0009;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0015::Migration0015;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0016::Migration0016;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0017::Migration0017;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0018::Migration0018;
+use tensorzero_internal::clickhouse::migration_manager::{self};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0000::Migration0000;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0002::Migration0002;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0003::Migration0003;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0004::Migration0004;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0005::Migration0005;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0006::Migration0006;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0008::Migration0008;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0009::Migration0009;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0011::Migration0011;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0013::Migration0013;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0015::Migration0015;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0016::Migration0016;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0017::Migration0017;
-use tensorzero_internal::clickhouse_migration_manager::migrations::migration_0018::Migration0018;
-use tensorzero_internal::clickhouse_migration_manager::{self};
 
 fn get_clean_clickhouse() -> ClickHouseConnectionInfo {
     let database = format!(
@@ -134,7 +134,7 @@ async fn test_clickhouse_migration_manager() {
         async move {
             // All of the previous migrations should have already been run
             for (i, migration) in migrations.iter().enumerate().take(migration_num) {
-                let clean_start = clickhouse_migration_manager::run_migration(migration.as_ref())
+                let clean_start = migration_manager::run_migration(migration.as_ref())
                     .await
                     .unwrap();
                 if i == 0 {
@@ -152,10 +152,9 @@ async fn test_clickhouse_migration_manager() {
                 );
             }
 
-            let clean_start =
-                clickhouse_migration_manager::run_migration(migrations[migration_num].as_ref())
-                    .await
-                    .unwrap();
+            let clean_start = migration_manager::run_migration(migrations[migration_num].as_ref())
+                .await
+                .unwrap();
             if migration_num == 0 {
                 // When running for the first time, we should have a clean start.
                 assert!(clean_start);
@@ -176,7 +175,7 @@ async fn test_clickhouse_migration_manager() {
     async fn run_all(migrations: &[Box<dyn Migration + '_>]) {
         // Now, run all of the migrations, and verify that none of them apply
         for (i, migration) in migrations.iter().enumerate() {
-            let clean_start = clickhouse_migration_manager::run_migration(migration.as_ref())
+            let clean_start = migration_manager::run_migration(migration.as_ref())
                 .await
                 .unwrap();
             if i == 0 {
@@ -233,9 +232,7 @@ async fn test_bad_clickhouse_write() {
 async fn test_clean_clickhouse_start() {
     let clickhouse = get_clean_clickhouse();
     let start = std::time::Instant::now();
-    clickhouse_migration_manager::run(&clickhouse)
-        .await
-        .unwrap();
+    migration_manager::run(&clickhouse).await.unwrap();
     let duration = start.elapsed();
     assert!(
         duration < std::time::Duration::from_secs(10),
