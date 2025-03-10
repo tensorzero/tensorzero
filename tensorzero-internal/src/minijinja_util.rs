@@ -35,6 +35,21 @@ impl TemplateConfig<'_> {
         Ok(())
     }
 
+    pub fn add_template(
+        &mut self,
+        template_name: &str,
+        template_content: &str,
+    ) -> Result<(), Error> {
+        self.env
+            .add_template_owned(template_name.to_string(), template_content.to_string())
+            .map_err(|e| {
+                Error::new(ErrorDetails::MiniJinjaTemplate {
+                    template_name: template_name.to_string(),
+                    message: format!("Failed to add template: {}", e),
+                })
+            })
+    }
+
     // Templates a message with a MiniJinja template.
     pub fn template_message(&self, template_name: &str, context: &Value) -> Result<String, Error> {
         let template = self.env.get_template(template_name).map_err(|_| {

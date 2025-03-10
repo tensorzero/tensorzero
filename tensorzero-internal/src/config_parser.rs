@@ -361,6 +361,21 @@ impl<'c> Config<'c> {
                     }
                     .into());
                 }
+                for variant in eval_function_config.variants().values() {
+                    for template in variant.get_all_template_paths() {
+                        config.templates.add_template(
+                            template.path.to_string_lossy().as_ref(),
+                            &template.contents,
+                        )?;
+                    }
+                }
+                eval_function_config.validate(
+                    &config.tools,
+                    &mut config.models,
+                    &config.embedding_models,
+                    &config.templates,
+                    &eval_function_name,
+                )?;
                 config
                     .functions
                     .insert(eval_function_name, eval_function_config);
@@ -504,7 +519,7 @@ impl<'c> Config<'c> {
 
     /// Get all templates from the config
     /// The HashMap returned is a mapping from the path as given in the TOML file
-    /// (relative to the directory containing the TOML file) to the path on the filesystem.
+    /// (relative to the directory containing the TOML file) to the file contents.
     /// The former path is used as the name of the template for retrieval by variants later.
     pub fn get_templates(&self) -> HashMap<String, String> {
         let mut templates = HashMap::new();
@@ -2032,8 +2047,21 @@ mod tests {
             "Return a number between 0 and 1 where 1 is very NSFW and 0 is the least NSFW content.\n\n"
                 .to_string(),
         );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::eval1::llm_judge_bool::user")
+                .unwrap(),
+            include_str!("evals/llm_judge_user_template.minijinja").to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::eval1::llm_judge_float::user")
+                .unwrap(),
+            include_str!("evals/llm_judge_user_template.minijinja").to_string()
+        );
+
         // Check the total number of templates
-        assert_eq!(templates.len(), 12);
+        assert_eq!(templates.len(), 14);
     }
 
     #[test]

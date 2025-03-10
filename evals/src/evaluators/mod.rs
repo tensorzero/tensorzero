@@ -65,6 +65,7 @@ pub async fn evaluate_inference(
                     inference_id: Some(inference_response.inference_id()),
                     dryrun: Some(false),
                     episode_id: None,
+                    internal: true,
                     tags: HashMap::from([(
                         "tensorzero::eval_run_id".to_string(),
                         eval_run_id.to_string(),

@@ -344,11 +344,17 @@ impl UninitializedLLMJudgeVariantConfig {
                     )),
                     contents: templated_system_instructions,
                 };
+                let user_template = PathWithContents {
+                    path: PathBuf::from(format!(
+                        "tensorzero::llm_judge::{eval_name}::{evaluator_name}::user"
+                    )),
+                    contents: include_str!("llm_judge_user_template.minijinja").to_string(),
+                };
                 Ok(VariantConfig::ChatCompletion(ChatCompletionConfig {
                     weight: Some(if params.active { 1.0 } else { 0.0 }),
                     model: params.model,
                     system_template: Some(system_template),
-                    user_template: None,
+                    user_template: Some(user_template),
                     assistant_template: None,
                     temperature: params.temperature,
                     top_p: params.top_p,

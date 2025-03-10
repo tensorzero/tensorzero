@@ -65,6 +65,7 @@ pub(super) async fn run_llm_judge_evaluator(
         params: InferenceParams::default(),
         variant_name: None,
         dryrun: Some(false),
+        internal: true,
         tags: HashMap::from([(
             "tensorzero::eval_run_id".to_string(),
             eval_run_id.to_string(),
@@ -373,7 +374,7 @@ mod tests {
             &tensorzero_client,
             &llm_judge_config,
             "test_eval",
-            "test_evaluator",
+            "happy_bool",
             Uuid::now_v7(),
         )
         .await
