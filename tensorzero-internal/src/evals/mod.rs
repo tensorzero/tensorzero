@@ -22,7 +22,6 @@ use crate::{
     },
 };
 
-pub const LLM_JUDGE_SYSTEM_SCHEMA_TEXT: &str = include_str!("llm_judge_system_schema.json");
 pub const LLM_JUDGE_USER_SCHEMA_TEXT: &str = include_str!("llm_judge_user_schema.json");
 pub const LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT: &str =
     include_str!("llm_judge_float_output_schema.json");
@@ -252,12 +251,6 @@ impl UninitializedEvaluatorConfig {
                     }
                     .into());
                 }
-                let system_schema_value = serde_json::from_str(LLM_JUDGE_SYSTEM_SCHEMA_TEXT)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::JsonSchema {
-                            message: format!("Failed to parse LLM judge system schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
-                        })
-                    })?;
                 let user_schema_value = serde_json::from_str(LLM_JUDGE_USER_SCHEMA_TEXT)
                     .map_err(|e| {
                         Error::new(ErrorDetails::JsonSchema {
@@ -279,7 +272,7 @@ impl UninitializedEvaluatorConfig {
                     create_implicit_tool_call_config(output_schema.clone());
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
-                    system_schema: Some(JSONSchemaFromPath::from_value(&system_schema_value)?),
+                    system_schema: None,
                     user_schema: Some(JSONSchemaFromPath::from_value(&user_schema_value)?),
                     assistant_schema: None,
                     output_schema,
@@ -351,11 +344,17 @@ impl UninitializedLLMJudgeVariantConfig {
                     )),
                     contents: templated_system_instructions,
                 };
+                let user_template = PathWithContents {
+                    path: PathBuf::from(format!(
+                        "tensorzero::llm_judge::{eval_name}::{evaluator_name}::user"
+                    )),
+                    contents: include_str!("llm_judge_user_template.minijinja").to_string(),
+                };
                 Ok(VariantConfig::ChatCompletion(ChatCompletionConfig {
                     weight: Some(if params.active { 1.0 } else { 0.0 }),
                     model: params.model,
                     system_template: Some(system_template),
-                    user_template: None,
+                    user_template: Some(user_template),
                     assistant_template: None,
                     temperature: params.temperature,
                     top_p: params.top_p,
@@ -563,7 +562,7 @@ mod tests {
                 FunctionConfig::Json(json_config) => {
                     assert_eq!(json_config.variants.len(), 1);
                     assert!(json_config.variants.contains_key("test_variant"));
-                    assert!(json_config.system_schema.is_some());
+                    assert!(json_config.system_schema.is_none());
                     assert!(json_config.user_schema.is_some());
                     assert!(json_config.output_schema.value.is_object());
                 }
