@@ -183,7 +183,10 @@ mod tests {
     use serde_json::json;
     use tensorzero::{ClientBuilder, ClientBuilderMode, Role};
     use tensorzero_internal::{
-        endpoints::{datasets::ChatInferenceDatapoint, inference::ChatInferenceResponse},
+        endpoints::{
+            datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint},
+            inference::{ChatInferenceResponse, JsonInferenceResponse},
+        },
         evals::{LLMJudgeIncludeConfig, LLMJudgeOptimize},
         inference::types::{
             resolved_input::ImageWithPath,
@@ -419,5 +422,190 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(result, Some(json!(1)));
+
+        // Try without output
+        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+            input: ResolvedInput {
+                system: None,
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("Hello, world!"),
+                    }],
+                }],
+            },
+            auxiliary: "".to_string(),
+            dataset_name: "test_dataset".to_string(),
+            episode_id: Some(Uuid::now_v7()),
+            id: Uuid::now_v7(),
+            is_deleted: false,
+            function_name: "test_function".to_string(),
+            output: None,
+            tags: None,
+            tool_params: None,
+        });
+
+        let result = run_llm_judge_evaluator(
+            &inference_response,
+            &datapoint,
+            &tensorzero_client,
+            &llm_judge_config,
+            "test_eval",
+            "happy_bool",
+            Uuid::now_v7(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_run_llm_judge_evaluator_json() {
+        let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(PathBuf::from(&format!(
+                "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+                std::env::var("CARGO_MANIFEST_DIR").unwrap()
+            ))),
+            clickhouse_url: None,
+            timeout: None,
+        })
+        .build()
+        .await
+        .unwrap();
+        let tensorzero_client = Arc::new(ThrottledTensorZeroClient::new(
+            tensorzero_client,
+            Semaphore::new(1),
+        ));
+        let inference_response = InferenceResponse::Json(JsonInferenceResponse {
+            output: JsonInferenceOutput {
+                parsed: Some(json!({"answer": "LeBron James"})),
+                raw: "{\"answer\": \"LeBron James\"}".to_string(),
+            },
+            original_response: None,
+            finish_reason: None,
+            episode_id: Uuid::now_v7(),
+            inference_id: Uuid::now_v7(),
+            usage: Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+            },
+            variant_name: "test_variant".to_string(),
+        });
+        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+            input: ResolvedInput {
+                system: None,
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("Hello, world!"),
+                    }],
+                }],
+            },
+            auxiliary: "".to_string(),
+            dataset_name: "test_dataset".to_string(),
+            episode_id: Some(Uuid::now_v7()),
+            id: Uuid::now_v7(),
+            is_deleted: false,
+            function_name: "test_function".to_string(),
+            output: Some(JsonInferenceOutput {
+                parsed: Some(json!({"answer": "LeBron James"})),
+                raw: "{\"answer\": \"LeBron James\"}".to_string(),
+            }),
+            output_schema: json!({"answer": "string"}),
+            tags: None,
+        });
+        let llm_judge_config = LLMJudgeConfig {
+            include: LLMJudgeIncludeConfig {
+                reference_output: true,
+            },
+            optimize: LLMJudgeOptimize::Max,
+            output_type: LLMJudgeOutputType::Boolean,
+        };
+        let result = run_llm_judge_evaluator(
+            &inference_response,
+            &datapoint,
+            &tensorzero_client,
+            &llm_judge_config,
+            "test_eval",
+            "happy_bool",
+            Uuid::now_v7(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, Some(json!(true)));
+
+        let result = run_llm_judge_evaluator(
+            &inference_response,
+            &datapoint,
+            &tensorzero_client,
+            &llm_judge_config,
+            "test_eval",
+            "sad_bool",
+            Uuid::now_v7(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, Some(json!(false)));
+
+        let result = run_llm_judge_evaluator(
+            &inference_response,
+            &datapoint,
+            &tensorzero_client,
+            &llm_judge_config,
+            "test_eval",
+            "zero",
+            Uuid::now_v7(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, Some(json!(0)));
+
+        let result = run_llm_judge_evaluator(
+            &inference_response,
+            &datapoint,
+            &tensorzero_client,
+            &llm_judge_config,
+            "test_eval",
+            "one",
+            Uuid::now_v7(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, Some(json!(1)));
+
+        // Try without output
+        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+            input: ResolvedInput {
+                system: None,
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("Hello, world!"),
+                    }],
+                }],
+            },
+            auxiliary: "".to_string(),
+            dataset_name: "test_dataset".to_string(),
+            episode_id: Some(Uuid::now_v7()),
+            id: Uuid::now_v7(),
+            is_deleted: false,
+            function_name: "test_function".to_string(),
+            output: None,
+            tags: None,
+            tool_params: None,
+        });
+
+        let result = run_llm_judge_evaluator(
+            &inference_response,
+            &datapoint,
+            &tensorzero_client,
+            &llm_judge_config,
+            "test_eval",
+            "happy_bool",
+            Uuid::now_v7(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, None);
     }
 }
