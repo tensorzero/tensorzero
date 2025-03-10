@@ -32,3 +32,235 @@ pub(super) fn run_exact_match_evaluator(
         _ => bail!("Datapoint and inference response types do not match"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use serde_json::json;
+    use tensorzero::Role;
+    use tensorzero_internal::{
+        endpoints::{
+            datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint},
+            inference::{ChatInferenceResponse, JsonInferenceResponse},
+        },
+        inference::types::{
+            ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
+            ResolvedInputMessageContent, Text, Usage,
+        },
+    };
+    use uuid::Uuid;
+
+    #[test]
+    fn test_exact_match_evaluator_chat() {
+        // Test a match
+        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+            id: Uuid::now_v7(),
+            input: ResolvedInput {
+                system: None,
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("Hello, world!"),
+                    }],
+                }],
+            },
+            dataset_name: "test".to_string(),
+            function_name: "test".to_string(),
+            episode_id: Uuid::now_v7(),
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "hello world".to_string(),
+            })]),
+            tool_params: None,
+            tags: None,
+            auxiliary: "".to_string(),
+            is_deleted: false,
+        });
+        let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
+            inference_id: Uuid::now_v7(),
+            episode_id: Uuid::now_v7(),
+            variant_name: "test".to_string(),
+            content: vec![ContentBlockChatOutput::Text(Text {
+                text: "hello world".to_string(),
+            })],
+            usage: Usage {
+                input_tokens: 10,
+                output_tokens: 10,
+            },
+        });
+        let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
+        assert_eq!(result, Some(Value::Bool(true)));
+
+        // Test a mismatch
+        let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
+            inference_id: Uuid::now_v7(),
+            episode_id: Uuid::now_v7(),
+            variant_name: "test".to_string(),
+            content: vec![ContentBlockChatOutput::Text(Text {
+                text: "hello, world!".to_string(),
+            })],
+            usage: Usage {
+                input_tokens: 10,
+                output_tokens: 10,
+            },
+        });
+        let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
+        assert_eq!(result, Some(Value::Bool(false)));
+
+        // Test with missing output (should be None)
+        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+            id: Uuid::now_v7(),
+            input: ResolvedInput {
+                system: None,
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!("Hello, world!"),
+                    }],
+                }],
+            },
+            dataset_name: "test".to_string(),
+            function_name: "test".to_string(),
+            episode_id: Uuid::now_v7(),
+            output: None,
+            tool_params: None,
+            tags: None,
+            auxiliary: "".to_string(),
+            is_deleted: false,
+        });
+        let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_exact_match_evaluator_json() {
+        // Test a match
+        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+            id: Uuid::now_v7(),
+            input: ResolvedInput {
+                system: None,
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!({"foo": "bar"}),
+                    }],
+                }],
+            },
+            dataset_name: "test".to_string(),
+            function_name: "test".to_string(),
+            output_schema: json!({
+                "type": "object",
+                "properties": {
+                    "foo": {
+                        "type": "string"
+                    }
+                }
+            }),
+            episode_id: Uuid::now_v7(),
+            output: Some(JsonInferenceOutput {
+                parsed: Some(json!({"foo": "bar"})),
+                raw: r#"{"foo": "bar"}"#.to_string(),
+            }),
+            tags: None,
+            auxiliary: "".to_string(),
+            is_deleted: false,
+        });
+        let inference_response = InferenceResponse::Json(JsonInferenceResponse {
+            inference_id: Uuid::now_v7(),
+            episode_id: Uuid::now_v7(),
+            variant_name: "test".to_string(),
+            output: JsonInferenceOutput {
+                parsed: Some(json!({"foo": "bar"})),
+                raw: r#"{"foo": "bar"}"#.to_string(),
+            },
+            usage: Usage {
+                input_tokens: 10,
+                output_tokens: 10,
+            },
+        });
+        let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
+        assert_eq!(result, Some(Value::Bool(true)));
+
+        // Test a mismatch
+        let inference_response = InferenceResponse::Json(JsonInferenceResponse {
+            inference_id: Uuid::now_v7(),
+            episode_id: Uuid::now_v7(),
+            variant_name: "test".to_string(),
+            output: JsonInferenceOutput {
+                parsed: Some(json!({"foo": "baz"})),
+                raw: r#"{"foo": "baz"}"#.to_string(),
+            },
+            usage: Usage {
+                input_tokens: 10,
+                output_tokens: 10,
+            },
+        });
+        let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
+        assert_eq!(result, Some(Value::Bool(false)));
+
+        // Test with missing output (should be None)
+        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+            id: Uuid::now_v7(),
+            input: ResolvedInput {
+                system: None,
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!({"foo": "bar"}),
+                    }],
+                }],
+            },
+            dataset_name: "test".to_string(),
+            function_name: "test".to_string(),
+            episode_id: Uuid::now_v7(),
+            output: None,
+            output_schema: json!({
+                "type": "object",
+                "properties": {
+                    "foo": {
+                        "type": "string"
+                    }
+                }
+            }),
+            tags: None,
+            auxiliary: "".to_string(),
+            is_deleted: false,
+        });
+        let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
+        assert_eq!(result, None);
+
+        // Test with datapoint with malformed output schema (should be None)
+        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+            id: Uuid::now_v7(),
+            input: ResolvedInput {
+                system: None,
+                messages: vec![ResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![ResolvedInputMessageContent::Text {
+                        value: json!({"foo": "bar"}),
+                    }],
+                }],
+            },
+            dataset_name: "test".to_string(),
+            function_name: "test".to_string(),
+            episode_id: Uuid::now_v7(),
+            output: Some(JsonInferenceOutput {
+                parsed: None,
+                raw: r#"{"foo": "bar"}"#.to_string(),
+            }),
+            output_schema: json!({
+                "type": "object",
+                "properties": {
+                    "foo": {
+                        "type": "string"
+                    }
+                }
+            }),
+            tags: None,
+            auxiliary: "".to_string(),
+            is_deleted: false,
+        });
+        let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
+        assert_eq!(result, None);
+    }
+}

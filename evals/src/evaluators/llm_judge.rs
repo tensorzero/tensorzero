@@ -40,7 +40,6 @@ pub(super) async fn run_llm_judge_evaluator(
     let reference_output = match handle_reference_output(llm_judge_config, datapoint) {
         Ok(reference_output) => reference_output,
         // Reference output is optional so if it's needed but not present, we can just return None
-        // TODO (Viraj): should we log an error here?
         Err(_e) => return Ok(None),
     };
     let input = Input {
@@ -130,7 +129,6 @@ pub fn prepare_serialized_input(resolved_input: &ResolvedInput) -> Result<String
 /// The only reason this doesn't directly use serde_json::to_string is because we want to
 /// strip out the Unknown content blocks, which we don't want to include in the output.
 fn prepare_serialized_chat_output(content: &Vec<ContentBlockChatOutput>) -> Result<String> {
-    // TODO (Viraj): test this
     let mut blocks_to_serialized = Vec::new();
     for block in content {
         if let ContentBlockChatOutput::Unknown { .. } = block {
@@ -171,5 +169,135 @@ fn handle_reference_output(
             Some(output) => prepare_serialized_json_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use serde_json::json;
+    use tensorzero::Role;
+    use tensorzero_internal::{
+        inference::types::{
+            resolved_input::ImageWithPath,
+            storage::{StorageKind, StoragePath},
+            Base64Image, ContentBlockChatOutput, ImageKind, ResolvedInput, ResolvedInputMessage,
+            ResolvedInputMessageContent, Text,
+        },
+        tool::{ToolCallOutput, ToolResult},
+    };
+    use url::Url;
+
+    #[test]
+    fn test_prepare_serialized_input() {
+        // No system, just a text user message
+        let resolved_input = ResolvedInput {
+            system: None,
+            messages: vec![ResolvedInputMessage {
+                role: Role::User,
+                content: vec![ResolvedInputMessageContent::Text {
+                    value: json!("Hello, world!"),
+                }],
+            }],
+        };
+        let serialized_input = prepare_serialized_input(&resolved_input).unwrap();
+        assert_eq!(
+            serialized_input,
+            r#"{"messages":[{"role":"user","content":[{"type":"text","value":"Hello, world!"}]}]}"#
+        );
+
+        // System message, user message with a text and tool block
+        let resolved_input = ResolvedInput {
+            system: Some(json!("You are a helpful assistant")),
+            messages: vec![ResolvedInputMessage {
+                role: Role::User,
+                content: vec![
+                    ResolvedInputMessageContent::Text {
+                        value: json!("Hello, world!"),
+                    },
+                    ResolvedInputMessageContent::ToolResult(ToolResult {
+                        name: "tool".to_string(),
+                        result: "it's 24 degrees and cloudy in SF".to_string(),
+                        id: "foooo".to_string(),
+                    }),
+                ],
+            }],
+        };
+        let serialized_input = prepare_serialized_input(&resolved_input).unwrap();
+        assert_eq!(
+            serialized_input,
+            r#"{"system":"You are a helpful assistant","messages":[{"role":"user","content":[{"type":"text","value":"Hello, world!"},{"type":"tool_result","name":"tool","result":"it's 24 degrees and cloudy in SF","id":"foooo"}]}]}"#
+        );
+        // Input contains an image
+        let resolved_input = ResolvedInput {
+            system: None,
+            messages: vec![ResolvedInputMessage {
+                role: Role::User,
+                content: vec![ResolvedInputMessageContent::Image(ImageWithPath {
+                    image: Base64Image {
+                        url: Some(Url::parse("https://example.com/image.png").unwrap()),
+                        data: None,
+                        mime_type: ImageKind::Png,
+                    },
+                    storage_path: StoragePath {
+                        kind: StorageKind::Filesystem {
+                            path: "/tmp/image.png".to_string(),
+                        },
+                        path: "foo".to_string().into(),
+                    },
+                })],
+            }],
+        };
+        let error = prepare_serialized_input(&resolved_input).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Image content not supported for LLM judge evals"
+        );
+    }
+
+    #[test]
+    fn test_prepare_serialized_chat_output() {
+        let content = vec![ContentBlockChatOutput::Text(Text {
+            text: "Hello, world!".to_string(),
+        })];
+        let serialized_output = prepare_serialized_chat_output(&content).unwrap();
+        assert_eq!(
+            serialized_output,
+            r#"[{"type":"text","text":"Hello, world!"}]"#
+        );
+        // Text and Unknown content blocks
+        let content = vec![
+            ContentBlockChatOutput::Text(Text {
+                text: "Hello, world!".to_string(),
+            }),
+            ContentBlockChatOutput::Unknown {
+                data: json!({"foo": "bar"}),
+                model_provider_name: Some("foo".to_string()),
+            },
+        ];
+        let serialized_output = prepare_serialized_chat_output(&content).unwrap();
+        assert_eq!(
+            serialized_output,
+            r#"[{"type":"text","text":"Hello, world!"}]"#
+        );
+        // Tool call and text content blocks
+        let content = vec![
+            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                name: Some("tool".to_string()),
+                arguments: Some(json!({"foo": "bar"})),
+                id: "foooo".to_string(),
+                raw_name: "tool".to_string(),
+                raw_arguments: r#"{"foo": "bar"}"#.to_string(),
+            }),
+            ContentBlockChatOutput::Text(Text {
+                text: "Hello, world!".to_string(),
+            }),
+        ];
+        let serialized_output = prepare_serialized_chat_output(&content).unwrap();
+        assert_eq!(
+            serialized_output,
+            r#"[{"type":"tool_call","arguments":{"foo":"bar"},"id":"foooo","name":"tool","raw_arguments":"{\"foo\": \"bar\"}","raw_name":"tool"},{"type":"text","text":"Hello, world!"}]"#
+        );
     }
 }
