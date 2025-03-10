@@ -17,12 +17,17 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
 
+[dev-dependencies]
+tensorzero-internal = { path = "../tensorzero-internal", features = [
+    "e2e_tests",
+] }
+
 [lints]
 workspace = true
 
 [features]
 # Forward these features to 'tensorzero-internal', so that our embedded
 # client can recognize things like the `dummy` provider
-e2e_tests = []
-batch_tests = []
+e2e_tests = ["tensorzero-internal/e2e_tests"]
+batch_tests = ["tensorzero-internal/batch_tests"]
 default = []
