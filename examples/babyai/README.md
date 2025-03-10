@@ -48,25 +48,3 @@ You'll notice that adding history to the prompt improves performance.
 Later, you can use the a fine-tuning recipe to improve the performance of the `history_and_reasoning` variant.
 The simplest way to fine-tune a model is to use the TensorZero UI (available at `http://localhost:4000`).
 The fine-tuned variant will achieve materially higher success rate and episode return.
-
-## Results
-
-<p align="center">
-  <img src="img/gpt-4o-mini_success-rate.png" alt="Success Rate">
-</p>
-
-<p align="center">
-  <img src="img/gpt-4o-mini_episode-return.png" alt="Episode Return">
-</p>
-
-<p align="center">
-  <img src="img/gpt-4o-mini_episode-length.png" alt="Episode Length">
-</p>
-
-<p align="center">
-  <img src="img/gpt-4o-mini_input-tokens.png" alt="Input Tokens">
-</p>
-
-<p align="center">
-  <img src="img/gpt-4o-mini_generated-tokens.png" alt="Generated Tokens">
-</p>
