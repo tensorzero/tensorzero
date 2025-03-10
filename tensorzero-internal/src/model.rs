@@ -14,7 +14,7 @@ use url::Url;
 
 use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
-    CacheData, ModelProviderRequest, StreamingCacheData,
+    CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
 use crate::endpoints::inference::InferenceClients;
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -218,6 +218,7 @@ impl ModelConfig {
                 model_name,
                 provider_name,
             };
+            let cache_key = model_provider_request.get_cache_key()?;
             // TODO: think about how to best handle errors here
             if clients.cache_options.enabled.read() {
                 let cache_lookup = cache_lookup(
@@ -255,8 +256,10 @@ impl ModelConfig {
                     if clients.cache_options.enabled.write() {
                         let _ = start_cache_write(
                             clients.clickhouse_connection_info,
-                            model_provider_request,
-                            &response.output,
+                            cache_key,
+                            NonStreamingCacheData {
+                                blocks: response.output.clone(),
+                            },
                             &response.raw_request,
                             &response.raw_response,
                             &response.usage,

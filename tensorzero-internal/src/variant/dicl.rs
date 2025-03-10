@@ -330,7 +330,7 @@ impl DiclConfig {
 
         // Embed the input via an API request
         let embedding_response = embedding_model
-            .embed(&embedding_request, clients.http_client, clients.credentials)
+            .embed(&embedding_request, &self.embedding_model, clients)
             .await?;
 
         // Wrap the embedding in a response with metadata
