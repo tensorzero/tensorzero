@@ -287,16 +287,16 @@ impl ModelConfig {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let request = self.filter_content_blocks(request, model_name, provider_name);
-            let request = &*request;
+            let model_provider_request = ModelProviderRequest {
+                request: &request,
+                model_name,
+                provider_name,
+            };
             // TODO: think about how to best handle errors here
             if clients.cache_options.enabled.read() {
                 let cache_lookup = cache_lookup_streaming(
                     clients.clickhouse_connection_info,
-                    ModelProviderRequest {
-                        request,
-                        model_name,
-                        provider_name,
-                    },
+                    model_provider_request,
                     clients.cache_options.max_age_s,
                 )
                 .await
@@ -313,7 +313,11 @@ impl ModelConfig {
                 })
             })?;
             let response = provider
-                .infer_stream(request, clients.http_client, clients.credentials)
+                .infer_stream(
+                    model_provider_request,
+                    clients.http_client,
+                    clients.credentials,
+                )
                 .instrument(span!(
                     Level::INFO,
                     "infer_stream",
@@ -329,11 +333,7 @@ impl ModelConfig {
                     let mut stream = if clients.cache_options.enabled.write() {
                         stream_with_cache_write(
                             raw_request.clone(),
-                            ModelProviderRequest {
-                                request,
-                                model_name,
-                                provider_name,
-                            },
+                            model_provider_request,
                             clients,
                             stream,
                         )
@@ -829,7 +829,7 @@ impl ModelProvider {
 
     async fn infer_stream(
         &self,
-        request: &ModelInferenceRequest<'_>,
+        request: ModelProviderRequest<'_>,
         client: &Client,
         api_keys: &InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
