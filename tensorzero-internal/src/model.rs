@@ -1519,7 +1519,8 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
-                        message: "Error sending request to Dummy provider.".to_string(),
+                        message: "Error sending request to Dummy provider for model 'error'."
+                            .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
                         raw_request: Some("raw request".to_string()),
@@ -1607,7 +1608,9 @@ mod tests {
             .await
             .unwrap();
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
-        assert!(logs_contain("Error sending request to Dummy provider"));
+        assert!(logs_contain(
+            "Error sending request to Dummy provider for model 'error'."
+        ));
         let content = response.output;
         assert_eq!(
             content,
@@ -1755,7 +1758,8 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
-                        message: "Error sending request to Dummy provider.".to_string(),
+                        message: "Error sending request to Dummy provider for model 'error'."
+                            .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
                         raw_request: Some("raw request".to_string()),
@@ -1849,7 +1853,9 @@ mod tests {
         let initial_chunk = stream.next().await.unwrap().unwrap();
         assert_eq!(&*model_provider_name, "good_provider");
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
-        assert!(logs_contain("Error sending request to Dummy provider"));
+        assert!(logs_contain(
+            "Error sending request to Dummy provider for model 'error'"
+        ));
         assert_eq!(raw_request, "raw request");
 
         assert_eq!(

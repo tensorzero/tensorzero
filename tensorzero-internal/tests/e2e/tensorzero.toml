@@ -1837,6 +1837,42 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 user_template = "../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
 max_tokens = 100
 
+[functions.variant_failover_zero_weight]
+type = "chat"
+system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
+user_schema = "../../fixtures/config/functions/variant_failover/user_schema.json"
+
+[functions.variant_failover_zero_weight.variants.first_error]
+type = "chat_completion"
+weight = 0.5
+model = "dummy::error_1"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
+max_tokens = 100
+
+[functions.variant_failover_zero_weight.variants.second_error]
+type = "chat_completion"
+weight = 0.5
+model = "dummy::error_2"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
+max_tokens = 100
+
+[functions.variant_failover_zero_weight.variants.no_weight]
+type = "chat_completion"
+model = "dummy::error_no_weight"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
+max_tokens = 100
+
+[functions.variant_failover_zero_weight.variants.zero_weight]
+type = "chat_completion"
+weight = 0
+model = "dummy::error_zero_weight"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/variant_failover/prompt/user_template.minijinja"
+max_tokens = 100
+
 [functions.prometheus_test1]
 type = "chat"
 
