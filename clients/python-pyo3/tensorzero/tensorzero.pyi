@@ -80,6 +80,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
             Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
+        internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
         credentials: Optional[Dict[str, str]] = None,
         cache_options: Optional[Dict[str, Any]] = None,
@@ -110,6 +111,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param tool_choice: If set, overrides the tool choice strategy for the request.
                             It should be one of: "auto", "required", "off", or {"specific": str}. The last option pins the request to a specific tool name.
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
+        :param internal: Only set true if this is a request internal to TensorZero.
         :param tags: If set, adds tags to the inference request.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async generator that yields InferenceChunks as they come in.
@@ -123,6 +125,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         inference_id: Optional[UUID] = None,
         episode_id: Optional[UUID] = None,
         dryrun: Optional[bool] = None,
+        internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
     ) -> FeedbackResponse:
         """
@@ -137,6 +140,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
                            Only use episode IDs that were returned by the TensorZero gateway.
                            Note: You can assign feedback to either an episode or an inference, but not both.
         :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
+        :param internal: Only set true if this is a request internal to TensorZero.
         :param tags: If set, adds tags to the feedback request.
         :return: {"feedback_id": str}
         """
@@ -213,6 +217,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
             Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
+        internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
         credentials: Optional[Dict[str, str]] = None,
         cache_options: Optional[Dict[str, Any]] = None,
@@ -243,6 +248,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param tool_choice: If set, overrides the tool choice strategy for the request.
                             It should be one of: "auto", "required", "off", or {"specific": str}. The last option pins the request to a specific tool name.
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
+        :param internal: Only set true if this is a request internal to TensorZero.
         :param tags: If set, adds tags to the inference request.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async generator that yields InferenceChunks as they come in.
@@ -256,6 +262,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         inference_id: Optional[UUID] = None,
         episode_id: Optional[UUID] = None,
         dryrun: Optional[bool] = None,
+        internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
     ) -> FeedbackResponse:
         """
@@ -270,6 +277,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
                            Only use episode IDs that were returned by the TensorZero gateway.
                            Note: You can assign feedback to either an episode or an inference, but not both.
         :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
+        :param internal: Only set true if this is a request internal to TensorZero.
         :param tags: If set, adds tags to the feedback request.
         :return: {"feedback_id": str}
         """
