@@ -1,3 +1,5 @@
+#![allow(clippy::print_stdout)]
+
 use reqwest::Url;
 use serde_json::Value;
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
@@ -18,9 +20,13 @@ pub fn get_gateway_endpoint(endpoint: &str) -> Url {
 
 pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
     let clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
-    ClickHouseConnectionInfo::new(clickhouse_url.as_ref())
+    let start = std::time::Instant::now();
+    println!("Connecting to ClickHouse");
+    let res = ClickHouseConnectionInfo::new(clickhouse_url.as_ref())
         .await
-        .expect("Failed to connect to ClickHouse")
+        .expect("Failed to connect to ClickHouse");
+    println!("Connected to ClickHouse in {:?}", start.elapsed());
+    res
 }
 
 #[cfg(feature = "e2e_tests")]

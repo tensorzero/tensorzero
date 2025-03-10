@@ -271,7 +271,7 @@ mod tests {
         };
         setup_clickhouse(
             &config,
-            Some("https://tensorzero.com:8123".to_string()),
+            Some("https://tensorzero.invalid:8123".to_string()),
             false,
         )
         .await
