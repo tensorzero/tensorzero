@@ -62,14 +62,14 @@ async fn get_providers() -> E2ETestProviders {
         variant_name: "openai".to_string(),
         model_name: "gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
-        credentials,
+        credentials: credentials.clone(),
     }];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         variant_name: "openai-dynamic".to_string(),
         model_name: "gpt-4o-mini-2024-07-18-dynamic".into(),
-        model_provider_name: "openfai".into(),
-        credentials: HashMap::new(),
+        model_provider_name: "openai".into(),
+        credentials,
     }];
 
     let image_providers = vec![E2ETestProvider {
