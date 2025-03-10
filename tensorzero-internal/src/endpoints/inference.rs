@@ -31,10 +31,10 @@ use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
     collect_chunks, Base64Image, ChatInferenceDatabaseInsert, CollectChunksArgs,
-    ContentBlockChatOutput, ContentBlockChunk, FetchContext, InferenceResult, InferenceResultChunk,
-    InferenceResultStream, Input, JsonInferenceDatabaseInsert, JsonInferenceOutput,
-    ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput, ResolvedInputMessageContent,
-    Usage,
+    ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
+    InferenceResultChunk, InferenceResultStream, Input, JsonInferenceDatabaseInsert,
+    JsonInferenceOutput, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
+    ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
@@ -91,6 +91,11 @@ pub struct Params {
     pub cache_options: CacheParamsOptions,
     #[serde(default)]
     pub credentials: InferenceCredentials,
+    /// If `true`, add an `original_response` field to the response, containing the raw string response from the model.
+    /// Note that for complex variants (e.g. `experimental_best_of_n_sampling`), the response may not contain `original_response`
+    /// if the fuser/judge model failed
+    #[serde(default)]
+    pub include_original_response: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -188,6 +193,14 @@ pub async fn inference(
     let start_time = Instant::now();
     let inference_id = Uuid::now_v7();
     tracing::Span::current().record("inference_id", inference_id.to_string());
+
+    if params.include_original_response && params.stream.unwrap_or(false) {
+        return Err(ErrorDetails::InvalidRequest {
+            message: "Cannot set both `include_original_response` and `stream` to `true`"
+                .to_string(),
+        }
+        .into());
+    }
 
     // Retrieve or generate the episode ID
     let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
@@ -361,7 +374,7 @@ pub async fn inference(
                 )
                 .await;
 
-            let result = match result {
+            let mut result = match result {
                 Ok(result) => result,
                 Err(e) => {
                     tracing::warn!(
@@ -409,6 +422,10 @@ pub async fn inference(
                         })
                     })?;
                 }
+            }
+
+            if !params.include_original_response {
+                result.set_original_response(None);
             }
 
             let response = InferenceResponse::new(result, episode_id, variant_name.to_string());
@@ -761,6 +778,10 @@ pub struct ChatInferenceResponse {
     pub variant_name: String,
     pub content: Vec<ContentBlockChatOutput>,
     pub usage: Usage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_response: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -770,6 +791,10 @@ pub struct JsonInferenceResponse {
     pub variant_name: String,
     pub output: JsonInferenceOutput,
     pub usage: Usage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_response: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
 }
 
 impl InferenceResponse {
@@ -781,6 +806,8 @@ impl InferenceResponse {
                 variant_name,
                 content: result.content,
                 usage: result.usage,
+                original_response: result.original_response,
+                finish_reason: result.finish_reason,
             }),
             InferenceResult::Json(result) => InferenceResponse::Json(JsonInferenceResponse {
                 inference_id: result.inference_id,
@@ -788,6 +815,8 @@ impl InferenceResponse {
                 variant_name,
                 output: result.output,
                 usage: result.usage,
+                original_response: result.original_response,
+                finish_reason: result.finish_reason,
             }),
         }
     }
@@ -829,6 +858,8 @@ pub struct ChatInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -839,6 +870,8 @@ pub struct JsonInferenceResponseChunk {
     pub raw: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
 }
 
 impl InferenceResponseChunk {
@@ -857,6 +890,7 @@ impl InferenceResponseChunk {
                     variant_name,
                     content: result.content,
                     usage: if cached { None } else { result.usage },
+                    finish_reason: result.finish_reason,
                 })
             }
             InferenceResultChunk::Json(result) => {
@@ -869,6 +903,7 @@ impl InferenceResponseChunk {
                     variant_name,
                     raw: result.raw.unwrap_or_default(),
                     usage: if cached { None } else { result.usage },
+                    finish_reason: result.finish_reason,
                 })
             }
         })
@@ -970,6 +1005,7 @@ mod tests {
             content: content.clone(),
             created: 0,
             usage: None,
+            finish_reason: Some(FinishReason::Stop),
             raw_response: "".to_string(),
             latency: Duration::from_millis(100),
         });
@@ -1006,6 +1042,7 @@ mod tests {
                 assert_eq!(c.variant_name, inference_metadata.variant_name);
                 assert_eq!(c.content, content);
                 assert!(c.usage.is_none());
+                assert_eq!(c.finish_reason, Some(FinishReason::Stop));
             }
             InferenceResponseChunk::Json(_) => {
                 panic!("Expected ChatInferenceResponseChunk, got JsonInferenceResponseChunk");
@@ -1024,6 +1061,7 @@ mod tests {
             usage: None,
             raw_response: "".to_string(),
             latency: Duration::from_millis(100),
+            finish_reason: Some(FinishReason::Stop),
         });
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),
@@ -1057,6 +1095,7 @@ mod tests {
                 assert_eq!(c.variant_name, inference_metadata.variant_name);
                 assert_eq!(c.raw, "Test content".to_string());
                 assert!(c.usage.is_none());
+                assert_eq!(c.finish_reason, Some(FinishReason::Stop));
             }
             InferenceResponseChunk::Chat(_) => {
                 panic!("Expected JsonInferenceResponseChunk, got ChatInferenceResponseChunk");

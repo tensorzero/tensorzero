@@ -39,7 +39,7 @@ pub struct ExtraBodyReplacement {
 
 #[derive(Debug, Default)]
 pub struct ChatCompletionConfig {
-    pub weight: f64,
+    pub weight: Option<f64>,
     pub model: Arc<str>,
     pub system_template: Option<PathWithContents>,
     pub user_template: Option<PathWithContents>,
@@ -59,7 +59,7 @@ pub struct ChatCompletionConfig {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
-    pub weight: f64,
+    pub weight: Option<f64>,
     pub model: Arc<str>,
     pub system_template: Option<PathBuf>,
     pub user_template: Option<PathBuf>,
@@ -315,7 +315,7 @@ impl Variant for ChatCompletionConfig {
         variant_name: &str,
     ) -> Result<(), Error> {
         // Validate that weight is non-negative
-        if self.weight < 0.0 {
+        if self.weight.is_some_and(|w| w < 0.0) {
             return Err(ErrorDetails::Config {
                 message: format!(
                     "`functions.{function_name}.variants.{variant_name}`: `weight` must be non-negative"
@@ -494,7 +494,7 @@ mod tests {
         // Part 1: test without templates
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             system_template: None,
             user_template: None,
             assistant_template: None,
@@ -564,7 +564,7 @@ mod tests {
 
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
                 contents: "".to_string(),
@@ -656,7 +656,7 @@ mod tests {
 
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
                 contents: "".to_string(),
@@ -723,7 +723,7 @@ mod tests {
         // Test without templates, string message
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             ..Default::default()
         };
         let input_message = Value::String("You are a helpful assistant.".to_string());
@@ -739,7 +739,7 @@ mod tests {
         // Test without templates, object message
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             ..Default::default()
         };
         let input_message = json!({"message": "You are a helpful assistant."});
@@ -755,7 +755,7 @@ mod tests {
         // Test without templates, no message
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             ..Default::default()
         };
         let result = chat_completion_config.prepare_system_message(&templates, None);
@@ -768,7 +768,7 @@ mod tests {
 
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
                 contents: "".to_string(),
@@ -791,7 +791,7 @@ mod tests {
 
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
                 contents: "".to_string(),
@@ -827,7 +827,7 @@ mod tests {
         let user_template_name = "greeting_with_age";
         let chat_completion_config = ChatCompletionConfig {
             model: "good".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
                 contents: "".to_string(),
@@ -1000,7 +1000,7 @@ mod tests {
 
         let chat_completion_config = ChatCompletionConfig {
             model: "error".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
                 contents: "".to_string(),
@@ -1061,7 +1061,7 @@ mod tests {
         let inference_params = InferenceParams::default();
         let chat_completion_config = ChatCompletionConfig {
             model: "good".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
                 contents: "".to_string(),
@@ -1152,7 +1152,7 @@ mod tests {
         let inference_params = InferenceParams::default();
         let chat_completion_config = ChatCompletionConfig {
             model: "tool".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             ..Default::default()
         };
         let input = ResolvedInput {
@@ -1326,7 +1326,7 @@ mod tests {
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
                 contents: "".to_string(),
@@ -1429,7 +1429,7 @@ mod tests {
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
                 contents: "".to_string(),
@@ -1522,7 +1522,7 @@ mod tests {
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
                 contents: "".to_string(),
@@ -1655,7 +1655,7 @@ mod tests {
         };
         let chat_completion_config = Box::leak(Box::new(ChatCompletionConfig {
             model: "error".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
                 contents: "".to_string(),
@@ -1718,7 +1718,7 @@ mod tests {
         let inference_params = InferenceParams::default();
         let chat_completion_config = Box::leak(Box::new(ChatCompletionConfig {
             model: "good".into(),
-            weight: 1.0,
+            weight: Some(1.0),
             system_template: Some(PathWithContents {
                 path: system_template_name.into(),
                 contents: "".to_string(),

@@ -162,6 +162,7 @@ impl FunctionConfig {
     }
 
     #[instrument(skip_all, fields(inference_id))]
+    #[allow(clippy::too_many_arguments)]
     pub async fn prepare_response<'a, 'request>(
         &self,
         inference_id: Uuid,
@@ -170,6 +171,7 @@ impl FunctionConfig {
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         inference_config: &'request InferenceConfig<'a, 'request>,
         inference_params: InferenceParams,
+        original_response: Option<String>,
     ) -> Result<InferenceResult, Error> {
         match self {
             FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(
@@ -180,6 +182,7 @@ impl FunctionConfig {
                     model_inference_results,
                     inference_config.tool_config,
                     inference_params,
+                    original_response,
                 )
                 .await,
             )),
@@ -233,6 +236,7 @@ impl FunctionConfig {
                     model_inference_results,
                     output_schema.value().clone(),
                     inference_params,
+                    original_response,
                 )))
             }
         }
@@ -504,6 +508,7 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 #[cfg(test)]
 mod tests {
     use crate::endpoints::inference::InferenceIds;
+    use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
     use crate::inference::types::Latency;
     use crate::jsonschema_util::DynamicJSONSchema;
@@ -1350,7 +1355,7 @@ mod tests {
                     (
                         name.to_string(),
                         VariantConfig::ChatCompletion(ChatCompletionConfig {
-                            weight,
+                            weight: Some(weight),
                             model: "model-name".into(),
                             ..Default::default()
                         }),
@@ -1521,6 +1526,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
         };
@@ -1544,6 +1550,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1556,6 +1563,7 @@ mod tests {
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, "Hello, world!");
                 assert_eq!(result.usage, usage);
+                assert_eq!(result.finish_reason, Some(FinishReason::Stop));
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
@@ -1582,6 +1590,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
         };
@@ -1593,6 +1602,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1631,6 +1641,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
         };
@@ -1642,6 +1653,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1652,6 +1664,7 @@ mod tests {
                 assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": "thirty"}"#);
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
+                assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1679,6 +1692,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::ToolCall),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -1692,6 +1706,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1703,6 +1718,7 @@ mod tests {
                 assert_eq!(result.output.raw, "tool_call_arguments");
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
+                assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1730,6 +1746,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::ContentFilter),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -1743,6 +1760,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1756,6 +1774,7 @@ mod tests {
                 assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": 30}"#);
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
+                assert_eq!(result.finish_reason, Some(FinishReason::ContentFilter));
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1778,6 +1797,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: None,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -1791,6 +1811,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap_err();
@@ -1843,6 +1864,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
         };
@@ -1854,6 +1876,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1889,6 +1912,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: None,
             latency,
             cached: false,
         };
@@ -1900,6 +1924,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1937,6 +1962,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::ToolCall),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -1950,6 +1976,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -1988,6 +2015,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: None,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -2001,6 +2029,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -2047,6 +2076,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
         };
@@ -2058,6 +2088,7 @@ mod tests {
                 vec![model_response.clone()],
                 &inference_config,
                 InferenceParams::default(),
+                None,
             )
             .await
             .unwrap();
@@ -2068,6 +2099,7 @@ mod tests {
                 assert_eq!(result.output.raw, r#"{"answer": "42"}"#);
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
+                assert_eq!(result.finish_reason, Some(FinishReason::Stop));
             }
             _ => panic!("Expected a JSON inference result"),
         }

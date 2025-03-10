@@ -31,8 +31,8 @@ use crate::endpoints::inference::{
 use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, Image, ImageKind, Input,
-    InputMessage, InputMessageContent, Role, TextKind, Usage,
+    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, FinishReason, Image, ImageKind,
+    Input, InputMessage, InputMessageContent, Role, TextKind, Usage,
 };
 use crate::tool::{
     DynamicToolParams, Tool, ToolCall, ToolCallChunk, ToolCallOutput, ToolChoice, ToolResult,
@@ -207,8 +207,30 @@ struct OpenAICompatibleResponseMessage {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAICompatibleChoice {
     index: u32,
-    finish_reason: String,
+    finish_reason: OpenAICompatibleFinishReason,
     message: OpenAICompatibleResponseMessage,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum OpenAICompatibleFinishReason {
+    Stop,
+    Length,
+    ContentFilter,
+    ToolCalls,
+    // FunctionCall, we never generate this and it is deprecated
+}
+
+impl From<FinishReason> for OpenAICompatibleFinishReason {
+    fn from(finish_reason: FinishReason) -> Self {
+        match finish_reason {
+            FinishReason::Stop => OpenAICompatibleFinishReason::Stop,
+            FinishReason::Length => OpenAICompatibleFinishReason::Length,
+            FinishReason::ContentFilter => OpenAICompatibleFinishReason::ContentFilter,
+            FinishReason::ToolCall => OpenAICompatibleFinishReason::ToolCalls,
+            FinishReason::Unknown => OpenAICompatibleFinishReason::Stop, // OpenAI doesn't have an unknown finish reason so we coerce
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -386,6 +408,8 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             credentials: InferenceCredentials::default(),
             cache_options: CacheParamsOptions::default(),
             tags: HashMap::new(),
+            // OpenAI compatible endpoint does not support 'include_original_response'
+            include_original_response: false,
         })
     }
 }
@@ -624,7 +648,7 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
                     id: response.inference_id.to_string(),
                     choices: vec![OpenAICompatibleChoice {
                         index: 0,
-                        finish_reason: "stop".to_string(),
+                        finish_reason: response.finish_reason.unwrap_or(FinishReason::Stop).into(),
                         message: OpenAICompatibleResponseMessage {
                             content,
                             tool_calls: Some(tool_calls),
@@ -643,7 +667,7 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
                 id: response.inference_id.to_string(),
                 choices: vec![OpenAICompatibleChoice {
                     index: 0,
-                    finish_reason: "stop".to_string(),
+                    finish_reason: response.finish_reason.unwrap_or(FinishReason::Stop).into(),
                     message: OpenAICompatibleResponseMessage {
                         content: Some(response.output.raw),
                         tool_calls: None,
@@ -737,7 +761,7 @@ struct OpenAICompatibleResponseChunk {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAICompatibleChoiceChunk {
     index: u32,
-    finish_reason: String,
+    finish_reason: Option<OpenAICompatibleFinishReason>,
     delta: OpenAICompatibleDelta,
 }
 
@@ -757,7 +781,7 @@ impl From<InferenceResponseChunk> for OpenAICompatibleResponseChunk {
                     episode_id: c.episode_id.to_string(),
                     choices: vec![OpenAICompatibleChoiceChunk {
                         index: 0,
-                        finish_reason: "".to_string(),
+                        finish_reason: c.finish_reason.map(|finish_reason| finish_reason.into()),
                         delta: OpenAICompatibleDelta {
                             content,
                             tool_calls: Some(tool_calls),
@@ -775,7 +799,7 @@ impl From<InferenceResponseChunk> for OpenAICompatibleResponseChunk {
                 episode_id: c.episode_id.to_string(),
                 choices: vec![OpenAICompatibleChoiceChunk {
                     index: 0,
-                    finish_reason: "".to_string(),
+                    finish_reason: c.finish_reason.map(|finish_reason| finish_reason.into()),
                     delta: OpenAICompatibleDelta {
                         content: Some(c.raw),
                         tool_calls: None,

@@ -3,6 +3,7 @@ import typing as t
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from enum import Enum
 from json import JSONEncoder
 from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 from uuid import UUID
@@ -13,7 +14,7 @@ import httpx
 # Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`
 # Used by the Rust native module
 class ToDictEncoder(JSONEncoder):
-    def default(self, o):
+    def default(self, o: Any) -> Any:
         return o.to_dict()
 
 
@@ -104,6 +105,14 @@ class ToolResult:
         return dict(type="tool_result", name=self.name, result=self.result, id=self.id)
 
 
+class FinishReason(str, Enum):
+    STOP = "stop"
+    LENGTH = "length"
+    TOOL_CALL = "tool_call"
+    CONTENT_FILTER = "content_filter"
+    UNKNOWN = "unknown"
+
+
 @dataclass
 class JsonInferenceOutput:
     raw: str
@@ -117,6 +126,7 @@ class ChatInferenceResponse:
     variant_name: str
     content: List[ContentBlock]
     usage: Usage
+    finish_reason: Optional[FinishReason]
 
 
 @dataclass
@@ -126,6 +136,7 @@ class JsonInferenceResponse:
     variant_name: str
     output: JsonInferenceOutput
     usage: Usage
+    finish_reason: Optional[FinishReason]
 
 
 class Message(TypedDict):
@@ -135,7 +146,7 @@ class Message(TypedDict):
 
 class InferenceInput(TypedDict):
     messages: List[Message]
-    system: Optional[str]
+    system: Optional[Union[str, Dict[str, Any]]]
 
 
 InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
@@ -143,21 +154,29 @@ InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
 
 def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
     if "content" in data and isinstance(data["content"], list):
+        finish_reason = data.get("finish_reason")
+        finish_reason_enum = FinishReason(finish_reason) if finish_reason else None
+
         return ChatInferenceResponse(
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
             content=[parse_content_block(block) for block in data["content"]],  # type: ignore
             usage=Usage(**data["usage"]),
+            finish_reason=finish_reason_enum,
         )
     elif "output" in data and isinstance(data["output"], dict):
         output: Dict[str, Any] = data["output"]
+        finish_reason = data.get("finish_reason")
+        finish_reason_enum = FinishReason(finish_reason) if finish_reason else None
+
         return JsonInferenceResponse(
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
             output=JsonInferenceOutput(**output),
             usage=Usage(**data["usage"]),
+            finish_reason=finish_reason_enum,
         )
     else:
         raise ValueError("Unable to determine response type")
@@ -220,6 +239,7 @@ class ChatChunk:
     variant_name: str
     content: List[ContentBlockChunk]
     usage: Optional[Usage]
+    finish_reason: Optional[FinishReason] = None
 
 
 @dataclass
@@ -229,12 +249,16 @@ class JsonChunk:
     variant_name: str
     raw: str
     usage: Optional[Usage]
+    finish_reason: Optional[FinishReason] = None
 
 
 InferenceChunk = Union[ChatChunk, JsonChunk]
 
 
 def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
+    finish_reason = chunk.get("finish_reason")
+    finish_reason_enum = FinishReason(finish_reason) if finish_reason else None
+
     if "content" in chunk:
         return ChatChunk(
             inference_id=UUID(chunk["inference_id"]),
@@ -242,6 +266,7 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             variant_name=chunk["variant_name"],
             content=[parse_content_block_chunk(block) for block in chunk["content"]],
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
+            finish_reason=finish_reason_enum,
         )
     elif "raw" in chunk:
         return JsonChunk(
@@ -250,6 +275,7 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             variant_name=chunk["variant_name"],
             raw=chunk["raw"],
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
+            finish_reason=finish_reason_enum,
         )
     else:
         raise ValueError(f"Unable to determine response type: {chunk}")

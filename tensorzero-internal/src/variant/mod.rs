@@ -165,10 +165,10 @@ pub trait Variant {
 impl VariantConfig {
     pub fn weight(&self) -> f64 {
         match self {
-            VariantConfig::ChatCompletion(params) => params.weight,
-            VariantConfig::BestOfNSampling(params) => params.weight,
-            VariantConfig::Dicl(params) => params.weight,
-            VariantConfig::MixtureOfN(params) => params.weight,
+            VariantConfig::ChatCompletion(params) => params.weight.unwrap_or(0.0),
+            VariantConfig::BestOfNSampling(params) => params.weight.unwrap_or(0.0),
+            VariantConfig::Dicl(params) => params.weight.unwrap_or(0.0),
+            VariantConfig::MixtureOfN(params) => params.weight.unwrap_or(0.0),
         }
     }
 }
@@ -493,6 +493,7 @@ async fn infer_model_request<'a, 'request>(
     .retry(args.retry_config.get_backoff())
     .await?;
 
+    let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, args.model_name);
     let raw_content = model_inference_result.output.clone();
@@ -507,6 +508,7 @@ async fn infer_model_request<'a, 'request>(
             model_inference_results,
             args.inference_config,
             args.inference_params,
+            Some(original_response),
         )
         .await
 }

@@ -19,14 +19,14 @@ use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
-    Latency, ModelInferenceRequestJsonMode, Role, Text,
+    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
+    FunctionType, Latency, ModelInferenceRequestJsonMode, Role, Text,
 };
 use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ImageKind, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage,
-    TextChunk, Usage,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Usage,
 };
 use crate::model::{
     build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
@@ -842,10 +842,33 @@ struct AnthropicResponse {
     content: Vec<FlattenUnknown<'static, AnthropicContentBlock>>,
     model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    stop_reason: Option<String>,
+    stop_reason: Option<AnthropicStopReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequence: Option<String>,
     usage: AnthropicUsage,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum AnthropicStopReason {
+    EndTurn,
+    MaxTokens,
+    StopSequence,
+    ToolUse,
+    #[serde(other)]
+    Unknown,
+}
+
+impl From<AnthropicStopReason> for FinishReason {
+    fn from(value: AnthropicStopReason) -> Self {
+        match value {
+            AnthropicStopReason::EndTurn => FinishReason::Stop,
+            AnthropicStopReason::MaxTokens => FinishReason::Length,
+            AnthropicStopReason::StopSequence => FinishReason::Stop,
+            AnthropicStopReason::ToolUse => FinishReason::ToolCall,
+            AnthropicStopReason::Unknown => FinishReason::Unknown,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -898,16 +921,19 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
         };
 
         Ok(ProviderInferenceResponse::new(
-            content,
-            request_body
-                .get("system")
-                .and_then(|s| s.as_str())
-                .map(|s| s.to_owned()),
-            input_messages,
-            raw_request,
-            raw_response,
-            response.usage.into(),
-            latency,
+            ProviderInferenceResponseArgs {
+                output: content,
+                system: request_body
+                    .get("system")
+                    .and_then(|s| s.as_str())
+                    .map(|s| s.to_owned()),
+                input_messages,
+                raw_request,
+                raw_response,
+                usage: response.usage.into(),
+                latency,
+                finish_reason: response.stop_reason.map(|s| s.into()),
+            },
         ))
     }
 }
@@ -962,6 +988,15 @@ enum AnthropicMessageBlock {
 
 #[derive(Deserialize, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+pub(crate) struct AnthropicMessageDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) stop_reason: Option<AnthropicStopReason>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) stop_sequence: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 enum AnthropicStreamMessage {
     ContentBlockDelta {
         delta: AnthropicMessageBlock,
@@ -978,7 +1013,7 @@ enum AnthropicStreamMessage {
         error: Value,
     },
     MessageDelta {
-        delta: Value,
+        delta: AnthropicMessageDelta,
         usage: Value,
     },
     MessageStart {
@@ -1016,6 +1051,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                     raw_message,
                     message_latency,
+                    None,
                 )))
             }
             AnthropicMessageBlock::InputJsonDelta { partial_json } => {
@@ -1041,6 +1077,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                     raw_message,
                     message_latency,
+                    None,
                 )))
             }
             _ => Err(ErrorDetails::InferenceServer {
@@ -1065,6 +1102,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                     raw_message,
                     message_latency,
+                    None,
                 )))
             }
             AnthropicMessageBlock::ToolUse { id, name, .. } => {
@@ -1081,6 +1119,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                     raw_message,
                     message_latency,
+                    None,
                 )))
             }
             _ => Err(ErrorDetails::InferenceServer {
@@ -1099,13 +1138,14 @@ fn anthropic_to_tensorzero_stream_message(
             raw_response: None,
         }
         .into()),
-        AnthropicStreamMessage::MessageDelta { usage, .. } => {
+        AnthropicStreamMessage::MessageDelta { usage, delta } => {
             let usage = parse_usage_info(&usage);
             Ok(Some(ProviderInferenceResponseChunk::new(
                 vec![],
                 Some(usage.into()),
                 raw_message,
                 message_latency,
+                delta.stop_reason.map(|s| s.into()),
             )))
         }
         AnthropicStreamMessage::MessageStart { message } => {
@@ -1116,6 +1156,7 @@ fn anthropic_to_tensorzero_stream_message(
                     Some(usage.into()),
                     raw_message,
                     message_latency,
+                    None,
                 )))
             } else {
                 Ok(None)
@@ -1857,7 +1898,7 @@ mod tests {
                 text: "Response text".to_string(),
             })],
             model: "model-name".into(),
-            stop_reason: Some("stop reason".to_string()),
+            stop_reason: Some(AnthropicStopReason::EndTurn),
             stop_sequence: Some("stop sequence".to_string()),
             usage: AnthropicUsage {
                 input_tokens: 100,
@@ -1905,6 +1946,7 @@ mod tests {
         assert_eq!(raw_response, inference_response.raw_response);
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.input_messages, input_messages);
@@ -1920,7 +1962,7 @@ mod tests {
                 input: json!({"location": "New York"}),
             })],
             model: "model-name".into(),
-            stop_reason: Some("tool_call".to_string()),
+            stop_reason: Some(AnthropicStopReason::ToolUse),
             stop_sequence: None,
             usage: AnthropicUsage {
                 input_tokens: 100,
@@ -1971,6 +2013,10 @@ mod tests {
         assert_eq!(inference_response.usage.output_tokens, 50);
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
+        assert_eq!(
+            inference_response.finish_reason,
+            Some(FinishReason::ToolCall)
+        );
         assert_eq!(inference_response.input_messages, input_messages);
 
         // Test case 3: Mixed response (text and tool call)
@@ -2042,6 +2088,7 @@ mod tests {
 
         assert_eq!(inference_response.usage.input_tokens, 100);
         assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.finish_reason, None);
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.input_messages, input_messages);
@@ -2258,7 +2305,10 @@ mod tests {
 
         // Test MessageDelta with usage
         let message_delta = AnthropicStreamMessage::MessageDelta {
-            delta: json!({}),
+            delta: AnthropicMessageDelta {
+                stop_reason: Some(AnthropicStopReason::EndTurn),
+                stop_sequence: None,
+            },
             usage: json!({"input_tokens": 10, "output_tokens": 20}),
         };
         let latency = Duration::from_millis(140);
@@ -2276,6 +2326,7 @@ mod tests {
         assert_eq!(usage.input_tokens, 10);
         assert_eq!(usage.output_tokens, 20);
         assert_eq!(chunk.latency, latency);
+        assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
 
         // Test MessageStart with usage
         let message_start = AnthropicStreamMessage::MessageStart {
@@ -2451,6 +2502,7 @@ mod tests {
             usage: None,
             raw_response: "".to_string(),
             latency: Duration::from_millis(0),
+            finish_reason: None,
         };
         let mut result = chunk.clone();
         prefill_json_chunk_response(&mut result);
@@ -2467,6 +2519,7 @@ mod tests {
             usage: None,
             raw_response: "".to_string(),
             latency: Duration::from_millis(0),
+            finish_reason: None,
             content: vec![ContentBlockChunk::Text(TextChunk {
                 text: "\"key\": \"value ".to_string(),
                 id: "0".to_string(),
@@ -2488,6 +2541,7 @@ mod tests {
             usage: None,
             raw_response: "".to_string(),
             latency: Duration::from_millis(0),
+            finish_reason: None,
             content: vec![
                 ContentBlockChunk::Text(TextChunk {
                     text: "Block 1".to_string(),
@@ -2509,6 +2563,7 @@ mod tests {
             usage: None,
             raw_response: "".to_string(),
             latency: Duration::from_millis(0),
+            finish_reason: None,
             content: vec![ContentBlockChunk::ToolCall(ToolCallChunk {
                 id: "1".to_string(),
                 raw_name: "test_tool".to_string(),

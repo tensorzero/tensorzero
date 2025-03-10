@@ -472,6 +472,30 @@ describe("getVariantPerformances with variant filtering", () => {
       },
     ]);
   });
+  test("getVariantPerformances for non-existent metric", async () => {
+    const function_name = "extract_entities";
+    const function_config = {
+      type: "json",
+    } as FunctionConfig;
+    const metric_name = "non_existent_metric";
+    const metric_config = {
+      type: "float",
+      level: "inference",
+      optimize: "max",
+    } as MetricConfig;
+    const time_window_unit = "week";
+    const variant_name = "gpt4o_initial_prompt";
+
+    const result = await getVariantPerformances({
+      function_name,
+      function_config,
+      metric_name,
+      metric_config,
+      time_window_unit,
+      variant_name,
+    });
+    expect(result).toBeUndefined();
+  });
 });
 
 describe("getVariantCounts", () => {

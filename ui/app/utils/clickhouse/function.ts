@@ -91,7 +91,7 @@ async function getEpisodePerformances(params: {
   metric_table_name: string;
   time_window_unit: TimeWindowUnit;
   variant_name?: string;
-}): Promise<VariantPerformanceRow[]> {
+}): Promise<VariantPerformanceRow[] | undefined> {
   const {
     function_name,
     inference_table_name,
@@ -225,7 +225,7 @@ ORDER BY
   });
   const rows = await resultSet.json();
   const parsedRows = z.array(variantPerformanceRowSchema).parse(rows);
-  return parsedRows;
+  return parsedRows.length > 0 ? parsedRows : undefined;
 }
 
 async function getInferencePerformances(params: {
@@ -235,7 +235,7 @@ async function getInferencePerformances(params: {
   metric_table_name: string;
   time_window_unit: TimeWindowUnit;
   variant_name?: string;
-}) {
+}): Promise<VariantPerformanceRow[] | undefined> {
   const {
     function_name,
     inference_table_name,
@@ -316,7 +316,7 @@ ORDER BY
 
   const rows = await resultSet.json();
   const parsedRows = z.array(variantPerformanceRowSchema).parse(rows);
-  return parsedRows;
+  return parsedRows.length > 0 ? parsedRows : undefined;
 }
 
 const variantCountsSchema = z.object({

@@ -347,6 +347,8 @@ impl BaseTensorZeroGateway {
             credentials: credentials.unwrap_or_default(),
             cache_options: cache_options.unwrap_or_default(),
             output_schema,
+            // This is currently unsupported in the Python client
+            include_original_response: false,
         })
     }
 }
@@ -416,22 +418,29 @@ impl TensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (*, config_file=None, clickhouse_url=None))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, timeout=None))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
     /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
+    /// :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
     /// :return: A `TensorZeroGateway` instance configured to use an embedded gateway.
     fn build_embedded(
         cls: &Bound<'_, PyType>,
         config_file: Option<&str>,
         clickhouse_url: Option<String>,
+        timeout: Option<f64>,
     ) -> PyResult<Py<TensorZeroGateway>> {
         warn_no_config(cls.py(), config_file)?;
+        let timeout = timeout
+            .map(Duration::try_from_secs_f64)
+            .transpose()
+            .map_err(|e| PyValueError::new_err(format!("Invalid timeout: {e}")))?;
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
+            timeout,
         })
         .build();
         let client = tokio_block_on_without_gil(cls.py(), client_fut);
@@ -674,23 +683,30 @@ impl AsyncTensorZeroGateway {
     // as `AsyncTensorZeroGateway` would be completely async *except* for this one method
     // (which potentially takes a very long time due to running DB migrations).
     #[classmethod]
-    #[pyo3(signature = (*, config_file=None, clickhouse_url=None))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, timeout=None))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
     /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
+    /// :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
     /// :return: A `Future` that resolves to an `AsyncTensorZeroGateway` instance configured to use an embedded gateway.
     fn build_embedded<'a>(
         // This is a classmethod, so it receives the class object as a parameter.
         cls: &Bound<'a, PyType>,
         config_file: Option<&str>,
         clickhouse_url: Option<String>,
+        timeout: Option<f64>,
     ) -> PyResult<Bound<'a, PyAny>> {
         warn_no_config(cls.py(), config_file)?;
+        let timeout = timeout
+            .map(Duration::try_from_secs_f64)
+            .transpose()
+            .map_err(|e| PyValueError::new_err(format!("Invalid timeout: {e}")))?;
         let client_fut = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: config_file.map(PathBuf::from),
             clickhouse_url,
+            timeout,
         })
         .build();
 

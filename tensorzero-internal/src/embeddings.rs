@@ -192,6 +192,7 @@ impl From<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetadata 
             model_provider_name: response.embedding_provider_name,
             model_name: response.embedding_model_name,
             cached: false,
+            finish_reason: None,
         }
     }
 }

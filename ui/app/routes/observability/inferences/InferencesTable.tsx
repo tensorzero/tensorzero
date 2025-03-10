@@ -9,6 +9,8 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
+import { FunctionLink } from "~/components/function/FunctionLink";
+import { VariantLink } from "~/components/function/variant/VariantLink";
 
 export default function InferencesTable({
   inferences,
@@ -61,24 +63,21 @@ export default function InferencesTable({
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <Link
-                    to={`/observability/functions/${inference.function_name}`}
-                    className="block no-underline"
-                  >
+                  <FunctionLink functionName={inference.function_name}>
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                       {inference.function_name}
                     </code>
-                  </Link>
+                  </FunctionLink>
                 </TableCell>
                 <TableCell>
-                  <Link
-                    to={`/observability/functions/${inference.function_name}/variants/${inference.variant_name}`}
-                    className="block no-underline"
+                  <VariantLink
+                    variantName={inference.variant_name}
+                    functionName={inference.function_name}
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                       {inference.variant_name}
                     </code>
-                  </Link>
+                  </VariantLink>
                 </TableCell>
                 <TableCell>
                   {formatDate(new Date(inference.timestamp))}

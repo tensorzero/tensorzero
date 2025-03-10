@@ -52,6 +52,7 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
+    println!("response: {:?}", response_json);
     let choices = response_json.get("choices").unwrap().as_array().unwrap();
     assert!(choices.len() == 1);
     let choice = choices.first().unwrap();
@@ -60,6 +61,8 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
     assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
     let content = message.get("content").unwrap().as_str().unwrap();
     assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+    let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
+    assert_eq!(finish_reason, "stop");
 
     let inference_id: Uuid = response_json
         .get("id")
@@ -120,6 +123,7 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
         .unwrap();
+    println!("ModelInference result: {:?}", result);
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
@@ -138,6 +142,8 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
     assert!(result.get("ttft_ms").unwrap().is_null());
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
+    let finish_reason = result.get("finish_reason").unwrap().as_str().unwrap();
+    assert_eq!(finish_reason, "stop");
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -188,6 +194,7 @@ async fn test_openai_compatible_route_with_default_function(
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
+    println!("response_json: {:?}", response_json);
     let choices = response_json.get("choices").unwrap().as_array().unwrap();
     assert!(choices.len() == 1);
     let choice = choices.first().unwrap();
@@ -196,6 +203,8 @@ async fn test_openai_compatible_route_with_default_function(
     assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
     let content = message.get("content").unwrap().as_str().unwrap();
     assert_eq!(content, expected_content);
+    let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
+    assert_eq!(finish_reason, "stop");
 
     let inference_id: Uuid = response_json
         .get("id")
@@ -274,6 +283,8 @@ async fn test_openai_compatible_route_with_default_function(
     assert!(result.get("ttft_ms").unwrap().is_null());
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
+    let finish_reason = result.get("finish_reason").unwrap().as_str().unwrap();
+    assert_eq!(finish_reason, "stop");
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -476,6 +487,7 @@ async fn test_openai_compatible_route_with_json_schema() {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
+    println!("response_json: {:?}", response_json);
     let choices = response_json.get("choices").unwrap().as_array().unwrap();
     assert!(choices.len() == 1);
     let choice = choices.first().unwrap();
@@ -484,6 +496,8 @@ async fn test_openai_compatible_route_with_json_schema() {
     assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
     let content = message.get("content").unwrap().as_str().unwrap();
     assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+    let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
+    assert_eq!(finish_reason, "stop");
 
     let inference_id: Uuid = response_json
         .get("id")

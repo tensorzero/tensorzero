@@ -24,8 +24,9 @@ use crate::inference::types::{
     ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, FlattenUnknown, Latency,
-    ModelInferenceRequestJsonMode, ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
+    ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
+    ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
 use crate::model::{
     build_creds_caching_default_with_fn, Credential, CredentialLocation, ModelProvider,
@@ -965,9 +966,48 @@ struct GCPVertexGeminiResponseContent {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum GCPVertexGeminiFinishReason {
+    FinishReasonUnspecified,
+    Stop,
+    MaxTokens,
+    Safety,
+    Recitation,
+    Other,
+    Blocklist,
+    ProhibitedContent,
+    #[serde(rename = "SPII")]
+    Spii,
+    MalformedFunctionCall,
+    #[serde(other)]
+    Unknown,
+}
+
+impl From<GCPVertexGeminiFinishReason> for FinishReason {
+    fn from(finish_reason: GCPVertexGeminiFinishReason) -> Self {
+        match finish_reason {
+            GCPVertexGeminiFinishReason::Stop => FinishReason::Stop,
+            GCPVertexGeminiFinishReason::MaxTokens => FinishReason::Length,
+            GCPVertexGeminiFinishReason::Safety => FinishReason::ContentFilter,
+            GCPVertexGeminiFinishReason::Recitation => FinishReason::ToolCall,
+            GCPVertexGeminiFinishReason::Other => FinishReason::Unknown,
+            GCPVertexGeminiFinishReason::Blocklist => FinishReason::ContentFilter,
+            GCPVertexGeminiFinishReason::ProhibitedContent => FinishReason::ContentFilter,
+            GCPVertexGeminiFinishReason::Spii => FinishReason::ContentFilter,
+            GCPVertexGeminiFinishReason::MalformedFunctionCall => FinishReason::ToolCall,
+            GCPVertexGeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown,
+            GCPVertexGeminiFinishReason::Unknown => FinishReason::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiResponseCandidate {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<GCPVertexGeminiResponseContent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    finish_reason: Option<GCPVertexGeminiFinishReason>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1057,13 +1097,18 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
         let input_messages = generic_request.messages.clone();
 
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            input_messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response,
+                usage,
+                latency,
+                finish_reason: first_candidate
+                    .finish_reason
+                    .map(|finish_reason| finish_reason.into()),
+            },
         ))
     }
 }
@@ -1113,6 +1158,9 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceRes
                 .map(|usage_metadata| usage_metadata.into()),
             raw,
             latency,
+            first_candidate
+                .finish_reason
+                .map(|finish_reason| finish_reason.into()),
         ))
     }
 }
@@ -1611,6 +1659,7 @@ mod tests {
         let content = GCPVertexGeminiResponseContent { parts: vec![part] };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
+            finish_reason: Some(GCPVertexGeminiFinishReason::Stop),
         };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
@@ -1672,6 +1721,10 @@ mod tests {
         assert_eq!(model_inference_response.raw_request, raw_request);
         assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(
+            model_inference_response.finish_reason,
+            Some(FinishReason::Stop)
+        );
+        assert_eq!(
             model_inference_response.system,
             Some("test_system".to_string())
         );
@@ -1688,6 +1741,7 @@ mod tests {
         };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
+            finish_reason: Some(GCPVertexGeminiFinishReason::Stop),
         };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
@@ -1758,6 +1812,10 @@ mod tests {
             }
         );
         assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(
+            model_inference_response.finish_reason,
+            Some(FinishReason::Stop)
+        );
         assert_eq!(model_inference_response.raw_request, raw_request);
         assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(model_inference_response.system, None);
@@ -1794,6 +1852,7 @@ mod tests {
         };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
+            finish_reason: Some(GCPVertexGeminiFinishReason::Stop),
         };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],

@@ -1,0 +1,29 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.generate_instruction]
+type = "json"
+system_schema = "functions/generate_instruction/system_schema.json"
+output_schema = "functions/generate_instruction/output_schema.json"
+
+[functions.generate_instruction.variants.baseline]
+type = "chat_completion"
+weight = 1.0
+model = "openai::o1"
+retries = { num_retries = 3, max_delay_s = 10 }
+system_template = "functions/generate_instruction/baseline/system_template.minijinja"
+
+[functions.judge_answer]
+type = "json"
+output_schema = "functions/judge_answer/output_schema.json"
+system_schema = "functions/judge_answer/system_schema.json"
+user_schema = "functions/judge_answer/user_schema.json"
+
+[functions.judge_answer.variants.baseline]
+type = "chat_completion"
+weight = 1.0
+model = "openai::gpt-4o-mini-2024-07-18"
+retries = { num_retries = 3, max_delay_s = 10 }
+system_template = "functions/judge_answer/baseline/system_template.minijinja"
+user_template = "functions/judge_answer/baseline/user_template.minijinja"

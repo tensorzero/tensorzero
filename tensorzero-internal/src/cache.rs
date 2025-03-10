@@ -5,8 +5,8 @@ use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::{
-    ContentBlockChunk, ContentBlockOutput, ModelInferenceRequest, ModelInferenceResponse,
-    ProviderInferenceResponseChunk, Usage,
+    ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
+    ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::model::StreamResponse;
 use serde::de::DeserializeOwned;
@@ -33,7 +33,7 @@ impl CacheEnabledMode {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CacheParamsOptions {
     #[serde(default)]
     pub max_age_s: Option<u32>,
@@ -146,6 +146,7 @@ pub struct CacheData<T: CacheOutput> {
     pub raw_response: String,
     pub input_tokens: u32,
     pub output_tokens: u32,
+    pub finish_reason: Option<FinishReason>,
 }
 
 /// A marker trait for types that can be used in the 'output' field of `CacheData`
@@ -180,6 +181,7 @@ pub fn start_cache_write(
     raw_request: &str,
     raw_response: &str,
     usage: &Usage,
+    finish_reason: Option<&FinishReason>,
 ) -> Result<(), Error> {
     let cache_key = request.get_cache_key()?;
     let short_cache_key = cache_key.get_short_key()?;
@@ -190,6 +192,7 @@ pub fn start_cache_write(
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     let clickhouse_client = clickhouse_client.clone();
+    let finish_reason = finish_reason.cloned();
     tokio::spawn(async move {
         clickhouse_client
             .write(
@@ -202,6 +205,7 @@ pub fn start_cache_write(
                         raw_response,
                         input_tokens,
                         output_tokens,
+                        finish_reason,
                     },
                 }],
                 "ModelInferenceCache",
@@ -232,6 +236,13 @@ pub fn start_cache_write_streaming(
     let long_cache_key = cache_key.get_long_key();
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
+    let mut finish_reason = None;
+    for chunk in &chunks {
+        if let Some(chunk_finish_reason) = &chunk.finish_reason {
+            finish_reason = Some(chunk_finish_reason);
+        }
+    }
+    let finish_reason = finish_reason.cloned();
     let output = StreamingCacheData {
         chunks: chunks
             .into_iter()
@@ -255,6 +266,7 @@ pub fn start_cache_write_streaming(
                         raw_response: String::new(),
                         input_tokens,
                         output_tokens,
+                        finish_reason,
                     },
                 }],
                 "ModelInferenceCache",
@@ -309,7 +321,8 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
                 raw_request,
                 raw_response,
                 input_tokens,
-                output_tokens
+                output_tokens,
+                finish_reason
             FROM ModelInferenceCache
             WHERE short_cache_key = {short_cache_key:UInt64}
                 AND long_cache_key = {long_cache_key:String}
@@ -325,7 +338,8 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
                 raw_request,
                 raw_response,
                 input_tokens,
-                output_tokens
+                output_tokens,
+                finish_reason
             FROM ModelInferenceCache
             WHERE short_cache_key = {short_cache_key:UInt64}
                 AND long_cache_key = {long_cache_key:String}
