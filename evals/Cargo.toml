@@ -28,6 +28,7 @@ tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 [lints]
 workspace = true
 
+
 [features]
 # Forward these features to 'tensorzero', so that our embedded
 # client can recognize things like the `dummy` provider

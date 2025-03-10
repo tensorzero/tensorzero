@@ -13,13 +13,13 @@ pub async fn query_dataset(
     function_name: &str,
     function_config: &FunctionConfig,
 ) -> Result<Vec<Datapoint>> {
-    let dataset_table = match function_config {
-        FunctionConfig::Chat(_) => "ChatInferenceDataset",
-        FunctionConfig::Json(_) => "JsonInferenceDataset",
+    let table_name = match function_config {
+        FunctionConfig::Chat(_) => "ChatInferenceDatapoint",
+        FunctionConfig::Json(_) => "JsonInferenceDatapoint",
     };
-    let query = "SELECT * FROM {table_name: Identifier} WHERE dataset_name = '{dataset_name: String}' and function_name = '{function_name: String}' FORMAT JSONEachRow".to_string();
+    let query = "SELECT * FROM {table_name: Identifier} FINAL WHERE dataset_name = {dataset_name: String} AND function_name = {function_name: String} FORMAT JSON".to_string();
     let params = HashMap::from([
-        ("table_name", dataset_table),
+        ("table_name", table_name),
         ("dataset_name", dataset_name),
         ("function_name", function_name),
     ]);
@@ -27,14 +27,18 @@ pub async fn query_dataset(
     let result = clickhouse_client.run_query(query, Some(&params)).await?;
     let datapoints: Vec<Datapoint> = match function_config {
         FunctionConfig::Chat(_) => {
-            let chat_datapoints: Vec<ChatInferenceDatapoint> = serde_json::from_str(&result)?;
+            let chat_datapoints: serde_json::Value = serde_json::from_str(&result)?;
+            let chat_datapoints: Vec<ChatInferenceDatapoint> =
+                serde_json::from_value(chat_datapoints["data"].clone())?;
             chat_datapoints
                 .into_iter()
                 .map(Datapoint::ChatInference)
                 .collect()
         }
         FunctionConfig::Json(_) => {
-            let json_datapoints: Vec<JsonInferenceDatapoint> = serde_json::from_str(&result)?;
+            let json_value: serde_json::Value = serde_json::from_str(&result)?;
+            let json_datapoints: Vec<JsonInferenceDatapoint> =
+                serde_json::from_value(json_value["data"].clone())?;
             json_datapoints
                 .into_iter()
                 .map(Datapoint::JsonInference)

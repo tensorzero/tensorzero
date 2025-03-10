@@ -33,26 +33,26 @@ const CACHE_OPTIONS: CacheParamsOptions = CacheParamsOptions {
 pub struct Args {
     /// Path to tensorzero.toml.
     #[arg(short, long, default_value = "./config/tensorzero.toml")]
-    config_file: PathBuf,
+    pub config_file: PathBuf,
 
     /// URL of a running TensorZero HTTP gateway server to use for requests. This runs evals using that gateway.
     #[arg(short, long)]
-    gateway_url: Option<Url>,
+    pub gateway_url: Option<Url>,
 
     /// Name of the eval to run.
     #[arg(short, long)]
-    name: String,
+    pub name: String,
 
     /// Name of the variant to run.
     #[arg(short, long)]
-    variant: String,
+    pub variant: String,
 
     /// Number of concurrent requests to make.
     #[arg(short, long, default_value = "1")]
-    concurrency: usize,
+    pub concurrency: usize,
 }
 
-pub async fn run_evals(args: Args, eval_run_id: Uuid) -> Result<()> {
+pub async fn run_eval(args: Args, eval_run_id: Uuid) -> Result<()> {
     let subscriber = tracing_subscriber::FmtSubscriber::new();
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))?;
@@ -61,11 +61,11 @@ pub async fn run_evals(args: Args, eval_run_id: Uuid) -> Result<()> {
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
 
     let config = Config::load_and_verify_from_path(&args.config_file).await?;
-    let function_config = config.get_function(&args.name)?;
     let eval_config = config
         .evals
         .get(&args.name)
         .ok_or(anyhow!("Eval not found"))?;
+    let function_config = config.get_function(&eval_config.function_name)?;
     #[allow(unused)]
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
@@ -172,7 +172,20 @@ async fn infer_datapoint(
         Some(tool_params) => get_tool_params_args(tool_params, function_config).await,
         None => DynamicToolParams::default(),
     };
-    let output_schema = datapoint.output_schema();
+    let output_schema = match (datapoint.output_schema(), function_config) {
+        // If the datapoint has an output schema, use it only in the case where it is not the same as the output schema of the function
+        (Some(output_schema), FunctionConfig::Json(json_function_config)) => {
+            if output_schema == json_function_config.output_schema.value {
+                None
+            } else {
+                Some(output_schema)
+            }
+        }
+        (Some(_), FunctionConfig::Chat(_)) => {
+            return Err(anyhow!("Chat function does not support output schema"));
+        }
+        (None, _) => None,
+    };
     let params = ClientInferenceParams {
         function_name: Some(function_name.to_string()),
         variant_name: Some(variant_name.to_string()),

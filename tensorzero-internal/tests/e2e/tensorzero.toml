@@ -2411,3 +2411,17 @@ model = "dummy::llm_judge::one"
 active = true
 system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
+
+[evals.entity_extraction]
+function_name = "extract_entities"
+dataset_name = "extract_entities_0.8"
+
+[evals.entity_extraction.evaluators.exact_match]
+type = "exact_match"
+
+[evals.haiku_with_outputs]
+function_name = "write_haiku"
+dataset_name = "good-haiku-data"
+
+[evals.haiku_with_outputs.evaluators.exact_match]
+type = "exact_match"

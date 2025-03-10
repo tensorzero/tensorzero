@@ -24,7 +24,7 @@ pub type EvalResult = HashMap<String, Result<Option<Value>>>;
 /// - Ok(Some(value)): The evaluator was run successfully and the result was a valid value.
 /// - Ok(None): The evaluator was run successfully but the result was None (if for example the evaluator requires a reference output but none is present).
 /// - Err(e): The evaluator failed to run due to some error (like the LLM Judge failed to infer).
-pub async fn evaluate_inference(
+pub(crate) async fn evaluate_inference(
     inference_response: Arc<InferenceResponse>,
     datapoint: Arc<Datapoint>,
     eval_config: Arc<EvalConfig>,
