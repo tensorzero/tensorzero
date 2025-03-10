@@ -150,6 +150,21 @@ jobs:
           uv pip install pyright==1.1.394
           uv run pyright
 
+      - name: "Node.js: OpenAI Client: Install dependencies"
+        working-directory: clients/openai-node
+        run: |
+          pnpm install
+
+      - name: "Node.js: OpenAI Client: typecheck"
+        working-directory: clients/openai-node
+        run: |
+          pnpm run typecheck
+          
+      - name: "Node.js: OpenAI Client: lint"
+        working-directory: clients/openai-node
+        run: |
+          pnpm run lint
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
