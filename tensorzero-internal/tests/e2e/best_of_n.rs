@@ -570,7 +570,14 @@ async fn e2e_test_best_of_n_json_real_judge() {
                 "maxOutputTokens": null,
                 "seed": null,
                 "responseMimeType": "application/json",
-                "responseSchema": null
+                "responseSchema": {
+                    "type": "object",
+                    "properties": {
+                        "thinking": { "type": "string" },
+                        "answer_choice": { "type": "integer" }
+                    },
+                    "required": ["thinking", "answer_choice"]
+                  }
               },
               "systemInstruction": {
                 "role": "model",
