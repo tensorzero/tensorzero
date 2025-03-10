@@ -21,11 +21,6 @@ docker compose up
 > You can use any S3-compatible object storage service (e.g. AWS S3, GCP Storage, Cloudflare R2).
 > We use a local MinIO instance in this example for convenience.
 
-> [!IMPORTANT]
->
-> In `docker-compose.yml`, we set `AWS_ALLOW_HTTP=true` to allow the TensorZero Gateway to communicate with the MinIO object storage service running locally.
-> For production environments, disable this setting and use a secure method of authentication in combination with a production-grade object storage service.
-
 3. Run the example:
 
 <details>
