@@ -33,7 +33,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "content": [
                         {"type": "text", "value": "Please write me a sentence about Megumin making an explosion."},
                         {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-1.5-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-2.0-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
                     ]
                 }
             ]},
@@ -92,7 +92,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "content": [
                         {"type": "text", "value": "Please write me a sentence about Megumin making an explosion."},
                         {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-1.5-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-2.0-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
                     ]
                 }
             ]
@@ -146,7 +146,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
         assert!(result.get("ttft_ms").is_some());
 
         // For the judge model we want to check that the raw_request is corredt
-        if model_name == "gemini-1.5-flash-001" {
+        if model_name == "gemini-2.0-flash-001" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
             let expected_request = json!({
@@ -219,7 +219,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                             .to_string()
                             .into(),
                         ContentBlock::Unknown {
-                            model_provider_name: Some("tensorzero::model_name::gemini-1.5-flash-001::provider_name::gcp_vertex_gemini".into()),
+                            model_provider_name: Some("tensorzero::model_name::gemini-2.0-flash-001::provider_name::gcp_vertex_gemini".into()),
                             data: serde_json::json!({"text": "My extra gemini text"})
                         }
                     ],
@@ -326,7 +326,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
 
     // Check that all expected model names are present
     let expected_model_names: std::collections::HashSet<String> =
-        ["test", "json", "gemini-1.5-flash-001"]
+        ["test", "json", "gemini-2.0-flash-001"]
             .iter()
             .map(|s| s.to_string())
             .collect();
@@ -549,7 +549,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
             }
         }
         // For the judge model we want to check that the raw_request is corredt
-        if model_name == "gemini-1.5-flash-001" {
+        if model_name == "gemini-2.0-flash-001" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
             let expected_request = json!({
@@ -606,7 +606,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
 
     // Check that all expected model names are present
     let expected_model_names: std::collections::HashSet<String> =
-        ["test", "json", "json_goodbye", "gemini-1.5-flash-001"]
+        ["test", "json", "json_goodbye", "gemini-2.0-flash-001"]
             .iter()
             .map(|s| s.to_string())
             .collect();
@@ -977,7 +977,7 @@ async fn e2e_test_best_of_n_judge_extra_body() {
         assert!(result.get("ttft_ms").is_some());
 
         // For the judge model we want to check that the raw_request is corredt
-        if model_name == "gemini-1.5-flash-001" {
+        if model_name == "gemini-2.0-flash-001" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
             let expected_request = json!({
