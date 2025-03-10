@@ -18,6 +18,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -496,12 +497,21 @@ struct GCPVertexGeminiFunctionResponse<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
+struct GCPVertexInlineData<'a> {
+    mime_type: String,
+    data: &'a str,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", untagged)]
 enum GCPVertexGeminiContentPart<'a> {
     Text {
         text: &'a str,
     },
-    // TODO (if needed): InlineData { inline_data: Blob },
+    InlineData {
+        #[serde(rename = "inline_data")]
+        inline_data: GCPVertexInlineData<'a>,
+    },
     // TODO (if needed): FileData { file_data: FileData },
     FunctionCall {
         function_call: GCPVertexGeminiFunctionCall<'a>,
@@ -579,11 +589,17 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
                     },
                 )))
             }
-            ContentBlock::Image(_) => Err(ErrorDetails::UnsupportedContentBlockType {
-                content_block_type: "image".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }
-            .into()),
+            ContentBlock::Image(ImageWithPath {
+                image,
+                storage_path: _,
+            }) => Ok(Some(FlattenUnknown::Normal(
+                GCPVertexGeminiContentPart::InlineData {
+                    inline_data: GCPVertexInlineData {
+                        mime_type: image.mime_type.to_string(),
+                        data: image.data()?.as_str(),
+                    },
+                },
+            ))),
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
             // output of a chat completion is used as an input to another model inference,

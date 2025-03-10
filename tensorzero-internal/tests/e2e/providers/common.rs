@@ -505,6 +505,36 @@ macro_rules! generate_provider_tests {
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
 
+pub const IMAGE_FUNCTION_CONFIG: &str = r#"
+[functions.image_test]
+type = "chat"
+
+[functions.image_test.variants.openai]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+
+[functions.image_test.variants.anthropic]
+type = "chat_completion"
+model = "anthropic::claude-3-haiku-20240307"
+
+[functions.image_test.variants.google_ai_studio]
+type = "chat_completion"
+model = "google_ai_studio_gemini::gemini-1.5-flash-8b"
+
+[functions.image_test.variants.gcp_vertex]
+type = "chat_completion"
+model = "gemini-1.5-pro-001"
+
+[models."gemini-1.5-pro-001"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gemini-1.5-pro-001".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+model_id = "gemini-1.5-pro-001"
+location = "us-central1"
+project_id = "tensorzero-public"
+"#;
+
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
@@ -519,7 +549,8 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
         [object_storage]
         type = "filesystem"
         path = "{}"
-        [functions]
+
+        {IMAGE_FUNCTION_CONFIG}
         "#,
             temp_dir.path().to_string_lossy()
         ),
@@ -548,7 +579,8 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
         [object_storage]
         type = "filesystem"
         path = "{}"
-        [functions]
+
+        {IMAGE_FUNCTION_CONFIG}
         "#,
             temp_dir.path().to_string_lossy()
         ),
@@ -600,7 +632,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     bucket_name = "{test_bucket}"
     prefix = "{prefix}"
 
-    [functions]
+    {IMAGE_FUNCTION_CONFIG}
     "#
         ),
         test_bucket,
@@ -759,7 +791,8 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     for should_be_cached in [false, true] {
         let response = client
             .inference(ClientInferenceParams {
-                model_name: Some(provider.model_name.clone()),
+                function_name: Some("image_test".to_string()),
+                variant_name: Some(provider.variant_name.clone()),
                 episode_id: Some(episode_id),
                 input: Input {
                     system: None,
@@ -1064,7 +1097,7 @@ pub async fn check_base64_image_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "tensorzero::default");
+    assert_eq!(function_name, "image_test");
 
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
