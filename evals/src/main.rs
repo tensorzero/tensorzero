@@ -201,6 +201,7 @@ async fn infer_datapoint(
         model_name: None,
         stream: Some(false),
         params: InferenceParams::default(),
+        include_original_response: false,
     };
     let inference_result = tensorzero_client.inference(params).await?;
     match inference_result {

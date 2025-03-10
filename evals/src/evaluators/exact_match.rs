@@ -67,7 +67,7 @@ mod tests {
             },
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
-            episode_id: Uuid::now_v7(),
+            episode_id: Some(Uuid::now_v7()),
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "hello world".to_string(),
             })]),
@@ -87,6 +87,8 @@ mod tests {
                 input_tokens: 10,
                 output_tokens: 10,
             },
+            original_response: None,
+            finish_reason: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, Some(Value::Bool(true)));
@@ -103,6 +105,8 @@ mod tests {
                 input_tokens: 10,
                 output_tokens: 10,
             },
+            original_response: None,
+            finish_reason: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, Some(Value::Bool(false)));
@@ -121,7 +125,7 @@ mod tests {
             },
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
-            episode_id: Uuid::now_v7(),
+            episode_id: Some(Uuid::now_v7()),
             output: None,
             tool_params: None,
             tags: None,
@@ -156,7 +160,7 @@ mod tests {
                     }
                 }
             }),
-            episode_id: Uuid::now_v7(),
+            episode_id: Some(Uuid::now_v7()),
             output: Some(JsonInferenceOutput {
                 parsed: Some(json!({"foo": "bar"})),
                 raw: r#"{"foo": "bar"}"#.to_string(),
@@ -177,6 +181,8 @@ mod tests {
                 input_tokens: 10,
                 output_tokens: 10,
             },
+            original_response: None,
+            finish_reason: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, Some(Value::Bool(true)));
@@ -194,6 +200,8 @@ mod tests {
                 input_tokens: 10,
                 output_tokens: 10,
             },
+            original_response: None,
+            finish_reason: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, Some(Value::Bool(false)));
@@ -212,7 +220,7 @@ mod tests {
             },
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
-            episode_id: Uuid::now_v7(),
+            episode_id: Some(Uuid::now_v7()),
             output: None,
             output_schema: json!({
                 "type": "object",
@@ -243,7 +251,7 @@ mod tests {
             },
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
-            episode_id: Uuid::now_v7(),
+            episode_id: Some(Uuid::now_v7()),
             output: Some(JsonInferenceOutput {
                 parsed: None,
                 raw: r#"{"foo": "bar"}"#.to_string(),

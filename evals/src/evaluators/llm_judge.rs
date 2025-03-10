@@ -61,6 +61,7 @@ pub(super) async fn run_llm_judge_evaluator(
         episode_id: None,
         input,
         stream: Some(false),
+        include_original_response: false,
         params: InferenceParams::default(),
         variant_name: None,
         dryrun: Some(false),
