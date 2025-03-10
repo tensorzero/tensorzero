@@ -587,3 +587,120 @@ async fn test_openai_compatible_route_with_json_schema() {
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
 }
+
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+async fn test_openai_compatible_streaming_tool_call() {
+    use futures::StreamExt;
+    use reqwest_eventsource::{Event, RequestBuilderExt};
+
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+    let body = json!({
+        "stream": true,
+        "model": "tensorzero::model_name::openai::gpt-4o",
+        "messages": [
+            {
+                "role": "user",
+                "content": "What's the weather like in Boston today?"
+            }
+        ],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_current_weather",
+                    "description": "Get the current weather in a given location",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "location": {
+                                "type": "string",
+                                "description": "The city and state, e.g. San Francisco, CA"
+                            },
+                            "unit": {
+                                "type": "string",
+                                "enum": ["celsius", "fahrenheit"]
+                            }
+                        },
+                        "required": ["location"]
+                    }
+                }
+            }
+        ],
+        "tool_choice": "auto"
+    });
+
+    let mut response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .header("Content-Type", "application/json")
+        .header("X-Episode-Id", episode_id.to_string())
+        .json(&body)
+        .eventsource()
+        .unwrap();
+
+    let mut chunks = vec![];
+    let mut found_done_chunk = false;
+    while let Some(event) = response.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    found_done_chunk = true;
+                    break;
+                }
+                chunks.push(message.data);
+            }
+        }
+    }
+    assert!(found_done_chunk);
+    let first_chunk = chunks.first().unwrap();
+    let parsed_chunk: Value = serde_json::from_str(first_chunk).unwrap();
+    assert_eq!(parsed_chunk["choices"][0]["index"].as_i64().unwrap(), 0);
+    assert_eq!(
+        parsed_chunk["choices"][0]["delta"]["role"]
+            .as_str()
+            .unwrap(),
+        "assistant"
+    );
+    assert!(parsed_chunk["choices"][0]["delta"]["content"].is_null());
+    println!("parsed_chunk: {:?}", parsed_chunk);
+    let tool_calls = parsed_chunk["choices"][0]["delta"]["tool_calls"]
+        .as_array()
+        .unwrap();
+    assert_eq!(tool_calls.len(), 1);
+    let tool_call = tool_calls[0].as_object().unwrap();
+    assert_eq!(tool_call["index"].as_i64().unwrap(), 0);
+    assert_eq!(
+        tool_call["function"]["name"].as_str().unwrap(),
+        "get_current_weather"
+    );
+    assert_eq!(tool_call["function"]["arguments"].as_str().unwrap(), "");
+    for (i, chunk) in chunks.iter().enumerate() {
+        let parsed_chunk: Value = serde_json::from_str(chunk).unwrap();
+        if let Some(tool_calls) = parsed_chunk["choices"][0]["delta"]["tool_calls"].as_array() {
+            for tool_call in tool_calls {
+                let index = tool_call["index"].as_i64().unwrap();
+                assert_eq!(index, 0);
+            }
+        }
+        if let Some(finish_reason) = parsed_chunk["choices"][0]["delta"]["finish_reason"].as_str() {
+            assert_eq!(finish_reason, "tool_calls");
+            assert_eq!(i, chunks.len() - 2);
+        }
+        if i == chunks.len() - 1 {
+            assert!(parsed_chunk["choices"][0]["delta"]["content"].is_null());
+            assert_eq!(
+                parsed_chunk["choices"][0]["delta"]["tool_calls"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                0
+            );
+            let usage = parsed_chunk["usage"].as_object().unwrap();
+            assert!(usage["prompt_tokens"].as_i64().unwrap() > 0);
+            assert!(usage["completion_tokens"].as_i64().unwrap() > 0);
+        }
+    }
+}
