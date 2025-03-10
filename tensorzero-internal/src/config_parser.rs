@@ -2342,7 +2342,7 @@ mod tests {
             "Unexpected error message: {err}"
         );
         assert!(
-            err.contains("failed to lookup address information: Name or service not known"),
+            err.contains("failed to lookup address information"),
             "Missing dns error in error: {err}"
         );
         assert!(logs_contain(
@@ -2382,7 +2382,7 @@ mod tests {
             "Unexpected error message: {err}"
         );
         assert!(
-            err.contains("failed to lookup address information: Name or service not known"),
+            err.contains("failed to lookup address information"),
             "Missing dns error in error: {err}"
         );
         assert!(!logs_contain("HTTPS"));

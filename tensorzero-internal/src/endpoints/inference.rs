@@ -69,6 +69,9 @@ pub struct Params {
     pub variant_name: Option<String>,
     // if true, the inference will not be stored
     pub dryrun: Option<bool>,
+    // if true, the inference will be internal and validation of tags will be skipped
+    #[serde(default)]
+    pub internal: bool,
     // the tags to add to the inference
     #[serde(default)]
     pub tags: HashMap<String, String>,
@@ -207,7 +210,7 @@ pub async fn inference(
     validate_episode_id(episode_id)?;
     tracing::Span::current().record("episode_id", episode_id.to_string());
 
-    validate_tags(&params.tags)?;
+    validate_tags(&params.tags, params.internal)?;
     let (function, function_name) = find_function(&params, &config)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =

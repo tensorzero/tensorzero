@@ -97,6 +97,10 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
             ]
         },
         "stream": false,
+        "internal": true, // This also tests that the internal flag is correctly propagated.
+        "tags": {
+            "tensorzero::tag_key": "tensorzero::tag_value"
+        }
     });
 
     let response = Client::new()
