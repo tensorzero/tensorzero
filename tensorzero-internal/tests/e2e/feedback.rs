@@ -1013,12 +1013,14 @@ async fn test_fast_inference_then_feedback() {
                 let inference_id = response.inference_id;
 
                 // Prepare and send the feedback request.
+                // This also tests that the internal flag is correctly propagated.
                 let feedback_payload = tensorzero::FeedbackParams {
                     inference_id: Some(inference_id),
                     episode_id: None,
                     metric_name: "task_success".to_string(),
                     value: json!(true),
-                    tags: HashMap::new(),
+                    internal: true,
+                    tags: HashMap::from([("tensorzero::tag_key".to_string(), "tensorzero::tag_value".to_string())]),
                     dryrun: None,
                 };
                 client.feedback(feedback_payload).await.unwrap();

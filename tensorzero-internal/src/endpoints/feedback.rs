@@ -48,6 +48,9 @@ pub struct Params {
     pub metric_name: String,
     // the value of the feedback being provided
     pub value: Value,
+    // if true, the feedback will be internal and validation of tags will be skipped
+    #[serde(default)]
+    pub internal: bool,
     // the tags to add to the feedback
     #[serde(default)]
     pub tags: HashMap<String, String>,
@@ -101,7 +104,7 @@ pub async fn feedback(
     }: AppStateData,
     params: Params,
 ) -> Result<Json<FeedbackResponse>, Error> {
-    validate_tags(&params.tags)?;
+    validate_tags(&params.tags, params.internal)?;
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
         &config,
@@ -797,6 +800,7 @@ mod tests {
             metric_name: "comment".to_string(),
             value: value.clone(),
             tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
+            internal: false,
             dryrun: Some(false),
         };
         let response =
@@ -828,6 +832,7 @@ mod tests {
             value: value.clone(),
             tags: HashMap::from([("baz".to_string(), "bat".to_string())]),
             dryrun: Some(false),
+            internal: false,
         };
         let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
             .await
@@ -850,6 +855,7 @@ mod tests {
             value: value.clone(),
             tags: HashMap::from([("bat".to_string(), "man".to_string())]),
             dryrun: Some(false),
+            internal: false,
         };
         let response =
             feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
@@ -891,6 +897,7 @@ mod tests {
             value: value.clone(),
             tags: HashMap::from([("boo".to_string(), "far".to_string())]),
             dryrun: Some(false),
+            internal: false,
         };
         let response = feedback_handler(State(app_state_data.clone()), StructuredJson(params))
             .await
@@ -911,6 +918,7 @@ mod tests {
             value: value.clone(),
             tags: HashMap::from([("poo".to_string(), "bar".to_string())]),
             dryrun: Some(false),
+            internal: false,
         };
         let response =
             feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;
@@ -949,6 +957,7 @@ mod tests {
             value: value.clone(),
             tags: HashMap::from([("new".to_string(), "car".to_string())]),
             dryrun: None,
+            internal: false,
         };
         let response =
             feedback_handler(State(app_state_data.clone()), StructuredJson(params)).await;

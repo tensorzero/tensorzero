@@ -589,6 +589,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
             region: Some("us-east-1".to_string()),
             prefix: prefix.clone(),
             endpoint: None,
+            allow_http: None,
         },
         &client,
         &format!(

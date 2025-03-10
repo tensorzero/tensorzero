@@ -35,6 +35,8 @@ pub struct ClientInferenceParams {
     pub variant_name: Option<String>,
     // if true, the inference will not be stored
     pub dryrun: Option<bool>,
+    // if true, the inference will be internal and validation of tags will be skipped
+    pub internal: bool,
     // the tags to add to the inference
     pub tags: HashMap<String, String>,
     // dynamic information about tool calling. Don't directly include `dynamic_tool_params` in `Params`.
@@ -73,6 +75,7 @@ impl From<ClientInferenceParams> for Params {
             variant_name: this.variant_name,
             dryrun: this.dryrun,
             tags: this.tags,
+            internal: this.internal,
             dynamic_tool_params: this.dynamic_tool_params,
             output_schema: this.output_schema,
             // TODO - can we avoid reconstructing the hashmap here?
@@ -102,6 +105,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         variant_name,
         dryrun,
         tags,
+        internal,
         dynamic_tool_params,
         output_schema,
         credentials,
@@ -118,6 +122,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         variant_name,
         dryrun,
         tags,
+        internal,
         dynamic_tool_params,
         output_schema,
         credentials: credentials.into_iter().map(|(k, v)| (k, v.0)).collect(),
