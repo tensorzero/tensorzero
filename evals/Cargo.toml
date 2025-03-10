@@ -18,7 +18,7 @@ uuid = { workspace = true }
 futures = { workspace = true }
 
 [dev-dependencies]
-tensorzero-internal = { path = "../tensorzero-internal", features = [
+tensorzero = { path = "../clients/rust", features = [
     "e2e_tests",
 ] }
 
@@ -26,8 +26,8 @@ tensorzero-internal = { path = "../tensorzero-internal", features = [
 workspace = true
 
 [features]
-# Forward these features to 'tensorzero-internal', so that our embedded
+# Forward these features to 'tensorzero', so that our embedded
 # client can recognize things like the `dummy` provider
-e2e_tests = ["tensorzero-internal/e2e_tests"]
-batch_tests = ["tensorzero-internal/batch_tests"]
+e2e_tests = ["tensorzero/e2e_tests"]
+batch_tests = ["tensorzero/batch_tests"]
 default = []
