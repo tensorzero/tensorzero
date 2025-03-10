@@ -3,6 +3,11 @@ name = "evals"
 version = "0.1.0"
 edition = "2021"
 
+[[test]]
+name = "e2e"
+path = "tests/tests.rs"
+required-features = ["e2e_tests"]
+
 [dependencies]
 tensorzero = { path = "../clients/rust" }
 tensorzero-internal = { path = "../tensorzero-internal" }
@@ -18,9 +23,7 @@ uuid = { workspace = true }
 futures = { workspace = true }
 
 [dev-dependencies]
-tensorzero = { path = "../clients/rust", features = [
-    "e2e_tests",
-] }
+tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 
 [lints]
 workspace = true
