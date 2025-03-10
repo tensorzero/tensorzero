@@ -3,15 +3,14 @@ use std::path::PathBuf;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_internal::{
-    clickhouse::ClickHouseConnectionInfo,
+    clickhouse::{test_helpers::clickhouse_flush_async_insert, ClickHouseConnectionInfo},
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use crate::common::{
-    clickhouse_flush_async_insert, get_clickhouse, get_gateway_endpoint, CLICKHOUSE_URL,
-};
+use crate::common::get_gateway_endpoint;
+use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 
 async fn make_embedded_gateway() -> tensorzero::Client {
     let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

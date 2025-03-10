@@ -471,8 +471,8 @@ mod tests {
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,
     };
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::providers::common::get_temperature_tool_config;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
+    use crate::inference::providers::test_helpers::get_temperature_tool_config;
     use crate::inference::types::{
         ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode, Usage,
     };

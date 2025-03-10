@@ -1994,7 +1994,9 @@ mod tests {
 
     use crate::{
         inference::{
-            providers::common::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG},
+            providers::test_helpers::{
+                MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
+            },
             types::FunctionType,
         },
         tool::ToolCallConfig,

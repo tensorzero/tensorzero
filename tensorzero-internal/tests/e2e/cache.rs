@@ -29,10 +29,10 @@ use tensorzero_internal::inference::types::{
     FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
 };
 
-use crate::common::get_clickhouse;
 use crate::common::get_gateway_endpoint;
-use crate::common::select_chat_inference_clickhouse;
-use crate::common::select_model_inference_clickhouse;
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
+};
 
 /// This test does a cache read then write then read again to ensure that
 /// the cache is working as expected.

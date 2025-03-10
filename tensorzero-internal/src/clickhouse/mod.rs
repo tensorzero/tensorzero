@@ -7,6 +7,10 @@ use tokio::sync::RwLock;
 use tokio::sync::RwLockWriteGuard;
 use url::Url;
 
+pub mod migration_manager;
+#[cfg(any(test, feature = "e2e_tests", feature = "batch_tests"))]
+pub mod test_helpers;
+
 use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug, Clone)]
