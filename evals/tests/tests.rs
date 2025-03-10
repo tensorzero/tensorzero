@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::common::write_json_fixture_to_dataset;
 use common::write_chat_fixture_to_dataset;
-use evals::{run_eval, Args};
+use evals::{run_eval, Args, OutputFormat};
 use uuid::Uuid;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -25,6 +25,7 @@ async fn run_exact_match_eval_json() {
         name: "entity_extraction".to_string(),
         variant: "gpt_4o_mini".to_string(),
         concurrency: 10,
+        format: OutputFormat::HumanReadable,
     };
 
     run_eval(args, eval_run_id).await.unwrap();
@@ -48,6 +49,7 @@ async fn run_exact_match_eval_chat() {
         name: "haiku_with_outputs".to_string(),
         variant: "gpt_4o_mini".to_string(),
         concurrency: 10,
+        format: OutputFormat::HumanReadable,
     };
 
     run_eval(args, eval_run_id).await.unwrap();

@@ -28,6 +28,13 @@ const CACHE_OPTIONS: CacheParamsOptions = CacheParamsOptions {
     max_age_s: None,
 };
 
+#[derive(clap::ValueEnum, Clone, Copy, Debug, Default)]
+pub enum OutputFormat {
+    Jsonl,
+    #[default]
+    HumanReadable,
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Args {
@@ -50,6 +57,9 @@ pub struct Args {
     /// Number of concurrent requests to make.
     #[arg(short, long, default_value = "1")]
     pub concurrency: usize,
+
+    #[arg(short, long, default_value = "human-readable")]
+    pub format: OutputFormat,
 }
 
 pub async fn run_eval(args: Args, eval_run_id: Uuid) -> Result<()> {
