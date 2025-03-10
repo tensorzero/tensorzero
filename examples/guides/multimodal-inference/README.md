@@ -19,7 +19,7 @@ docker compose up
 > [!TIP]
 >
 > You can use any S3-compatible object storage service (e.g. AWS S3, GCP Storage, Cloudflare R2).
-> We use MinIO in this example for convenience.
+> We use a local MinIO instance in this example for convenience.
 
 > [!IMPORTANT]
 >
