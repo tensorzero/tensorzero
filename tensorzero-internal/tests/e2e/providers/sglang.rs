@@ -42,6 +42,7 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
         inference_params_inference: standard_providers.clone(),
+        inference_params_dynamic_credentials: vec![],
         // TODO: Support tool use once SGLang makes a releawe with https://github.com/sgl-project/sglang/pull/2544
         tool_use_inference: vec![],
         tool_multi_turn_inference: vec![],

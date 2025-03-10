@@ -59,10 +59,17 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let inference_params_providers = vec![E2ETestProvider {
-        variant_name: "openai-dynamic".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18-dynamic".into(),
+        variant_name: "openai".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
         model_provider_name: "openai".into(),
         credentials,
+    }];
+
+    let inference_params_dynamic_providers = vec![E2ETestProvider {
+        variant_name: "openai-dynamic".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18-dynamic".into(),
+        model_provider_name: "openfai".into(),
+        credentials: HashMap::new(),
     }];
 
     let image_providers = vec![E2ETestProvider {
@@ -118,6 +125,7 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
+        inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
