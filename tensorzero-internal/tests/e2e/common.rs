@@ -1,3 +1,5 @@
+#![allow(clippy::print_stdout)]
+
 use reqwest::Url;
 use serde_json::Value;
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
