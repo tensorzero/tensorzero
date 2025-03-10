@@ -27,7 +27,7 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let inference_params_providers = vec![E2ETestProvider {
+    let inference_params_dynamic_providers = vec![E2ETestProvider {
         variant_name: "azure-dynamic".to_string(),
         model_name: "gpt-4o-mini-azure-dynamic".into(),
         model_provider_name: "azure".into(),
@@ -65,7 +65,8 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
-        inference_params_inference: inference_params_providers,
+        inference_params_inference: standard_providers.clone(),
+        inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),

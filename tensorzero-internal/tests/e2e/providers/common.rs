@@ -46,6 +46,7 @@ pub struct E2ETestProvider {
     pub variant_name: String,
     pub model_name: String,
     pub model_provider_name: String,
+    #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub credentials: HashMap<String, String>,
 }
 
@@ -62,6 +63,9 @@ pub struct E2ETestProviders {
     pub extra_body_inference: Vec<E2ETestProvider>,
     #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub reasoning_inference: Vec<E2ETestProvider>,
+    #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+    pub inference_params_dynamic_credentials: Vec<E2ETestProvider>,
+    #[cfg_attr(not(feature = "batch_tests"), allow(dead_code))]
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
     pub tool_multi_turn_inference: Vec<E2ETestProvider>,
@@ -234,7 +238,7 @@ macro_rules! generate_provider_tests {
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_inference_params_inference_request() {
-            let providers = $func().await.inference_params_inference;
+            let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
                 test_inference_params_inference_request_with_provider(provider).await;
             }
@@ -243,7 +247,7 @@ macro_rules! generate_provider_tests {
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_inference_params_streaming_inference_request() {
-            let providers = $func().await.inference_params_inference;
+            let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
                 test_inference_params_streaming_inference_request_with_provider(provider).await;
             }

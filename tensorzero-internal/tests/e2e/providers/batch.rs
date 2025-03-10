@@ -899,7 +899,6 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
         "tags": [{
             "test_type": "batch_inference_params"
         }],
-        "credentials": provider.credentials,
     });
 
     let response = Client::new()
