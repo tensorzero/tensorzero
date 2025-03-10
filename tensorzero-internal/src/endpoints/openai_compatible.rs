@@ -1355,6 +1355,11 @@ mod tests {
                 id: "4".to_string(),
                 text: " fourth part".to_string(),
             }),
+            ContentBlockChunk::ToolCall(ToolCallChunk {
+                id: "5".to_string(),
+                raw_name: "last_tool".to_string(),
+                raw_arguments: "{\"key\": \"value\"}".to_string(),
+            }),
         ];
         let mut tool_id_to_index = HashMap::new();
         let (content_str, tool_calls) = process_chat_content_chunk(content, &mut tool_id_to_index);
@@ -1362,11 +1367,15 @@ mod tests {
             content_str,
             Some("First part second part third part fourth part".to_string())
         );
-        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls.len(), 2);
         assert_eq!(tool_calls[0].id, Some("123".to_string()));
         assert_eq!(tool_calls[0].index, 0);
         assert_eq!(tool_calls[0].function.name, "middle_tool");
         assert_eq!(tool_calls[0].function.arguments, "{\"key\": \"value\"}");
+        assert_eq!(tool_calls[1].id, Some("5".to_string()));
+        assert_eq!(tool_calls[1].index, 1);
+        assert_eq!(tool_calls[1].function.name, "last_tool");
+        assert_eq!(tool_calls[1].function.arguments, "{\"key\": \"value\"}");
     }
 
     #[test]
