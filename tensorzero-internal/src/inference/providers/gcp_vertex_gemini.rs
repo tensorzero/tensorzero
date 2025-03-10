@@ -687,12 +687,9 @@ struct GCPVertexGeminiToolConfig<'a> {
 // Auto is the default mode where a tool could be called but it isn't required.
 // Any is a mode where a tool is required and if allowed_function_names is Some it has to be from that list.
 // See [the documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/function-calling) for details.
-const MODELS_SUPPORTING_ANY_MODE: &[&str] = &[
-    "gemini-1.5-pro-001",
-    "gemini-1.5-flash-001",
-    "gemini-1.5-pro-002",
-    "gemini-1.5-flash-002",
-];
+// If Vertex adds any models that *don't* support Any mode, we'll add them to the list,
+// which will cause us to fall back to Auto
+const MODELS_NOT_SUPPORTING_ANY_MODE: &[&str] = &[];
 
 impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
     fn from(input: (&'a ToolChoice, &'a str)) -> Self {
@@ -711,35 +708,35 @@ impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
                 },
             },
             ToolChoice::Required => {
-                if MODELS_SUPPORTING_ANY_MODE.contains(&model_name) {
+                if MODELS_NOT_SUPPORTING_ANY_MODE.contains(&model_name) {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                            mode: GCPVertexGeminiFunctionCallingMode::Any,
+                            mode: GCPVertexGeminiFunctionCallingMode::Auto,
                             allowed_function_names: None,
                         },
                     }
                 } else {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                            mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                            mode: GCPVertexGeminiFunctionCallingMode::Any,
                             allowed_function_names: None,
                         },
                     }
                 }
             }
             ToolChoice::Specific(tool_name) => {
-                if MODELS_SUPPORTING_ANY_MODE.contains(&model_name) {
+                if MODELS_NOT_SUPPORTING_ANY_MODE.contains(&model_name) {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                            mode: GCPVertexGeminiFunctionCallingMode::Any,
-                            allowed_function_names: Some(vec![tool_name]),
+                            mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                            allowed_function_names: None,
                         },
                     }
                 } else {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                            mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                            allowed_function_names: None,
+                            mode: GCPVertexGeminiFunctionCallingMode::Any,
+                            allowed_function_names: Some(vec![tool_name]),
                         },
                     }
                 }
@@ -1310,32 +1307,7 @@ mod tests {
     fn test_from_tool_choice() {
         let tool_choice = ToolChoice::Auto;
         let supports_any_model_name = "gemini-1.5-pro-001";
-        let no_any_model_name = "gemini-2.0-flash-lite";
         let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
-        assert_eq!(
-            tool_config,
-            GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                    allowed_function_names: None,
-                }
-            }
-        );
-        let tool_choice = ToolChoice::Auto;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, no_any_model_name));
-        assert_eq!(
-            tool_config,
-            GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                    allowed_function_names: None,
-                }
-            }
-        );
-
-        // Flash is still Auto mode since it doesn't support Any mode
-        let tool_choice = ToolChoice::Required;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, no_any_model_name));
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -1359,18 +1331,6 @@ mod tests {
             }
         );
 
-        let tool_choice = ToolChoice::Specific("get_temperature".to_string());
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, no_any_model_name));
-        assert_eq!(
-            tool_config,
-            GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                    allowed_function_names: None,
-                }
-            }
-        );
-
         // The Pro model supports Any mode with allowed function names
         let tool_choice = ToolChoice::Specific("get_temperature".to_string());
         let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
@@ -1380,19 +1340,6 @@ mod tests {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                     mode: GCPVertexGeminiFunctionCallingMode::Any,
                     allowed_function_names: Some(vec!["get_temperature"]),
-                }
-            }
-        );
-
-        // Both Flash and Pro support None mode
-        let tool_choice = ToolChoice::None;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, no_any_model_name));
-        assert_eq!(
-            tool_config,
-            GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::None,
-                    allowed_function_names: None,
                 }
             }
         );
@@ -1993,10 +1940,9 @@ mod tests {
         let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-2.0-flash-lite");
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
-        // Some models like this do not support function calling mode Any
         assert_eq!(
             tool_config.function_calling_config.mode,
-            GCPVertexGeminiFunctionCallingMode::Auto,
+            GCPVertexGeminiFunctionCallingMode::Any,
         );
         assert_eq!(tools.len(), 1);
         match &tools[0] {
