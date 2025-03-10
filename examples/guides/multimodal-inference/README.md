@@ -41,7 +41,7 @@ curl -X POST http://localhost:3000/inference \
           "content": [
             {
               "type": "text",
-              "value": "Do the images share any common features?"
+              "text": "Do the images share any common features?"
             },
             {
               "type": "image",
