@@ -279,7 +279,7 @@ async def test_async_default_function_inference_plain_dict(async_client):
     input = {
         "system": "You are a helpful assistant named Alfred Pennyworth.",
         "messages": [
-            {"role": "user", "content": [{"type": "raw_text", "value": "Hello"}]}
+            {"role": "user", "content": [{"type": "raw_text", "text": "Hello"}]}
         ],
     }
     input_copy = deepcopy(input)

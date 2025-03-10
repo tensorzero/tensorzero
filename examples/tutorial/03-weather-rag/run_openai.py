@@ -40,9 +40,12 @@ with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
                 "role": "user",
                 "content": [
                     {
-                        "location": location,
-                        "temperature": temperature,
-                        "units": units,
+                        "type": "text",
+                        "tensorzero::arguments": {
+                            "location": location,
+                            "temperature": temperature,
+                            "units": units,
+                        },
                     }
                 ],
             }
