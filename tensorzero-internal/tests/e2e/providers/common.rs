@@ -46,6 +46,7 @@ pub struct E2ETestProvider {
     pub variant_name: String,
     pub model_name: String,
     pub model_provider_name: String,
+    #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub credentials: HashMap<String, String>,
 }
 
@@ -62,6 +63,7 @@ pub struct E2ETestProviders {
     pub extra_body_inference: Vec<E2ETestProvider>,
     #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub reasoning_inference: Vec<E2ETestProvider>,
+    #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub inference_params_dynamic_credentials: Vec<E2ETestProvider>,
     #[cfg_attr(not(feature = "batch_tests"), allow(dead_code))]
     pub inference_params_inference: Vec<E2ETestProvider>,
