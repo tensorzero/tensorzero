@@ -12,7 +12,7 @@ with TensorZeroGateway.build_http(
                     "content": [
                         {
                             "type": "text",
-                            "value": "Do the images share any common features?",
+                            "text": "Do the images share any common features?",
                         },
                         # Remote image of Ferris the crab
                         {
