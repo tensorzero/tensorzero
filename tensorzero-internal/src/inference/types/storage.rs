@@ -12,6 +12,7 @@ pub enum StorageKind {
         bucket_name: Option<String>,
         region: Option<String>,
         endpoint: Option<String>,
+        allow_http: Option<bool>,
         /// An extra prefix to prepend to the object key.
         /// This is only enabled in e2e tests, to prevent clashes between concurrent test runs.
         #[cfg(feature = "e2e_tests")]
