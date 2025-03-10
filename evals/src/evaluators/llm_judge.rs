@@ -309,7 +309,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_run_llm_judge_evaluator() {
+    async fn test_run_llm_judge_evaluator_chat() {
         let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(PathBuf::from(&format!(
                 "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
@@ -380,5 +380,44 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(result, Some(json!(true)));
+
+        let result = run_llm_judge_evaluator(
+            &inference_response,
+            &datapoint,
+            &tensorzero_client,
+            &llm_judge_config,
+            "test_eval",
+            "sad_bool",
+            Uuid::now_v7(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, Some(json!(false)));
+
+        let result = run_llm_judge_evaluator(
+            &inference_response,
+            &datapoint,
+            &tensorzero_client,
+            &llm_judge_config,
+            "test_eval",
+            "zero",
+            Uuid::now_v7(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, Some(json!(0)));
+
+        let result = run_llm_judge_evaluator(
+            &inference_response,
+            &datapoint,
+            &tensorzero_client,
+            &llm_judge_config,
+            "test_eval",
+            "one",
+            Uuid::now_v7(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result, Some(json!(1)));
     }
 }

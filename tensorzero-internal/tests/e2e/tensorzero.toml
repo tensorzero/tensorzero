@@ -2303,3 +2303,39 @@ model = "dummy::llm_judge::true"
 active = true
 system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
+
+[evals.test_eval.evaluators.sad_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+
+[evals.test_eval.evaluators.sad_bool.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::false"
+active = true
+system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+[evals.test_eval.evaluators.zero]
+type = "llm_judge"
+output_type = "float"
+optimize = "max"
+
+[evals.test_eval.evaluators.zero.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::zero"
+active = true
+system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+[evals.test_eval.evaluators.one]
+type = "llm_judge"
+output_type = "float"
+optimize = "max"
+
+[evals.test_eval.evaluators.one.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::one"
+active = true
+system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
