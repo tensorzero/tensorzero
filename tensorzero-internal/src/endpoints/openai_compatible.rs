@@ -113,6 +113,7 @@ struct OpenAICompatibleToolMessage {
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
 enum OpenAICompatibleMessage {
+    #[serde(alias = "developer")]
     System(OpenAICompatibleSystemMessage),
     User(OpenAICompatibleUserMessage),
     Assistant(OpenAICompatibleAssistantMessage),

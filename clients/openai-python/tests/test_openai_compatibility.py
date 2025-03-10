@@ -449,6 +449,81 @@ async def test_async_json_streaming(async_client):
 
 
 @pytest.mark.asyncio
+async def test_reject_developer_and_system(async_client):
+    messages = [
+        {
+            "role": "developer",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+            ],
+        },
+    ]
+    episode_id = str(uuid7())
+
+    with pytest.raises(BadRequestError) as exc_info:
+        await async_client.chat.completions.create(
+            extra_headers={"episode_id": episode_id},
+            messages=messages,
+            model="tensorzero::function_name::json_success",
+        )
+    assert (
+        "Invalid request to OpenAI-compatible endpoint: At most one system message is allowed"
+        in str(exc_info.value)
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_json_success_developer(async_client):
+    messages = [
+        {
+            "role": "developer",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+            ],
+        },
+    ]
+    episode_id = str(uuid7())
+    result = await async_client.chat.completions.create(
+        extra_headers={"episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::function_name::json_success",
+    )
+    assert result.model == "test"
+    assert result.episode_id == episode_id
+    assert result.choices[0].message.content == '{"answer":"Hello"}'
+    assert result.choices[0].message.tool_calls is None
+    assert result.usage.prompt_tokens == 10
+    assert result.usage.completion_tokens == 10
+
+
+@pytest.mark.asyncio
 async def test_async_json_success_non_deprecated(async_client):
     messages = [
         {
