@@ -19,7 +19,7 @@ docker compose up
 > [!IMPORTANT]
 >
 > In `docker-compose.yml`, we set `AWS_ALLOW_HTTP=true` to allow the TensorZero Gateway to communicate with the MinIO object storage service running locally.
-> For production environments, we recommend disabling this setting and using a secure method of authentication (such as TLS/HTTPS) in combination with a production-grade object storage service.
+> For production environments, disable this setting and use a secure method of authentication in combination with a production-grade object storage service.
 
 3. Run the example:
 
