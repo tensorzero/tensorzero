@@ -31,7 +31,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let image_providers = vec![E2ETestProvider {
-        variant_name: "anthropic-image".to_string(),
+        variant_name: "anthropic".to_string(),
         model_name: "anthropic::claude-3-haiku-20240307".into(),
         model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),

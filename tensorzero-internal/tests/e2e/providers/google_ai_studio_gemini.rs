@@ -29,7 +29,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let image_providers = vec![E2ETestProvider {
-        variant_name: "google-ai-studio-gemini-flash-8b".to_string(),
+        variant_name: "google_ai_studio".to_string(),
         model_name: "google_ai_studio_gemini::gemini-1.5-flash-8b".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
