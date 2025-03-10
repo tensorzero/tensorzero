@@ -1186,7 +1186,7 @@ mod tests {
     use std::borrow::Cow;
 
     use super::*;
-    use crate::inference::providers::common::WEATHER_TOOL_CONFIG;
+    use crate::inference::providers::test_helpers::WEATHER_TOOL_CONFIG;
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};

@@ -6,7 +6,7 @@ use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use std::time::Duration;
 use tensorzero_internal::{
-    clickhouse::ClickHouseConnectionInfo,
+    clickhouse::{test_helpers::select_json_inference_clickhouse, ClickHouseConnectionInfo},
     embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
     endpoints::inference::InferenceCredentials,
     inference::types::{
@@ -17,9 +17,9 @@ use tensorzero_internal::{
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-    select_json_inference_clickhouse, select_model_inferences_clickhouse,
+use crate::common::get_gateway_endpoint;
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
 };
 
 #[tokio::test]
