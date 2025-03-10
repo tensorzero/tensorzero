@@ -1,9 +1,11 @@
 [object_storage]
 type = "s3_compatible"
 endpoint = "http://minio:9000"
-bucket_name = "tensorzero"  # optional: depends on your S3-compatible storage provider
 # region = "us-east-1"  # optional: depends on your S3-compatible storage provider
-allow_http = true # For production environments, remove this setting and use a secure method of authentication in combination with a production-grade object storage service.
+bucket_name = "tensorzero"  # optional: depends on your S3-compatible storage provider
+# IMPORTANT: for production environments, remove the following setting and use a secure method of authentication in
+# combination with a production-grade object storage service.
+allow_http = true
 
 [functions.chatbot]
 type = "chat"
