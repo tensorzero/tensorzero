@@ -1638,7 +1638,7 @@ mod tests {
         );
         assert_eq!(
             request.generation_config.as_ref().unwrap().response_schema,
-            None
+            Some(serde_json::Value::Object(Default::default()))
         );
     }
 
