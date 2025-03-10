@@ -1015,6 +1015,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
             region: None,
             prefix: prefix.clone(),
             endpoint: Some(endpoint.clone()),
+            allow_http: None,
         },
         &client,
         &format!(
@@ -1201,6 +1202,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
             region: None,
             prefix: prefix.clone(),
             endpoint: Some(endpoint.clone()),
+            allow_http: None,
         },
         &client,
         &format!(
