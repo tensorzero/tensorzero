@@ -8,9 +8,11 @@ use serde_json::Value;
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::cache::CacheOptions;
 use tensorzero_internal::embeddings::EmbeddingModelConfig;
+#[allow(unused)]
+use tensorzero_internal::embeddings::EmbeddingProvider;
 use tensorzero_internal::endpoints::inference::InferenceClients;
 use tensorzero_internal::{
-    embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
+    embeddings::{EmbeddingProviderConfig, EmbeddingRequest},
     endpoints::inference::InferenceCredentials,
     inference::types::{Latency, ModelInferenceRequestJsonMode},
 };
