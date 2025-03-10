@@ -992,6 +992,7 @@ model = "test"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 json_mode = "strict"
+
 [functions.json_success]
 type = "json"
 system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
@@ -2225,6 +2226,25 @@ candidates = ["variant0", "variant1"]
 model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
+
+[functions.write_haiku]
+type = "chat"
+user_schema = "../../fixtures/config/functions/write_haiku/user_schema.json"
+
+[functions.write_haiku.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/write_haiku/initial_prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/write_haiku/initial_prompt/user_template.minijinja"
+
+[functions.extract_entities]
+type = "json"
+output_schema = "../../fixtures/config/functions/extract_entities/output_schema.json"
+
+[functions.extract_entities.variants.gpt_4o_mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/extract_entities/initial_prompt/system_template.minijinja"
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
