@@ -175,5 +175,7 @@ repos:
           - clickhouse-connect
           - pandas
           - pandas-stubs
+          - pydantic
           - tensorzero
           - tiktoken
+          - toml

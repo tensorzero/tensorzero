@@ -159,7 +159,23 @@ jobs:
         working-directory: clients/openai-node
         run: |
           pnpm run typecheck
-          
+
+      - name: "Python: Recipes: Install dependencies"
+        working-directory: recipes
+        run: |
+          uv venv
+          uv sync
+
+      - name: "Python: Recipes: pyright"
+        working-directory: recipes
+        run: |
+          uv run pyright
+
+      - name: "Python: Recipes: pytest"
+        working-directory: recipes
+        run: |
+          uv run pytest
+
       - name: "Node.js: OpenAI Client: lint"
         working-directory: clients/openai-node
         run: |
