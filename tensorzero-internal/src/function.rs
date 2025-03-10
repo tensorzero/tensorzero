@@ -418,7 +418,7 @@ pub fn sample_variant<'a>(
     let total_weight = candidate_variant_names
         .iter()
         .filter_map(|name| variants.get(*name))
-        .map(|variant| variant.weight())
+        .map(|variant| variant.weight().unwrap_or(0.0))
         .sum::<f64>();
 
     // If the total weight is non-positive, perform uniform sampling
@@ -472,7 +472,7 @@ pub fn sample_variant<'a>(
                 message: format!("Function `{function_name}` has no variant `{variant_name}`"),
             })
         })?;
-        cumulative_weight += variant.weight();
+        cumulative_weight += variant.weight().unwrap_or(0.0);
         if cumulative_weight > random_threshold {
             sampled_variant_name = candidate_variant_names.swap_remove(i);
             break;
@@ -1371,7 +1371,7 @@ mod tests {
             sample_size: usize,
             tolerance: f64,
         ) {
-            let total_weight: f64 = variants.values().map(|v| v.weight()).sum();
+            let total_weight: f64 = variants.values().map(|v| v.weight().unwrap_or(0.0)).sum();
             let mut counts: HashMap<String, usize> = HashMap::new();
 
             for _ in 0..sample_size {
@@ -1387,7 +1387,7 @@ mod tests {
             }
 
             for (variant_name, variant) in variants {
-                let expected_prob = variant.weight() / total_weight;
+                let expected_prob = variant.weight().unwrap_or(0.0) / total_weight;
                 let actual_prob =
                     *counts.get(variant_name).unwrap_or(&0) as f64 / sample_size as f64;
                 let diff = (expected_prob - actual_prob).abs();

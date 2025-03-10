@@ -241,7 +241,8 @@ impl UninitializedEvaluatorConfig {
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 let nonzero_weights = variants
                     .iter()
-                    .filter(|(_, variant)| variant.weight() > 0.0)
+                    // Treat a None weight as 0.0 for this check - we only care if we have multiple variants with an explicit positive weight
+                    .filter(|(_, variant)| variant.weight().unwrap_or(0.0) > 0.0)
                     .count();
                 if nonzero_weights != 1 {
                     return Err(ErrorDetails::Config {
