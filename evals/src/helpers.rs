@@ -116,3 +116,84 @@ pub async fn get_tool_params_args(
         },
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use serde_json::json;
+    use tensorzero::Tool;
+    use tensorzero_internal::{function::FunctionConfigChat, tool::ToolChoice};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_get_tool_params_args() {
+        // Dynamic tool params with tool_choice set to "tool_1"
+        let tool_database_insert = ToolCallConfigDatabaseInsert {
+            tool_choice: ToolChoice::Specific("tool_1".to_string()),
+            parallel_tool_calls: false,
+            tools_available: vec![Tool {
+                name: "tool_1".to_string(),
+                description: "Tool 1".to_string(),
+                parameters: json!({}),
+                strict: true,
+            }],
+        };
+        let function_config = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec![],
+            tool_choice: ToolChoice::Specific("tool_1".to_string()),
+            parallel_tool_calls: false,
+        });
+        let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config).await;
+        assert_eq!(
+            tool_params_args,
+            DynamicToolParams {
+                tool_choice: Some(ToolChoice::Specific("tool_1".to_string())),
+                parallel_tool_calls: Some(false),
+                allowed_tools: Some(Vec::new()),
+                additional_tools: Some(vec![Tool {
+                    name: "tool_1".to_string(),
+                    description: "Tool 1".to_string(),
+                    parameters: json!({}),
+                    strict: true,
+                }]),
+            }
+        );
+
+        // Static tool params with a tool choice set to required
+        let tool_database_insert = ToolCallConfigDatabaseInsert {
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: false,
+            tools_available: vec![Tool {
+                name: "tool_1".to_string(),
+                description: "Tool 1".to_string(),
+                parameters: json!({}),
+                strict: true,
+            }],
+        };
+        let function_config = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec!["tool_1".to_string()],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        });
+        let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config).await;
+        assert_eq!(
+            tool_params_args,
+            DynamicToolParams {
+                tool_choice: Some(ToolChoice::Required),
+                parallel_tool_calls: Some(false),
+                allowed_tools: Some(vec!["tool_1".to_string()]),
+                additional_tools: Some(vec![]),
+            }
+        );
+    }
+}
