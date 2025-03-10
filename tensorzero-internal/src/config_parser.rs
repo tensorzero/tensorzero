@@ -2243,6 +2243,10 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     async fn test_config_blocked_s3_http_endpoint_default() {
+        // Set invalid credentials (tests are isolated per-process)
+        // to make sure that the write fails quickly.
+        std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
         let tempfile = NamedTempFile::new().unwrap();
         write!(
             &tempfile,
@@ -2273,6 +2277,10 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     async fn test_config_blocked_s3_http_endpoint_override() {
+        // Set invalid credentials (tests are isolated per-process)
+        // to make sure that the write fails quickly.
+        std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
         std::env::set_var("AWS_ALLOW_HTTP", "true");
         let tempfile = NamedTempFile::new().unwrap();
         write!(
@@ -2305,6 +2313,10 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     async fn test_config_s3_allow_http_config() {
+        // Set invalid credentials (tests are isolated per-process)
+        // to make sure that the write fails quickly.
+        std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
         // Make `object_store` fail immediately (with the expected dns resolution error)
         // to speed up this test.
         std::env::set_var("TENSORZERO_E2E_DISABLE_S3_RETRY", "true");
@@ -2341,6 +2353,10 @@ mod tests {
     #[traced_test]
     #[tokio::test]
     async fn test_config_s3_allow_http_env_var() {
+        // Set invalid credentials (tests are isolated per-process)
+        // to make sure that the write fails quickly.
+        std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
         // Make `object_store` fail immediately (with the expected dns resolution error)
         // to speed up this test.
         std::env::set_var("TENSORZERO_E2E_DISABLE_S3_RETRY", "true");
