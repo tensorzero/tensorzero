@@ -29,7 +29,7 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let image_providers = vec![E2ETestProvider {
-        variant_name: "google-ai-studio-gemini-flash-8b".to_string(),
+        variant_name: "google_ai_studio".to_string(),
         model_name: "google_ai_studio_gemini::gemini-1.5-flash-8b".into(),
         model_provider_name: "google_ai_studio_gemini".into(),
         credentials: HashMap::new(),
@@ -41,7 +41,7 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let inference_params_providers = vec![
+    let inference_params_dynamic_providers = vec![
         E2ETestProvider {
             variant_name: "google-ai-studio-gemini-flash-8b-dynamic".to_string(),
             model_name: "gemini-1.5-flash-8b-dynamic".into(),
@@ -108,7 +108,8 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
-        inference_params_inference: inference_params_providers,
+        inference_params_inference: standard_providers.clone(),
+        inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: tool_providers.clone(),
         tool_multi_turn_inference: tool_providers.clone(),
         dynamic_tool_use_inference: tool_providers.clone(),

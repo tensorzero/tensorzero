@@ -717,8 +717,8 @@ mod tests {
 
     use crate::inference::{
         providers::{
-            common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG},
             openai::{OpenAIToolType, SpecificToolChoice, SpecificToolFunction},
+            test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG},
         },
         types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
     };

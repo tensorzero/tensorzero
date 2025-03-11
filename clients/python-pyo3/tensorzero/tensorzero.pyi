@@ -80,6 +80,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
             Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
+        internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
         credentials: Optional[Dict[str, str]] = None,
         cache_options: Optional[Dict[str, Any]] = None,
@@ -123,6 +124,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         inference_id: Optional[UUID] = None,
         episode_id: Optional[UUID] = None,
         dryrun: Optional[bool] = None,
+        internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
     ) -> FeedbackResponse:
         """
@@ -213,6 +215,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
             Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
         ] = None,
         parallel_tool_calls: Optional[bool] = None,
+        internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
         credentials: Optional[Dict[str, str]] = None,
         cache_options: Optional[Dict[str, Any]] = None,
@@ -256,6 +259,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         inference_id: Optional[UUID] = None,
         episode_id: Optional[UUID] = None,
         dryrun: Optional[bool] = None,
+        internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
     ) -> FeedbackResponse:
         """

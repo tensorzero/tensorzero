@@ -84,7 +84,12 @@ async def judge_answer(
                 messages=[
                     {
                         "role": "user",
-                        "content": {"prediction": prediction, "truth": truth},
+                        "content": [
+                            {
+                                "type": "text",
+                                "arguments": {"prediction": prediction, "truth": truth},
+                            }
+                        ],
                     },
                 ],
             )

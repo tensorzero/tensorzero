@@ -9,9 +9,12 @@ with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
                 "role": "user",
                 "content": [
                     {
-                        "recipient_name": "TensorZero Team",
-                        "sender_name": "Mark Zuckerberg",
-                        "email_purpose": "Acquire TensorZero for $100 billion dollars.",
+                        "type": "text",
+                        "tensorzero::arguments": {
+                            "recipient_name": "TensorZero Team",
+                            "sender_name": "Mark Zuckerberg",
+                            "email_purpose": "Acquire TensorZero for $100 billion dollars.",
+                        },
                     }
                 ],
             }

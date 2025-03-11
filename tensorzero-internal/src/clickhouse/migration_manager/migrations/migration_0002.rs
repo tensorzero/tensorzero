@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
+use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::clickhouse_migration_manager::migration_trait::Migration;
 use crate::error::Error;
 
 use super::check_table_exists;

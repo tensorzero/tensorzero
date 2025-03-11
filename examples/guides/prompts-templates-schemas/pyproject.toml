@@ -1,5 +1,5 @@
 [project]
-name = "tensorzero-examples-guides-multimodal-inference"
+name = "tensorzero-examples-guides-prompts-templates-schemas"
 version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"

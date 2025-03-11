@@ -21,11 +21,13 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
+    select_model_inference_clickhouse,
+};
+
 use crate::{
-    common::{
-        get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-        select_json_inference_clickhouse, select_model_inference_clickhouse,
-    },
+    common::get_gateway_endpoint,
     providers::common::{
         make_embedded_gateway, make_embedded_gateway_no_config, make_http_gateway,
     },
@@ -97,6 +99,10 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
             ]
         },
         "stream": false,
+        "internal": true, // This also tests that the internal flag is correctly propagated.
+        "tags": {
+            "tensorzero::tag_key": "tensorzero::tag_value"
+        }
     });
 
     let response = Client::new()

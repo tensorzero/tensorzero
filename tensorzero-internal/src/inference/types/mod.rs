@@ -1566,7 +1566,7 @@ fn handle_textual_content_block<F, A>(
 mod tests {
     use super::*;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::providers::common::get_temperature_tool_config;
+    use crate::inference::providers::test_helpers::get_temperature_tool_config;
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolConfig;

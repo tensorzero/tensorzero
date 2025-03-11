@@ -420,6 +420,8 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             // OpenAI compatible endpoint does not support dynamic credentials
             credentials: InferenceCredentials::default(),
             cache_options: CacheParamsOptions::default(),
+            // For now, we don't support internal inference for OpenAI compatible endpoint
+            internal: false,
             tags: HashMap::new(),
             // OpenAI compatible endpoint does not support 'include_original_response'
             include_original_response: false,

@@ -5,9 +5,9 @@ use serde_json::Value;
 use tensorzero_internal::endpoints::datasets::CLICKHOUSE_DATETIME_FORMAT;
 use uuid::Uuid;
 
-use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_chat_datapoint_clickhouse,
-    select_json_datapoint_clickhouse,
+use crate::common::get_gateway_endpoint;
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_datapoint_clickhouse, select_json_datapoint_clickhouse,
 };
 
 #[tokio::test]
