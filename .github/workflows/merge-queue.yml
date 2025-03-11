@@ -85,7 +85,7 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch MinIO container for E2E tests
-        run: docker compose -f ci/minio-docker-compose.yml up -d --wait
+        run: docker compose -f ci/minio-docker-compose.yml up
 
       - name: Launch ClickHouse container for E2E tests
         run: docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait
