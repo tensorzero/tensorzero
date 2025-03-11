@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
 use super::ClickHouseConnectionInfo;
 use serde_json::Value;
 use uuid::Uuid;
