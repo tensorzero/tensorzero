@@ -27,7 +27,7 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let inference_params_providers = vec![E2ETestProvider {
+    let inference_params_dynamic_providers = vec![E2ETestProvider {
         variant_name: "hyperbolic-dynamic".to_string(),
         model_name: "meta-llama/Meta-Llama-3-70B-Instruct-dynamic".into(),
         model_provider_name: "hyperbolic".into(),
@@ -43,10 +43,11 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     E2ETestProviders {
-        simple_inference: standard_providers,
+        simple_inference: standard_providers.clone(),
         reasoning_inference: vec![],
         extra_body_inference: extra_body_providers,
-        inference_params_inference: inference_params_providers,
+        inference_params_inference: standard_providers,
+        inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: vec![],
         tool_multi_turn_inference: vec![],
         dynamic_tool_use_inference: vec![],
