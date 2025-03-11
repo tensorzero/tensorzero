@@ -18,8 +18,10 @@ services:
     depends_on:
       s3service:
         condition: service_healthy
+    restart: "no"
     entrypoint: >
       /bin/sh -c "
+      set -euxo pipefail;
       /usr/bin/mc alias set tensorzero-minio http://s3service:9000 tensorzero-root tensorzero-root;
       /usr/bin/mc mb tensorzero-minio/tensorzero-e2e-tests;
       /usr/bin/mc admin user add tensorzero-minio tensorzero tensorzero;

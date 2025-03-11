@@ -85,7 +85,9 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch MinIO container for E2E tests
-        run: docker compose -f ci/minio-docker-compose.yml up --exit-code-from createbuckets
+        run: |
+          # This will exit with status code 1 if any container exits, even if the container exits with status code 0
+          docker compose -f ci/minio-docker-compose.yml up --wait || true
 
       - name: Launch ClickHouse container for E2E tests
         run: docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait
