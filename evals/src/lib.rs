@@ -5,7 +5,7 @@ use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use dataset::query_dataset;
 use evaluators::evaluate_inference;
-use helpers::{get_tool_params_args, resolved_input_to_input};
+use helpers::{get_tool_params_args, resolved_input_to_input, setup_logging};
 use tensorzero::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
     DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceResponse,
@@ -63,9 +63,7 @@ pub struct Args {
 }
 
 pub async fn run_eval(args: Args, eval_run_id: Uuid) -> Result<()> {
-    let subscriber = tracing_subscriber::FmtSubscriber::new();
-    tracing::subscriber::set_global_default(subscriber)
-        .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))?;
+    setup_logging(&args)?;
     let semaphore = Semaphore::new(args.concurrency);
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;

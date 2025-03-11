@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use futures::future::join_all;
 use tensorzero::{DynamicToolParams, Input, InputMessage, InputMessageContent};
 use tensorzero_internal::{
@@ -8,6 +8,8 @@ use tensorzero_internal::{
     },
     tool::ToolCallConfigDatabaseInsert,
 };
+
+use crate::{Args, OutputFormat};
 
 /// Convert a `ResolvedInput` to an `Input`.
 ///
@@ -114,6 +116,23 @@ pub async fn get_tool_params_args(
             tool_choice: None,
             parallel_tool_calls: None,
         },
+    }
+}
+
+pub fn setup_logging(args: &Args) -> Result<()> {
+    match args.format {
+        OutputFormat::Jsonl => {
+            let subscriber = tracing_subscriber::FmtSubscriber::builder()
+                .with_writer(std::io::stderr)
+                .finish();
+            tracing::subscriber::set_global_default(subscriber)
+                .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
+        }
+        OutputFormat::HumanReadable => {
+            let subscriber = tracing_subscriber::FmtSubscriber::new();
+            tracing::subscriber::set_global_default(subscriber)
+                .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
+        }
     }
 }
 
