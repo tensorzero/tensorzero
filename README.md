@@ -156,7 +156,7 @@ from openai import OpenAI
 
 with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
     response = client.chat.completions.create(
-        model="tensorzero::function_name::your_function_name",  # defined in configuration (step 2)
+        model="tensorzero::model_name::openai::gpt-4o-mini",
         messages=[
             {
                 "role": "user",
@@ -188,7 +188,7 @@ const client = new OpenAI({
 });
 
 const response = await client.chat.completions.create({
-  model: "tensorzero::function_name::generate_haiku",
+  model: "tensorzero::model_name::openai::gpt-4o-mini",
   messages: [
     {
       role: "user",
@@ -196,8 +196,6 @@ const response = await client.chat.completions.create({
     },
   ],
 });
-
-console.log(JSON.stringify(response, null, 2));
 ```
 
 See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more information.
