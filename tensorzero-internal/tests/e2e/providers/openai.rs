@@ -5,8 +5,14 @@ use reqwest::Client;
 use reqwest::StatusCode;
 use serde_json::json;
 use serde_json::Value;
+use tensorzero_internal::cache::CacheEnabledMode;
+use tensorzero_internal::cache::CacheOptions;
+use tensorzero_internal::embeddings::EmbeddingModelConfig;
+#[allow(unused)]
+use tensorzero_internal::embeddings::EmbeddingProvider;
+use tensorzero_internal::endpoints::inference::InferenceClients;
 use tensorzero_internal::{
-    embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
+    embeddings::{EmbeddingProviderConfig, EmbeddingRequest},
     endpoints::inference::InferenceCredentials,
     inference::types::{Latency, ModelInferenceRequestJsonMode},
 };
@@ -843,6 +849,7 @@ async fn test_o1_mini_inference() {
 
 #[tokio::test]
 async fn test_embedding_request() {
+    let clickhouse = get_clickhouse().await;
     let provider_config_serialized = r#"
     type = "openai"
     model_name = "text-embedding-3-small"
@@ -854,16 +861,39 @@ async fn test_embedding_request() {
         EmbeddingProviderConfig::OpenAI(_)
     ));
 
-    let client = Client::new();
+    // Inject randomness into the model name to ensure that the first request
+    // is a cache miss
+    let model_name = format!("my-embedding-{}", Uuid::now_v7());
+
+    let model_config = EmbeddingModelConfig {
+        routing: vec![model_name.as_str().into()],
+        providers: [(model_name.as_str().into(), provider_config)]
+            .into_iter()
+            .collect(),
+    };
+
     let request = EmbeddingRequest {
         input: "This is a test input".to_string(),
     };
     let api_keys = InferenceCredentials::default();
-    let response = provider_config
-        .embed(&request, &client, &api_keys)
+    let response = model_config
+        .embed(
+            &request,
+            &model_name,
+            &InferenceClients {
+                http_client: &Default::default(),
+                credentials: &api_keys,
+                clickhouse_connection_info: &clickhouse,
+                cache_options: &CacheOptions {
+                    max_age_s: None,
+                    enabled: CacheEnabledMode::On,
+                },
+            },
+        )
         .await
         .unwrap();
     assert_eq!(response.embedding.len(), 1536);
+    assert!(!response.cached);
     // Calculate the L2 norm of the embedding
     let norm: f32 = response
         .embedding
@@ -908,6 +938,29 @@ async fn test_embedding_request() {
         }
         _ => panic!("Latency should be non-streaming"),
     }
+
+    // Wait for ClickHouse write
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let cached_response = model_config
+        .embed(
+            &request,
+            &model_name,
+            &InferenceClients {
+                http_client: &Default::default(),
+                credentials: &api_keys,
+                clickhouse_connection_info: &clickhouse,
+                cache_options: &CacheOptions {
+                    max_age_s: None,
+                    enabled: CacheEnabledMode::On,
+                },
+            },
+        )
+        .await
+        .unwrap();
+    assert!(cached_response.cached);
+    assert_eq!(response.embedding, cached_response.embedding);
+    assert_eq!(cached_response.usage.input_tokens, 5);
+    assert_eq!(cached_response.usage.output_tokens, 0);
 }
 
 #[cfg(feature = "e2e_tests")]
