@@ -4,9 +4,9 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-    select_model_inference_clickhouse,
+use crate::common::get_gateway_endpoint;
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
 #[cfg(feature = "e2e_tests")]

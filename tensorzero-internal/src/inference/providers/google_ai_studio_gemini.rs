@@ -1004,7 +1004,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::inference::providers::common::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
+    use crate::inference::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::inference::types::{FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode};
     use crate::tool::{ToolCallConfig, ToolResult};
 

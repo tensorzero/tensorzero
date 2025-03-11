@@ -5,11 +5,11 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::{
-    common::{
-        get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-        select_model_inference_clickhouse,
-    },
+    common::get_gateway_endpoint,
     providers::common::{E2ETestProvider, E2ETestProviders},
+};
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
 #[cfg(feature = "e2e_tests")]
@@ -31,7 +31,7 @@ async fn get_providers() -> E2ETestProviders {
     }];
 
     let image_providers = vec![E2ETestProvider {
-        variant_name: "anthropic-image".to_string(),
+        variant_name: "anthropic".to_string(),
         model_name: "anthropic::claude-3-haiku-20240307".into(),
         model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
@@ -44,7 +44,7 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let inference_params_providers = vec![E2ETestProvider {
+    let inference_params_dynamic_providers = vec![E2ETestProvider {
         variant_name: "anthropic-dynamic".to_string(),
         model_name: "claude-3-haiku-20240307-anthropic-dynamic".into(),
         model_provider_name: "anthropic".into(),
@@ -84,7 +84,8 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
-        inference_params_inference: inference_params_providers,
+        inference_params_inference: standard_providers.clone(),
+        inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),

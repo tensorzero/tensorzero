@@ -36,9 +36,9 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use crate::common::{
+use tensorzero_internal::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
-    select_json_inference_clickhouse, select_model_inference_clickhouse,
+    select_json_inference_clickhouse, select_model_inference_clickhouse, CLICKHOUSE_URL,
 };
 
 #[derive(Clone, Debug)]
@@ -46,6 +46,7 @@ pub struct E2ETestProvider {
     pub variant_name: String,
     pub model_name: String,
     pub model_provider_name: String,
+    #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub credentials: HashMap<String, String>,
 }
 
@@ -62,6 +63,9 @@ pub struct E2ETestProviders {
     pub extra_body_inference: Vec<E2ETestProvider>,
     #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub reasoning_inference: Vec<E2ETestProvider>,
+    #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+    pub inference_params_dynamic_credentials: Vec<E2ETestProvider>,
+    #[cfg_attr(not(feature = "batch_tests"), allow(dead_code))]
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
     pub tool_multi_turn_inference: Vec<E2ETestProvider>,
@@ -92,7 +96,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
     config_path.push("tests/e2e/tensorzero.toml");
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
-        clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
     })
     .build()
@@ -104,7 +108,7 @@ pub async fn make_embedded_gateway() -> tensorzero::Client {
 pub async fn make_embedded_gateway_no_config() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: None,
-        clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
     })
     .build()
@@ -118,7 +122,7 @@ pub async fn make_embedded_gateway_with_config(config: &str) -> tensorzero::Clie
     std::fs::write(tmp_config.path(), config).unwrap();
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(tmp_config.path().to_owned()),
-        clickhouse_url: Some(crate::common::CLICKHOUSE_URL.clone()),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         timeout: None,
     })
     .build()
@@ -234,7 +238,7 @@ macro_rules! generate_provider_tests {
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_inference_params_inference_request() {
-            let providers = $func().await.inference_params_inference;
+            let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
                 test_inference_params_inference_request_with_provider(provider).await;
             }
@@ -243,7 +247,7 @@ macro_rules! generate_provider_tests {
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
         async fn test_inference_params_streaming_inference_request() {
-            let providers = $func().await.inference_params_inference;
+            let providers = $func().await.inference_params_dynamic_credentials;
             for provider in providers {
                 test_inference_params_streaming_inference_request_with_provider(provider).await;
             }
@@ -505,6 +509,36 @@ macro_rules! generate_provider_tests {
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
 
+pub const IMAGE_FUNCTION_CONFIG: &str = r#"
+[functions.image_test]
+type = "chat"
+
+[functions.image_test.variants.openai]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+
+[functions.image_test.variants.anthropic]
+type = "chat_completion"
+model = "anthropic::claude-3-haiku-20240307"
+
+[functions.image_test.variants.google_ai_studio]
+type = "chat_completion"
+model = "google_ai_studio_gemini::gemini-1.5-flash-8b"
+
+[functions.image_test.variants.gcp_vertex]
+type = "chat_completion"
+model = "gemini-1.5-pro-001"
+
+[models."gemini-1.5-pro-001"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gemini-1.5-pro-001".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+model_id = "gemini-1.5-pro-001"
+location = "us-central1"
+project_id = "tensorzero-public"
+"#;
+
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
@@ -519,7 +553,8 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
         [object_storage]
         type = "filesystem"
         path = "{}"
-        [functions]
+
+        {IMAGE_FUNCTION_CONFIG}
         "#,
             temp_dir.path().to_string_lossy()
         ),
@@ -548,7 +583,8 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
         [object_storage]
         type = "filesystem"
         path = "{}"
-        [functions]
+
+        {IMAGE_FUNCTION_CONFIG}
         "#,
             temp_dir.path().to_string_lossy()
         ),
@@ -589,6 +625,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
             region: Some("us-east-1".to_string()),
             prefix: prefix.clone(),
             endpoint: None,
+            allow_http: None,
         },
         &client,
         &format!(
@@ -599,7 +636,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     bucket_name = "{test_bucket}"
     prefix = "{prefix}"
 
-    [functions]
+    {IMAGE_FUNCTION_CONFIG}
     "#
         ),
         test_bucket,
@@ -758,7 +795,8 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     for should_be_cached in [false, true] {
         let response = client
             .inference(ClientInferenceParams {
-                model_name: Some(provider.model_name.clone()),
+                function_name: Some("image_test".to_string()),
+                variant_name: Some(provider.variant_name.clone()),
                 episode_id: Some(episode_id),
                 input: Input {
                     system: None,
@@ -1063,7 +1101,7 @@ pub async fn check_base64_image_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "tensorzero::default");
+    assert_eq!(function_name, "image_test");
 
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();

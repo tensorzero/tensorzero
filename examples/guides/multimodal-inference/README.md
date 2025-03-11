@@ -21,12 +21,42 @@ docker compose up
 > You can use any S3-compatible object storage service (e.g. AWS S3, GCP Storage, Cloudflare R2).
 > We use a local MinIO instance in this example for convenience.
 
-> [!IMPORTANT]
->
-> In `docker-compose.yml`, we set `AWS_ALLOW_HTTP=true` to allow the TensorZero Gateway to communicate with the MinIO object storage service running locally.
-> For production environments, disable this setting and use a secure method of authentication in combination with a production-grade object storage service.
-
 3. Run the example:
+
+<details>
+<summary><b>Python</b></summary>
+
+a. Install the dependencies:
+
+```bash
+# We recommend using Python 3.9+ and a virtual environment
+pip install -r requirements.txt
+```
+
+b. Run the example:
+
+```bash
+python main.py
+```
+
+</details>
+
+<summary><b>Python (OpenAI)</b></summary>
+
+a. Install the dependencies:
+
+```bash
+# We recommend using Python 3.9+ and a virtual environment
+pip install -r requirements.txt
+```
+
+b. Run the example:
+
+```bash
+python main_openai.py
+```
+
+</details>
 
 <details>
 <summary><b>HTTP</b></summary>
@@ -46,7 +76,7 @@ curl -X POST http://localhost:3000/inference \
           "content": [
             {
               "type": "text",
-              "value": "Do the images share any common features?"
+              "text": "Do the images share any common features?"
             },
             {
               "type": "image",
@@ -62,24 +92,6 @@ curl -X POST http://localhost:3000/inference \
       ]
     }
   }'
-```
-
-</details>
-
-<details>
-<summary><b>Python</b></summary>
-
-a. Install the dependencies:
-
-```bash
-# We recommend using Python 3.9+ and a virtual environment
-pip install -r requirements.txt
-```
-
-b. Run the example:
-
-```bash
-python main.py
 ```
 
 </details>

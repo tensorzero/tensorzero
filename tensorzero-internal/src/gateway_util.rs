@@ -5,8 +5,8 @@ use reqwest::{Client, Proxy};
 use serde::de::DeserializeOwned;
 use tracing::instrument;
 
+use crate::clickhouse::migration_manager;
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::clickhouse_migration_manager;
 use crate::config_parser::Config;
 use crate::error::{Error, ErrorDetails};
 
@@ -77,7 +77,7 @@ pub async fn setup_clickhouse(
 
     // Run ClickHouse migrations (if any) if we have a production ClickHouse connection
     if let ClickHouseConnectionInfo::Production { .. } = &clickhouse_connection_info {
-        clickhouse_migration_manager::run(&clickhouse_connection_info).await?;
+        migration_manager::run(&clickhouse_connection_info).await?;
     }
     Ok(clickhouse_connection_info)
 }

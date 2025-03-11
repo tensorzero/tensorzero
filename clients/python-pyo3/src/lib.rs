@@ -173,7 +173,7 @@ impl BaseTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None))]
     #[allow(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -190,6 +190,7 @@ impl BaseTensorZeroGateway {
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
         parallel_tool_calls: Option<bool>,
+        internal: Option<bool>,
         tags: Option<HashMap<String, String>>,
         credentials: Option<HashMap<String, ClientSecretString>>,
         cache_options: Option<&Bound<'_, PyDict>>,
@@ -209,6 +210,7 @@ impl BaseTensorZeroGateway {
             additional_tools,
             tool_choice,
             parallel_tool_calls,
+            internal.unwrap_or(false),
             tags,
             credentials,
             cache_options,
@@ -241,6 +243,7 @@ where
 }
 
 impl BaseTensorZeroGateway {
+    #[allow(clippy::too_many_arguments)]
     fn prepare_feedback_params(
         py: Python<'_>,
         metric_name: String,
@@ -248,6 +251,7 @@ impl BaseTensorZeroGateway {
         inference_id: Option<Bound<'_, PyAny>>,
         episode_id: Option<Bound<'_, PyAny>>,
         dryrun: Option<bool>,
+        internal: bool,
         tags: Option<HashMap<String, String>>,
     ) -> PyResult<FeedbackParams> {
         Ok(FeedbackParams {
@@ -257,6 +261,7 @@ impl BaseTensorZeroGateway {
             inference_id: python_uuid_to_uuid("inference_id", inference_id)?,
             dryrun,
             tags: tags.unwrap_or_default(),
+            internal,
         })
     }
 
@@ -276,6 +281,7 @@ impl BaseTensorZeroGateway {
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
         parallel_tool_calls: Option<bool>,
+        internal: bool,
         tags: Option<HashMap<String, String>>,
         credentials: Option<HashMap<String, ClientSecretString>>,
         cache_options: Option<&Bound<'_, PyDict>>,
@@ -336,6 +342,7 @@ impl BaseTensorZeroGateway {
             variant_name,
             dryrun,
             tags: tags.unwrap_or_default(),
+            internal,
             params: params.unwrap_or_default(),
             dynamic_tool_params: DynamicToolParams {
                 allowed_tools,
@@ -461,7 +468,7 @@ impl TensorZeroGateway {
         Py::new(cls.py(), instance)
     }
 
-    #[pyo3(signature = (*, metric_name, value, inference_id=None, episode_id=None, dryrun=None, tags=None))]
+    #[pyo3(signature = (*, metric_name, value, inference_id=None, episode_id=None, dryrun=None, internal=None, tags=None))]
     /// Make a request to the /feedback endpoint of the gateway
     ///
     /// :param metric_name: The name of the metric to provide feedback for
@@ -484,6 +491,7 @@ impl TensorZeroGateway {
         inference_id: Option<Bound<'_, PyAny>>,
         episode_id: Option<Bound<'_, PyAny>>,
         dryrun: Option<bool>,
+        internal: Option<bool>,
         tags: Option<HashMap<String, String>>,
     ) -> PyResult<Py<PyAny>> {
         let fut = this
@@ -496,6 +504,7 @@ impl TensorZeroGateway {
                 inference_id,
                 episode_id,
                 dryrun,
+                internal.unwrap_or(false),
                 tags,
             )?);
         // We're in the synchronous `TensorZeroGateway` class, so we need to block on the Rust future,
@@ -506,7 +515,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None))]
     #[allow(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -554,6 +563,7 @@ impl TensorZeroGateway {
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
         parallel_tool_calls: Option<bool>,
+        internal: Option<bool>,
         tags: Option<HashMap<String, String>>,
         credentials: Option<HashMap<String, ClientSecretString>>,
         cache_options: Option<&Bound<'_, PyDict>>,
@@ -576,6 +586,7 @@ impl TensorZeroGateway {
                     additional_tools,
                     tool_choice,
                     parallel_tool_calls,
+                    internal.unwrap_or(false),
                     tags,
                     credentials,
                     cache_options,
@@ -736,7 +747,7 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, tags=None, credentials=None, cache_options=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None))]
     #[allow(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -784,6 +795,7 @@ impl AsyncTensorZeroGateway {
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
         parallel_tool_calls: Option<bool>,
+        internal: Option<bool>,
         tags: Option<HashMap<String, String>>,
         credentials: Option<HashMap<String, ClientSecretString>>,
         cache_options: Option<&Bound<'_, PyDict>>,
@@ -803,6 +815,7 @@ impl AsyncTensorZeroGateway {
             additional_tools,
             tool_choice,
             parallel_tool_calls,
+            internal.unwrap_or(false),
             tags,
             credentials,
             cache_options,
@@ -826,7 +839,7 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, metric_name, value, inference_id=None, episode_id=None, dryrun=None, tags=None))]
+    #[pyo3(signature = (*, metric_name, value, inference_id=None, episode_id=None, dryrun=None, internal=None, tags=None))]
     /// Make a request to the /feedback endpoint.
     ///
     /// :param metric_name: The name of the metric to provide feedback for
@@ -840,6 +853,7 @@ impl AsyncTensorZeroGateway {
     /// :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
     /// :param tags: If set, adds tags to the feedback request.
     /// :return: {"feedback_id": str}
+    #[allow(clippy::too_many_arguments)]
     fn feedback<'a>(
         this: PyRef<'a, Self>,
         metric_name: String,
@@ -847,6 +861,7 @@ impl AsyncTensorZeroGateway {
         inference_id: Option<Bound<'_, PyAny>>,
         episode_id: Option<Bound<'_, PyAny>>,
         dryrun: Option<bool>,
+        internal: Option<bool>,
         tags: Option<HashMap<String, String>>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
@@ -857,6 +872,7 @@ impl AsyncTensorZeroGateway {
             inference_id,
             episode_id,
             dryrun,
+            internal.unwrap_or(false),
             tags,
         )?;
         // See `AsyncStreamWrapper::__anext__` for more details about `future_into_py`

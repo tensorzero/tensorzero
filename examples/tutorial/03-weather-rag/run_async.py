@@ -40,11 +40,16 @@ async def main():
                 "messages": [
                     {
                         "role": "user",
-                        "content": {
-                            "location": location,
-                            "temperature": temperature,
-                            "units": units,
-                        },
+                        "content": [
+                            {
+                                "type": "text",
+                                "arguments": {
+                                    "location": location,
+                                    "temperature": temperature,
+                                    "units": units,
+                                },
+                            }
+                        ],
                     }
                 ]
             },

@@ -53,6 +53,6 @@ slow-timeout = { period = "15s", terminate-after = 1 }
 
 [[profile.default.overrides]]
 # Settings for running unit tests
-filter = 'not binary(e2e)'
+filter = 'not binary(e2e) and not binary(batch)'
 retries = 0
 slow-timeout = { period = "5s", terminate-after = 1 }

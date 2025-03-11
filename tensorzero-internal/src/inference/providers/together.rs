@@ -874,10 +874,10 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::providers::openai::{
         OpenAIToolType, OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
     };
+    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
 
     #[test]
