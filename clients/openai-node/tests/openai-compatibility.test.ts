@@ -22,7 +22,7 @@ let client: OpenAI;
 beforeAll(() => {
   client = new OpenAI({
     apiKey: "donotuse",
-    baseURL: "http://localhost:3000/openai/v1",
+    baseURL: "http://127.0.0.1:3000/openai/v1",
   });
 });
 
