@@ -118,11 +118,11 @@ async fn main() {
         .fallback(endpoints::fallback::handle_404)
         .with_state(app_state);
 
-    // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
+    // Bind to the socket address specified in the config, or default to [::]:3000
     let bind_address = config
         .gateway
         .bind_address
-        .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 3000)));
+        .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], 3000)));
 
     let listener = match tokio::net::TcpListener::bind(bind_address).await {
         Ok(listener) => listener,
