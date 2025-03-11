@@ -171,7 +171,7 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 </details>
 
 <details>
-<summary><b>Usage: OpenAI Node Client</b></summary>
+<summary><b>Usage: OpenAI Node Client (JavaScript/TypeScript)</b></summary>
 
 You can access any provider using the OpenAI Node client with TensorZero.
 
