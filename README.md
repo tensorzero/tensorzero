@@ -110,7 +110,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 <br>
 
 <details open>
-<summary><b>Usage: TensorZero Python Client (Recommended)</b></summary>
+<summary><b>Usage: Python &mdash; TensorZero Client (Recommended)</b></summary>
 
 You can access any provider using the TensorZero Python client.
 
@@ -119,7 +119,7 @@ You can access any provider using the TensorZero Python client.
 3. Run inference:
 
 ```python
-from tensorzero import TensorZeroGateway
+from tensorzero import TensorZeroGateway  # or AsyncTensorZeroGateway
 
 
 with TensorZeroGateway.build_embedded(clickhouse_url="...", config_file="...") as client:
@@ -141,7 +141,7 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 </details>
 
 <details>
-<summary><b>Usage: OpenAI Python Client</b></summary>
+<summary><b>Usage: Python &mdash; OpenAI Client</b></summary>
 
 You can access any provider using the OpenAI Python client with TensorZero.
 
@@ -171,7 +171,7 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 </details>
 
 <details>
-<summary><b>Usage: OpenAI Node Client (JavaScript/TypeScript)</b></summary>
+<summary><b>Usage: JavaScript / TypeScript (Node) &mdash; OpenAI Client</b></summary>
 
 You can access any provider using the OpenAI Node client with TensorZero.
 
@@ -203,7 +203,7 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 </details>
 
 <details>
-<summary><b>Usage: Other Languages & Platforms (HTTP)</b></summary>
+<summary><b>Usage: Other Languages & Platforms &mdash; HTTP API</b></summary>
 
 TensorZero supports virtually any programming language or platform via its HTTP API.
 
