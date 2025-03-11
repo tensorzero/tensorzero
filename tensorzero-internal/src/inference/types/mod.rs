@@ -188,12 +188,47 @@ pub enum InputMessageContent {
     // We may extend this in the future to include other types of content
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum TextKind {
     Text { text: String },
     Arguments { arguments: Map<String, Value> },
     LegacyValue { value: Value },
+}
+
+impl<'de> Deserialize<'de> for TextKind {
+    fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+        let object: Map<String, Value> = Map::deserialize(de)?;
+        // Expect exactly one key
+        if object.keys().len() != 1 {
+            return Err(serde::de::Error::custom(format!(
+                "Expected exactly one other key in text content, found {} other keys",
+                object.keys().len()
+            )));
+        }
+        let (key, value) = object.into_iter().next().ok_or_else(|| {
+            serde::de::Error::custom(
+                "Internal error: Failed to get key/value after checking length",
+            )
+        })?;
+        match key.as_str() {
+            "text" => Ok(TextKind::Text {
+                text: serde_json::from_value(value).map_err(|e| {
+                    serde::de::Error::custom(format!("Error deserializing 'text': {e}"))
+                })?,
+            }),
+            "arguments" => Ok(TextKind::Arguments {
+                arguments: serde_json::from_value(value).map_err(|e| {
+                    serde::de::Error::custom(format!("Error deserializing 'arguments': {e}"))
+                })?,
+            }),
+            "value" => Ok(TextKind::LegacyValue { value }),
+            _ => Err(serde::de::Error::custom(format!(
+                "Unknown key '{}' in text content",
+                key
+            ))),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
