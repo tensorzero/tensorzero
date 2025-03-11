@@ -397,6 +397,7 @@ pub struct JsonInferenceDatapoint {
     pub input: ResolvedInput,
     #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub output: Option<JsonInferenceOutput>,
+    #[serde(deserialize_with = "deserialize_json_string")]
     pub output_schema: serde_json::Value,
     pub tags: Option<HashMap<String, String>>,
     pub auxiliary: String,

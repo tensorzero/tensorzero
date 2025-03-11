@@ -6,7 +6,6 @@ use tensorzero_internal::endpoints::datasets::{
 };
 use tensorzero_internal::{clickhouse::ClickHouseConnectionInfo, function::FunctionConfig};
 
-#[allow(dead_code)]
 pub async fn query_dataset(
     clickhouse_client: &ClickHouseConnectionInfo,
     dataset_name: &str,

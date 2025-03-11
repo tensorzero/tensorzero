@@ -34,10 +34,13 @@ async fn run_exact_match_eval_json() {
     let mut output = Vec::new();
     run_eval(args, eval_run_id, &mut output).await.unwrap();
     let output_str = String::from_utf8(output).unwrap();
+    let mut parsed_output = Vec::new();
     for line in output_str.lines() {
         let _parsed: serde_json::Value =
             serde_json::from_str(line).expect("Each line should be valid JSON");
+        parsed_output.push(_parsed);
     }
+    assert_eq!(parsed_output.len(), 50);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -63,4 +66,12 @@ async fn run_exact_match_eval_chat() {
 
     let mut output = Vec::new();
     run_eval(args, eval_run_id, &mut output).await.unwrap();
+    let output_str = String::from_utf8(output).unwrap();
+    let mut parsed_output = Vec::new();
+    for line in output_str.lines() {
+        let _parsed: serde_json::Value =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        parsed_output.push(_parsed);
+    }
+    assert_eq!(parsed_output.len(), 29);
 }
