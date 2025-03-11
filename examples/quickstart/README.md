@@ -4,29 +4,14 @@ This directory contains the code for the **[TensorZero Quick Start](https://www.
 
 ## Running the Example
 
-1. Launch the TensorZero Gateway and ClickHouse database:
+### Python
 
-```bash
-docker compose up
-```
+1. Launch the TensorZero Gateway, the TensorZero UI, and a development ClickHouse database: `docker compose up`
+2. Install the dependencies: `pip install -r requirements.txt`
+3. Run the example: `python before.py` and `python after.py`
 
-2. Install the dependencies:
+### Node
 
-```bash
-uv venv
-uv pip sync requirements.txt
-```
-
-or
-
-```bash
-# We recommend using Python 3.10+ and a virtual environment
-pip install -r requirements.txt
-```
-
-3. Run the example:
-
-```bash
-python before.py
-python after.py # or after_async.py or after_openai.py
-```
+1. Launch the TensorZero Gateway, the TensorZero UI, and a development ClickHouse database: `docker compose up`
+2. Install the dependencies: `npm install`
+3. Run the example: `npm start`

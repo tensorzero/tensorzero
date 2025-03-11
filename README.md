@@ -171,6 +171,40 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 </details>
 
 <details>
+<summary><b>Usage: OpenAI Node Client</b></summary>
+
+You can access any provider using the OpenAI Node client with TensorZero.
+
+1. Deploy `tensorzero/gateway` using Docker.
+   **[Detailed instructions →](https://www.tensorzero.com/docs/gateway/deployment)**
+2. Set up the TensorZero configuration.
+3. Run inference:
+
+```ts
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "http://localhost:3000/openai/v1",
+});
+
+const response = await client.chat.completions.create({
+  model: "tensorzero::function_name::generate_haiku",
+  messages: [
+    {
+      role: "user",
+      content: "Write a haiku about artificial intelligence.",
+    },
+  ],
+});
+
+console.log(JSON.stringify(response, null, 2));
+```
+
+See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more information.
+
+</details>
+
+<details>
 <summary><b>Usage: Other Languages & Platforms (HTTP)</b></summary>
 
 TensorZero supports virtually any programming language or platform via its HTTP API.
