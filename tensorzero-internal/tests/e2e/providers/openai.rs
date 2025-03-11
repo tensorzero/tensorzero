@@ -1087,7 +1087,12 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     bucket_name = "{test_bucket}"
     prefix = "{prefix}"
 
-    [functions]
+    [functions.image_test]
+    type = "chat"
+
+    [functions.image_test.variants.openai]
+    type = "chat_completion"
+    model = "openai::gpt-4o-mini-2024-07-18"
     "#
         ),
         test_bucket,
@@ -1215,6 +1220,7 @@ async fn test_content_block_text_field() {
 #[tokio::test]
 pub async fn test_image_inference_with_provider_gcp_storage() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
+    use crate::providers::common::IMAGE_FUNCTION_CONFIG;
     use aws_credential_types::Credentials;
     use aws_sdk_s3::config::SharedCredentialsProvider;
     use rand::distributions::Alphanumeric;
@@ -1274,7 +1280,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     bucket_name = "{test_bucket}"
     prefix = "{prefix}"
 
-    [functions]
+    {IMAGE_FUNCTION_CONFIG}
     "#
         ),
         test_bucket,
