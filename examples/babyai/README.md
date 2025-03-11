@@ -21,8 +21,6 @@ We use the [BALROG agentic LLM benchmark](https://github.com/balrog-ai/BALROG) i
 We provide a TensorZero configuration file to tackle BALROG's BabyAI benchmark.
 Our setup implements the function `act` with multiple variants (e.g. baseline, reasoning, history).
 
-TODO
-
 ### Prerequisites
 
 1. Install `cmake` (e.g. `brew install cmake` or `sudo apt-get install cmake`)

@@ -36,12 +36,12 @@ system_template = "functions/act/history_and_reasoning/system.minijinja"
 user_template = "functions/act/history_and_reasoning/user.minijinja"
 json_mode = "on"
 
-[functions.act.variants.history_and_reasoning_sft]
-type = "chat_completion"
-model = "openai::ft:gpt-4o-mini-2024-07-18:tensorzero::B9dwjUny"
-system_template = "functions/act/history_and_reasoning/system.minijinja"
-user_template = "functions/act/history_and_reasoning/user.minijinja"
-json_mode = "on"
+# [functions.act.variants.history_and_reasoning_sft]
+# type = "chat_completion"
+# model = "openai::ft:gpt-4o-mini-2024-07-18:tensorzero::XXXXXXXX"
+# system_template = "functions/act/history_and_reasoning/system.minijinja"
+# user_template = "functions/act/history_and_reasoning/user.minijinja"
+# json_mode = "on"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
