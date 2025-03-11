@@ -88,7 +88,7 @@ jobs:
         run: docker compose -f ci/minio-docker-compose.yml up
 
       - name: Launch ClickHouse container for E2E tests
-        run: docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait
+        run: docker compose -f ci/minio-docker-compose.yml up --exit-code-from createbuckets
 
       - name: Launch the provider-proxy cache for E2E tests
         run: |
