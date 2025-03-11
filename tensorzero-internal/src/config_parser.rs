@@ -52,7 +52,7 @@ pub struct ObjectStoreInfo {
 }
 
 impl ObjectStoreInfo {
-    fn new(config: Option<StorageKind>) -> Result<Option<Self>, Error> {
+    pub fn new(config: Option<StorageKind>) -> Result<Option<Self>, Error> {
         let Some(config) = config else {
             return Ok(None);
         };

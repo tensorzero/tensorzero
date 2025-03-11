@@ -7,6 +7,7 @@ pub mod datasets;
 pub mod fallback;
 pub mod feedback;
 pub mod inference;
+pub mod object_storage;
 pub mod openai_compatible;
 pub mod status;
 

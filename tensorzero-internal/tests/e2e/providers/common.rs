@@ -569,11 +569,31 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
     assert_eq!(result, FERRIS_PNG);
 }
 
+async fn check_object_fetch_via_gateway(storage_path: &StoragePath) {
+    // Try using the running HTTP gateway (which is *not* configured with an object store)
+    // to fetch the `StoragePath`
+    let client = reqwest::Client::new();
+    let res = client
+        .get(get_gateway_endpoint(&format!(
+            "/internal/object_storage?storage_path={}",
+            serde_json::to_string(storage_path).unwrap()
+        )))
+        .send()
+        .await
+        .unwrap();
+
+    let response_json = res.json::<Value>().await.unwrap();
+    assert_eq!(
+        response_json["data"].as_str().unwrap(),
+        BASE64_STANDARD.encode(FERRIS_PNG)
+    );
+}
+
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
-    test_base64_image_inference_with_provider_and_store(
+    let storage_path = test_base64_image_inference_with_provider_and_store(
         provider,
         &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -598,6 +618,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
     ))
     .unwrap();
     assert_eq!(result, FERRIS_PNG);
+    check_object_fetch_via_gateway(&storage_path).await;
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -618,7 +639,7 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
     prefix += "-";
 
-    test_image_inference_with_provider_s3_compatible(
+    let (expected_key, storage_path) = test_image_inference_with_provider_s3_compatible(
         provider,
         &StorageKind::S3Compatible {
             bucket_name: Some(test_bucket.to_string()),
@@ -643,6 +664,16 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
         &prefix,
     )
     .await;
+
+    check_object_fetch_via_gateway(&storage_path).await;
+
+    client
+        .delete_object()
+        .key(&expected_key)
+        .bucket(test_bucket)
+        .send()
+        .await
+        .unwrap();
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -653,7 +684,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(
     toml: &str,
     bucket_name: &str,
     prefix: &str,
-) {
+) -> (String, StoragePath) {
     let expected_key =
         format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
 
@@ -676,7 +707,9 @@ pub async fn test_image_inference_with_provider_s3_compatible(
         panic!("Expected ServiceError: {err:?}");
     }
 
-    test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix).await;
+    let storage_path =
+        test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix)
+            .await;
 
     let result = client
         .get_object()
@@ -688,13 +721,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(
 
     assert_eq!(result.body.collect().await.unwrap().to_vec(), FERRIS_PNG);
 
-    client
-        .delete_object()
-        .key(&expected_key)
-        .bucket(bucket_name)
-        .send()
-        .await
-        .unwrap();
+    (expected_key, storage_path)
 }
 
 async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
@@ -785,12 +812,13 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     kind: &StorageKind,
     config_toml: &str,
     prefix: &str,
-) {
+) -> StoragePath {
     let episode_id = Uuid::now_v7();
 
     let image_data = BASE64_STANDARD.encode(FERRIS_PNG);
 
     let client = make_embedded_gateway_with_config(config_toml).await;
+    let mut storage_path = None;
 
     for should_be_cached in [false, true] {
         let response = client
@@ -826,7 +854,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
             panic!("Expected non-streaming inference response");
         };
 
-        check_base64_image_response(
+        let latest_storage_path = check_base64_image_response(
             response,
             Some(episode_id),
             &provider,
@@ -836,7 +864,9 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         )
         .await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        storage_path = Some(latest_storage_path);
     }
+    storage_path.unwrap()
 }
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
@@ -1050,7 +1080,7 @@ pub async fn check_base64_image_response(
     should_be_cached: bool,
     kind: &StorageKind,
     prefix: &str,
-) {
+) -> StoragePath {
     let inference_id = response.inference_id();
 
     let episode_id_response = response.episode_id();
@@ -1147,28 +1177,31 @@ pub async fn check_base64_image_response(
     let model_inference_id = result.get("id").unwrap().as_str().unwrap();
     assert!(Uuid::parse_str(model_inference_id).is_ok());
 
+    let expected_storage_path = StoragePath {
+        kind: kind.clone(),
+        path: Path::parse(format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png")).unwrap(),
+    };
+
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     assert_eq!(
         input_messages,
-        vec![
-            RequestMessage {
-                role: Role::User,
-                content: vec![ContentBlock::Text(Text {
+        vec![RequestMessage {
+            role: Role::User,
+            content: vec![
+                ContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
-                }), ContentBlock::Image(ImageWithPath {
+                }),
+                ContentBlock::Image(ImageWithPath {
                     image: Base64Image {
                         url: None,
                         data: None,
                         mime_type: ImageKind::Png,
                     },
-                    storage_path: StoragePath {
-                        kind: kind.clone(),
-                        path: Path::parse(format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png")).unwrap(),
-                    }
-                })]
-            },
-        ]
+                    storage_path: expected_storage_path.clone(),
+                })
+            ]
+        },]
     );
 
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
@@ -1193,6 +1226,7 @@ pub async fn check_base64_image_response(
         result.get("cached").unwrap().as_bool().unwrap(),
         should_be_cached
     );
+    expected_storage_path
 }
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
