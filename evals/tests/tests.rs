@@ -1,4 +1,7 @@
-#[cfg(test)]
+#![cfg_attr(
+    test,
+    allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)
+)]
 mod common;
 use std::path::PathBuf;
 
@@ -25,10 +28,16 @@ async fn run_exact_match_eval_json() {
         name: "entity_extraction".to_string(),
         variant: "gpt_4o_mini".to_string(),
         concurrency: 10,
-        format: OutputFormat::HumanReadable,
+        format: OutputFormat::Jsonl,
     };
 
-    run_eval(args, eval_run_id).await.unwrap();
+    let mut output = Vec::new();
+    run_eval(args, eval_run_id, &mut output).await.unwrap();
+    let output_str = String::from_utf8(output).unwrap();
+    for line in output_str.lines() {
+        let _parsed: serde_json::Value =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -49,8 +58,9 @@ async fn run_exact_match_eval_chat() {
         name: "haiku_with_outputs".to_string(),
         variant: "gpt_4o_mini".to_string(),
         concurrency: 10,
-        format: OutputFormat::HumanReadable,
+        format: OutputFormat::Jsonl,
     };
 
-    run_eval(args, eval_run_id).await.unwrap();
+    let mut output = Vec::new();
+    run_eval(args, eval_run_id, &mut output).await.unwrap();
 }

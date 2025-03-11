@@ -7,5 +7,6 @@ use uuid::Uuid;
 async fn main() -> Result<()> {
     let eval_run_id = Uuid::now_v7();
     let args = Args::parse();
-    run_eval(args, eval_run_id).await
+    let mut writer = std::io::stdout();
+    run_eval(args, eval_run_id, &mut writer).await
 }

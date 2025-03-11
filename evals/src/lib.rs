@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf};
 
@@ -6,6 +7,9 @@ use clap::Parser;
 use dataset::query_dataset;
 use evaluators::evaluate_inference;
 use helpers::{get_tool_params_args, resolved_input_to_input, setup_logging};
+use indicatif::ProgressBar;
+use serde::Serialize;
+use serde_json::Value;
 use tensorzero::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
     DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceResponse,
@@ -28,7 +32,7 @@ const CACHE_OPTIONS: CacheParamsOptions = CacheParamsOptions {
     max_age_s: None,
 };
 
-#[derive(clap::ValueEnum, Clone, Copy, Debug, Default)]
+#[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq)]
 pub enum OutputFormat {
     Jsonl,
     #[default]
@@ -62,7 +66,7 @@ pub struct Args {
     pub format: OutputFormat,
 }
 
-pub async fn run_eval(args: Args, eval_run_id: Uuid) -> Result<()> {
+pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> Result<()> {
     setup_logging(&args)?;
     let semaphore = Semaphore::new(args.concurrency);
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
@@ -103,6 +107,7 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid) -> Result<()> {
     .await?;
     let variant = Arc::new(args.variant);
     let eval_name = Arc::new(args.name);
+    let dataset_len = dataset.len();
 
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
@@ -129,7 +134,7 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid) -> Result<()> {
 
             let eval_result = evaluate_inference(
                 inference_response.clone(),
-                datapoint,
+                datapoint.clone(),
                 eval_config,
                 eval_name,
                 client_clone,
@@ -137,7 +142,8 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid) -> Result<()> {
             )
             .await?;
 
-            Ok::<(InferenceResponse, evaluators::EvalResult), anyhow::Error>((
+            Ok::<(Datapoint, InferenceResponse, evaluators::EvalResult), anyhow::Error>((
+                Arc::into_inner(datapoint).ok_or_else(|| anyhow!("Failed to get datapoint for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
                 Arc::into_inner(inference_response).ok_or_else(|| anyhow!("Failed to get inference response for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
                 eval_result,
             ))
@@ -145,14 +151,15 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid) -> Result<()> {
     }
 
     // Collect results
-    let mut inference_responses = Vec::new();
-    let mut eval_results = Vec::new();
+    let mut eval_stats = EvalStats::new(args.format, dataset_len);
 
     while let Some(result) = join_set.join_next().await {
         match result {
-            Ok(Ok((inference_response, eval_result))) => {
-                inference_responses.push(inference_response);
-                eval_results.push(eval_result);
+            Ok(Ok((datapoint, inference_response, eval_result))) => {
+                eval_stats.push(
+                    EvalInfo::new(datapoint, inference_response, eval_result),
+                    &mut writer,
+                )?;
             }
             Ok(Err(e)) => {
                 tracing::warn!("Task error: {}", e);
@@ -163,8 +170,87 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid) -> Result<()> {
         }
     }
 
-    // TODO: what should we do with stdout here?
+    if let Some(progress_bar) = eval_stats.progress_bar {
+        progress_bar.finish_with_message("Done");
+    }
+
+    if eval_stats.output_format == OutputFormat::HumanReadable {
+        for eval_info in eval_stats.eval_infos {
+            writeln!(writer, "{}", serde_json::to_string(&eval_info)?)?;
+        }
+    }
+
     Ok(())
+}
+
+struct EvalStats {
+    output_format: OutputFormat,
+    eval_infos: Vec<EvalInfo>,
+    progress_bar: Option<ProgressBar>,
+}
+
+impl EvalStats {
+    fn new(output_format: OutputFormat, dataset_len: usize) -> Self {
+        let progress_bar = match output_format {
+            OutputFormat::Jsonl => None,
+            OutputFormat::HumanReadable => Some(ProgressBar::new(dataset_len as u64)),
+        };
+        Self {
+            output_format,
+            eval_infos: Vec::new(),
+            progress_bar,
+        }
+    }
+
+    fn push(&mut self, eval_info: EvalInfo, writer: &mut impl Write) -> Result<()> {
+        match self.output_format {
+            OutputFormat::Jsonl => {
+                writeln!(writer, "{}", serde_json::to_string(&eval_info)?)?;
+            }
+            OutputFormat::HumanReadable => {
+                if let Some(progress_bar) = &mut self.progress_bar {
+                    progress_bar.inc(1);
+                }
+            }
+        }
+        self.eval_infos.push(eval_info);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct EvalInfo {
+    datapoint: Datapoint,
+    response: InferenceResponse,
+    evaluations: HashMap<String, Option<Value>>,
+    evaluator_errors: HashMap<String, String>,
+}
+
+impl EvalInfo {
+    fn new(
+        datapoint: Datapoint,
+        response: InferenceResponse,
+        eval_result: evaluators::EvalResult,
+    ) -> Self {
+        let mut evaluations = HashMap::new();
+        let mut evaluator_errors = HashMap::new();
+        for (eval_name, eval_result) in eval_result {
+            match eval_result {
+                Ok(eval_result) => {
+                    evaluations.insert(eval_name, eval_result);
+                }
+                Err(e) => {
+                    evaluator_errors.insert(eval_name, e.to_string());
+                }
+            }
+        }
+        Self {
+            datapoint,
+            response,
+            evaluations,
+            evaluator_errors,
+        }
+    }
 }
 
 async fn infer_datapoint(
