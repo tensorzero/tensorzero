@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use crate::common::write_json_fixture_to_dataset;
 use common::write_chat_fixture_to_dataset;
-use evals::{run_eval, Args, OutputFormat};
+use evals::{run_eval, Args, EvalInfo, OutputFormat};
 use uuid::Uuid;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -36,11 +36,11 @@ async fn run_exact_match_eval_json() {
     let output_str = String::from_utf8(output).unwrap();
     let mut parsed_output = Vec::new();
     for line in output_str.lines() {
-        let _parsed: serde_json::Value =
-            serde_json::from_str(line).expect("Each line should be valid JSON");
-        parsed_output.push(_parsed);
+        let parsed: EvalInfo = serde_json::from_str(line).expect("Each line should be valid JSON");
+        parsed_output.push(parsed);
     }
     assert_eq!(parsed_output.len(), 50);
+    // TODO: check clickhouse inference and feedback tables
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -69,9 +69,9 @@ async fn run_exact_match_eval_chat() {
     let output_str = String::from_utf8(output).unwrap();
     let mut parsed_output = Vec::new();
     for line in output_str.lines() {
-        let _parsed: serde_json::Value =
-            serde_json::from_str(line).expect("Each line should be valid JSON");
-        parsed_output.push(_parsed);
+        let parsed: EvalInfo = serde_json::from_str(line).expect("Each line should be valid JSON");
+        parsed_output.push(parsed);
     }
     assert_eq!(parsed_output.len(), 29);
+    // TODO: check clickhouse inference and feedback tables
 }

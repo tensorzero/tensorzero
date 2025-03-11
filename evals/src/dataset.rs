@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use tensorzero_internal::endpoints::datasets::{
-    ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
+    ClickHouseChatInferenceDatapoint, ClickHouseDatapoint, ClickHouseJsonInferenceDatapoint,
+    Datapoint,
 };
 use tensorzero_internal::{clickhouse::ClickHouseConnectionInfo, function::FunctionConfig};
 
@@ -27,20 +28,22 @@ pub async fn query_dataset(
     let datapoints: Vec<Datapoint> = match function_config {
         FunctionConfig::Chat(_) => {
             let chat_datapoints: serde_json::Value = serde_json::from_str(&result)?;
-            let chat_datapoints: Vec<ChatInferenceDatapoint> =
+            let chat_datapoints: Vec<ClickHouseChatInferenceDatapoint> =
                 serde_json::from_value(chat_datapoints["data"].clone())?;
             chat_datapoints
                 .into_iter()
-                .map(Datapoint::ChatInference)
+                .map(ClickHouseDatapoint::Chat)
+                .map(Datapoint::from)
                 .collect()
         }
         FunctionConfig::Json(_) => {
             let json_value: serde_json::Value = serde_json::from_str(&result)?;
-            let json_datapoints: Vec<JsonInferenceDatapoint> =
+            let json_datapoints: Vec<ClickHouseJsonInferenceDatapoint> =
                 serde_json::from_value(json_value["data"].clone())?;
             json_datapoints
                 .into_iter()
-                .map(Datapoint::JsonInference)
+                .map(ClickHouseDatapoint::Json)
+                .map(Datapoint::from)
                 .collect()
         }
     };

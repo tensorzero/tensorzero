@@ -333,6 +333,7 @@ impl DatapointKind {
 pub struct CreateDatapointResponse {}
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
 pub enum Datapoint {
     ChatInference(ChatInferenceDatapoint),
     JsonInference(JsonInferenceDatapoint),
@@ -374,13 +375,10 @@ pub struct ChatInferenceDatapoint {
     pub function_name: String,
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
-    #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub tags: Option<HashMap<String, String>>,
     pub auxiliary: String,
@@ -393,13 +391,93 @@ pub struct JsonInferenceDatapoint {
     pub function_name: String,
     pub id: Uuid,
     pub episode_id: Option<Uuid>,
-    #[serde(deserialize_with = "deserialize_json_string")]
     pub input: ResolvedInput,
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<JsonInferenceOutput>,
-    #[serde(deserialize_with = "deserialize_json_string")]
     pub output_schema: serde_json::Value,
     pub tags: Option<HashMap<String, String>>,
     pub auxiliary: String,
     pub is_deleted: bool,
+}
+
+/// We need to be able to deserialize Datapoints from both ClickHouse and
+/// from strings. Since the strings will be properly serialized and we want
+/// to be able to handle them naturally, we duplicated the types so that we
+/// can effectively deserialize from ClickHouse as well.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum ClickHouseDatapoint {
+    Chat(ClickHouseChatInferenceDatapoint),
+    Json(ClickHouseJsonInferenceDatapoint),
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ClickHouseChatInferenceDatapoint {
+    dataset_name: String,
+    function_name: String,
+    id: Uuid,
+    episode_id: Option<Uuid>,
+    #[serde(deserialize_with = "deserialize_json_string")]
+    input: ResolvedInput,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    output: Option<Vec<ContentBlockChatOutput>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    tool_params: Option<ToolCallConfigDatabaseInsert>,
+    tags: Option<HashMap<String, String>>,
+    auxiliary: String,
+    is_deleted: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ClickHouseJsonInferenceDatapoint {
+    dataset_name: String,
+    function_name: String,
+    id: Uuid,
+    episode_id: Option<Uuid>,
+    #[serde(deserialize_with = "deserialize_json_string")]
+    input: ResolvedInput,
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    output: Option<JsonInferenceOutput>,
+    #[serde(deserialize_with = "deserialize_json_string")]
+    output_schema: serde_json::Value,
+    tags: Option<HashMap<String, String>>,
+    auxiliary: String,
+    is_deleted: bool,
+}
+
+impl From<ClickHouseDatapoint> for Datapoint {
+    fn from(value: ClickHouseDatapoint) -> Self {
+        match value {
+            ClickHouseDatapoint::Chat(datapoint) => {
+                Datapoint::ChatInference(ChatInferenceDatapoint {
+                    dataset_name: datapoint.dataset_name,
+                    function_name: datapoint.function_name,
+                    id: datapoint.id,
+                    episode_id: datapoint.episode_id,
+                    input: datapoint.input,
+                    output: datapoint.output,
+                    tool_params: datapoint.tool_params,
+                    tags: datapoint.tags,
+                    auxiliary: datapoint.auxiliary,
+                    is_deleted: datapoint.is_deleted,
+                })
+            }
+            ClickHouseDatapoint::Json(datapoint) => {
+                Datapoint::JsonInference(JsonInferenceDatapoint {
+                    dataset_name: datapoint.dataset_name,
+                    function_name: datapoint.function_name,
+                    id: datapoint.id,
+                    episode_id: datapoint.episode_id,
+                    input: datapoint.input,
+                    output: datapoint.output,
+                    output_schema: datapoint.output_schema,
+                    tags: datapoint.tags,
+                    auxiliary: datapoint.auxiliary,
+                    is_deleted: datapoint.is_deleted,
+                })
+            }
+        }
+    }
 }

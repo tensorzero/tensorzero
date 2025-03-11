@@ -8,7 +8,7 @@ use dataset::query_dataset;
 use evaluators::evaluate_inference;
 use helpers::{get_tool_params_args, resolved_input_to_input, setup_logging};
 use indicatif::ProgressBar;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
@@ -218,8 +218,8 @@ impl EvalStats {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct EvalInfo {
+#[derive(Debug, Deserialize, Serialize)]
+pub struct EvalInfo {
     datapoint: Datapoint,
     response: InferenceResponse,
     evaluations: HashMap<String, Option<Value>>,
