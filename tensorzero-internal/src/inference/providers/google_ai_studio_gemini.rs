@@ -142,7 +142,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         ModelProviderRequest {
             request,
             provider_name: _,
-            model_name: _,
+            model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -153,7 +153,12 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 message: format!("Error serializing Gemini request: {e}"),
             })
         })?;
-        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(
+            &request.extra_body,
+            model_provider,
+            model_name,
+            &mut request_body,
+        )?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut url = self.request_url.clone();
@@ -222,7 +227,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         ModelProviderRequest {
             request,
             provider_name: _,
-            model_name: _,
+            model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -233,7 +238,12 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 message: format!("Error serializing Gemini request: {e}"),
             })
         })?;
-        inject_extra_body(&request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(
+            &request.extra_body,
+            model_provider,
+            model_name,
+            &mut request_body,
+        )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),

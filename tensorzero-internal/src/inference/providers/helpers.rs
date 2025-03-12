@@ -59,7 +59,7 @@ pub fn inject_extra_body(
                 pointer,
                 value,
             } => {
-                if model_provider_name == expected_provider_name {
+                if *model_provider_name == expected_provider_name {
                     write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
                 }
             }
@@ -286,6 +286,7 @@ mod tests {
                 provider_name: "dummy_provider".into(),
                 extra_body: None,
             },
+            "dummy_model",
             &mut body,
         )
         .unwrap();
@@ -308,6 +309,7 @@ mod tests {
                 provider_name: "dummy_provider".into(),
                 extra_body: None,
             },
+            "dummy_model",
             &mut body,
         )
         .unwrap();
@@ -322,6 +324,7 @@ mod tests {
                 provider_name: "dummy_provider".into(),
                 extra_body: None,
             },
+            "dummy_model",
             &mut serde_json::Value::String("test".to_string()),
         )
         .unwrap_err()
@@ -366,6 +369,7 @@ mod tests {
                 provider_name: "dummy_provider".into(),
                 extra_body: None,
             },
+            "dummy_model",
             &mut body,
         )
         .unwrap();
@@ -437,6 +441,7 @@ mod tests {
                     ],
                 }),
             },
+            "dummy_model",
             &mut body,
         )
         .unwrap();

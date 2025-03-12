@@ -218,7 +218,7 @@ impl InferenceProvider for DeepSeekProvider {
         ModelProviderRequest {
             request,
             provider_name: _,
-            model_name: _,
+            model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,

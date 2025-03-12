@@ -96,6 +96,7 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
     mut bedrock_request: CustomizableOperation<T, E, S>,
     request: &ModelInferenceRequest<'_>,
     model_provider: &ModelProvider,
+    model_name: String,
 ) -> WithRawRequest<T, E, S, impl FnOnce() -> Result<String, Error>> {
     let raw_request = Arc::new(Mutex::new(None));
     let extra_body = request.extra_body.clone();
@@ -135,7 +136,7 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
             inject_extra_body(
                 &self.extra_body,
                 self.model_provider_info.clone(),
-                self.model_name,
+                &self.model_name,
                 &mut body_json,
             )?;
             let raw_request = serde_json::to_string(&body_json).map_err(|e| {
@@ -168,6 +169,7 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
         raw_request: raw_request.clone(),
         extra_body,
         model_provider_info: model_provider.into(),
+        model_name,
     };
 
     bedrock_request = bedrock_request.interceptor(interceptor);
@@ -199,7 +201,7 @@ impl InferenceProvider for AWSBedrockProvider {
         ModelProviderRequest {
             request,
             provider_name: _,
-            model_name: _,
+            model_name,
         }: ModelProviderRequest<'a>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
@@ -278,7 +280,12 @@ impl InferenceProvider for AWSBedrockProvider {
         let WithRawRequest {
             bedrock_request,
             get_raw_request,
-        } = attach_interceptor(bedrock_request.customize(), request, model_provider);
+        } = attach_interceptor(
+            bedrock_request.customize(),
+            request,
+            model_provider,
+            model_name.to_string(),
+        );
 
         let start_time = Instant::now();
         let output = bedrock_request.send().await.map_err(|e| {
@@ -317,7 +324,7 @@ impl InferenceProvider for AWSBedrockProvider {
         ModelProviderRequest {
             request,
             provider_name: _,
-            model_name: _,
+            model_name,
         }: ModelProviderRequest<'a>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
@@ -393,7 +400,12 @@ impl InferenceProvider for AWSBedrockProvider {
         let WithRawRequest {
             bedrock_request,
             get_raw_request,
-        } = attach_interceptor(bedrock_request.customize(), request, model_provider);
+        } = attach_interceptor(
+            bedrock_request.customize(),
+            request,
+            model_provider,
+            model_name.to_string(),
+        );
 
         let start_time = Instant::now();
         let stream = bedrock_request.send().await.map_err(|e| {

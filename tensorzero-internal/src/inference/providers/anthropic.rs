@@ -131,7 +131,7 @@ impl InferenceProvider for AnthropicProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name,
+            provider_name: _,
             model_name: tensorzero_model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
@@ -149,7 +149,7 @@ impl InferenceProvider for AnthropicProvider {
         inject_extra_body(
             &request.extra_body,
             model_provider,
-            model_name,
+            tensorzero_model_name,
             &mut request_body,
         )?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
