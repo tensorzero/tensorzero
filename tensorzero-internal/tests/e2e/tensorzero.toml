@@ -2419,6 +2419,19 @@ dataset_name = "extract_entities_0.8"
 [evals.entity_extraction.evaluators.exact_match]
 type = "exact_match"
 
+[evals.entity_extraction.evaluators.count_misc]
+type = "llm_judge"
+output_type = "float"
+optimize = "min"
+include = { reference_output = false }
+
+[evals.entity_extraction.evaluators.count_misc.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+active = true
+system_instructions = "../../fixtures/config/evals/entity_extraction/count_misc/system_instructions.txt"
+json_mode = "strict"
+
 [evals.haiku_with_outputs]
 function_name = "write_haiku"
 dataset_name = "good-haiku-data"

@@ -18,7 +18,7 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 #[tokio::test(flavor = "multi_thread")]
-async fn run_exact_match_eval_json() {
+async fn run_evals_json() {
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(&PathBuf::from(&format!(
         "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
@@ -44,6 +44,7 @@ async fn run_exact_match_eval_json() {
     clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
     let mut parsed_output = Vec::new();
+    let mut total_misc = 0;
     for line in output_str.lines() {
         let parsed: EvalInfo = serde_json::from_str(line).expect("Each line should be valid JSON");
         assert!(parsed.evaluator_errors.is_empty());
@@ -69,7 +70,7 @@ async fn run_exact_match_eval_json() {
             eval_run_id.to_string()
         );
 
-        // Check feedback was recorded
+        // Check boolean feedback was recorded
         let feedback = select_feedback_by_target_id_clickhouse(
             &clickhouse,
             "BooleanMetricFeedback",
@@ -91,9 +92,32 @@ async fn run_exact_match_eval_json() {
                 .unwrap()
         );
 
+        // Check float feedback was recorded
+        let feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "FloatMetricFeedback",
+            inference_id,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::eval_name::entity_extraction::evaluator_name::count_misc"
+        );
+        assert_eq!(
+            feedback["value"],
+            parsed.evaluations["count_misc"]
+                .as_ref()
+                .unwrap()
+                .as_f64()
+                .unwrap()
+        );
+        total_misc += feedback["value"].as_f64().unwrap() as u32;
         parsed_output.push(parsed);
     }
     assert_eq!(parsed_output.len(), 50);
+    assert_eq!(total_misc, 60);
 }
 
 #[tokio::test(flavor = "multi_thread")]
