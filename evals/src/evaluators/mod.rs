@@ -108,7 +108,9 @@ async fn run_evaluator(
         }
     };
     let result = match evaluator_config {
-        EvaluatorConfig::ExactMatch => run_exact_match_evaluator(inference_response, datapoint),
+        EvaluatorConfig::ExactMatch(_exact_match_config) => {
+            run_exact_match_evaluator(inference_response, datapoint)
+        }
         EvaluatorConfig::LLMJudge(llm_judge_config) => {
             run_llm_judge_evaluator(
                 inference_response,

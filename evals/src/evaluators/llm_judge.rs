@@ -369,6 +369,7 @@ mod tests {
             },
             optimize: LLMJudgeOptimize::Max,
             output_type: LLMJudgeOutputType::Boolean,
+            cutoff: None,
         };
         let result = run_llm_judge_evaluator(
             &inference_response,
@@ -519,6 +520,7 @@ mod tests {
             },
             optimize: LLMJudgeOptimize::Max,
             output_type: LLMJudgeOutputType::Boolean,
+            cutoff: None,
         };
         let result = run_llm_judge_evaluator(
             &inference_response,

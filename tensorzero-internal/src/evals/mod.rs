@@ -37,8 +37,30 @@ pub struct EvalConfig {
 
 #[derive(Debug)]
 pub enum EvaluatorConfig {
-    ExactMatch,
+    ExactMatch(ExactMatchConfig),
     LLMJudge(LLMJudgeConfig),
+}
+
+impl EvaluatorConfig {
+    pub fn cutoff(&self) -> Option<f32> {
+        match self {
+            EvaluatorConfig::ExactMatch(config) => config.cutoff,
+            EvaluatorConfig::LLMJudge(config) => config.cutoff,
+        }
+    }
+
+    pub fn optimize(&self) -> MetricConfigOptimize {
+        match self {
+            EvaluatorConfig::ExactMatch(_) => MetricConfigOptimize::Max,
+            EvaluatorConfig::LLMJudge(config) => config.optimize.into(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ExactMatchConfig {
+    #[serde(default)]
+    pub cutoff: Option<f32>,
 }
 
 #[derive(Debug)]
@@ -46,6 +68,7 @@ pub struct LLMJudgeConfig {
     pub output_type: LLMJudgeOutputType,
     pub include: LLMJudgeIncludeConfig,
     pub optimize: LLMJudgeOptimize,
+    pub cutoff: Option<f32>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -188,7 +211,7 @@ impl UninitializedEvalConfig {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum UninitializedEvaluatorConfig {
-    ExactMatch,
+    ExactMatch(ExactMatchConfig),
     #[serde(rename = "llm_judge")]
     LLMJudge(UninitializedLLMJudgeConfig),
 }
@@ -200,6 +223,8 @@ struct UninitializedLLMJudgeConfig {
     optimize: LLMJudgeOptimize,
     #[serde(default)]
     include: LLMJudgeIncludeConfig,
+    #[serde(default)]
+    cutoff: Option<f32>,
 }
 
 impl UninitializedEvaluatorConfig {
@@ -219,8 +244,8 @@ impl UninitializedEvaluatorConfig {
             .into());
         }
         match self {
-            UninitializedEvaluatorConfig::ExactMatch => Ok((
-                EvaluatorConfig::ExactMatch,
+            UninitializedEvaluatorConfig::ExactMatch(params) => Ok((
+                EvaluatorConfig::ExactMatch(params),
                 None,
                 MetricConfig {
                     r#type: MetricConfigType::Boolean,
@@ -283,6 +308,7 @@ impl UninitializedEvaluatorConfig {
                         output_type: params.output_type,
                         include: params.include,
                         optimize: params.optimize,
+                        cutoff: params.cutoff,
                     }),
                     Some(function_config),
                     MetricConfig {
@@ -446,7 +472,7 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch,
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.4) }),
             );
 
             let uninitialized_config = UninitializedEvalConfig {
@@ -462,10 +488,10 @@ mod tests {
             assert_eq!(config.dataset_name, "test_dataset");
             assert_eq!(config.function_name, function_name);
             assert_eq!(config.evaluators.len(), 1);
-            assert!(matches!(
-                config.evaluators.get("em_evaluator").unwrap(),
-                EvaluatorConfig::ExactMatch
-            ));
+            match config.evaluators.get("em_evaluator").unwrap() {
+                EvaluatorConfig::ExactMatch(params) => assert_eq!(params.cutoff, Some(0.4)),
+                _ => panic!("Expected ExactMatch evaluator"),
+            }
             // No additional function configs for exact match
             assert_eq!(additional_functions.len(), 0);
 
@@ -519,6 +545,7 @@ mod tests {
                 include: LLMJudgeIncludeConfig {
                     reference_output: false,
                 },
+                cutoff: None,
             };
 
             let mut evaluators = HashMap::new();
@@ -635,6 +662,7 @@ mod tests {
                 include: LLMJudgeIncludeConfig {
                     reference_output: true,
                 },
+                cutoff: None,
             };
 
             let mut evaluators = HashMap::new();
@@ -712,7 +740,7 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch,
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
             let uninitialized_config = UninitializedEvalConfig {
@@ -734,7 +762,7 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch,
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
             let uninitialized_config = UninitializedEvalConfig {
@@ -815,6 +843,7 @@ mod tests {
                 include: LLMJudgeIncludeConfig {
                     reference_output: false,
                 },
+                cutoff: Some(0.3),
             };
 
             let mut evaluators = HashMap::new();
@@ -863,7 +892,7 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "foo::invalid_name".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch,
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
             let uninitialized_config = UninitializedEvalConfig {
@@ -916,6 +945,7 @@ mod tests {
                 include: LLMJudgeIncludeConfig {
                     reference_output: true,
                 },
+                cutoff: None,
             };
 
             let mut evaluators = HashMap::new();
