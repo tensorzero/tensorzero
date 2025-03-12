@@ -4,7 +4,7 @@
 # (which has a crate name of 'tensorzero')
 name = "tensorzero-python"
 version = "2025.3.0"
-edition = "2021"
+edition = "2024"
 license = "Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
