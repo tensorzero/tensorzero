@@ -10,6 +10,7 @@ pub(super) fn run_exact_match_evaluator(
     match (inference_response, datapoint) {
         (InferenceResponse::Chat(response), Datapoint::ChatInference(datapoint)) => {
             match &datapoint.output {
+                // Right now this is order-sensitive, but we may consider relaxing this in the future
                 Some(output) => Ok(Some(Value::Bool(output == &response.content))),
                 None => Ok(None),
             }

@@ -26,7 +26,6 @@ pub(super) async fn run_llm_judge_evaluator(
     evaluator_name: &str,
     eval_run_id: Uuid,
 ) -> Result<Option<Value>> {
-    let function_name = get_llm_judge_function_name(eval_name, evaluator_name);
     let resolved_input = datapoint.input();
     let serialized_datapoint_input = prepare_serialized_input(resolved_input)?;
     let generated_output = match &inference_response {
@@ -56,7 +55,7 @@ pub(super) async fn run_llm_judge_evaluator(
     };
 
     let params = ClientInferenceParams {
-        function_name: Some(function_name),
+        function_name: Some(get_llm_judge_function_name(eval_name, evaluator_name)),
         model_name: None,
         episode_id: None,
         input,
