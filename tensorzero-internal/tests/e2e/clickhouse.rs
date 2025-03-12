@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::sync::Arc;
 
 use paste::paste;
 use reqwest::Client;
@@ -237,5 +238,29 @@ async fn test_clean_clickhouse_start() {
     assert!(
         duration < std::time::Duration::from_secs(10),
         "Migrations took longer than 10 seconds: {duration:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_concurrent_clickhouse_migrations() {
+    let clickhouse = Arc::new(get_clean_clickhouse());
+    let num_concurrent_starts = 100;
+    let start = std::time::Instant::now();
+
+    let mut handles = Vec::with_capacity(num_concurrent_starts);
+    for _ in 0..num_concurrent_starts {
+        let clickhouse_clone = clickhouse.clone();
+        handles.push(tokio::spawn(async move {
+            migration_manager::run(&clickhouse_clone).await.unwrap();
+        }));
+    }
+    for handle in handles {
+        handle.await.unwrap();
+    }
+
+    let duration = start.elapsed();
+    assert!(
+        duration < std::time::Duration::from_secs(60),
+        "Migrations took longer than 60 seconds: {duration:?}"
     );
 }
