@@ -31,8 +31,8 @@ workspace = true
 
 
 [features]
-# Forward these features to 'tensorzero', so that our embedded
-# client can recognize things like the `dummy` provider
+# Forward these features to 'evals', so that our 
+# tests can recognize things like the `dummy` provider
 e2e_tests = ["tensorzero/e2e_tests"]
 batch_tests = ["tensorzero/batch_tests"]
 default = []
