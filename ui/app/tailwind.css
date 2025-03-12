@@ -7,10 +7,11 @@
 html,
 body {
   @apply bg-background dark:bg-background;
+  font-weight: var(--font-weight-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-weight: 400;
-
+  font-feature-settings: var(--geist-font-features);
+  text-rendering: optimizeLegibility;
   @media (prefers-color-scheme: dark) {
     color-scheme: dark;
   }

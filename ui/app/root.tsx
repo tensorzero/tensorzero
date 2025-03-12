@@ -18,6 +18,20 @@ import { ContentLayout } from "./components/layout/ContentLayout";
 
 export const links: Route.LinksFunction = () => [
   {
+    rel: "preload",
+    href: "/fonts/GeistVariableVF.woff2",
+    as: "font",
+    type: "font/woff2",
+    crossOrigin: "anonymous",
+  },
+  {
+    rel: "preload",
+    href: "/fonts/GeistMonoVariableVF.woff2",
+    as: "font",
+    type: "font/woff2",
+    crossOrigin: "anonymous",
+  },
+  {
     rel: "icon",
     type: "image/svg+xml",
     href: "/favicon.svg",
