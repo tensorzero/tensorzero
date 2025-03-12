@@ -1,8 +1,16 @@
-@import "./fonts.css";
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --font-weight-thin: 100;
+  --font-weight-light: 300;
+  --font-weight-normal: 420;
+  --font-weight-medium: 520;
+  --font-weight-semibold: 620;
+  --font-weight-bold: 700;
+  --font-weight-black: 900;
+}
 
 html,
 body {
@@ -24,6 +32,19 @@ body {
 }
 
 @layer base {
+  /* Set default styles for font families */
+  .font-sans {
+    font-weight: var(--font-weight-normal);
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+  
+  .font-mono {
+    font-weight: var(--font-weight-normal);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+  
   :root {
     --background-primary: 0 0% 100%;
     --background-secondary: 0 0% 98.5%;
@@ -64,15 +85,6 @@ body {
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
-    
-    /* Font weight variables */
-    --font-weight-thin: 100;
-    --font-weight-light: 300;
-    --font-weight-normal: 400;
-    --font-weight-medium: 500;
-    --font-weight-semibold: 600;
-    --font-weight-bold: 700;
-    --font-weight-black: 900;
   }
 
   .dark {

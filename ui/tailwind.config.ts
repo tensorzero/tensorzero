@@ -25,13 +25,13 @@ export default {
         ],
       },
       fontWeight: {
-        thin: "100",
-        light: "300",
-        normal: "400",
-        medium: "500",
-        semibold: "600",
-        bold: "700",
-        black: "900",
+        thin: "var(--font-weight-thin)",
+        light: "var(--font-weight-light)",
+        normal: "var(--font-weight-normal)",
+        medium: "var(--font-weight-medium)",
+        semibold: "var(--font-weight-semibold)",
+        bold: "var(--font-weight-bold)",
+        black: "var(--font-weight-black)",
       },
       // Typography scale
       fontSize: {

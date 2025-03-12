@@ -17,17 +17,15 @@ import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
 
 export const links: Route.LinksFunction = () => [
+  { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
-    rel: "preload",
-    href: "/fonts/GeistVariableVF.woff2",
-    as: "font",
-    type: "font/woff2",
+    rel: "preconnect",
+    href: "https://fonts.gstatic.com",
+    crossOrigin: "anonymous",
   },
   {
-    rel: "preload",
-    href: "/fonts/GeistMonoVariableVF.woff2",
-    as: "font",
-    type: "font/woff2",
+    rel: "stylesheet",
+    href: "https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&display=swap",
   },
   {
     rel: "icon",
