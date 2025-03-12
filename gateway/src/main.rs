@@ -61,6 +61,10 @@ async fn main() {
         std::process::exit(1);
     }
 
+    if !args.default_config && config_path.is_none() {
+        tracing::warn!("Running the gateway without any config-related arguments is deprecated. Use `--default-config` to start the gateway with the default config.");
+    }
+
     let config = if let Some(path) = &config_path {
         Arc::new(
             Config::load_and_verify_from_path(Path::new(&path))

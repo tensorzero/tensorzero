@@ -184,6 +184,26 @@ jobs:
         run: |
           uv run pytest
 
+      - name: "Node.js: OpenAI Client: Install dependencies"
+        working-directory: clients/openai-node
+        run: |
+          pnpm install
+
+      - name: "Node.js: OpenAI Client: typecheck"
+        working-directory: clients/openai-node
+        run: |
+          pnpm run typecheck
+
+      - name: "Node.js: OpenAI Client: lint"
+        working-directory: clients/openai-node
+        run: |
+          pnpm run lint
+
+      - name: "Node.js: OpenAI Client: test"
+        working-directory: clients/openai-node
+        run: |
+          pnpm run test
+
       - name: "Python: Recipes: Install dependencies"
         working-directory: recipes
         run: |

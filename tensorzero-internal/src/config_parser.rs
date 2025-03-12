@@ -298,6 +298,9 @@ impl<'c> Config<'c> {
     }
 
     fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config<'c>, Error> {
+        if table.is_empty() {
+            tracing::info!("Config file is empty, so only default functions will be available.")
+        }
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
         let gateway = uninitialized_config
@@ -544,6 +547,7 @@ struct UninitializedConfig {
     pub models: ModelTable, // model name => model config
     #[serde(default)]
     pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
+    #[serde(default)]
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
@@ -1166,9 +1170,9 @@ mod tests {
         );
     }
 
-    /// Ensure that the config parsing fails when the `[functions]` section is missing
+    /// Ensure that the config parsing fails when referencing a nonexistent function
     #[test]
-    fn test_config_from_toml_table_missing_functions() {
+    fn test_config_from_toml_table_nonexistent_function() {
         let mut config = get_sample_valid_config();
         config
             .remove("functions")
@@ -1178,7 +1182,8 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "missing field `functions`\n".to_string()
+                message: "Function `generate_draft` not found (referenced in `[evals.eval1]`)"
+                    .to_string()
             }
             .into()
         );
@@ -2068,6 +2073,19 @@ mod tests {
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         Config::load_from_toml(config, base_path.clone()).expect("Failed to load config");
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_empty_config() {
+        let tempfile = NamedTempFile::new().unwrap();
+        write!(&tempfile, "").unwrap();
+        Config::load_and_verify_from_path(tempfile.path())
+            .await
+            .unwrap();
+        assert!(logs_contain(
+            "Config file is empty, so only default functions will be available."
+        ))
     }
 
     #[test]
