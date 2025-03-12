@@ -18,8 +18,8 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode, ProviderInferenceResponse,
 };
 use crate::inference::types::{
-    ContentBlockChunk, ContentBlockOutput, ProviderInferenceResponseStreamInner, TextChunk,
-    Thought, ThoughtChunk,
+    ContentBlockChunk, ContentBlockOutput, ProviderInferenceResponseArgs,
+    ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,
 };
 use crate::inference::types::{
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
@@ -30,9 +30,9 @@ use crate::tool::ToolCallChunk;
 use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
-    tensorzero_to_openai_system_message, OpenAIAssistantRequestMessage, OpenAIRequestMessage,
-    OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIUsage,
-    OpenAIUserContent, OpenAIUserRequestMessage, StreamOptions,
+    tensorzero_to_openai_system_message, OpenAIAssistantRequestMessage, OpenAIFinishReason,
+    OpenAIRequestMessage, OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAITool,
+    OpenAIToolChoice, OpenAIUsage, OpenAIUserContent, OpenAIUserRequestMessage, StreamOptions,
 };
 
 lazy_static! {
@@ -210,7 +210,11 @@ impl InferenceProvider for DeepSeekProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -462,6 +466,7 @@ struct DeepSeekDelta {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct DeepSeekChatChunkChoice {
     delta: DeepSeekDelta,
+    finish_reason: Option<OpenAIFinishReason>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -497,7 +502,11 @@ fn deepseek_to_tensorzero_chunk(
     }
     let usage = chunk.usage.map(|u| u.into());
     let mut content = vec![];
+    let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
+        if let Some(choice_finish_reason) = choice.finish_reason {
+            finish_reason = Some(choice_finish_reason.into());
+        }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {
                 text,
@@ -561,6 +570,7 @@ fn deepseek_to_tensorzero_chunk(
         usage,
         raw_message,
         latency,
+        finish_reason,
     ))
 }
 
@@ -579,6 +589,7 @@ struct DeepSeekResponseMessage {
 struct DeepSeekResponseChoice {
     index: u8,
     message: DeepSeekResponseMessage,
+    finish_reason: Option<OpenAIFinishReason>,
 }
 
 // Leaving out id, created, model, service_tier, system_fingerprint, object for now
@@ -652,7 +663,11 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
         }
 
         let usage = response.usage.into();
-        let message = response
+        let DeepSeekResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
@@ -660,8 +675,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
-            }))?
-            .message;
+            }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(reasoning) = message.reasoning_content {
             content.push(ContentBlockOutput::Thought(Thought { text: reasoning }));
@@ -679,17 +693,19 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
                 message: format!("Error serializing request body as JSON: {e}"),
             })
         })?;
-
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages: messages,
+                raw_request,
+                raw_response,
+                usage,
+                latency,
+                finish_reason: finish_reason.map(|r| r.into()),
+            },
         ))
     }
 }
@@ -754,13 +770,13 @@ mod tests {
     use std::time::Duration;
     use uuid::Uuid;
 
-    use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::providers::openai::{
         OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
         OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
     };
+    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{
-        FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
+        FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
 
     #[test]
@@ -920,6 +936,7 @@ mod tests {
                     reasoning_content: Some("I'm thinking about the weather".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: Some(OpenAIFinishReason::Stop),
             }],
             usage: OpenAIUsage {
                 prompt_tokens: 10,
@@ -983,6 +1000,7 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+        assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
     }
 
     #[test]

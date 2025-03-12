@@ -1,13 +1,6 @@
 #![allow(clippy::print_stdout)]
 use crate::common::get_gateway_endpoint;
-use crate::common::select_json_inference_clickhouse;
-use crate::{
-    common::{
-        get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
-        select_model_inference_clickhouse,
-    },
-    providers::common::E2ETestProvider,
-};
+use crate::providers::common::E2ETestProvider;
 use futures::StreamExt;
 use reqwest::Client;
 use reqwest::StatusCode;
@@ -16,6 +9,10 @@ use reqwest_eventsource::RequestBuilderExt;
 use serde_json::json;
 use serde_json::Value;
 use tensorzero::Role;
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
+    select_json_inference_clickhouse, select_model_inference_clickhouse,
+};
 use tensorzero_internal::inference::types::{ContentBlock, RequestMessage};
 use uuid::Uuid;
 

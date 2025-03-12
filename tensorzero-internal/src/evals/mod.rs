@@ -241,7 +241,8 @@ impl UninitializedEvaluatorConfig {
                     .collect::<Result<HashMap<_, _>, Error>>()?;
                 let nonzero_weights = variants
                     .iter()
-                    .filter(|(_, variant)| variant.weight() > 0.0)
+                    // Treat a None weight as 0.0 for this check - we only care if we have multiple variants with an explicit positive weight
+                    .filter(|(_, variant)| variant.weight().unwrap_or(0.0) > 0.0)
                     .count();
                 if nonzero_weights != 1 {
                     return Err(ErrorDetails::Config {
@@ -351,7 +352,7 @@ impl UninitializedLLMJudgeVariantConfig {
                     contents: templated_system_instructions,
                 };
                 Ok(VariantConfig::ChatCompletion(ChatCompletionConfig {
-                    weight: if params.active { 1.0 } else { 0.0 },
+                    weight: Some(if params.active { 1.0 } else { 0.0 }),
                     model: params.model,
                     system_template: Some(system_template),
                     user_template: None,

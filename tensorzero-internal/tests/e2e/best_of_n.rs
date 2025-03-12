@@ -6,9 +6,10 @@ use tensorzero_internal::inference::{
 };
 use uuid::Uuid;
 
-use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-    select_json_inference_clickhouse, select_model_inferences_clickhouse,
+use crate::common::get_gateway_endpoint;
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
+    select_model_inferences_clickhouse,
 };
 
 /// This test calls a function which currently uses best of n.
@@ -181,7 +182,18 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                   "frequencyPenalty": null,
                   "seed": null,
                   "responseMimeType": "application/json",
-                  "responseSchema": null
+                  "responseSchema": {
+                    "type": "object",
+                    "properties": {
+                      "thinking": {
+                        "type": "string"
+                      },
+                      "answer_choice": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["thinking", "answer_choice"]
+                  }
                 },
                 "systemInstruction": {
                   "role": "model",
@@ -570,7 +582,14 @@ async fn e2e_test_best_of_n_json_real_judge() {
                 "maxOutputTokens": null,
                 "seed": null,
                 "responseMimeType": "application/json",
-                "responseSchema": null
+                "responseSchema": {
+                    "type": "object",
+                    "properties": {
+                        "thinking": { "type": "string" },
+                        "answer_choice": { "type": "integer" }
+                    },
+                    "required": ["thinking", "answer_choice"]
+                  }
               },
               "systemInstruction": {
                 "role": "model",
@@ -991,7 +1010,18 @@ async fn e2e_test_best_of_n_judge_extra_body() {
                     "frequencyPenalty": null,
                     "seed": null,
                     "responseMimeType": "application/json",
-                    "responseSchema": null
+                    "responseSchema": {
+                        "type": "object",
+                        "properties": {
+                          "thinking": {
+                            "type": "string"
+                          },
+                          "answer_choice": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["thinking", "answer_choice"]
+                      }
                 },
                 "systemInstruction": {
                   "role": "model",

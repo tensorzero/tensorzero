@@ -23,13 +23,16 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+    ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
 use crate::model::ModelProvider;
 use crate::model::{build_creds_caching_default_with_fn, CredentialLocation};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
+use super::anthropic::{
+    prefill_json_chunk_response, prefill_json_response, AnthropicMessageDelta, AnthropicStopReason,
+};
 use super::gcp_vertex_gemini::{default_api_key_location, GCPVertexCredentials};
 use super::helpers::{inject_extra_body, peek_first_chunk};
 
@@ -166,7 +169,11 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
     /// Anthropic streaming API request
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -710,7 +717,7 @@ struct GCPVertexAnthropicResponse {
     content: Vec<GCPVertexAnthropicContentBlock>,
     model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    stop_reason: Option<String>,
+    stop_reason: Option<AnthropicStopReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequence: Option<String>,
     usage: GCPVertexAnthropic,
@@ -765,13 +772,16 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
         let input_messages = generic_request.messages.clone();
 
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            input_messages,
-            raw_request,
-            raw_response,
-            response.usage.into(),
-            latency,
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response,
+                usage: response.usage.into(),
+                latency,
+                finish_reason: response.stop_reason.map(|r| r.into()),
+            },
         ))
     }
 }
@@ -841,7 +851,7 @@ enum GCPVertexAnthropicStreamMessage {
         error: Value,
     },
     MessageDelta {
-        delta: Value,
+        delta: AnthropicMessageDelta,
         usage: Value,
     },
     MessageStart {
@@ -879,6 +889,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                     raw_message,
                     message_latency,
+                    None,
                 )))
             }
             GCPVertexAnthropicMessageBlock::InputJsonDelta { partial_json } => {
@@ -904,6 +915,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                     raw_message,
                     message_latency,
+                    None,
                 )))
             }
             _ => Err(ErrorDetails::InferenceServer {
@@ -928,6 +940,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                     raw_message,
                     message_latency,
+                    None,
                 )))
             }
             GCPVertexAnthropicMessageBlock::ToolUse { id, name, .. } => {
@@ -944,6 +957,7 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                     raw_message,
                     message_latency,
+                    None,
                 )))
             }
             _ => Err(ErrorDetails::InferenceServer {
@@ -962,13 +976,14 @@ fn anthropic_to_tensorzero_stream_message(
             raw_response: None,
         }
         .into()),
-        GCPVertexAnthropicStreamMessage::MessageDelta { usage, .. } => {
+        GCPVertexAnthropicStreamMessage::MessageDelta { usage, delta } => {
             let usage = parse_usage_info(&usage);
             Ok(Some(ProviderInferenceResponseChunk::new(
                 vec![],
                 Some(usage.into()),
                 raw_message,
                 message_latency,
+                delta.stop_reason.map(|s| s.into()),
             )))
         }
         GCPVertexAnthropicStreamMessage::MessageStart { message } => {
@@ -979,6 +994,7 @@ fn anthropic_to_tensorzero_stream_message(
                     Some(usage.into()),
                     raw_message,
                     message_latency,
+                    None,
                 )))
             } else {
                 Ok(None)
@@ -1015,7 +1031,7 @@ mod tests {
     use serde_json::json;
     use uuid::Uuid;
 
-    use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
@@ -1752,7 +1768,7 @@ mod tests {
                 text: "Response text".to_string(),
             }],
             model: "model-name".into(),
-            stop_reason: Some("stop reason".to_string()),
+            stop_reason: Some(AnthropicStopReason::EndTurn),
             stop_sequence: Some("stop sequence".to_string()),
             usage: GCPVertexAnthropic {
                 input_tokens: 100,
@@ -1835,7 +1851,7 @@ mod tests {
                 input: json!({"location": "New York"}),
             }],
             model: "model-name".into(),
-            stop_reason: Some("tool_call".to_string()),
+            stop_reason: Some(AnthropicStopReason::ToolUse),
             stop_sequence: None,
             usage: GCPVertexAnthropic {
                 input_tokens: 100,
@@ -2212,7 +2228,10 @@ mod tests {
 
         // Test MessageDelta with usage
         let message_delta = GCPVertexAnthropicStreamMessage::MessageDelta {
-            delta: json!({}),
+            delta: AnthropicMessageDelta {
+                stop_reason: Some(AnthropicStopReason::EndTurn),
+                stop_sequence: None,
+            },
             usage: json!({"input_tokens": 10, "output_tokens": 20}),
         };
         let latency = Duration::from_millis(140);

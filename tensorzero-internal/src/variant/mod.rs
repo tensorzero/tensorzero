@@ -163,7 +163,7 @@ pub trait Variant {
 }
 
 impl VariantConfig {
-    pub fn weight(&self) -> f64 {
+    pub fn weight(&self) -> Option<f64> {
         match self {
             VariantConfig::ChatCompletion(params) => params.weight,
             VariantConfig::BestOfNSampling(params) => params.weight,
@@ -493,10 +493,11 @@ async fn infer_model_request<'a, 'request>(
     .retry(args.retry_config.get_backoff())
     .await?;
 
+    let original_response = model_inference_response.raw_response.clone();
     let model_inference_result =
         ModelInferenceResponseWithMetadata::new(model_inference_response, args.model_name);
     let raw_content = model_inference_result.output.clone();
-    let usage = model_inference_result.usage.clone();
+    let usage = model_inference_result.actual_usage();
     let model_inference_results = vec![model_inference_result];
 
     args.function
@@ -507,6 +508,7 @@ async fn infer_model_request<'a, 'request>(
             model_inference_results,
             args.inference_config,
             args.inference_params,
+            Some(original_response),
         )
         .await
 }
@@ -521,12 +523,15 @@ async fn infer_model_request_stream<'request>(
     inference_params: InferenceParams,
     retry_config: RetryConfig,
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
-    let StreamResponse {
-        stream,
-        raw_request,
-        model_provider_name,
-        cached,
-    } = (|| async {
+    let (
+        StreamResponse {
+            stream,
+            raw_request,
+            model_provider_name,
+            cached,
+        },
+        input_messages,
+    ) = (|| async {
         model_config
             .infer_stream(&request, clients, &model_name)
             .await
@@ -534,7 +539,6 @@ async fn infer_model_request_stream<'request>(
     .retry(retry_config.get_backoff())
     .await?;
     let system = request.system.clone();
-    let input_messages = request.messages.clone();
     let model_used_info = ModelUsedInfo {
         model_name,
         model_provider_name,
@@ -1234,7 +1238,7 @@ mod tests {
             _ => panic!("Expected Chat inference result"),
         }
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider."#
+            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 
@@ -1529,7 +1533,7 @@ mod tests {
         assert_eq!(full_response, expected_response);
 
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider."#
+            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 }

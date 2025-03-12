@@ -12,8 +12,9 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::inference::types::{
-    Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+    FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ProviderInferenceResponseArgs,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::ToolChoice;
@@ -217,7 +218,11 @@ impl InferenceProvider for TogetherProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -470,11 +475,37 @@ fn process_think_blocks(text: &str, parse: bool) -> Result<(String, Option<Strin
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum TogetherFinishReason {
+    Stop,
+    Eos,
+    Length,
+    ToolCalls,
+    FunctionCall,
+    #[serde(other)]
+    Unknown,
+}
+
+impl From<TogetherFinishReason> for FinishReason {
+    fn from(finish_reason: TogetherFinishReason) -> Self {
+        match finish_reason {
+            TogetherFinishReason::Stop => FinishReason::Stop,
+            TogetherFinishReason::Eos => FinishReason::Stop,
+            TogetherFinishReason::Length => FinishReason::Length,
+            TogetherFinishReason::ToolCalls => FinishReason::ToolCall,
+            TogetherFinishReason::FunctionCall => FinishReason::ToolCall,
+            TogetherFinishReason::Unknown => FinishReason::Unknown,
+        }
+    }
+}
+
 // Leaving out logprobs and finish_reason for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 struct TogetherResponseChoice {
     index: u8,
     message: TogetherResponseMessage,
+    finish_reason: Option<TogetherFinishReason>,
 }
 
 // Leaving out id, created, model, service_tier, system_fingerprint, object for now
@@ -517,16 +548,19 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             .into());
         }
         let usage = response.usage.into();
-        let message = response
+        let TogetherResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }))?
-            .message;
+            }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(raw_text) = message.content {
             let (clean_text, extracted_reasoning) =
@@ -544,21 +578,23 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
+        let system = generic_request.system.clone();
+        let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            generic_request.system.clone(),
-            generic_request.messages.clone(),
-            raw_request,
-            raw_response,
-            usage,
-            latency,
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                usage,
+                latency,
+                finish_reason: finish_reason.map(|r| r.into()),
+            },
         ))
     }
 }
@@ -701,8 +737,12 @@ fn together_to_tensorzero_chunk(
         .into());
     }
     let usage = chunk.usage.map(|u| u.into());
+    let mut finish_reason = None;
     let mut content = vec![];
     if let Some(choice) = chunk.choices.pop() {
+        if let Some(reason) = choice.finish_reason {
+            finish_reason = Some(reason.into());
+        }
         if let Some(text) = choice.delta.content {
             if parse_think_blocks {
                 if !thinking_state.update(&text)? {
@@ -780,6 +820,7 @@ fn together_to_tensorzero_chunk(
         usage,
         raw_message,
         latency,
+        finish_reason,
     ))
 }
 
@@ -814,6 +855,7 @@ struct TogetherDelta {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct TogetherChatChunkChoice {
     delta: TogetherDelta,
+    finish_reason: Option<TogetherFinishReason>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -832,10 +874,10 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::providers::openai::{
         OpenAIToolType, OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
     };
+    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
 
     #[test]
@@ -932,6 +974,7 @@ mod tests {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: None,
             }],
             usage: OpenAIUsage {
                 prompt_tokens: 10,
@@ -998,6 +1041,7 @@ mod tests {
                     content: Some("<think>hmmm</think>Hello, world!".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: None,
             }],
             usage: OpenAIUsage {
                 prompt_tokens: 10,
@@ -1041,6 +1085,7 @@ mod tests {
                     content: Some("Hello <think>hmmm</think> world!".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: None,
             }],
             usage: OpenAIUsage {
                 prompt_tokens: 10,
@@ -1213,6 +1258,7 @@ mod tests {
                     content: Some("Hello".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: Some(TogetherFinishReason::Stop),
             }],
             usage: None,
         };
@@ -1235,6 +1281,7 @@ mod tests {
                 id: "0".to_string(),
             })],
         );
+        assert_eq!(message.finish_reason, Some(FinishReason::Stop));
         // Test what an intermediate tool chunk should look like
         let chunk = TogetherChatChunk {
             choices: vec![TogetherChatChunkChoice {
@@ -1249,6 +1296,7 @@ mod tests {
                         },
                     }]),
                 },
+                finish_reason: Some(TogetherFinishReason::ToolCalls),
             }],
             usage: None,
         };
@@ -1269,6 +1317,7 @@ mod tests {
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
+        assert_eq!(message.finish_reason, Some(FinishReason::ToolCall));
         // Test what a bad tool chunk would do (new ID but no names)
         let chunk = TogetherChatChunk {
             choices: vec![TogetherChatChunkChoice {
@@ -1283,6 +1332,7 @@ mod tests {
                         },
                     }]),
                 },
+                finish_reason: Some(TogetherFinishReason::ToolCalls),
             }],
             usage: None,
         };
@@ -1319,6 +1369,7 @@ mod tests {
                         },
                     }]),
                 },
+                finish_reason: Some(TogetherFinishReason::ToolCalls),
             }],
             usage: None,
         };
@@ -1380,6 +1431,7 @@ mod tests {
                     content: Some("<think>".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: Some(TogetherFinishReason::Stop),
             }],
             usage: None,
         };
@@ -1402,6 +1454,7 @@ mod tests {
                     content: Some("some thinking content".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: Some(TogetherFinishReason::Stop),
             }],
             usage: None,
         };
@@ -1430,6 +1483,7 @@ mod tests {
                     content: Some("</think>".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: Some(TogetherFinishReason::Stop),
             }],
             usage: None,
         };
@@ -1454,6 +1508,7 @@ mod tests {
                     content: Some("Hello <think>should not parse</think>".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: Some(TogetherFinishReason::Stop),
             }],
             usage: None,
         };

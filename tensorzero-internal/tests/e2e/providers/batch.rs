@@ -11,7 +11,9 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use tensorzero_internal::{
-    clickhouse::ClickHouseConnectionInfo,
+    clickhouse::{
+        test_helpers::select_batch_model_inferences_clickhouse, ClickHouseConnectionInfo,
+    },
     endpoints::batch_inference::PollPathParams,
     inference::types::{
         batch::{BatchModelInferenceRow, BatchRequestRow},
@@ -23,25 +25,23 @@ use tokio::time::{sleep, Duration};
 use url::Url;
 use uuid::Uuid;
 
-use crate::{
-    common::select_batch_model_inferences_clickhouse,
-    providers::common::{
-        check_dynamic_json_mode_inference_response, check_dynamic_tool_use_inference_response,
-        check_json_mode_inference_response, check_parallel_tool_use_inference_response,
-        check_tool_use_multi_turn_inference_response,
-        check_tool_use_tool_choice_allowed_tools_inference_response,
-        check_tool_use_tool_choice_auto_unused_inference_response,
-        check_tool_use_tool_choice_auto_used_inference_response,
-        check_tool_use_tool_choice_none_inference_response,
-        check_tool_use_tool_choice_required_inference_response,
-        check_tool_use_tool_choice_specific_inference_response,
-    },
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_batch_model_inference_clickhouse, select_latest_batch_request_clickhouse,
+};
+
+use crate::providers::common::{
+    check_dynamic_json_mode_inference_response, check_dynamic_tool_use_inference_response,
+    check_json_mode_inference_response, check_parallel_tool_use_inference_response,
+    check_tool_use_multi_turn_inference_response,
+    check_tool_use_tool_choice_allowed_tools_inference_response,
+    check_tool_use_tool_choice_auto_unused_inference_response,
+    check_tool_use_tool_choice_auto_used_inference_response,
+    check_tool_use_tool_choice_none_inference_response,
+    check_tool_use_tool_choice_required_inference_response,
+    check_tool_use_tool_choice_specific_inference_response,
 };
 use crate::{
-    common::{
-        get_clickhouse, get_gateway_endpoint, select_batch_model_inference_clickhouse,
-        select_latest_batch_request_clickhouse,
-    },
+    common::get_gateway_endpoint,
     providers::common::{check_inference_params_response, check_simple_inference_response},
 };
 
@@ -114,8 +114,7 @@ macro_rules! generate_batch_inference_tests {
         #[tokio::test]
         async fn test_start_inference_params_batch_inference_request() {
             let all_providers = $func().await;
-            // We use the simple inference providers for batch inference params inference because they do not require dynamic credentials
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.inference_params_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_start_inference_params_batch_inference_request_with_provider(provider).await;
@@ -126,8 +125,7 @@ macro_rules! generate_batch_inference_tests {
         #[tokio::test]
         async fn test_poll_existing_inference_params_batch_inference_request() {
             let all_providers = $func().await;
-            // We use the simple inference providers for batch inference params inference because they do not require dynamic credentials
-            let providers = all_providers.simple_inference;
+            let providers = all_providers.inference_params_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_existing_inference_params_batch_inference_request_with_provider(provider).await;
@@ -901,7 +899,6 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
         "tags": [{
             "test_type": "batch_inference_params"
         }],
-        "credentials": provider.credentials,
     });
 
     let response = Client::new()

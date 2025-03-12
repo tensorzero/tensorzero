@@ -12,7 +12,8 @@ use url::Url;
 use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
-    OpenAIRequestMessage, OpenAIResponse, OpenAISystemRequestMessage, StreamOptions,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAISystemRequestMessage,
+    StreamOptions,
 };
 use super::provider_trait::InferenceProvider;
 use crate::cache::ModelProviderRequest;
@@ -22,7 +23,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
@@ -194,7 +195,11 @@ impl InferenceProvider for VLLMProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -366,16 +371,19 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .into());
         }
         let usage = response.usage.into();
-        let message = response
+        let OpenAIResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }))?
-            .message;
+            }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
@@ -386,23 +394,23 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
+            Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request body as JSON: {e}"),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
             })
         })?;
         let system = generic_request.system.clone();
-        let messages = generic_request.messages.clone();
+        let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                usage,
+                latency,
+                finish_reason: Some(finish_reason.into()),
+            },
         ))
     }
 }
@@ -439,8 +447,10 @@ mod tests {
 
     use crate::inference::{
         providers::{
-            common::WEATHER_TOOL_CONFIG,
-            openai::{OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage},
+            openai::{
+                OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
+            },
+            test_helpers::WEATHER_TOOL_CONFIG,
         },
         types::{FunctionType, RequestMessage, Role},
     };
@@ -557,6 +567,7 @@ mod tests {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: OpenAIFinishReason::Stop,
             }],
             usage: OpenAIUsage {
                 prompt_tokens: 10,

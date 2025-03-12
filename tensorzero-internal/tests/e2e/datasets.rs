@@ -2,14 +2,13 @@
 
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
+use tensorzero_internal::endpoints::datasets::CLICKHOUSE_DATETIME_FORMAT;
 use uuid::Uuid;
 
-use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_chat_datapoint_clickhouse,
-    select_json_datapoint_clickhouse,
+use crate::common::get_gateway_endpoint;
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_datapoint_clickhouse, select_json_datapoint_clickhouse,
 };
-
-const DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%f";
 
 #[tokio::test]
 async fn test_datapoint_insert_output_inherit_chat() {
@@ -65,10 +64,12 @@ async fn test_datapoint_insert_output_inherit_chat() {
         .unwrap()
         .remove("updated_at")
         .unwrap();
-    let updated_at =
-        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), DATETIME_FORMAT)
-            .unwrap()
-            .and_utc();
+    let updated_at = chrono::NaiveDateTime::parse_from_str(
+        updated_at.as_str().unwrap(),
+        CLICKHOUSE_DATETIME_FORMAT,
+    )
+    .unwrap()
+    .and_utc();
     assert!(
         chrono::Utc::now()
             .signed_duration_since(updated_at)
@@ -90,6 +91,93 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "is_deleted": false
     });
     assert_eq!(datapoint, expected);
+
+    let resp = client
+        .delete(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/function/basic_test/kind/chat/datapoint/{inference_id}",
+        )))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let resp_text = resp.text().await.unwrap();
+    assert_eq!(status, StatusCode::OK, "Delete failed: {resp_text}");
+
+    // Force deduplication to run
+    clickhouse
+        .run_query("OPTIMIZE TABLE ChatInferenceDatapoint".to_string(), None)
+        .await
+        .unwrap();
+
+    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let new_updated_at = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("updated_at")
+        .unwrap();
+    let new_updated_at = chrono::NaiveDateTime::parse_from_str(
+        new_updated_at.as_str().unwrap(),
+        CLICKHOUSE_DATETIME_FORMAT,
+    )
+    .unwrap()
+    .and_utc();
+    assert!(
+        chrono::Utc::now()
+            .signed_duration_since(new_updated_at)
+            .num_seconds()
+            < 5,
+        "Unexpected updated_at: {new_updated_at:?}"
+    );
+
+    let expected = serde_json::json!({
+      "dataset_name": dataset_name,
+      "function_name": "basic_test",
+      "id": inference_id.to_string(),
+      "episode_id": episode_id.to_string(),
+      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Hello, world!\"}]}]}",
+      "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
+      "tool_params": "",
+      "tags": {},
+      "auxiliary": "{}",
+      "is_deleted": true
+    });
+    assert_eq!(datapoint, expected);
+    assert_ne!(
+        updated_at, new_updated_at,
+        "Deleting datapoint should change updated_at"
+    );
+}
+
+#[tokio::test]
+async fn test_bad_delete_datapoint() {
+    let client = Client::new();
+
+    let id = Uuid::now_v7();
+    let resp = client
+        .delete(get_gateway_endpoint(&format!(
+            "/datasets/missing/function/basic_test/kind/chat/datapoint/{id}",
+        )))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let resp: serde_json::Value = resp.json().await.unwrap();
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "Delete should have failed: {resp}"
+    );
+    assert_eq!(
+        resp,
+        serde_json::json!({
+            "error": format!("Datapoint not found with params DeletePathParams {{ dataset: \"missing\", function: \"basic_test\", kind: Chat, id: {id} }}")
+        })
+    );
 }
 
 #[tokio::test]
@@ -146,10 +234,12 @@ async fn test_datapoint_insert_output_none_chat() {
         .unwrap()
         .remove("updated_at")
         .unwrap();
-    let updated_at =
-        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), DATETIME_FORMAT)
-            .unwrap()
-            .and_utc();
+    let updated_at = chrono::NaiveDateTime::parse_from_str(
+        updated_at.as_str().unwrap(),
+        CLICKHOUSE_DATETIME_FORMAT,
+    )
+    .unwrap()
+    .and_utc();
     assert!(
         chrono::Utc::now()
             .signed_duration_since(updated_at)
@@ -244,10 +334,12 @@ async fn test_datapoint_insert_output_demonstration_chat() {
         .unwrap()
         .remove("updated_at")
         .unwrap();
-    let updated_at =
-        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), DATETIME_FORMAT)
-            .unwrap()
-            .and_utc();
+    let updated_at = chrono::NaiveDateTime::parse_from_str(
+        updated_at.as_str().unwrap(),
+        CLICKHOUSE_DATETIME_FORMAT,
+    )
+    .unwrap()
+    .and_utc();
     assert!(
         chrono::Utc::now()
             .signed_duration_since(updated_at)
@@ -330,10 +422,12 @@ async fn test_datapoint_insert_output_inherit_json() {
         .unwrap()
         .remove("updated_at")
         .unwrap();
-    let updated_at =
-        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), DATETIME_FORMAT)
-            .unwrap()
-            .and_utc();
+    let updated_at = chrono::NaiveDateTime::parse_from_str(
+        updated_at.as_str().unwrap(),
+        CLICKHOUSE_DATETIME_FORMAT,
+    )
+    .unwrap()
+    .and_utc();
     assert!(
         chrono::Utc::now()
             .signed_duration_since(updated_at)
@@ -355,6 +449,70 @@ async fn test_datapoint_insert_output_inherit_json() {
       "is_deleted": false,
     });
     assert_eq!(datapoint, expected);
+
+    let resp = client
+        .delete(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/function/json_success/kind/json/datapoint/{inference_id}",
+        )))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let resp_text = resp.text().await.unwrap();
+    assert_eq!(status, StatusCode::OK, "Delete failed: {resp_text}");
+
+    // Force deduplication to run
+    clickhouse
+        .run_query("OPTIMIZE TABLE JsonInferenceDatapoint".to_string(), None)
+        .await
+        .unwrap();
+
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let new_updated_at = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("updated_at")
+        .unwrap();
+    let new_updated_at = chrono::NaiveDateTime::parse_from_str(
+        new_updated_at.as_str().unwrap(),
+        CLICKHOUSE_DATETIME_FORMAT,
+    )
+    .unwrap()
+    .and_utc();
+    assert!(
+        chrono::Utc::now()
+            .signed_duration_since(new_updated_at)
+            .num_seconds()
+            < 5,
+        "Unexpected updated_at: {new_updated_at:?}"
+    );
+
+    let expected = serde_json::json!({
+      "dataset_name": dataset_name,
+      "function_name": "json_success",
+      "id": inference_id,
+      "episode_id": episode_id,
+      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"Japan\"}}]}]}",
+      "output": "{\"raw\":\"{\\\"answer\\\":\\\"Hello\\\"}\",\"parsed\":{\"answer\":\"Hello\"}}",
+      "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
+      "tags": {},
+      "auxiliary": "{}",
+      "is_deleted": true
+    });
+    assert_eq!(
+        datapoint,
+        expected,
+        "Unexpected datapoint: {}",
+        serde_json::to_string_pretty(&datapoint).unwrap()
+    );
+    assert_ne!(
+        updated_at, new_updated_at,
+        "Deleting datapoint should change updated_at"
+    );
 }
 
 #[tokio::test]
@@ -411,10 +569,12 @@ async fn test_datapoint_insert_output_none_json() {
         .unwrap()
         .remove("updated_at")
         .unwrap();
-    let updated_at =
-        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), DATETIME_FORMAT)
-            .unwrap()
-            .and_utc();
+    let updated_at = chrono::NaiveDateTime::parse_from_str(
+        updated_at.as_str().unwrap(),
+        CLICKHOUSE_DATETIME_FORMAT,
+    )
+    .unwrap()
+    .and_utc();
     assert!(
         chrono::Utc::now()
             .signed_duration_since(updated_at)
@@ -509,10 +669,12 @@ async fn test_datapoint_insert_output_demonstration_json() {
         .unwrap()
         .remove("updated_at")
         .unwrap();
-    let updated_at =
-        chrono::NaiveDateTime::parse_from_str(updated_at.as_str().unwrap(), DATETIME_FORMAT)
-            .unwrap()
-            .and_utc();
+    let updated_at = chrono::NaiveDateTime::parse_from_str(
+        updated_at.as_str().unwrap(),
+        CLICKHOUSE_DATETIME_FORMAT,
+    )
+    .unwrap()
+    .and_utc();
     assert!(
         chrono::Utc::now()
             .signed_duration_since(updated_at)

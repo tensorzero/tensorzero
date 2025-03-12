@@ -14,19 +14,19 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse,
 };
+use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
 use super::helpers::inject_extra_body;
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
-    OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice, OpenAIToolChoiceString,
-    SpecificToolChoice,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
+    OpenAIToolChoiceString, SpecificToolChoice,
 };
 use super::provider_trait::InferenceProvider;
 
@@ -198,7 +198,11 @@ impl InferenceProvider for AzureProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -433,18 +437,19 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
         let usage = response.usage.into();
-        let message = response
+        let OpenAIResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "Response has no choices (this should never happen)".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                    raw_request: None,
-                    raw_response: Some(raw_response.clone()),
-                })
-            })?
-            .message;
+            .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
+                message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
+                provider_type: PROVIDER_TYPE.to_string(),
+            }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
@@ -461,13 +466,16 @@ impl<'a> TryFrom<AzureResponseWithMetadata<'a>> for ProviderInferenceResponse {
         })?;
 
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            input_messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response,
+                usage,
+                latency,
+                finish_reason: Some(finish_reason.into()),
+            },
         ))
     }
 }
@@ -481,13 +489,13 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::providers::openai::{
-        OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType, OpenAIUsage,
-        SpecificToolFunction,
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType,
+        OpenAIUsage, SpecificToolFunction,
     };
+    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{
-        FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
+        FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
 
     #[test]
@@ -673,6 +681,7 @@ mod tests {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: OpenAIFinishReason::Stop,
             }],
             usage: OpenAIUsage {
                 prompt_tokens: 10,
@@ -720,6 +729,7 @@ mod tests {
         assert_eq!(inference_response.raw_response, "test_response");
         assert_eq!(inference_response.usage.input_tokens, 10);
         assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {

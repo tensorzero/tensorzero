@@ -34,11 +34,16 @@ with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client
             "messages": [
                 {
                     "role": "user",
-                    "content": {
-                        "location": location,
-                        "temperature": temperature,
-                        "units": units,
-                    },
+                    "content": [
+                        {
+                            "type": "text",
+                            "arguments": {
+                                "location": location,
+                                "temperature": temperature,
+                                "units": units,
+                            },
+                        }
+                    ],
                 }
             ]
         },

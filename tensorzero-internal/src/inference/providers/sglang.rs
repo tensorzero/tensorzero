@@ -17,15 +17,15 @@ use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
 use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-    stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAITool, OpenAIToolChoice,
-    StreamOptions,
+    stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
+    OpenAIToolChoice, StreamOptions,
 };
 
 fn default_api_key_location() -> CredentialLocation {
@@ -198,7 +198,11 @@ impl InferenceProvider for SGLangProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -401,16 +405,20 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
             .into());
         }
-        let message = response
+        let usage = response.usage.into();
+        let OpenAIResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
-                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
-                raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
-            }))?
-            .message;
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
+            }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
@@ -427,17 +435,19 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 message: format!("Error serializing request body as JSON: {e}"),
             })
         })?;
-        let usage = response.usage.into();
         let system = generic_request.system.clone();
-        let messages = generic_request.messages.clone();
+        let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                usage,
+                latency,
+                finish_reason: Some(finish_reason.into()),
+            },
         ))
     }
 }
@@ -451,10 +461,12 @@ mod tests {
 
     use crate::inference::{
         providers::{
-            common::WEATHER_TOOL_CONFIG,
-            openai::{OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage},
+            openai::{
+                OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
+            },
+            test_helpers::WEATHER_TOOL_CONFIG,
         },
-        types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
+        types::{FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
     };
 
     use super::*;
@@ -594,6 +606,7 @@ mod tests {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: OpenAIFinishReason::Stop,
             }],
             usage: OpenAIUsage {
                 prompt_tokens: 10,
@@ -644,6 +657,7 @@ mod tests {
         assert_eq!(inference_response.raw_response, "test_response");
         assert_eq!(inference_response.usage.input_tokens, 10);
         assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {

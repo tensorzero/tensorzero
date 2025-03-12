@@ -34,9 +34,9 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
 };
 use crate::inference::types::{
-    ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, Usage,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
@@ -211,7 +211,11 @@ impl InferenceProvider for TGIProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -451,7 +455,11 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             .into());
         }
         let usage = response.usage.into();
-        let message = response
+        let TGIResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
@@ -459,8 +467,7 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: serde_json::to_string(&request_body).ok(),
                 raw_response: Some(raw_response.clone()),
-            }))?
-            .message;
+            }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
@@ -476,15 +483,18 @@ impl<'a> TryFrom<TGIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             })
         })?;
         let system = generic_request.system.clone();
-        let messages = generic_request.messages.clone();
+        let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                usage,
+                latency,
+                finish_reason: finish_reason.map(|r| r.into()),
+            },
         ))
     }
 }
@@ -560,11 +570,38 @@ struct TGIResponseMessage {
     tool_calls: Option<Vec<TGIResponseToolCall>>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum TGIFinishReason {
+    Stop,
+    Length,
+    ContentFilter,
+    ToolCalls,
+    FunctionCall,
+    #[serde(other)]
+    Unknown,
+}
+
+impl From<TGIFinishReason> for FinishReason {
+    fn from(finish_reason: TGIFinishReason) -> Self {
+        match finish_reason {
+            TGIFinishReason::Stop => FinishReason::Stop,
+            TGIFinishReason::Length => FinishReason::Length,
+            TGIFinishReason::ContentFilter => FinishReason::ContentFilter,
+            TGIFinishReason::ToolCalls => FinishReason::ToolCall,
+            TGIFinishReason::FunctionCall => FinishReason::ToolCall,
+            TGIFinishReason::Unknown => FinishReason::Unknown,
+        }
+    }
+}
+
 // Leaving out logprobs and finish_reason for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct TGIResponseChoice {
     index: u8,
     message: TGIResponseMessage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    finish_reason: Option<TGIFinishReason>,
 }
 
 // Leaving out id, created, model, service_tier, system_fingerprint, object for now
@@ -605,6 +642,7 @@ struct TGIDelta {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct TGIChatChunkChoice {
     delta: TGIDelta,
+    finish_reason: Option<TGIFinishReason>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -638,7 +676,11 @@ fn tgi_to_tensorzero_chunk(
     }
     let usage = chunk.usage.map(|u| u.into());
     let mut content = vec![];
+    let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
+        if let Some(reason) = choice.finish_reason {
+            finish_reason = Some(reason.into());
+        }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {
                 text,
@@ -662,6 +704,7 @@ fn tgi_to_tensorzero_chunk(
         usage,
         raw_message,
         latency,
+        finish_reason,
     ))
 }
 
@@ -674,8 +717,8 @@ mod tests {
 
     use crate::inference::{
         providers::{
-            common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG},
             openai::{OpenAIToolType, SpecificToolChoice, SpecificToolFunction},
+            test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG},
         },
         types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
     };
@@ -847,6 +890,7 @@ mod tests {
     fn test_tgi_to_tensorzero_chunk() {
         let chunk = TGIChatChunk {
             choices: vec![TGIChatChunkChoice {
+                finish_reason: Some(TGIFinishReason::Stop),
                 delta: TGIDelta {
                     content: Some("Hello".to_string()),
                     tool_calls: None,
@@ -860,14 +904,16 @@ mod tests {
             vec![ContentBlockChunk::Text(TextChunk {
                 text: "Hello".to_string(),
                 id: "0".to_string(),
-            })],
+            })]
         );
+        assert_eq!(message.finish_reason, Some(FinishReason::Stop));
     }
     #[test]
     fn test_tgi_response_with_metadata_try_into() {
         let valid_response = TGIResponse {
             choices: vec![TGIResponseChoice {
                 index: 0,
+                finish_reason: Some(TGIFinishReason::Stop),
                 message: TGIResponseMessage {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
@@ -920,6 +966,7 @@ mod tests {
         assert_eq!(inference_response.raw_response, "test_response");
         assert_eq!(inference_response.usage.input_tokens, 10);
         assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {

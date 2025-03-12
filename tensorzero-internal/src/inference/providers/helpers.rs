@@ -232,6 +232,7 @@ mod tests {
             usage: None,
             raw_response: "My raw response".to_string(),
             latency: Duration::from_secs(0),
+            finish_reason: None,
         };
         let mut stream = Box::pin(stream::iter([
             Ok(chunk.clone()),

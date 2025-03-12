@@ -4,7 +4,8 @@ use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
+use serde::de::IntoDeserializer;
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -26,13 +27,15 @@ use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
 use crate::inference::types::resolved_input::ImageWithPath;
-use crate::inference::types::ProviderInferenceResponseStreamInner;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
     TextChunk, Usage,
+};
+use crate::inference::types::{
+    FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -216,7 +219,11 @@ impl InferenceProvider for OpenAIProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -1469,11 +1476,37 @@ pub(super) struct OpenAIResponseMessage {
     pub(super) tool_calls: Option<Vec<OpenAIResponseToolCall>>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum OpenAIFinishReason {
+    Stop,
+    Length,
+    ContentFilter,
+    ToolCalls,
+    FunctionCall,
+    #[serde(other)]
+    Unknown,
+}
+
+impl From<OpenAIFinishReason> for FinishReason {
+    fn from(finish_reason: OpenAIFinishReason) -> Self {
+        match finish_reason {
+            OpenAIFinishReason::Stop => FinishReason::Stop,
+            OpenAIFinishReason::Length => FinishReason::Length,
+            OpenAIFinishReason::ContentFilter => FinishReason::ContentFilter,
+            OpenAIFinishReason::ToolCalls => FinishReason::ToolCall,
+            OpenAIFinishReason::FunctionCall => FinishReason::ToolCall,
+            OpenAIFinishReason::Unknown => FinishReason::Unknown,
+        }
+    }
+}
+
 // Leaving out logprobs and finish_reason for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) struct OpenAIResponseChoice {
     pub(super) index: u8,
     pub(super) message: OpenAIResponseMessage,
+    pub(super) finish_reason: OpenAIFinishReason,
 }
 
 // Leaving out id, created, model, service_tier, system_fingerprint, object for now
@@ -1513,7 +1546,11 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
             }
             .into());
         }
-        let message = response
+        let OpenAIResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
@@ -1521,8 +1558,7 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
                 raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: Some(serde_json::to_string(&response).unwrap_or_default()),
                 provider_type: PROVIDER_TYPE.to_string(),
-            }))?
-            .message;
+            }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             content.push(text.into());
@@ -1544,13 +1580,16 @@ impl<'a> TryFrom<OpenAIResponseWithMetadata<'a>> for ProviderInferenceResponse {
         let system = generic_request.system.clone();
         let messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages: messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                usage,
+                latency,
+                finish_reason: Some(finish_reason.into()),
+            },
         ))
     }
 }
@@ -1582,10 +1621,34 @@ struct OpenAIDelta {
     tool_calls: Option<Vec<OpenAIToolCallChunk>>,
 }
 
-// This doesn't include logprobs, finish_reason, and index
+// Custom deserializer function for empty string to None
+// This is required because SGLang (which depends on this code) returns "" in streaming chunks instead of null
+fn empty_string_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    let opt = Option::<String>::deserialize(deserializer)?;
+    if let Some(s) = opt {
+        if s.is_empty() {
+            return Ok(None);
+        }
+        // Convert serde_json::Error to D::Error
+        Ok(Some(
+            T::deserialize(serde_json::Value::String(s).into_deserializer())
+                .map_err(|e| serde::de::Error::custom(e.to_string()))?,
+        ))
+    } else {
+        Ok(None)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct OpenAIChatChunkChoice {
     delta: OpenAIDelta,
+    #[serde(default)]
+    #[serde(deserialize_with = "empty_string_as_none")]
+    finish_reason: Option<OpenAIFinishReason>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1621,7 +1684,11 @@ fn openai_to_tensorzero_chunk(
     }
     let usage = chunk.usage.map(|u| u.into());
     let mut content = vec![];
+    let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
+        if let Some(choice_finish_reason) = choice.finish_reason {
+            finish_reason = Some(choice_finish_reason.into());
+        }
         if let Some(text) = choice.delta.content {
             content.push(ContentBlockChunk::Text(TextChunk {
                 text,
@@ -1679,6 +1746,7 @@ fn openai_to_tensorzero_chunk(
         usage,
         raw_message,
         latency,
+        finish_reason,
     ))
 }
 
@@ -1847,7 +1915,11 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
         })?;
 
         // Extract the message from choices
-        let message = response
+        let OpenAIResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
@@ -1855,8 +1927,7 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
                 raw_request: None,
                 raw_response: Some(raw_response.clone()),
                 provider_type: PROVIDER_TYPE.to_string(),
-            }))?
-            .message;
+            }))?;
 
         // Convert message content to ContentBlocks
         let mut content: Vec<ContentBlockOutput> = Vec::new();
@@ -1874,6 +1945,7 @@ impl TryFrom<OpenAIBatchFileRow> for ProviderBatchInferenceOutput {
             output: content,
             raw_response,
             usage: response.usage.into(),
+            finish_reason: Some(finish_reason.into()),
         })
     }
 }
@@ -1922,7 +1994,9 @@ mod tests {
 
     use crate::{
         inference::{
-            providers::common::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG},
+            providers::test_helpers::{
+                MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
+            },
             types::FunctionType,
         },
         tool::ToolCallConfig,
@@ -2331,6 +2405,7 @@ mod tests {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: OpenAIFinishReason::Stop,
             }],
             usage: OpenAIUsage {
                 prompt_tokens: 10,
@@ -2394,6 +2469,7 @@ mod tests {
         );
         assert_eq!(inference_response.usage.input_tokens, 10);
         assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
@@ -2414,6 +2490,7 @@ mod tests {
         let valid_response_with_tools = OpenAIResponse {
             choices: vec![OpenAIResponseChoice {
                 index: 0,
+                finish_reason: OpenAIFinishReason::ToolCalls,
                 message: OpenAIResponseMessage {
                     content: None,
                     tool_calls: Some(vec![OpenAIResponseToolCall {
@@ -2492,6 +2569,10 @@ mod tests {
         assert_eq!(inference_response.usage.input_tokens, 15);
         assert_eq!(inference_response.usage.output_tokens, 25);
         assert_eq!(
+            inference_response.finish_reason,
+            Some(FinishReason::ToolCall)
+        );
+        assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
                 response_time: Duration::from_millis(110)
@@ -2555,9 +2636,11 @@ mod tests {
                         content: Some("Choice 1".to_string()),
                         tool_calls: None,
                     },
+                    finish_reason: OpenAIFinishReason::Stop,
                 },
                 OpenAIResponseChoice {
                     index: 1,
+                    finish_reason: OpenAIFinishReason::Stop,
                     message: OpenAIResponseMessage {
                         content: Some("Choice 2".to_string()),
                         tool_calls: None,
@@ -2770,6 +2853,7 @@ mod tests {
                     content: Some("Hello".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: Some(OpenAIFinishReason::Stop),
             }],
             usage: None,
         };
@@ -2789,9 +2873,11 @@ mod tests {
                 id: "0".to_string(),
             })],
         );
+        assert_eq!(message.finish_reason, Some(FinishReason::Stop));
         // Test what an intermediate tool chunk should look like
         let chunk = OpenAIChatChunk {
             choices: vec![OpenAIChatChunkChoice {
+                finish_reason: Some(OpenAIFinishReason::ToolCalls),
                 delta: OpenAIDelta {
                     content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
@@ -2821,9 +2907,11 @@ mod tests {
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
+        assert_eq!(message.finish_reason, Some(FinishReason::ToolCall));
         // Test what a bad tool chunk would do (new ID but no names)
         let chunk = OpenAIChatChunk {
             choices: vec![OpenAIChatChunkChoice {
+                finish_reason: None,
                 delta: OpenAIDelta {
                     content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
@@ -2858,6 +2946,7 @@ mod tests {
         // Test a correct new tool chunk
         let chunk = OpenAIChatChunk {
             choices: vec![OpenAIChatChunkChoice {
+                finish_reason: Some(OpenAIFinishReason::Stop),
                 delta: OpenAIDelta {
                     content: None,
                     tool_calls: Some(vec![OpenAIToolCallChunk {
@@ -2887,6 +2976,7 @@ mod tests {
                 raw_arguments: "{\"hello\":\"world\"}".to_string(),
             })]
         );
+        assert_eq!(message.finish_reason, Some(FinishReason::Stop));
         // Check that the lists were updated
         assert_eq!(tool_call_ids, vec!["id1".to_string(), "id2".to_string()]);
         assert_eq!(

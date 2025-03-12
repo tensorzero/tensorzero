@@ -1,0 +1,53 @@
+# This is a simplified example for learning purposes. Do not use this in production.
+# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.12-alpine
+    environment:
+      - CLICKHOUSE_USER=chuser
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_PASSWORD=chpassword
+    ports:
+      - "8123:8123"
+    healthcheck:
+      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  gateway:
+    image: tensorzero/gateway
+    volumes:
+      # Mount our tensorzero.toml file into the container
+      - ./config:/app/config:ro
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      - S3_ACCESS_KEY_ID=miniouser
+      - S3_SECRET_ACCESS_KEY=miniopassword
+      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  # For a production deployment, you can use AWS S3, GCP Cloud Storage, Cloudflare R2, etc.
+  minio:
+    image: bitnami/minio
+    ports:
+      - "9000:9000" # API port
+      - "9001:9001" # Console port
+    environment:
+      - MINIO_ROOT_USER=miniouser
+      - MINIO_ROOT_PASSWORD=miniopassword
+      - MINIO_DEFAULT_BUCKETS=tensorzero
+    healthcheck:
+      test: "mc ls local/tensorzero || exit 1"
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s

@@ -24,13 +24,13 @@ use tensorzero_internal::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
 };
 use tensorzero_internal::inference::types::{
-    ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, Usage,
+    ContentBlockChatOutput, FinishReason, JsonInferenceOutput, ResolvedInput, Usage,
 };
 use tensorzero_internal::jsonschema_util::JSONSchemaFromPath;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use crate::common::{
+use tensorzero_internal::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
     select_model_inferences_clickhouse,
 };
@@ -348,6 +348,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             input_tokens: 10,
             output_tokens: 20,
         },
+        finish_reason: Some(FinishReason::Stop),
     };
     let inference_id2 = batch_model_inference_rows[1].inference_id;
     let output_2 = ProviderBatchInferenceOutput {
@@ -358,6 +359,7 @@ async fn test_write_read_completed_batch_inference_chat() {
             input_tokens: 20,
             output_tokens: 30,
         },
+        finish_reason: Some(FinishReason::ToolCall),
     };
     let response = ProviderBatchInferenceResponse {
         elements: HashMap::from([(inference_id1, output_1), (inference_id2, output_2)]),
@@ -379,6 +381,10 @@ async fn test_write_read_completed_batch_inference_chat() {
     match inference_response_1 {
         InferenceResponse::Chat(chat_inference_response) => {
             assert_eq!(chat_inference_response.inference_id, inference_id1);
+            assert_eq!(
+                chat_inference_response.finish_reason,
+                Some(FinishReason::Stop)
+            );
             match &chat_inference_response.content[0] {
                 ContentBlockChatOutput::Text(text_block) => {
                     assert_eq!(text_block.text, "hello world")
@@ -544,6 +550,7 @@ async fn test_write_read_completed_batch_inference_json() {
             input_tokens: 10,
             output_tokens: 20,
         },
+        finish_reason: Some(FinishReason::Stop),
     };
     let inference_id2 = batch_model_inference_rows[1].inference_id;
     let output_2 = ProviderBatchInferenceOutput {
@@ -554,6 +561,7 @@ async fn test_write_read_completed_batch_inference_json() {
             input_tokens: 20,
             output_tokens: 30,
         },
+        finish_reason: Some(FinishReason::ToolCall),
     };
     let raw_request = "raw request".to_string();
     let raw_response = "raw response".to_string();
@@ -595,6 +603,10 @@ async fn test_write_read_completed_batch_inference_json() {
                 "hello world"
             );
             assert_eq!(json_inference_response.usage.input_tokens, 10);
+            assert_eq!(
+                json_inference_response.finish_reason,
+                Some(FinishReason::Stop)
+            );
         }
         _ => panic!("Unexpected inference response type"),
     }
@@ -607,6 +619,10 @@ async fn test_write_read_completed_batch_inference_json() {
                 "{\"response\": \"goodbye world\"}"
             );
             assert!(json_inference_response.output.parsed.is_none());
+            assert_eq!(
+                json_inference_response.finish_reason,
+                Some(FinishReason::ToolCall)
+            );
         }
         _ => panic!("Unexpected inference response type"),
     }

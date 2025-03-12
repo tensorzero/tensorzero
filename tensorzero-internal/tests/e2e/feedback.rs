@@ -3,15 +3,14 @@ use std::path::PathBuf;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_internal::{
-    clickhouse::ClickHouseConnectionInfo,
+    clickhouse::{test_helpers::clickhouse_flush_async_insert, ClickHouseConnectionInfo},
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use crate::common::{
-    clickhouse_flush_async_insert, get_clickhouse, get_gateway_endpoint, CLICKHOUSE_URL,
-};
+use crate::common::get_gateway_endpoint;
+use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 
 async fn make_embedded_gateway() -> tensorzero::Client {
     let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -19,6 +18,7 @@ async fn make_embedded_gateway() -> tensorzero::Client {
     tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        timeout: None,
     })
     .build()
     .await
@@ -1012,12 +1012,14 @@ async fn test_fast_inference_then_feedback() {
                 let inference_id = response.inference_id;
 
                 // Prepare and send the feedback request.
+                // This also tests that the internal flag is correctly propagated.
                 let feedback_payload = tensorzero::FeedbackParams {
                     inference_id: Some(inference_id),
                     episode_id: None,
                     metric_name: "task_success".to_string(),
                     value: json!(true),
-                    tags: HashMap::new(),
+                    internal: true,
+                    tags: HashMap::from([("tensorzero::tag_key".to_string(), "tensorzero::tag_value".to_string())]),
                     dryrun: None,
                 };
                 client.feedback(feedback_payload).await.unwrap();

@@ -13,13 +13,18 @@ async def main():
                 "messages": [
                     {
                         "role": "user",
-                        "content": {
-                            "recipient_name": "TensorZero Team",
-                            "sender_name": "Mark Zuckerberg",
-                            "email_purpose": "Acquire TensorZero for $100 billion dollars.",
-                        },
+                        "content": [
+                            {
+                                "type": "text",
+                                "arguments": {
+                                    "recipient_name": "TensorZero Team",
+                                    "sender_name": "Mark Zuckerberg",
+                                    "email_purpose": "Acquire TensorZero for $100 billion dollars.",
+                                },
+                            }
+                        ],
                     }
-                ]
+                ],
             },
         )
 

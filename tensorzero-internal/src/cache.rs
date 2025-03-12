@@ -2,11 +2,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::embeddings::{EmbeddingRequest, EmbeddingResponse};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::{
-    ContentBlockChunk, ContentBlockOutput, ModelInferenceRequest, ModelInferenceResponse,
-    ProviderInferenceResponseChunk,
+    ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
+    ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
 use crate::model::StreamResponse;
 use serde::de::DeserializeOwned;
@@ -33,7 +34,7 @@ impl CacheEnabledMode {
     }
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CacheParamsOptions {
     #[serde(default)]
     pub max_age_s: Option<u32>,
@@ -64,12 +65,23 @@ pub struct CacheOptions {
     pub enabled: CacheEnabledMode,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct ModelProviderRequest<'request> {
-    pub request: &'request ModelInferenceRequest<'request>,
+#[derive(Debug)]
+pub struct BaseModelProviderRequest<'request, T> {
+    pub request: &'request T,
     pub model_name: &'request str,
     pub provider_name: &'request str,
 }
+
+// We need a manual impl to avoid adding a 'T: Copy' bound
+impl<T> Copy for BaseModelProviderRequest<'_, T> {}
+impl<T> Clone for BaseModelProviderRequest<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+pub type ModelProviderRequest<'a> = BaseModelProviderRequest<'a, ModelInferenceRequest<'a>>;
+pub type EmbeddingModelProviderRequest<'a> = BaseModelProviderRequest<'a, EmbeddingRequest>;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CacheKey([u8; 32]);
@@ -89,15 +101,48 @@ impl CacheKey {
     }
 }
 
+impl EmbeddingModelProviderRequest<'_> {
+    // Destructure EmbeddingModelProviderRequest so that we get a compiler error
+    // if we add any new fields
+    pub fn get_cache_key(&self) -> Result<CacheKey, Error> {
+        let EmbeddingModelProviderRequest {
+            model_name,
+            provider_name,
+            request,
+        } = self;
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(model_name.as_bytes());
+        hasher.update(&[0]); // null byte after model name to ensure data is prefix-free
+        hasher.update(provider_name.as_bytes());
+        hasher.update(&[0]); // null byte after provider name to ensure data is prefix-free
+
+        // Convert the request to a JSON Value, error if serialization fails
+        let request_json = serde_json::to_string(request).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize request: {e}"),
+            })
+        })?;
+        hasher.update(request_json.as_bytes());
+        Ok(CacheKey(hasher.finalize().into()))
+    }
+}
+
 impl ModelProviderRequest<'_> {
     pub fn get_cache_key(&self) -> Result<CacheKey, Error> {
+        // Destructure ModelProviderRequest so that we get a compiler error
+        // if we add any new fields
+        let ModelProviderRequest {
+            model_name,
+            provider_name,
+            request,
+        } = self;
         let mut hasher = blake3::Hasher::new();
-        hasher.update(self.model_name.as_bytes());
+        hasher.update(model_name.as_bytes());
         hasher.update(&[0]); // null byte after model name to ensure data is prefix-free
-        hasher.update(self.provider_name.as_bytes());
+        hasher.update(provider_name.as_bytes());
         hasher.update(&[0]); // null byte after provider name to ensure data is prefix-free
                              // Convert the request to a JSON Value, error if serialization fails
-        let mut request_value = serde_json::to_value(self.request).map_err(|e| {
+        let mut request_value = serde_json::to_value(request).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize request: {e}"),
             })
@@ -144,6 +189,9 @@ pub struct CacheData<T: CacheOutput> {
     pub output: T,
     pub raw_request: String,
     pub raw_response: String,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub finish_reason: Option<FinishReason>,
 }
 
 /// A marker trait for types that can be used in the 'output' field of `CacheData`
@@ -155,6 +203,14 @@ pub trait CacheOutput {}
 
 impl CacheOutput for StreamingCacheData {}
 impl CacheOutput for NonStreamingCacheData {}
+impl CacheOutput for EmbeddingCacheData {}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct EmbeddingCacheData {
+    #[serde(deserialize_with = "deserialize_json_string")]
+    pub embedding: Vec<f32>,
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
@@ -171,35 +227,44 @@ pub struct StreamingCacheData {
 }
 
 // This doesn't block
-pub fn start_cache_write(
+pub fn start_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     clickhouse_client: &ClickHouseConnectionInfo,
-    request: ModelProviderRequest<'_>,
-    output: &[ContentBlockOutput],
+    cache_key: CacheKey,
+    output: T,
     raw_request: &str,
     raw_response: &str,
+    usage: &Usage,
+    finish_reason: Option<&FinishReason>,
 ) -> Result<(), Error> {
-    let cache_key = request.get_cache_key()?;
     let short_cache_key = cache_key.get_short_key()?;
     let long_cache_key = cache_key.get_long_key();
-    let output = output.to_owned();
     let raw_request = raw_request.to_string();
     let raw_response = raw_response.to_string();
+    let input_tokens = usage.input_tokens;
+    let output_tokens = usage.output_tokens;
     let clickhouse_client = clickhouse_client.clone();
+    let finish_reason = finish_reason.cloned();
     tokio::spawn(async move {
-        clickhouse_client
+        if let Err(e) = clickhouse_client
             .write(
                 &[FullCacheRow {
                     short_cache_key,
                     long_cache_key,
                     data: CacheData {
-                        output: NonStreamingCacheData { blocks: output },
+                        output,
                         raw_request,
                         raw_response,
+                        input_tokens,
+                        output_tokens,
+                        finish_reason,
                     },
                 }],
                 "ModelInferenceCache",
             )
             .await
+        {
+            tracing::warn!("Failed to write to cache: {e}");
+        }
     });
     Ok(())
 }
@@ -219,10 +284,19 @@ pub fn start_cache_write_streaming(
     cache_key: CacheKey,
     chunks: Vec<ProviderInferenceResponseChunk>,
     raw_request: &str,
+    usage: &Usage,
 ) -> Result<(), Error> {
     let short_cache_key = cache_key.get_short_key()?;
     let long_cache_key = cache_key.get_long_key();
-
+    let input_tokens = usage.input_tokens;
+    let output_tokens = usage.output_tokens;
+    let mut finish_reason = None;
+    for chunk in &chunks {
+        if let Some(chunk_finish_reason) = &chunk.finish_reason {
+            finish_reason = Some(chunk_finish_reason);
+        }
+    }
+    let finish_reason = finish_reason.cloned();
     let output = StreamingCacheData {
         chunks: chunks
             .into_iter()
@@ -244,6 +318,9 @@ pub fn start_cache_write_streaming(
                         output,
                         raw_request,
                         raw_response: String::new(),
+                        input_tokens,
+                        output_tokens,
+                        finish_reason,
                     },
                 }],
                 "ModelInferenceCache",
@@ -253,6 +330,20 @@ pub fn start_cache_write_streaming(
     Ok(())
 }
 
+pub async fn embedding_cache_lookup(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    request: &EmbeddingModelProviderRequest<'_>,
+    max_age_s: Option<u32>,
+) -> Result<Option<EmbeddingResponse>, Error> {
+    let result = cache_lookup_inner::<EmbeddingCacheData>(
+        clickhouse_connection_info,
+        request.get_cache_key()?,
+        max_age_s,
+    )
+    .await?;
+    Ok(result.map(|result| EmbeddingResponse::from_cache(result, request)))
+}
+
 pub async fn cache_lookup(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     request: ModelProviderRequest<'_>,
@@ -260,7 +351,7 @@ pub async fn cache_lookup(
 ) -> Result<Option<ModelInferenceResponse>, Error> {
     let result = cache_lookup_inner::<NonStreamingCacheData>(
         clickhouse_connection_info,
-        &request,
+        request.get_cache_key()?,
         max_age_s,
     )
     .await?;
@@ -274,16 +365,20 @@ pub async fn cache_lookup_streaming(
     request: ModelProviderRequest<'_>,
     max_age_s: Option<u32>,
 ) -> Result<Option<StreamResponse>, Error> {
-    let result = cache_lookup_inner(clickhouse_connection_info, &request, max_age_s).await?;
+    let result = cache_lookup_inner(
+        clickhouse_connection_info,
+        request.get_cache_key()?,
+        max_age_s,
+    )
+    .await?;
     Ok(result.map(|result| StreamResponse::from_cache(result, Arc::from(request.provider_name))))
 }
 
 pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    request: &ModelProviderRequest<'_>,
+    cache_key: CacheKey,
     max_age_s: Option<u32>,
 ) -> Result<Option<CacheData<T>>, Error> {
-    let cache_key = request.get_cache_key()?;
     // NOTE: the short cache key is just so the ClickHouse index can be as efficient as possible
     // but we always check against the long cache key before returning a result
     let short_cache_key = cache_key.get_short_key()?.to_string();
@@ -296,7 +391,10 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
             SELECT
                 output,
                 raw_request,
-                raw_response
+                raw_response,
+                input_tokens,
+                output_tokens,
+                finish_reason
             FROM ModelInferenceCache
             WHERE short_cache_key = {short_cache_key:UInt64}
                 AND long_cache_key = {long_cache_key:String}
@@ -310,7 +408,10 @@ pub async fn cache_lookup_inner<T: CacheOutput + DeserializeOwned>(
             SELECT
                 output,
                 raw_request,
-                raw_response
+                raw_response,
+                input_tokens,
+                output_tokens,
+                finish_reason
             FROM ModelInferenceCache
             WHERE short_cache_key = {short_cache_key:UInt64}
                 AND long_cache_key = {long_cache_key:String}

@@ -5,6 +5,7 @@ mod azure;
 mod batch;
 pub mod common;
 mod deepseek;
+mod errors;
 mod fireworks;
 mod gcp_vertex_anthropic;
 mod gcp_vertex_gemini;

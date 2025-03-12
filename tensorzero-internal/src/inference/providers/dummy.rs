@@ -21,7 +21,7 @@ use crate::inference::types::{
     ContentBlockOutput, Latency, ModelInferenceRequest, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, Usage,
 };
-use crate::inference::types::{ContentBlock, ProviderInferenceResponseStreamInner};
+use crate::inference::types::{ContentBlock, FinishReason, ProviderInferenceResponseStreamInner};
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk};
@@ -193,9 +193,12 @@ impl InferenceProvider for DummyProvider {
             }
         }
 
-        if self.model_name == "error" {
+        if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
-                message: "Error sending request to Dummy provider.".to_string(),
+                message: format!(
+                    "Error sending request to Dummy provider for model '{}'.",
+                    self.model_name
+                ),
                 raw_request: Some("raw request".to_string()),
                 raw_response: None,
                 status_code: None,
@@ -326,6 +329,10 @@ impl InferenceProvider for DummyProvider {
         };
         let system = request.system.clone();
         let input_messages = request.messages.clone();
+        let finish_reason = match self.model_name.contains("tool") {
+            true => Some(FinishReason::ToolCall),
+            false => Some(FinishReason::Stop),
+        };
         Ok(ProviderInferenceResponse {
             id,
             created,
@@ -336,12 +343,17 @@ impl InferenceProvider for DummyProvider {
             latency,
             system,
             input_messages,
+            finish_reason,
         })
     }
 
     async fn infer_stream<'a>(
         &'a self,
-        _request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request: _,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         _http_client: &'a reqwest::Client,
         _dynamic_api_keys: &'a InferenceCredentials,
         _model_provider: &'a ModelProvider,
@@ -388,9 +400,12 @@ impl InferenceProvider for DummyProvider {
             .await;
         }
 
-        if self.model_name == "error" {
+        if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
-                message: "Error sending request to Dummy provider.".to_string(),
+                message: format!(
+                    "Error sending request to Dummy provider for model '{}'.",
+                    self.model_name
+                ),
                 raw_request: Some("raw request".to_string()),
                 raw_response: None,
                 status_code: None,
@@ -411,6 +426,10 @@ impl InferenceProvider for DummyProvider {
 
         let total_tokens = content_chunks.len() as u32;
         let content_chunk_len = content_chunks.len();
+        let finish_reason = match is_tool_call {
+            true => Some(FinishReason::ToolCall),
+            false => Some(FinishReason::Stop),
+        };
         let stream: ProviderInferenceResponseStreamInner = Box::pin(
             tokio_stream::iter(content_chunks.into_iter().enumerate())
                 .map(move |(i, chunk)| {
@@ -438,6 +457,7 @@ impl InferenceProvider for DummyProvider {
                             })
                         }],
                         usage: None,
+                        finish_reason: None,
                         raw_response: chunk.to_string(),
                         latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
                     })
@@ -449,6 +469,7 @@ impl InferenceProvider for DummyProvider {
                         input_tokens: 10,
                         output_tokens: total_tokens,
                     }),
+                    finish_reason,
                     raw_response: "".to_string(),
                     latency: Duration::from_millis(50 + 10 * (content_chunk_len as u64)),
                 })))
@@ -507,9 +528,12 @@ impl EmbeddingProvider for DummyProvider {
         _http_client: &reqwest::Client,
         _dynamic_api_keys: &InferenceCredentials,
     ) -> Result<EmbeddingProviderResponse, Error> {
-        if self.model_name == "error" {
+        if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
-                message: "Error sending request to Dummy provider.".to_string(),
+                message: format!(
+                    "Error sending request to Dummy provider for model '{}'.",
+                    self.model_name
+                ),
                 raw_request: Some("raw request".to_string()),
                 raw_response: None,
                 status_code: None,
@@ -568,6 +592,7 @@ async fn create_streaming_reasoning_response(
                 usage: None,
                 raw_response: "".to_string(),
                 latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
+                finish_reason: None,
             })
         })
         .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
@@ -577,6 +602,7 @@ async fn create_streaming_reasoning_response(
                 input_tokens: 10,
                 output_tokens: 10,
             }),
+            finish_reason: Some(FinishReason::Stop),
             raw_response: "".to_string(),
             latency: Duration::from_millis(50 + 10 * (num_chunks as u64)),
         })))

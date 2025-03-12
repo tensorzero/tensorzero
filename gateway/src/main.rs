@@ -1,4 +1,4 @@
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::Router;
 use clap::Parser;
 use mimalloc::MiMalloc;
@@ -24,9 +24,13 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
-    /// Path to tensorzero.toml
+    /// Use the `tensorzero.toml` config file at the specified path. Incompatible with `--default-config`
     #[arg(long)]
     config_file: Option<PathBuf>,
+
+    /// Use a default config file. Incompatible with `--config-file`
+    #[arg(long)]
+    default_config: bool,
 
     /// Deprecated: use `--config-file` instead
     tensorzero_toml: Option<PathBuf>,
@@ -51,6 +55,15 @@ async fn main() {
     }
 
     let config_path = args.config_file.or(args.tensorzero_toml);
+
+    if config_path.is_some() && args.default_config {
+        tracing::error!("Cannot specify both `--config-file` and `--default-config`");
+        std::process::exit(1);
+    }
+
+    if !args.default_config && config_path.is_none() {
+        tracing::warn!("Running the gateway without any config-related arguments is deprecated. Use `--default-config` to start the gateway with the default config.");
+    }
 
     let config = if let Some(path) = &config_path {
         Arc::new(
@@ -106,6 +119,10 @@ async fn main() {
         .route(
             "/datasets/:dataset/datapoints",
             post(endpoints::datasets::create_datapoint_handler),
+        )
+        .route(
+            "/datasets/:dataset/function/:function/kind/:kind/datapoint/:id",
+            delete(endpoints::datasets::delete_datapoint_handler),
         )
         .route(
             "/metrics",

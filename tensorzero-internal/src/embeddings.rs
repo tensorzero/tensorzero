@@ -1,6 +1,12 @@
 use std::future::Future;
+use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
 
+use crate::cache::{
+    embedding_cache_lookup, start_cache_write, CacheData, EmbeddingCacheData,
+    EmbeddingModelProviderRequest,
+};
+use crate::endpoints::inference::InferenceClients;
 use crate::model_table::BaseModelTable;
 use crate::model_table::ShorthandModelConfig;
 use crate::{
@@ -16,7 +22,7 @@ use crate::{
     model::ProviderConfig,
 };
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -67,8 +73,8 @@ impl EmbeddingModelConfig {
     pub async fn embed(
         &self,
         request: &EmbeddingRequest,
-        client: &Client,
-        dynamic_api_keys: &InferenceCredentials,
+        model_name: &str,
+        clients: &InferenceClients<'_>,
     ) -> Result<EmbeddingResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
@@ -77,11 +83,43 @@ impl EmbeddingModelConfig {
                     provider_name: provider_name.to_string(),
                 })
             })?;
+            let provider_request = EmbeddingModelProviderRequest {
+                request,
+                provider_name,
+                model_name,
+            };
+            // TODO: think about how to best handle errors here
+            if clients.cache_options.enabled.read() {
+                let cache_lookup = embedding_cache_lookup(
+                    clients.clickhouse_connection_info,
+                    &provider_request,
+                    clients.cache_options.max_age_s,
+                )
+                .await
+                .ok()
+                .flatten();
+                if let Some(cache_lookup) = cache_lookup {
+                    return Ok(cache_lookup);
+                }
+            }
             let response = provider_config
-                .embed(request, client, dynamic_api_keys)
+                .embed(request, clients.http_client, clients.credentials)
                 .await;
             match response {
                 Ok(response) => {
+                    if clients.cache_options.enabled.write() {
+                        let _ = start_cache_write(
+                            clients.clickhouse_connection_info,
+                            provider_request.get_cache_key()?,
+                            EmbeddingCacheData {
+                                embedding: response.embedding.clone(),
+                            },
+                            &response.raw_request,
+                            &response.raw_response,
+                            &response.usage,
+                            None,
+                        );
+                    }
                     let embedding_response =
                         EmbeddingResponse::new(response, provider_name.clone());
                     return Ok(embedding_response);
@@ -95,9 +133,16 @@ impl EmbeddingModelConfig {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct EmbeddingRequest {
     pub input: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct EmbeddingProviderRequest<'request> {
+    pub request: &'request EmbeddingRequest,
+    pub model_name: &'request str,
+    pub provider_name: &'request str,
 }
 
 #[derive(Debug, PartialEq)]
@@ -123,6 +168,32 @@ pub struct EmbeddingResponse {
     pub usage: Usage,
     pub latency: Latency,
     pub embedding_provider_name: Arc<str>,
+    pub cached: bool,
+}
+
+impl EmbeddingResponse {
+    pub fn from_cache(
+        cache_lookup: CacheData<EmbeddingCacheData>,
+        request: &EmbeddingModelProviderRequest,
+    ) -> Self {
+        Self {
+            id: Uuid::now_v7(),
+            created: current_timestamp(),
+            input: request.request.input.clone(),
+            embedding: cache_lookup.output.embedding,
+            raw_request: cache_lookup.raw_request,
+            raw_response: cache_lookup.raw_response,
+            usage: Usage {
+                input_tokens: cache_lookup.input_tokens,
+                output_tokens: cache_lookup.output_tokens,
+            },
+            latency: Latency::NonStreaming {
+                response_time: Duration::from_secs(0),
+            },
+            embedding_provider_name: Arc::from(request.provider_name),
+            cached: true,
+        }
+    }
 }
 
 pub struct EmbeddingResponseWithMetadata {
@@ -153,6 +224,7 @@ impl EmbeddingResponse {
             usage: embedding_provider_response.usage,
             latency: embedding_provider_response.latency,
             embedding_provider_name,
+            cached: false,
         }
     }
 }
@@ -192,6 +264,7 @@ impl From<EmbeddingResponseWithMetadata> for ModelInferenceResponseWithMetadata 
             model_provider_name: response.embedding_provider_name,
             model_name: response.embedding_model_name,
             cached: false,
+            finish_reason: None,
         }
     }
 }
@@ -276,6 +349,11 @@ impl EmbeddingProviderResponse {
 mod tests {
     use tracing_test::traced_test;
 
+    use crate::{
+        cache::{CacheEnabledMode, CacheOptions},
+        clickhouse::ClickHouseConnectionInfo,
+    };
+
     use super::*;
 
     #[traced_test]
@@ -299,12 +377,24 @@ mod tests {
         let request = EmbeddingRequest {
             input: "Hello, world!".to_string(),
         };
-        let client = Client::new();
-        let inference_credentials = InferenceCredentials::default();
         let response = fallback_embedding_model
-            .embed(&request, &client, &inference_credentials)
+            .embed(
+                &request,
+                "fallback",
+                &InferenceClients {
+                    http_client: &Client::new(),
+                    credentials: &InferenceCredentials::default(),
+                    cache_options: &CacheOptions {
+                        max_age_s: None,
+                        enabled: CacheEnabledMode::Off,
+                    },
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                },
+            )
             .await;
         assert!(response.is_ok());
-        assert!(logs_contain("Error sending request to Dummy provider."))
+        assert!(logs_contain(
+            "Error sending request to Dummy provider for model 'error'"
+        ))
     }
 }

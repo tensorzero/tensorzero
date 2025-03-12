@@ -31,8 +31,8 @@ use crate::endpoints::inference::{
 use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
-    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, Image, ImageKind, Input,
-    InputMessage, InputMessageContent, Role, TextKind, Usage,
+    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, FinishReason, Image, ImageKind,
+    Input, InputMessage, InputMessageContent, Role, TextKind, Usage,
 };
 use crate::tool::{
     DynamicToolParams, Tool, ToolCall, ToolCallChunk, ToolCallOutput, ToolChoice, ToolResult,
@@ -87,6 +87,18 @@ pub struct OpenAICompatibleToolCall {
     pub function: OpenAICompatibleFunctionCall,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct OpenAICompatibleToolCallChunk {
+    /// The ID of the tool call.
+    pub id: Option<String>,
+    /// The index of the tool call.
+    pub index: usize,
+    /// The type of the tool. Currently, only `function` is supported.
+    pub r#type: String,
+    /// The function that the model called.
+    pub function: OpenAICompatibleFunctionCall,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct OpenAICompatibleSystemMessage {
     content: Value,
@@ -113,6 +125,7 @@ struct OpenAICompatibleToolMessage {
 #[serde(tag = "role")]
 #[serde(rename_all = "lowercase")]
 enum OpenAICompatibleMessage {
+    #[serde(alias = "developer")]
     System(OpenAICompatibleSystemMessage),
     User(OpenAICompatibleUserMessage),
     Assistant(OpenAICompatibleAssistantMessage),
@@ -207,8 +220,30 @@ struct OpenAICompatibleResponseMessage {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAICompatibleChoice {
     index: u32,
-    finish_reason: String,
+    finish_reason: OpenAICompatibleFinishReason,
     message: OpenAICompatibleResponseMessage,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum OpenAICompatibleFinishReason {
+    Stop,
+    Length,
+    ContentFilter,
+    ToolCalls,
+    // FunctionCall, we never generate this and it is deprecated
+}
+
+impl From<FinishReason> for OpenAICompatibleFinishReason {
+    fn from(finish_reason: FinishReason) -> Self {
+        match finish_reason {
+            FinishReason::Stop => OpenAICompatibleFinishReason::Stop,
+            FinishReason::Length => OpenAICompatibleFinishReason::Length,
+            FinishReason::ContentFilter => OpenAICompatibleFinishReason::ContentFilter,
+            FinishReason::ToolCall => OpenAICompatibleFinishReason::ToolCalls,
+            FinishReason::Unknown => OpenAICompatibleFinishReason::Stop, // OpenAI doesn't have an unknown finish reason so we coerce
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -385,7 +420,11 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             // OpenAI compatible endpoint does not support dynamic credentials
             credentials: InferenceCredentials::default(),
             cache_options: CacheParamsOptions::default(),
+            // For now, we don't support internal inference for OpenAI compatible endpoint
+            internal: false,
             tags: HashMap::new(),
+            // OpenAI compatible endpoint does not support 'include_original_response'
+            include_original_response: false,
         })
     }
 }
@@ -624,7 +663,7 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
                     id: response.inference_id.to_string(),
                     choices: vec![OpenAICompatibleChoice {
                         index: 0,
-                        finish_reason: "stop".to_string(),
+                        finish_reason: response.finish_reason.unwrap_or(FinishReason::Stop).into(),
                         message: OpenAICompatibleResponseMessage {
                             content,
                             tool_calls: Some(tool_calls),
@@ -643,7 +682,7 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
                 id: response.inference_id.to_string(),
                 choices: vec![OpenAICompatibleChoice {
                     index: 0,
-                    finish_reason: "stop".to_string(),
+                    finish_reason: response.finish_reason.unwrap_or(FinishReason::Stop).into(),
                     message: OpenAICompatibleResponseMessage {
                         content: Some(response.output.raw),
                         tool_calls: None,
@@ -737,63 +776,67 @@ struct OpenAICompatibleResponseChunk {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAICompatibleChoiceChunk {
     index: u32,
-    finish_reason: String,
+    finish_reason: Option<OpenAICompatibleFinishReason>,
     delta: OpenAICompatibleDelta,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAICompatibleDelta {
     content: Option<String>,
-    tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
+    tool_calls: Option<Vec<OpenAICompatibleToolCallChunk>>,
 }
 
-impl From<InferenceResponseChunk> for OpenAICompatibleResponseChunk {
-    fn from(chunk: InferenceResponseChunk) -> Self {
-        match chunk {
-            InferenceResponseChunk::Chat(c) => {
-                let (content, tool_calls) = process_chat_content_chunk(c.content);
-                OpenAICompatibleResponseChunk {
-                    id: c.inference_id.to_string(),
-                    episode_id: c.episode_id.to_string(),
-                    choices: vec![OpenAICompatibleChoiceChunk {
-                        index: 0,
-                        finish_reason: "".to_string(),
-                        delta: OpenAICompatibleDelta {
-                            content,
-                            tool_calls: Some(tool_calls),
-                        },
-                    }],
-                    created: current_timestamp() as u32,
-                    model: c.variant_name,
-                    system_fingerprint: "".to_string(),
-                    object: "chat.completion".to_string(),
-                    usage: c.usage.map(|usage| usage.into()),
-                }
-            }
-            InferenceResponseChunk::Json(c) => OpenAICompatibleResponseChunk {
+fn convert_inference_response_chunk_to_openai_compatible(
+    chunk: InferenceResponseChunk,
+    tool_id_to_index: &mut HashMap<String, usize>,
+) -> Vec<OpenAICompatibleResponseChunk> {
+    let response_chunk = match chunk {
+        InferenceResponseChunk::Chat(c) => {
+            let (content, tool_calls) = process_chat_content_chunk(c.content, tool_id_to_index);
+            OpenAICompatibleResponseChunk {
                 id: c.inference_id.to_string(),
                 episode_id: c.episode_id.to_string(),
                 choices: vec![OpenAICompatibleChoiceChunk {
                     index: 0,
-                    finish_reason: "".to_string(),
+                    finish_reason: c.finish_reason.map(|finish_reason| finish_reason.into()),
                     delta: OpenAICompatibleDelta {
-                        content: Some(c.raw),
-                        tool_calls: None,
+                        content,
+                        tool_calls: Some(tool_calls),
                     },
                 }],
                 created: current_timestamp() as u32,
                 model: c.variant_name,
                 system_fingerprint: "".to_string(),
-                object: "chat.completion".to_string(),
+                object: "chat.completion.chunk".to_string(),
                 usage: c.usage.map(|usage| usage.into()),
-            },
+            }
         }
-    }
+        InferenceResponseChunk::Json(c) => OpenAICompatibleResponseChunk {
+            id: c.inference_id.to_string(),
+            episode_id: c.episode_id.to_string(),
+            choices: vec![OpenAICompatibleChoiceChunk {
+                index: 0,
+                finish_reason: c.finish_reason.map(|finish_reason| finish_reason.into()),
+                delta: OpenAICompatibleDelta {
+                    content: Some(c.raw),
+                    tool_calls: None,
+                },
+            }],
+            created: current_timestamp() as u32,
+            model: c.variant_name,
+            system_fingerprint: "".to_string(),
+            object: "chat.completion.chunk".to_string(),
+            usage: c.usage.map(|usage| usage.into()),
+        },
+    };
+
+    vec![response_chunk]
 }
 
 fn process_chat_content_chunk(
     content: Vec<ContentBlockChunk>,
-) -> (Option<String>, Vec<OpenAICompatibleToolCall>) {
+    tool_id_to_index: &mut HashMap<String, usize>,
+) -> (Option<String>, Vec<OpenAICompatibleToolCallChunk>) {
     let mut content_str: Option<String> = None;
     let mut tool_calls = Vec::new();
     for block in content {
@@ -803,7 +846,18 @@ fn process_chat_content_chunk(
                 None => content_str = Some(text.text),
             },
             ContentBlockChunk::ToolCall(tool_call) => {
-                tool_calls.push(tool_call.into());
+                let len = tool_id_to_index.len();
+                let is_new = !tool_id_to_index.contains_key(&tool_call.id);
+                let index = tool_id_to_index.entry(tool_call.id.clone()).or_insert(len);
+                tool_calls.push(OpenAICompatibleToolCallChunk {
+                    id: if is_new { Some(tool_call.id) } else { None },
+                    index: *index,
+                    r#type: "function".to_string(),
+                    function: OpenAICompatibleFunctionCall {
+                        name: tool_call.raw_name,
+                        arguments: tool_call.raw_arguments,
+                    },
+                });
             }
             ContentBlockChunk::Thought(_thought) => {
                 // OpenAI compatible endpoint does not support thought blocks
@@ -820,23 +874,33 @@ fn prepare_serialized_openai_compatible_events(
     mut stream: InferenceStream,
 ) -> impl Stream<Item = Result<Event, Error>> {
     async_stream::stream! {
+        let mut tool_id_to_index = HashMap::new();
+        let mut is_first_chunk = true;
         while let Some(chunk) = stream.next().await {
             // NOTE - in the future, we may want to end the stream early if we get an error
             // For now, we just ignore the error and try to get more chunks
             let Ok(chunk) = chunk else {
                 continue;
             };
-            let openai_compatible_chunk = OpenAICompatibleResponseChunk::from(chunk);
-            let chunk_json = serde_json::to_value(openai_compatible_chunk).map_err(|e| {
-                Error::new(ErrorDetails::Inference {
-                    message: format!("Failed to convert chunk to JSON: {}", e),
+            let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index);
+            for chunk in openai_compatible_chunks {
+                let mut chunk_json = serde_json::to_value(chunk).map_err(|e| {
+                    Error::new(ErrorDetails::Inference {
+                        message: format!("Failed to convert chunk to JSON: {}", e),
+                    })
+                })?;
+                if is_first_chunk {
+                    // OpenAI includes "assistant" role in the first chunk but not in the subsequent chunks
+                    chunk_json["choices"][0]["delta"]["role"] = Value::String("assistant".to_string());
+                    is_first_chunk = false;
+                }
+
+                yield Event::default().json_data(chunk_json).map_err(|e| {
+                    Error::new(ErrorDetails::Inference {
+                        message: format!("Failed to convert Value to Event: {}", e),
+                    })
                 })
-            })?;
-            yield Event::default().json_data(chunk_json).map_err(|e| {
-                Error::new(ErrorDetails::Inference {
-                    message: format!("Failed to convert Value to Event: {}", e),
-                })
-            })
+            }
         }
         yield Ok(Event::default().data("[DONE]"));
     }
@@ -1258,15 +1322,17 @@ mod tests {
                 text: ", world!".to_string(),
             }),
         ];
-        let (content_str, tool_calls) = process_chat_content_chunk(content);
+        let mut tool_id_to_index = HashMap::new();
+        let (content_str, tool_calls) = process_chat_content_chunk(content, &mut tool_id_to_index);
         assert_eq!(content_str, Some("Hello, world!".to_string()));
         assert_eq!(tool_calls.len(), 1);
-        assert_eq!(tool_calls[0].id, "1");
+        assert_eq!(tool_calls[0].id, Some("1".to_string()));
+        assert_eq!(tool_calls[0].index, 0);
         assert_eq!(tool_calls[0].function.name, "test_tool");
         assert_eq!(tool_calls[0].function.arguments, "{}");
 
         let content: Vec<ContentBlockChunk> = vec![];
-        let (content_str, tool_calls) = process_chat_content_chunk(content);
+        let (content_str, tool_calls) = process_chat_content_chunk(content, &mut tool_id_to_index);
         assert_eq!(content_str, None);
         assert!(tool_calls.is_empty());
 
@@ -1292,16 +1358,27 @@ mod tests {
                 id: "4".to_string(),
                 text: " fourth part".to_string(),
             }),
+            ContentBlockChunk::ToolCall(ToolCallChunk {
+                id: "5".to_string(),
+                raw_name: "last_tool".to_string(),
+                raw_arguments: "{\"key\": \"value\"}".to_string(),
+            }),
         ];
-        let (content_str, tool_calls) = process_chat_content_chunk(content);
+        let mut tool_id_to_index = HashMap::new();
+        let (content_str, tool_calls) = process_chat_content_chunk(content, &mut tool_id_to_index);
         assert_eq!(
             content_str,
             Some("First part second part third part fourth part".to_string())
         );
-        assert_eq!(tool_calls.len(), 1);
-        assert_eq!(tool_calls[0].id, "123");
+        assert_eq!(tool_calls.len(), 2);
+        assert_eq!(tool_calls[0].id, Some("123".to_string()));
+        assert_eq!(tool_calls[0].index, 0);
         assert_eq!(tool_calls[0].function.name, "middle_tool");
         assert_eq!(tool_calls[0].function.arguments, "{\"key\": \"value\"}");
+        assert_eq!(tool_calls[1].id, Some("5".to_string()));
+        assert_eq!(tool_calls[1].index, 1);
+        assert_eq!(tool_calls[1].function.name, "last_tool");
+        assert_eq!(tool_calls[1].function.arguments, "{\"key\": \"value\"}");
     }
 
     #[test]

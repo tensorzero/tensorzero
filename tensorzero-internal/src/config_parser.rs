@@ -22,6 +22,7 @@ use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig};
+use std::error::Error as StdError;
 
 #[derive(Debug, Default)]
 pub struct Config<'c> {
@@ -70,6 +71,7 @@ impl ObjectStoreInfo {
                 bucket_name,
                 region,
                 endpoint,
+                allow_http,
                 #[cfg(feature = "e2e_tests")]
                     prefix: _,
             } => {
@@ -96,6 +98,18 @@ impl ObjectStoreInfo {
                 if let Some(endpoint) = endpoint {
                     builder = builder.with_endpoint(endpoint);
                 }
+                if std::env::var("AWS_ALLOW_HTTP").as_deref() == Ok("true") {
+                    tracing::warn!("`AWS_ALLOW_HTTP` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store");
+                    if allow_http.is_some() {
+                        tracing::info!("Config has `[object_storage.allow_http]` present - this takes precedence over `AWS_ALLOW_HTTP`");
+                    }
+                }
+                if let Some(allow_http) = *allow_http {
+                    if allow_http {
+                        tracing::warn!("`[object_storage.allow_http]` is set to `true` - this is insecure, and should only be used when running a local S3-compatible object store")
+                    }
+                    builder = builder.with_allow_http(allow_http);
+                }
 
                 if let (Some(bucket_name), Some(endpoint)) = (bucket_name, endpoint) {
                     if endpoint.ends_with(bucket_name) {
@@ -103,11 +117,21 @@ impl ObjectStoreInfo {
                     }
                 }
 
-                Some(Arc::new(
-                builder.build()
+                // This is used to speed up our unit tests - in the future,
+                // we might want to expose more flexible options through the config
+                #[cfg(test)]
+                if std::env::var("TENSORZERO_E2E_DISABLE_S3_RETRY").is_ok() {
+                    builder = builder.with_retry(object_store::RetryConfig {
+                        max_retries: 0,
+                        ..Default::default()
+                    });
+                }
+
+                Some(Arc::new(builder.build()
                     .map_err(|e| Error::new(ErrorDetails::Config {
                         message: format!("Failed to create S3-compatible object store with config `{config:?}`: {e}"),
-                    }))?),
+                    })
+                )?),
             )
             }
             StorageKind::Disabled => None,
@@ -125,13 +149,33 @@ impl ObjectStoreInfo {
             tracing::info!("Verifying that [object_storage] is configured correctly (writing .tensorzero-validate)");
             store.put(&object_store::path::Path::from(".tensorzero-validate"), PutPayload::new())
                 .await
-                .map_err(|e| Error::new(ErrorDetails::Config {
+                .map_err(|e| {
+                    if contains_bad_scheme_err(&e) {
+                        tracing::warn!("Consider setting `[object_storage.allow_http]` to `true` if you are using a non-HTTPs endpoint");
+                    }
+                    Error::new(ErrorDetails::Config {
                     message: format!("Failed to write `.tensorzero-validate` to object store. Check that your credentials are configured correctly: {e:?}"),
-                }))?;
+                })
+            })?;
             tracing::info!("Successfully wrote .tensorzero-validate to object store");
         }
         Ok(())
     }
+}
+
+// Best-effort attempt to find a 'BadScheme' error by walking up
+// the error 'source' chain. This should only be used for printing
+// improved warning messages.
+// We are attempting to find this error: `https://github.com/seanmonstar/reqwest/blob/c4a9fb060fb518f0053b98f78c7583071a760cf4/src/error.rs#L340`
+fn contains_bad_scheme_err(e: &impl StdError) -> bool {
+    let mut source: Option<&dyn StdError> = Some(e);
+    while let Some(err) = source {
+        if format!("{err:?}") == "BadScheme" {
+            return true;
+        }
+        source = err.source();
+    }
+    false
 }
 
 /// Note: This struct and the impl below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag
@@ -254,6 +298,9 @@ impl<'c> Config<'c> {
     }
 
     fn load_from_toml(table: toml::Table, base_path: PathBuf) -> Result<Config<'c>, Error> {
+        if table.is_empty() {
+            tracing::info!("Config file is empty, so only default functions will be available.")
+        }
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
         let gateway = uninitialized_config
@@ -500,6 +547,7 @@ struct UninitializedConfig {
     pub models: ModelTable, // model name => model config
     #[serde(default)]
     pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
+    #[serde(default)]
     pub functions: HashMap<String, UninitializedFunctionConfig>, // function name => function config
     #[serde(default)]
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
@@ -886,7 +934,7 @@ mod tests {
                 let variant = json_config.variants.get("variant_with_variables").unwrap();
                 match variant {
                     VariantConfig::ChatCompletion(chat_config) => {
-                        assert_eq!(chat_config.weight, 0.0); // Default weight should be 0
+                        assert_eq!(chat_config.weight, None); // Default weight should be None
                     }
                     _ => panic!("Expected a chat completion variant"),
                 }
@@ -917,7 +965,7 @@ mod tests {
                 match &json_config.variants["anthropic_promptA"] {
                     VariantConfig::ChatCompletion(chat_config) => {
                         assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
-                        assert_eq!(chat_config.weight, 1.0);
+                        assert_eq!(chat_config.weight, Some(1.0));
                         assert_eq!(
                             *chat_config.system_template.as_ref().unwrap(),
                             PathWithContents {
@@ -1122,9 +1170,9 @@ mod tests {
         );
     }
 
-    /// Ensure that the config parsing fails when the `[functions]` section is missing
+    /// Ensure that the config parsing fails when referencing a nonexistent function
     #[test]
-    fn test_config_from_toml_table_missing_functions() {
+    fn test_config_from_toml_table_nonexistent_function() {
         let mut config = get_sample_valid_config();
         config
             .remove("functions")
@@ -1134,7 +1182,8 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "missing field `functions`\n".to_string()
+                message: "Function `generate_draft` not found (referenced in `[evals.eval1]`)"
+                    .to_string()
             }
             .into()
         );
@@ -2026,6 +2075,19 @@ mod tests {
         Config::load_from_toml(config, base_path.clone()).expect("Failed to load config");
     }
 
+    #[tokio::test]
+    #[traced_test]
+    async fn test_empty_config() {
+        let tempfile = NamedTempFile::new().unwrap();
+        write!(&tempfile, "").unwrap();
+        Config::load_and_verify_from_path(tempfile.path())
+            .await
+            .unwrap();
+        assert!(logs_contain(
+            "Config file is empty, so only default functions will be available."
+        ))
+    }
+
     #[test]
     fn test_model_provider_unknown_field() {
         let config_str = r#"
@@ -2194,6 +2256,154 @@ mod tests {
             err.contains("Failed to write `.tensorzero-validate` to object store."),
             "Unexpected error message: {err}"
         );
+    }
+
+    #[traced_test]
+    #[tokio::test]
+    async fn test_config_blocked_s3_http_endpoint_default() {
+        // Set invalid credentials (tests are isolated per-process)
+        // to make sure that the write fails quickly.
+        std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+        let tempfile = NamedTempFile::new().unwrap();
+        write!(
+            &tempfile,
+            r#"
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+            endpoint = "http://tensorzero.invalid"
+            [functions]"#
+        )
+        .unwrap();
+        let err = Config::load_and_verify_from_path(tempfile.path())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Failed to write `.tensorzero-validate` to object store."),
+            "Unexpected error message: {err}"
+        );
+        assert!(
+            err.contains("BadScheme"),
+            "Missing `BadScheme` in error: {err}"
+        );
+        assert!(logs_contain("Consider setting `[object_storage.allow_http]` to `true` if you are using a non-HTTPs endpoint"));
+    }
+
+    #[traced_test]
+    #[tokio::test]
+    async fn test_config_blocked_s3_http_endpoint_override() {
+        // Set invalid credentials (tests are isolated per-process)
+        // to make sure that the write fails quickly.
+        std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+        std::env::set_var("AWS_ALLOW_HTTP", "true");
+        let tempfile = NamedTempFile::new().unwrap();
+        write!(
+            &tempfile,
+            r#"
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+            endpoint = "http://tensorzero.invalid"
+            allow_http = false
+            [functions]"#
+        )
+        .unwrap();
+        let err = Config::load_and_verify_from_path(tempfile.path())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Failed to write `.tensorzero-validate` to object store."),
+            "Unexpected error message: {err}"
+        );
+        assert!(
+            err.contains("BadScheme"),
+            "Missing `BadScheme` in error: {err}"
+        );
+        assert!(logs_contain("Consider setting `[object_storage.allow_http]` to `true` if you are using a non-HTTPs endpoint"));
+    }
+
+    #[traced_test]
+    #[tokio::test]
+    async fn test_config_s3_allow_http_config() {
+        // Set invalid credentials (tests are isolated per-process)
+        // to make sure that the write fails quickly.
+        std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+        // Make `object_store` fail immediately (with the expected dns resolution error)
+        // to speed up this test.
+        std::env::set_var("TENSORZERO_E2E_DISABLE_S3_RETRY", "true");
+        let tempfile = NamedTempFile::new().unwrap();
+        write!(
+            &tempfile,
+            r#"
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+            endpoint = "http://tensorzero.invalid"
+            allow_http = true
+            [functions]"#
+        )
+        .unwrap();
+        let err = Config::load_and_verify_from_path(tempfile.path())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Failed to write `.tensorzero-validate` to object store."),
+            "Unexpected error message: {err}"
+        );
+        assert!(
+            err.contains("failed to lookup address information"),
+            "Missing dns error in error: {err}"
+        );
+        assert!(logs_contain(
+            "[object_storage.allow_http]` is set to `true` - this is insecure"
+        ));
+    }
+
+    #[traced_test]
+    #[tokio::test]
+    async fn test_config_s3_allow_http_env_var() {
+        // Set invalid credentials (tests are isolated per-process)
+        // to make sure that the write fails quickly.
+        std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "invalid");
+        // Make `object_store` fail immediately (with the expected dns resolution error)
+        // to speed up this test.
+        std::env::set_var("TENSORZERO_E2E_DISABLE_S3_RETRY", "true");
+        std::env::set_var("AWS_ALLOW_HTTP", "true");
+        let tempfile = NamedTempFile::new().unwrap();
+        write!(
+            &tempfile,
+            r#"
+            [object_storage]
+            type = "s3_compatible"
+            bucket_name = "tensorzero-fake-bucket"
+            region = "us-east-1"
+            endpoint = "http://tensorzero.invalid"
+            [functions]"#
+        )
+        .unwrap();
+        let err = Config::load_and_verify_from_path(tempfile.path())
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Failed to write `.tensorzero-validate` to object store."),
+            "Unexpected error message: {err}"
+        );
+        assert!(
+            err.contains("failed to lookup address information"),
+            "Missing dns error in error: {err}"
+        );
+        assert!(!logs_contain("HTTPS"));
     }
 
     #[traced_test]

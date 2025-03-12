@@ -12,8 +12,12 @@ use std::time::Duration;
 use tensorzero::ContentBlockChunk;
 use tensorzero_internal::cache::cache_lookup_streaming;
 use tensorzero_internal::cache::start_cache_write_streaming;
+use tensorzero_internal::cache::NonStreamingCacheData;
 use tensorzero_internal::inference::types::ContentBlock;
+use tensorzero_internal::inference::types::ContentBlockOutput;
+use tensorzero_internal::inference::types::FinishReason;
 use tensorzero_internal::inference::types::ProviderInferenceResponseChunk;
+use tensorzero_internal::inference::types::Text;
 use tensorzero_internal::inference::types::TextChunk;
 use uuid::Uuid;
 
@@ -28,10 +32,10 @@ use tensorzero_internal::inference::types::{
     FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
 };
 
-use crate::common::get_clickhouse;
 use crate::common::get_gateway_endpoint;
-use crate::common::select_chat_inference_clickhouse;
-use crate::common::select_model_inference_clickhouse;
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
+};
 
 /// This test does a cache read then write then read again to ensure that
 /// the cache is working as expected.
@@ -82,10 +86,19 @@ async fn test_cache_write_and_read() {
     // Write
     start_cache_write(
         &clickhouse_connection_info,
-        model_provider_request,
-        &["test content".to_string().into()],
+        model_provider_request.get_cache_key().unwrap(),
+        NonStreamingCacheData {
+            blocks: vec![ContentBlockOutput::Text(Text {
+                text: "my test content".to_string(),
+            })],
+        },
         "raw request",
         "raw response",
+        &Usage {
+            input_tokens: 10,
+            output_tokens: 16,
+        },
+        Some(&FinishReason::Stop),
     )
     .unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -100,9 +113,21 @@ async fn test_cache_write_and_read() {
     .unwrap();
     assert!(result.is_some());
     let result = result.unwrap();
-    assert_eq!(result.output, vec!["test content".to_string().into()]);
+    assert_eq!(
+        result.output,
+        [ContentBlockOutput::Text(Text {
+            text: "my test content".to_string(),
+        })]
+    );
     assert_eq!(result.raw_request, "raw request");
     assert_eq!(result.raw_response, "raw response");
+    assert_eq!(
+        result.usage,
+        Usage {
+            input_tokens: 10,
+            output_tokens: 16,
+        }
+    );
     assert_eq!(*result.model_provider_name, *"test_provider");
     assert_eq!(result.system, Some("test system".to_string()));
     assert_eq!(
@@ -115,8 +140,8 @@ async fn test_cache_write_and_read() {
     assert_eq!(
         result.usage,
         Usage {
-            input_tokens: 0,
-            output_tokens: 0
+            input_tokens: 10,
+            output_tokens: 16
         }
     );
     assert_eq!(
@@ -193,6 +218,7 @@ async fn test_cache_stream_write_and_read() {
         }),
         raw_response: "raw response".to_string(),
         latency: Duration::from_secs(999),
+        finish_reason: Some(FinishReason::Stop),
     }];
 
     // Write
@@ -201,6 +227,10 @@ async fn test_cache_stream_write_and_read() {
         model_provider_request.get_cache_key().unwrap(),
         initial_chunks.clone(),
         "raw request",
+        &Usage {
+            input_tokens: 20,
+            output_tokens: 40,
+        },
     )
     .unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -223,6 +253,7 @@ async fn test_cache_stream_write_and_read() {
         usage,
         raw_response,
         latency,
+        finish_reason,
     } = &chunks[0];
     assert_eq!(content, &initial_chunks[0].content);
     // 'created' should be different (current timestamp is different)
@@ -230,13 +261,13 @@ async fn test_cache_stream_write_and_read() {
     assert_eq!(
         usage,
         &Some(Usage {
-            input_tokens: 0,
-            output_tokens: 0,
+            input_tokens: 20,
+            output_tokens: 40,
         })
     );
     assert_eq!(raw_response, &initial_chunks[0].raw_response);
     assert_eq!(latency, &Duration::from_secs(0));
-
+    assert_eq!(finish_reason, &Some(FinishReason::Stop));
     // Read (should be None)
     tokio::time::sleep(Duration::from_secs(2)).await;
     let result =
@@ -510,13 +541,8 @@ pub async fn check_test_streaming_cache_with_err(
     let input_tokens = result.get("input_tokens").unwrap();
     let output_tokens = result.get("output_tokens").unwrap();
 
-    if expect_cached {
-        assert!(input_tokens.is_null());
-        assert!(output_tokens.is_null());
-    } else {
-        assert_eq!(input_tokens.as_u64().unwrap(), 10);
-        assert_eq!(output_tokens.as_u64().unwrap(), 16);
-    }
+    assert_eq!(input_tokens.as_u64().unwrap(), 10);
+    assert_eq!(output_tokens.as_u64().unwrap(), 16);
 
     let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
     if expect_cached {
