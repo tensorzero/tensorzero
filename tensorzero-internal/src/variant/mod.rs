@@ -61,7 +61,7 @@ pub enum JsonMode {
 #[serde(untagged)]
 pub enum InferenceExtraBody {
     Provider {
-        provider_name: String,
+        model_provider_name: String,
         pointer: String,
         value: serde_json::Value,
     },

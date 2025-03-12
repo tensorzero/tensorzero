@@ -107,6 +107,7 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
         raw_request: Arc<Mutex<Option<String>>>,
         extra_body: Option<FullExtraBodyConfig>,
         model_provider_info: ModelProviderRequestInfo,
+        model_name: String,
     }
     impl Intercept for TensorZeroInterceptor {
         fn name(&self) -> &'static str {
@@ -134,6 +135,7 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
             inject_extra_body(
                 &self.extra_body,
                 self.model_provider_info.clone(),
+                self.model_name,
                 &mut body_json,
             )?;
             let raw_request = serde_json::to_string(&body_json).map_err(|e| {

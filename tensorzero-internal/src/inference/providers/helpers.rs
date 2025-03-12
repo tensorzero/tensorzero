@@ -6,13 +6,14 @@ use serde_json::{map::Entry, Map, Value};
 use crate::{
     error::{Error, ErrorDetails},
     inference::types::{FullExtraBodyConfig, ProviderInferenceResponseChunk},
-    model::ModelProviderRequestInfo,
+    model::{fully_qualified_name, ModelProviderRequestInfo},
     variant::InferenceExtraBody,
 };
 
 pub fn inject_extra_body(
     config: &Option<FullExtraBodyConfig>,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
+    model_name: &str,
     body: &mut serde_json::Value,
 ) -> Result<(), Error> {
     if !body.is_object() {
@@ -40,6 +41,8 @@ pub fn inject_extra_body(
         }
     }
 
+    let expected_provider_name = fully_qualified_name(model_name, &*model_provider.provider_name);
+
     for extra_body in config.as_ref().iter().flat_map(|c| &c.inference_extra_body) {
         match extra_body {
             InferenceExtraBody::Variant {
@@ -52,11 +55,11 @@ pub fn inject_extra_body(
                 write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
             }
             InferenceExtraBody::Provider {
-                provider_name,
+                model_provider_name,
                 pointer,
                 value,
             } => {
-                if *provider_name == *model_provider.provider_name {
+                if model_provider_name == expected_provider_name {
                     write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
                 }
             }
@@ -296,7 +299,7 @@ mod tests {
             &Some(FullExtraBodyConfig {
                 extra_body: ExtraBodyConfig { data: vec![] },
                 inference_extra_body: vec![InferenceExtraBody::Provider {
-                    provider_name: "wrong_provider".to_string(),
+                    model_provider_name: "wrong_provider".to_string(),
                     pointer: "/my_key".to_string(),
                     value: "My Value".to_string().into(),
                 }],
@@ -354,7 +357,7 @@ mod tests {
                     ],
                 },
                 inference_extra_body: vec![InferenceExtraBody::Provider {
-                    provider_name: "dummy_provider".to_string(),
+                    model_provider_name: "dummy_provider".to_string(),
                     pointer: "/generationConfig/valueFromInference".to_string(),
                     value: "inferenceValue".to_string().into(),
                 }],
@@ -410,7 +413,7 @@ mod tests {
                     ],
                 },
                 inference_extra_body: vec![InferenceExtraBody::Provider {
-                    provider_name: "dummy_provider".to_string(),
+                    model_provider_name: "dummy_provider".to_string(),
                     pointer: "/multiOverride".to_string(),
                     value: Value::String("from inference".to_string()),
                 }],
