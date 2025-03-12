@@ -24,6 +24,41 @@ docker compose up
 3. Run the example:
 
 <details>
+<summary><b>Python</b></summary>
+
+a. Install the dependencies:
+
+```bash
+# We recommend using Python 3.9+ and a virtual environment
+pip install -r requirements.txt
+```
+
+b. Run the example:
+
+```bash
+python main.py
+```
+
+</details>
+
+<summary><b>Python (OpenAI)</b></summary>
+
+a. Install the dependencies:
+
+```bash
+# We recommend using Python 3.9+ and a virtual environment
+pip install -r requirements.txt
+```
+
+b. Run the example:
+
+```bash
+python main_openai.py
+```
+
+</details>
+
+<details>
 <summary><b>HTTP</b></summary>
 
 Run the following commands to make a multimodal inference request to the TensorZero Gateway.
@@ -41,7 +76,7 @@ curl -X POST http://localhost:3000/inference \
           "content": [
             {
               "type": "text",
-              "value": "Do the images share any common features?"
+              "text": "Do the images share any common features?"
             },
             {
               "type": "image",
@@ -57,24 +92,6 @@ curl -X POST http://localhost:3000/inference \
       ]
     }
   }'
-```
-
-</details>
-
-<details>
-<summary><b>Python</b></summary>
-
-a. Install the dependencies:
-
-```bash
-# We recommend using Python 3.9+ and a virtual environment
-pip install -r requirements.txt
-```
-
-b. Run the example:
-
-```bash
-python main.py
 ```
 
 </details>

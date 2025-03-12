@@ -24,9 +24,13 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
-    /// Path to tensorzero.toml
+    /// Use the `tensorzero.toml` config file at the specified path. Incompatible with `--default-config`
     #[arg(long)]
     config_file: Option<PathBuf>,
+
+    /// Use a default config file. Incompatible with `--config-file`
+    #[arg(long)]
+    default_config: bool,
 
     /// Deprecated: use `--config-file` instead
     tensorzero_toml: Option<PathBuf>,
@@ -51,6 +55,11 @@ async fn main() {
     }
 
     let config_path = args.config_file.or(args.tensorzero_toml);
+
+    if config_path.is_some() && args.default_config {
+        tracing::error!("Cannot specify both `--config-file` and `--default-config`");
+        std::process::exit(1);
+    }
 
     let config = if let Some(path) = &config_path {
         Arc::new(

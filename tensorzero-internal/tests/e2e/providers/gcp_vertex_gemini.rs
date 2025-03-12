@@ -23,6 +23,13 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let image_providers = vec![E2ETestProvider {
+        variant_name: "gcp_vertex".to_string(),
+        model_name: "gemini-1.5-pro-001".into(),
+        model_provider_name: "gcp_vertex_gemini".into(),
+        credentials: HashMap::new(),
+    }];
+
     let extra_body_providers = vec![E2ETestProvider {
         variant_name: "gcp-vertex-gemini-flash-extra-body".to_string(),
         model_name: "gemini-1.5-flash-001".into(),
@@ -68,12 +75,13 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
         inference_params_inference: standard_providers.clone(),
+        inference_params_dynamic_credentials: vec![],
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
-        image_inference: vec![],
+        image_inference: image_providers,
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: vec![],
         #[cfg(feature = "batch_tests")]

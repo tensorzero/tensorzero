@@ -12,9 +12,12 @@ use std::time::Duration;
 use tensorzero::ContentBlockChunk;
 use tensorzero_internal::cache::cache_lookup_streaming;
 use tensorzero_internal::cache::start_cache_write_streaming;
+use tensorzero_internal::cache::NonStreamingCacheData;
 use tensorzero_internal::inference::types::ContentBlock;
+use tensorzero_internal::inference::types::ContentBlockOutput;
 use tensorzero_internal::inference::types::FinishReason;
 use tensorzero_internal::inference::types::ProviderInferenceResponseChunk;
+use tensorzero_internal::inference::types::Text;
 use tensorzero_internal::inference::types::TextChunk;
 use uuid::Uuid;
 
@@ -83,8 +86,12 @@ async fn test_cache_write_and_read() {
     // Write
     start_cache_write(
         &clickhouse_connection_info,
-        model_provider_request,
-        &["test content".to_string().into()],
+        model_provider_request.get_cache_key().unwrap(),
+        NonStreamingCacheData {
+            blocks: vec![ContentBlockOutput::Text(Text {
+                text: "my test content".to_string(),
+            })],
+        },
         "raw request",
         "raw response",
         &Usage {
@@ -106,8 +113,12 @@ async fn test_cache_write_and_read() {
     .unwrap();
     assert!(result.is_some());
     let result = result.unwrap();
-
-    assert_eq!(result.output, vec!["test content".to_string().into()]);
+    assert_eq!(
+        result.output,
+        [ContentBlockOutput::Text(Text {
+            text: "my test content".to_string(),
+        })]
+    );
     assert_eq!(result.raw_request, "raw request");
     assert_eq!(result.raw_response, "raw response");
     assert_eq!(
