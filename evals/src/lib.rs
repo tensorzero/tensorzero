@@ -353,6 +353,13 @@ mod tests {
                     stderr: 0.1,
                 },
             );
+            stats.insert(
+                "evaluator3".to_string(),
+                stats::EvaluatorStats {
+                    mean: 0.1,
+                    stderr: 0.05,
+                },
+            );
             stats
         };
         let evaluators = {
@@ -365,6 +372,10 @@ mod tests {
                 "evaluator2".to_string(),
                 EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.6) }),
             );
+            evaluators.insert(
+                "evaluator3".to_string(),
+                EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
+            );
             evaluators
         };
         let failures = check_evaluator_cutoffs(&stats, &evaluators).unwrap();
@@ -373,5 +384,8 @@ mod tests {
         // Check that both expected failures are present, regardless of order
         assert!(failures.contains(&("evaluator1".to_string(), 0.5, 0.4)));
         assert!(failures.contains(&("evaluator2".to_string(), 0.6, 0.3)));
+
+        // Check that evaluator3 is not in the failures list since it has no cutoff
+        assert!(!failures.iter().any(|(name, _, _)| name == "evaluator3"));
     }
 }
