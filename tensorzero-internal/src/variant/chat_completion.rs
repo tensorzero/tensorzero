@@ -933,7 +933,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            extra_body: None,
+            extra_body: vec![],
         };
         let models = ModelTable::default();
         let inference_models = InferenceModels {
