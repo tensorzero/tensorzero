@@ -2418,12 +2418,15 @@ dataset_name = "extract_entities_0.8"
 
 [evals.entity_extraction.evaluators.exact_match]
 type = "exact_match"
+# expected to fail
+cutoff = 0.6
 
 [evals.entity_extraction.evaluators.count_misc]
 type = "llm_judge"
 output_type = "float"
 optimize = "min"
 include = { reference_output = false }
+cutoff = 0.5
 
 [evals.entity_extraction.evaluators.count_misc.variants.mini]
 type = "chat_completion"
@@ -2451,6 +2454,7 @@ type = "llm_judge"
 output_type = "float"
 optimize = "min"
 include = { reference_output = false }
+cutoff = 0.5
 
 [evals.haiku_without_outputs.evaluators.count_prepositions.variants.mini]
 type = "chat_completion"

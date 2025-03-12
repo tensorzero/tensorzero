@@ -13,6 +13,7 @@ use tensorzero::{
     DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceResponse,
 };
 use tensorzero_internal::cache::CacheEnabledMode;
+use tensorzero_internal::evals::EvaluatorConfig;
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo, config_parser::Config, endpoints::datasets::Datapoint,
     function::FunctionConfig,
@@ -175,32 +176,65 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
 
     if eval_stats.output_format == OutputFormat::HumanReadable {
         let stats = eval_stats.compute_stats(&eval_config.evaluators);
-        for (evaluator_name, evaluator_stats) in stats {
+
+        // Print all stats
+        for (evaluator_name, evaluator_stats) in &stats {
             writeln!(writer, "{}: {}", evaluator_name, evaluator_stats)?;
-            let evaluator_config = eval_config
-                .evaluators
-                .get(&evaluator_name)
-                .ok_or_else(|| anyhow!("Evaluator not found for computing stats"))?;
-            if let Some(cutoff) = evaluator_config.cutoff() {
-                if evaluator_stats.mean < cutoff {
-                    writeln!(
-                        writer,
-                        "Failed cutoff for evaluator {} ({}, got {})",
-                        evaluator_name, cutoff, evaluator_stats.mean
-                    )?;
-                    // Exit with status code 1 if a
-                    bail!(
-                        "Failed cutoff for evaluator {} ({}, got {})",
-                        evaluator_name,
-                        cutoff,
-                        evaluator_stats.mean
-                    );
-                }
-            }
+        }
+
+        // Check cutoffs and handle failures
+        let failures = check_evaluator_cutoffs(&stats, &eval_config.evaluators)?;
+
+        // Print failure messages
+        for (name, cutoff, actual) in &failures {
+            writeln!(
+                writer,
+                "Failed cutoff for evaluator {} ({}, got {})",
+                name, cutoff, actual
+            )?;
+        }
+
+        // If there are failures, return an error with all failures listed
+        if !failures.is_empty() {
+            let failure_messages = format_cutoff_failures(&failures);
+            bail!("Failed cutoffs for evaluators: {}", failure_messages);
         }
     }
 
     Ok(())
+}
+
+/// Checks if evaluator results meet their cutoff thresholds
+///
+/// Returns a vector of failures with (evaluator_name, cutoff, actual_value)
+pub fn check_evaluator_cutoffs(
+    stats: &HashMap<String, stats::EvaluatorStats>,
+    evaluator_configs: &HashMap<String, EvaluatorConfig>,
+) -> Result<Vec<(String, f32, f32)>> {
+    let mut failures = Vec::new();
+
+    for (evaluator_name, evaluator_stats) in stats {
+        let evaluator_config = evaluator_configs
+            .get(evaluator_name)
+            .ok_or_else(|| anyhow!("Evaluator not found for computing stats"))?;
+
+        if let Some(cutoff) = evaluator_config.cutoff() {
+            if evaluator_stats.mean < cutoff {
+                failures.push((evaluator_name.clone(), cutoff, evaluator_stats.mean));
+            }
+        }
+    }
+
+    Ok(failures)
+}
+
+/// Formats a list of cutoff failures into a human-readable string
+pub fn format_cutoff_failures(failures: &[(String, f32, f32)]) -> String {
+    failures
+        .iter()
+        .map(|(name, cutoff, actual)| format!("{} (cutoff: {}, got: {})", name, cutoff, actual))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 async fn infer_datapoint(
@@ -279,5 +313,65 @@ impl ThrottledTensorZeroClient {
         let _permit = self.semaphore.acquire().await;
         self.client.feedback(params).await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tensorzero_internal::evals::ExactMatchConfig;
+
+    use super::*;
+
+    #[test]
+    fn test_format_cutoff_failures() {
+        let failures = vec![
+            ("evaluator1".to_string(), 0.5, 0.4),
+            ("evaluator2".to_string(), 0.6, 0.3),
+        ];
+        let formatted = format_cutoff_failures(&failures);
+        assert_eq!(
+            formatted,
+            "evaluator1 (cutoff: 0.5, got: 0.4)\nevaluator2 (cutoff: 0.6, got: 0.3)"
+        );
+    }
+
+    #[test]
+    fn test_check_evaluator_cutoffs() {
+        let stats = {
+            let mut stats = HashMap::new();
+            stats.insert(
+                "evaluator1".to_string(),
+                stats::EvaluatorStats {
+                    mean: 0.4,
+                    stderr: 0.1,
+                },
+            );
+            stats.insert(
+                "evaluator2".to_string(),
+                stats::EvaluatorStats {
+                    mean: 0.3,
+                    stderr: 0.1,
+                },
+            );
+            stats
+        };
+        let evaluators = {
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "evaluator1".to_string(),
+                EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.5) }),
+            );
+            evaluators.insert(
+                "evaluator2".to_string(),
+                EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.6) }),
+            );
+            evaluators
+        };
+        let failures = check_evaluator_cutoffs(&stats, &evaluators).unwrap();
+        assert_eq!(failures.len(), 2);
+
+        // Check that both expected failures are present, regardless of order
+        assert!(failures.contains(&("evaluator1".to_string(), 0.5, 0.4)));
+        assert!(failures.contains(&("evaluator2".to_string(), 0.6, 0.3)));
     }
 }

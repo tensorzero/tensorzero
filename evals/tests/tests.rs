@@ -17,6 +17,7 @@ use tensorzero_internal::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput},
 };
 use uuid::Uuid;
+
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evals_json() {
     let clickhouse = get_clickhouse().await;
@@ -293,4 +294,65 @@ async fn run_llm_judge_eval_chat() {
     }
     assert_eq!(parsed_output.len(), 23);
     assert_eq!(total_prepositions, 40);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn run_llm_judge_eval_chat_human_readable() {
+    write_chat_fixture_to_dataset(&PathBuf::from(&format!(
+        "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    )))
+    .await;
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let eval_run_id = Uuid::now_v7();
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        name: "haiku_without_outputs".to_string(),
+        variant: "gpt_4o_mini".to_string(),
+        concurrency: 10,
+        format: OutputFormat::HumanReadable,
+    };
+
+    let mut output = Vec::new();
+    // Let's make sure this threshold passes and the output is reasonable
+    run_eval(args, eval_run_id, &mut output).await.unwrap();
+    let output_str = String::from_utf8(output).unwrap();
+    assert!(output_str.contains("count_prepositions: 2.13 ± 0.15"));
+    assert!(output_str.contains("exact_match: 0.00 ± 0.00"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn run_llm_judge_eval_json_human_readable() {
+    write_json_fixture_to_dataset(&PathBuf::from(&format!(
+        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    )))
+    .await;
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let eval_run_id = Uuid::now_v7();
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        name: "entity_extraction".to_string(),
+        variant: "gpt_4o_mini".to_string(),
+        concurrency: 10,
+        format: OutputFormat::HumanReadable,
+    };
+
+    let mut output = Vec::new();
+    // Let's make sure this threshold fails and the output is reasonable
+    let err = run_eval(args, eval_run_id, &mut output).await.unwrap_err();
+    let output_str = String::from_utf8(output).unwrap();
+    assert!(output_str.contains("count_misc: 1.20 ± 0.24"));
+    assert!(output_str.contains("exact_match: 0.50 ± 0.07"));
+    let err = err.to_string();
+    assert!(err.contains("Failed cutoffs for evaluators:"));
+    assert!(err.contains("exact_match (cutoff: 0.6, got: 0.5)"));
 }
