@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use crate::common::write_json_fixture_to_dataset;
 use common::write_chat_fixture_to_dataset;
-use evals::{run_eval, Args, EvalInfo, OutputFormat};
+use evals::{run_eval, stats::EvalInfo, Args, OutputFormat};
 use tensorzero::InferenceResponse;
 use tensorzero_internal::{
     clickhouse::test_helpers::{

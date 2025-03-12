@@ -7,9 +7,7 @@ use clap::Parser;
 use dataset::query_dataset;
 use evaluators::evaluate_inference;
 use helpers::{get_tool_params_args, resolved_input_to_input, setup_logging};
-use indicatif::ProgressBar;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use stats::{EvalInfo, EvalStats};
 use tensorzero::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
     DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceResponse,
@@ -26,6 +24,7 @@ use uuid::Uuid;
 pub mod dataset;
 pub mod evaluators;
 pub mod helpers;
+pub mod stats;
 
 const CACHE_OPTIONS: CacheParamsOptions = CacheParamsOptions {
     enabled: CacheEnabledMode::On,
@@ -170,88 +169,38 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
         }
     }
 
-    if let Some(progress_bar) = eval_stats.progress_bar {
+    if let Some(progress_bar) = &eval_stats.progress_bar {
         progress_bar.finish_with_message("Done");
     }
 
     if eval_stats.output_format == OutputFormat::HumanReadable {
-        // TODO: Print more human readable stats
-        for eval_info in eval_stats.eval_infos {
-            writeln!(writer, "{}", serde_json::to_string(&eval_info)?)?;
+        let stats = eval_stats.compute_stats(&eval_config.evaluators);
+        for (evaluator_name, evaluator_stats) in stats {
+            writeln!(writer, "{}: {}", evaluator_name, evaluator_stats)?;
+            let evaluator_config = eval_config
+                .evaluators
+                .get(&evaluator_name)
+                .ok_or_else(|| anyhow!("Evaluator not found for computing stats"))?;
+            if let Some(cutoff) = evaluator_config.cutoff() {
+                if evaluator_stats.mean < cutoff {
+                    writeln!(
+                        writer,
+                        "Failed cutoff for evaluator {} ({}, got {})",
+                        evaluator_name, cutoff, evaluator_stats.mean
+                    )?;
+                    // Exit with status code 1 if a
+                    bail!(
+                        "Failed cutoff for evaluator {} ({}, got {})",
+                        evaluator_name,
+                        cutoff,
+                        evaluator_stats.mean
+                    );
+                }
+            }
         }
     }
 
     Ok(())
-}
-
-struct EvalStats {
-    output_format: OutputFormat,
-    eval_infos: Vec<EvalInfo>,
-    progress_bar: Option<ProgressBar>,
-}
-
-impl EvalStats {
-    fn new(output_format: OutputFormat, dataset_len: usize) -> Self {
-        let progress_bar = match output_format {
-            OutputFormat::Jsonl => None,
-            OutputFormat::HumanReadable => Some(ProgressBar::new(dataset_len as u64)),
-        };
-        Self {
-            output_format,
-            eval_infos: Vec::new(),
-            progress_bar,
-        }
-    }
-
-    fn push(&mut self, eval_info: EvalInfo, writer: &mut impl Write) -> Result<()> {
-        match self.output_format {
-            OutputFormat::Jsonl => {
-                writeln!(writer, "{}", serde_json::to_string(&eval_info)?)?;
-            }
-            OutputFormat::HumanReadable => {
-                if let Some(progress_bar) = &mut self.progress_bar {
-                    progress_bar.inc(1);
-                }
-            }
-        }
-        self.eval_infos.push(eval_info);
-        Ok(())
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct EvalInfo {
-    pub datapoint: Datapoint,
-    pub response: InferenceResponse,
-    pub evaluations: HashMap<String, Option<Value>>,
-    pub evaluator_errors: HashMap<String, String>,
-}
-
-impl EvalInfo {
-    fn new(
-        datapoint: Datapoint,
-        response: InferenceResponse,
-        eval_result: evaluators::EvalResult,
-    ) -> Self {
-        let mut evaluations = HashMap::new();
-        let mut evaluator_errors = HashMap::new();
-        for (eval_name, eval_result) in eval_result {
-            match eval_result {
-                Ok(eval_result) => {
-                    evaluations.insert(eval_name, eval_result);
-                }
-                Err(e) => {
-                    evaluator_errors.insert(eval_name, e.to_string());
-                }
-            }
-        }
-        Self {
-            datapoint,
-            response,
-            evaluations,
-            evaluator_errors,
-        }
-    }
 }
 
 async fn infer_datapoint(
