@@ -169,7 +169,7 @@ impl Migration for Migration0013<'_> {
         // IMPORTANT: The function_type column is now correctly set to 'chat'
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW ChatInferenceByIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByIdView
             TO InferenceById
             AS
                 SELECT
@@ -188,7 +188,7 @@ impl Migration for Migration0013<'_> {
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW JsonInferenceByIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByIdView
             TO InferenceById
             AS
                 SELECT
@@ -208,7 +208,7 @@ impl Migration for Migration0013<'_> {
         // IMPORTANT: The function_type column is now correctly set to 'chat'
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW ChatInferenceByEpisodeIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByEpisodeIdView
             TO InferenceByEpisodeId
             AS
                 SELECT
@@ -228,7 +228,7 @@ impl Migration for Migration0013<'_> {
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW JsonInferenceByEpisodeIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByEpisodeIdView
             TO InferenceByEpisodeId
             AS
                 SELECT
