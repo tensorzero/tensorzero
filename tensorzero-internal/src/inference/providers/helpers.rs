@@ -360,7 +360,9 @@ mod tests {
                     ],
                 },
                 inference_extra_body: vec![InferenceExtraBody::Provider {
-                    model_provider_name: "dummy_provider".to_string(),
+                    model_provider_name:
+                        "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
+                            .to_string(),
                     pointer: "/generationConfig/valueFromInference".to_string(),
                     value: "inferenceValue".to_string().into(),
                 }],
@@ -417,7 +419,9 @@ mod tests {
                     ],
                 },
                 inference_extra_body: vec![InferenceExtraBody::Provider {
-                    model_provider_name: "dummy_provider".to_string(),
+                    model_provider_name:
+                        "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
+                            .to_string(),
                     pointer: "/multiOverride".to_string(),
                     value: Value::String("from inference".to_string()),
                 }],

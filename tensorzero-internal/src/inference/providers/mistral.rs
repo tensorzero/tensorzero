@@ -226,7 +226,12 @@ impl InferenceProvider for MistralProvider {
                     message: format!("Error serializing Mistral request: {e}"),
                 })
             })?;
-        inject_extra_body(&request.extra_body, model_provider, model_name, &mut request_body)?;
+        inject_extra_body(
+            &request.extra_body,
+            model_provider,
+            model_name,
+            &mut request_body,
+        )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
