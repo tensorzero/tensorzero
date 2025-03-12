@@ -974,7 +974,7 @@ fn get_finish_reason(
     model_inference_results
         .iter()
         .sorted_by_key(|r| r.created)
-        .last()
+        .next_back()
         .and_then(|r| r.finish_reason.clone())
 }
 
