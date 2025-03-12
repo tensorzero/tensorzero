@@ -244,6 +244,7 @@ pub async fn select_latest_batch_request_clickhouse(
     Some(json)
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn select_feedback_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     table_name: &str,
@@ -264,6 +265,7 @@ pub async fn select_feedback_clickhouse(
     Some(json)
 }
 
+#[cfg(feature = "e2e_tests")]
 pub async fn select_feedback_by_target_id_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     table_name: &str,
