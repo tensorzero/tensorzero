@@ -1,3 +1,5 @@
+#![allow(clippy::print_stdout)]
+
 use reqwest::Url;
 
 lazy_static::lazy_static! {

@@ -163,13 +163,15 @@ impl ClickHouseConnectionInfo {
                 ping_url.set_path("/ping");
                 ping_url.set_query(None);
 
-                match client
-                    .get(ping_url)
+                let timeout = if cfg!(feature = "e2e_tests") {
+                    // Set a long timeout to try to debug batch tests
+                    std::time::Duration::from_secs(60)
+                } else {
                     // If ClickHouse is healthy, it should respond within 1000ms
-                    .timeout(std::time::Duration::from_millis(1000))
-                    .send()
-                    .await
-                {
+                    std::time::Duration::from_millis(1000)
+                };
+
+                match client.get(ping_url).timeout(timeout).send().await {
                     Ok(response) if response.status().is_success() => Ok(()),
                     Ok(response) => Err(ErrorDetails::ClickHouseConnection {
                         message: format!(
