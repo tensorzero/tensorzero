@@ -175,6 +175,7 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
     }
 
     if eval_stats.output_format == OutputFormat::HumanReadable {
+        // TODO: Print more human readable stats
         for eval_info in eval_stats.eval_infos {
             writeln!(writer, "{}", serde_json::to_string(&eval_info)?)?;
         }
