@@ -1226,6 +1226,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
         let details = anthropic_request_body.unwrap_err().get_owned_details();
@@ -1263,6 +1264,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1317,6 +1319,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1385,6 +1388,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let anthropic_request_body = GCPVertexAnthropicRequestBody::new(&inference_request);
@@ -1797,6 +1801,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
@@ -1877,6 +1882,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
@@ -1966,6 +1972,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",

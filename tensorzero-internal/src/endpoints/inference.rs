@@ -287,6 +287,7 @@ pub async fn inference(
             inference_id,
             episode_id,
         },
+        extra_cache_key: None,
     };
     let inference_clients = InferenceClients {
         http_client,
