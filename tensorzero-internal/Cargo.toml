@@ -96,4 +96,3 @@ paste = "1.0.15"
 base64 = "0.22.1"
 aws-sdk-s3 = "1.76.0"
 aws-credential-types = { version = "1.2.1", features = ["hardcoded-credentials"] }
-uuid = { workspace = true, features = ["v4"] }

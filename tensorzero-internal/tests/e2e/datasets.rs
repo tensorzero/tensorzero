@@ -342,11 +342,11 @@ async fn test_datapoint_insert_invalid_output_synthetic_json() {
 async fn test_datapoint_insert_synthetic_bad_uuid() {
     let client = Client::new();
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
-    let datapoint_id = Uuid::new_v4();
+    let datapoint_uuid_v4 = "1b3e1480-a24a-4a69-942e-da960f9045fc";
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/datasets/{dataset_name}/datapoints/{datapoint_uuid_v4}",
         )))
         .json(&serde_json::json!({
             "function_name": "basic_test",
