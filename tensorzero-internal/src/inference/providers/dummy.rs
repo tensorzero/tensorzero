@@ -234,6 +234,7 @@ impl InferenceProvider for DummyProvider {
             "reasoner" => vec![
                 ContentBlockOutput::Thought(Thought {
                     text: "hmmm".to_string(),
+                    signature: None,
                 }),
                 ContentBlockOutput::Text(Text {
                     text: DUMMY_INFER_RESPONSE_CONTENT.to_string(),
@@ -242,6 +243,7 @@ impl InferenceProvider for DummyProvider {
             "json_reasoner" => vec![
                 ContentBlockOutput::Thought(Thought {
                     text: "hmmm".to_string(),
+                    signature: None,
                 }),
                 ContentBlockOutput::Text(Text {
                     text: DUMMY_JSON_RESPONSE_RAW.to_string(),
