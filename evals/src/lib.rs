@@ -220,10 +220,10 @@ impl EvalStats {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct EvalInfo {
-    datapoint: Datapoint,
-    response: InferenceResponse,
-    evaluations: HashMap<String, Option<Value>>,
-    evaluator_errors: HashMap<String, String>,
+    pub datapoint: Datapoint,
+    pub response: InferenceResponse,
+    pub evaluations: HashMap<String, Option<Value>>,
+    pub evaluator_errors: HashMap<String, String>,
 }
 
 impl EvalInfo {

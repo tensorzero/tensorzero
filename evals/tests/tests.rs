@@ -8,10 +8,18 @@ use std::path::PathBuf;
 use crate::common::write_json_fixture_to_dataset;
 use common::write_chat_fixture_to_dataset;
 use evals::{run_eval, Args, EvalInfo, OutputFormat};
+use tensorzero::InferenceResponse;
+use tensorzero_internal::{
+    clickhouse::test_helpers::{
+        clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
+        select_feedback_by_target_id_clickhouse, select_json_inference_clickhouse,
+    },
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput},
+};
 use uuid::Uuid;
-
 #[tokio::test(flavor = "multi_thread")]
 async fn run_exact_match_eval_json() {
+    let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(&PathBuf::from(&format!(
         "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -33,18 +41,64 @@ async fn run_exact_match_eval_json() {
 
     let mut output = Vec::new();
     run_eval(args, eval_run_id, &mut output).await.unwrap();
+    clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
     let mut parsed_output = Vec::new();
     for line in output_str.lines() {
         let parsed: EvalInfo = serde_json::from_str(line).expect("Each line should be valid JSON");
+        assert!(parsed.evaluator_errors.is_empty());
+        let inference_id = parsed.response.inference_id();
+        let clickhouse_inference = select_json_inference_clickhouse(&clickhouse, inference_id)
+            .await
+            .unwrap();
+        let parsed_response = match parsed.response.clone() {
+            InferenceResponse::Json(json_response) => json_response,
+            InferenceResponse::Chat(..) => panic!("Chat response not supported"),
+        };
+        let clickhouse_input: ResolvedInput =
+            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        // Check the input to the inference is the same as the input to the datapoint
+        assert_eq!(&clickhouse_input, parsed.datapoint.input());
+        let clickhouse_output: JsonInferenceOutput =
+            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        // Check the output to the inference is the same as the output in the response
+        assert_eq!(clickhouse_output, parsed_response.output);
+        // Check the inference is properly tagged
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::eval_run_id"],
+            eval_run_id.to_string()
+        );
+
+        // Check feedback was recorded
+        let feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::eval_name::entity_extraction::evaluator_name::exact_match"
+        );
+        assert_eq!(
+            feedback["value"],
+            parsed.evaluations["exact_match"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
+
         parsed_output.push(parsed);
     }
     assert_eq!(parsed_output.len(), 50);
-    // TODO: check clickhouse inference and feedback tables
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_exact_match_eval_chat() {
+    let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(&PathBuf::from(&format!(
         "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -66,12 +120,58 @@ async fn run_exact_match_eval_chat() {
 
     let mut output = Vec::new();
     run_eval(args, eval_run_id, &mut output).await.unwrap();
+    clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
     let mut parsed_output = Vec::new();
     for line in output_str.lines() {
         let parsed: EvalInfo = serde_json::from_str(line).expect("Each line should be valid JSON");
+        assert!(parsed.evaluator_errors.is_empty());
+        let inference_id = parsed.response.inference_id();
+        let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
+            .await
+            .unwrap();
+        let parsed_response = match parsed.response.clone() {
+            InferenceResponse::Chat(chat_response) => chat_response,
+            InferenceResponse::Json(..) => panic!("Json response not supported"),
+        };
+        let clickhouse_input: ResolvedInput =
+            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        // Check the input to the inference is the same as the input to the datapoint
+        assert_eq!(&clickhouse_input, parsed.datapoint.input());
+        let clickhouse_output: Vec<ContentBlockChatOutput> =
+            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        // Check the output to the inference is the same as the output in the response
+        assert_eq!(clickhouse_output, parsed_response.content);
+        // Check the inference is properly tagged
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::eval_run_id"],
+            eval_run_id.to_string()
+        );
+
+        let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            clickhouse_feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::eval_name::haiku_with_outputs::evaluator_name::exact_match"
+        );
+        assert_eq!(
+            clickhouse_feedback["value"],
+            parsed.evaluations["exact_match"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::eval_run_id"],
+            eval_run_id.to_string()
+        );
         parsed_output.push(parsed);
     }
     assert_eq!(parsed_output.len(), 29);
-    // TODO: check clickhouse inference and feedback tables
 }
