@@ -290,6 +290,28 @@ mod tests {
     }
 
     #[test]
+    fn test_inject_no_matches() {
+        let mut body = serde_json::json!({});
+        inject_extra_body(
+            &Some(FullExtraBodyConfig {
+                extra_body: ExtraBodyConfig { data: vec![] },
+                inference_extra_body: vec![InferenceExtraBody::Provider {
+                    provider_name: "wrong_provider".to_string(),
+                    pointer: "/my_key".to_string(),
+                    value: "My Value".to_string().into(),
+                }],
+            }),
+            ModelProviderRequestInfo {
+                provider_name: "dummy_provider".into(),
+                extra_body: None,
+            },
+            &mut body,
+        )
+        .unwrap();
+        assert_eq!(body, serde_json::json!({}));
+    }
+
+    #[test]
     fn test_inject_to_non_map() {
         let err = inject_extra_body(
             &None,
@@ -331,7 +353,11 @@ mod tests {
                         },
                     ],
                 },
-                inference_extra_body: vec![],
+                inference_extra_body: vec![InferenceExtraBody::Provider {
+                    provider_name: "dummy_provider".to_string(),
+                    pointer: "/generationConfig/valueFromInference".to_string(),
+                    value: "inferenceValue".to_string().into(),
+                }],
             }),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
@@ -346,17 +372,19 @@ mod tests {
                 "otherKey": "otherValue",
                 "generationConfig": {
                     "otherNestedKey": "otherNestedValue",
-                    "temperature": 0.123
+                    "temperature": 0.123,
+                    "valueFromInference": "inferenceValue"
                 }
             })
         );
     }
 
     // Tests that we inject fields in the correct order when `extra_body`
-    // is set at both the variant and model provider level. Keys set in the
-    // model provider should override keys set in the variant
+    // is set at both the variant and model provider level,
+    // and `inference_extra_body` is provided.
+    // The correct priority is inference -> model provider -> variant.
     #[test]
-    fn test_inject_both() {
+    fn test_inject_all() {
         let mut body = serde_json::json!({
             "otherKey": "otherValue",
             "generationConfig": {
@@ -375,9 +403,17 @@ mod tests {
                             pointer: "/variantKey".to_string(),
                             value: Value::String("variantValue".to_string()),
                         },
+                        ExtraBodyReplacement {
+                            pointer: "/multiOverride".to_string(),
+                            value: Value::String("from variant".to_string()),
+                        },
                     ],
                 },
-                inference_extra_body: vec![],
+                inference_extra_body: vec![InferenceExtraBody::Provider {
+                    provider_name: "dummy_provider".to_string(),
+                    pointer: "/multiOverride".to_string(),
+                    value: Value::String("from inference".to_string()),
+                }],
             }),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
@@ -391,6 +427,10 @@ mod tests {
                             pointer: "/modelProviderKey".to_string(),
                             value: Value::String("modelProviderValue".to_string()),
                         },
+                        ExtraBodyReplacement {
+                            pointer: "/multiOverride".to_string(),
+                            value: Value::String("from model provider".to_string()),
+                        },
                     ],
                 }),
             },
@@ -403,6 +443,7 @@ mod tests {
                 "otherKey": "otherValue",
                 "modelProviderKey": "modelProviderValue",
                 "variantKey": "modelProviderOverride",
+                "multiOverride": "from inference",
                 "generationConfig": {
                     "temperature": 123,
                     "otherNestedKey": "otherNestedValue"
