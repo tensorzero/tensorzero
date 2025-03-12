@@ -476,6 +476,7 @@ pub struct ModelProvider {
 impl From<&ModelProvider> for ModelProviderRequestInfo {
     fn from(val: &ModelProvider) -> Self {
         ModelProviderRequestInfo {
+            provider_name: val.name.clone(),
             extra_body: val.extra_body.clone(),
         }
     }
@@ -483,6 +484,7 @@ impl From<&ModelProvider> for ModelProviderRequestInfo {
 
 #[derive(Clone, Debug)]
 pub struct ModelProviderRequestInfo {
+    pub provider_name: Arc<str>,
     pub extra_body: Option<ExtraBodyConfig>,
 }
 

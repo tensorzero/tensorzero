@@ -43,7 +43,9 @@ pub fn inject_extra_body(
     for extra_body in config.as_ref().iter().flat_map(|c| &c.inference_extra_body) {
         match extra_body {
             InferenceExtraBody::Variant {
-                variant_name,
+                // We already filtered out mismatched `variant_name` entries
+                // before calling `inject_extra_body`
+                variant_name: _,
                 pointer,
                 value,
             } => {
@@ -54,8 +56,9 @@ pub fn inject_extra_body(
                 pointer,
                 value,
             } => {
-                // TODO - check provider name
-                write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
+                if *provider_name == *model_provider.provider_name {
+                    write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
+                }
             }
         }
     }
@@ -276,7 +279,10 @@ mod tests {
         let mut body = serde_json::json!({});
         inject_extra_body(
             &None,
-            ModelProviderRequestInfo { extra_body: None },
+            ModelProviderRequestInfo {
+                provider_name: "dummy_provider".into(),
+                extra_body: None,
+            },
             &mut body,
         )
         .unwrap();
@@ -287,7 +293,10 @@ mod tests {
     fn test_inject_to_non_map() {
         let err = inject_extra_body(
             &None,
-            ModelProviderRequestInfo { extra_body: None },
+            ModelProviderRequestInfo {
+                provider_name: "dummy_provider".into(),
+                extra_body: None,
+            },
             &mut serde_json::Value::String("test".to_string()),
         )
         .unwrap_err()
@@ -322,8 +331,12 @@ mod tests {
                         },
                     ],
                 },
+                inference_extra_body: vec![],
             }),
-            ModelProviderRequestInfo { extra_body: None },
+            ModelProviderRequestInfo {
+                provider_name: "dummy_provider".into(),
+                extra_body: None,
+            },
             &mut body,
         )
         .unwrap();
@@ -364,8 +377,10 @@ mod tests {
                         },
                     ],
                 },
+                inference_extra_body: vec![],
             }),
             ModelProviderRequestInfo {
+                provider_name: "dummy_provider".into(),
                 extra_body: Some(ExtraBodyConfig {
                     data: vec![
                         ExtraBodyReplacement {
