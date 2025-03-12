@@ -22,14 +22,12 @@ export const links: Route.LinksFunction = () => [
     href: "/fonts/GeistVariableVF.woff2",
     as: "font",
     type: "font/woff2",
-    crossOrigin: "anonymous",
   },
   {
     rel: "preload",
     href: "/fonts/GeistMonoVariableVF.woff2",
     as: "font",
     type: "font/woff2",
-    crossOrigin: "anonymous",
   },
   {
     rel: "icon",

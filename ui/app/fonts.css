@@ -4,7 +4,7 @@
   src: url("/fonts/GeistVariableVF.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
-  font-display: swap;
+  font-display: block;
 }
 
 /* Geist Mono Variable Font */
@@ -13,21 +13,5 @@
   src: url("/fonts/GeistMonoVariableVF.woff2") format("woff2");
   font-weight: 100 900;
   font-style: normal;
-  font-display: swap;
-}
-
-/* Define custom font weights */
-:root {
-  --font-weight-thin: 100;
-  --font-weight-extra-light: 200;
-  --font-weight-light: 300;
-  --font-weight-normal: 400;
-  --font-weight-medium: 500;
-  --font-weight-semi-bold: 600;
-  --font-weight-bold: 700;
-  --font-weight-extra-bold: 800;
-  --font-weight-black: 900;
-
-  /* Enable alternative no-tail "a" and slashed zero for Geist font */
-  --geist-font-features: "ss01" on;
+  font-display: block;
 }
