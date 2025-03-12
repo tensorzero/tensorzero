@@ -1289,7 +1289,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     .await;
 }
 
-// We already test Amazon S3 with all image providers, so let's test Google Cloud Storage
+// We already test Amazon S3 with all image providers, so let's test minio
 // (which is S3-compatible) with just OpenAI to save time and money.
 #[cfg(feature = "e2e_tests")]
 #[tokio::test]
