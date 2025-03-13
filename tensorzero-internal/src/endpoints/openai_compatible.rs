@@ -58,6 +58,7 @@ pub async fn inference_handler(
     let params: Params = (headers, openai_compatible_params).try_into()?;
 
     // The prefix for the response's `model` field depends on the inference target
+    // (We run this disambiguation deep in the `inference` call below but we don't get the decision out, so we duplicate it here)
     let response_model_prefix = match (&params.function_name, &params.model_name) {
         (Some(function_name), None) => Ok::<String, Error>(format!(
             "tensorzero::function_name::{}::variant_name::",
