@@ -1288,3 +1288,81 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     )
     .await;
 }
+
+// We already test Amazon S3 with all image providers, so let's test minio
+// (which is S3-compatible) with just OpenAI to save time and money.
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+pub async fn test_image_inference_with_provider_docker_minio() {
+    use crate::providers::common::test_image_inference_with_provider_s3_compatible;
+    use aws_credential_types::Credentials;
+    use aws_sdk_s3::config::SharedCredentialsProvider;
+    use rand::distributions::Alphanumeric;
+    use rand::distributions::DistString;
+    use tensorzero_internal::inference::types::storage::StorageKind;
+
+    // These are set in `ci/minio-docker-compose.yml`
+    let minio_access_key_id = "tensorzero".to_string();
+    let minio_secret_access_key = "tensorzero".to_string();
+
+    let credentials = Credentials::from_keys(&minio_access_key_id, &minio_secret_access_key, None);
+
+    // Our S3-compatible object store checks for these variables, giving them
+    // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
+    std::env::set_var("S3_ACCESS_KEY_ID", minio_access_key_id);
+    std::env::set_var("S3_SECRET_ACCESS_KEY", minio_secret_access_key);
+
+    let provider = E2ETestProvider {
+        variant_name: "openai".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    };
+
+    let endpoint = "http://127.0.0.1:8000/".to_string();
+
+    let test_bucket = "tensorzero-e2e-tests";
+    let config = aws_config::load_from_env()
+        .await
+        .to_builder()
+        .credentials_provider(SharedCredentialsProvider::new(credentials))
+        .endpoint_url(&endpoint)
+        .build();
+
+    let client = aws_sdk_s3::Client::new(&config);
+
+    let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
+    prefix += "-";
+
+    test_image_inference_with_provider_s3_compatible(
+        provider,
+        &StorageKind::S3Compatible {
+            bucket_name: Some(test_bucket.to_string()),
+            region: None,
+            prefix: prefix.clone(),
+            endpoint: Some(endpoint.clone()),
+            allow_http: Some(true),
+        },
+        &client,
+        &format!(
+            r#"
+    [object_storage]
+    type = "s3_compatible"
+    endpoint = "{endpoint}"
+    bucket_name = "{test_bucket}"
+    prefix = "{prefix}"
+    allow_http = true
+    
+    [functions.image_test]
+    type = "chat"
+
+    [functions.image_test.variants.openai]
+    type = "chat_completion"
+    model = "openai::gpt-4o-mini-2024-07-18"
+    "#
+        ),
+        test_bucket,
+        &prefix,
+    )
+    .await;
+}
