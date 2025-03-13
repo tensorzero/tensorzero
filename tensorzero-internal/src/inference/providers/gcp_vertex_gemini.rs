@@ -821,21 +821,10 @@ impl<'a> GCPVertexGeminiRequest<'a> {
         let (response_mime_type, response_schema) = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 match request.output_schema {
-                    Some(output_schema) => {
-                        // According to these [docs](https://ai.google.dev/gemini-api/docs/json-mode?lang=web),
-                        // JSON mode is only supported for Gemini Pro models not Flash.
-                        let strict_json_models = ["gemini-1.5-pro-001"];
-                        let response_schema = if strict_json_models.contains(&model_name) {
-                            Some(process_output_schema(output_schema)?)
-                        } else {
-                            None
-                        };
-
-                        (
-                            Some(GCPVertexGeminiResponseMimeType::ApplicationJson),
-                            response_schema,
-                        )
-                    }
+                    Some(output_schema) => (
+                        Some(GCPVertexGeminiResponseMimeType::ApplicationJson),
+                        Some(process_output_schema(output_schema)?),
+                    ),
                     None => (Some(GCPVertexGeminiResponseMimeType::ApplicationJson), None),
                 }
             }
@@ -1397,6 +1386,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
         let details = result.unwrap_err().get_owned_details();
@@ -1434,6 +1424,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
         let request = result.unwrap();
@@ -1484,6 +1475,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
             extra_body: None,
+            ..Default::default()
         };
         // JSON schema should be supported for Gemini Pro models
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-1.5-pro-001");
@@ -1551,6 +1543,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
             extra_body: None,
+            ..Default::default()
         };
         // JSON mode should be supported for Gemini Flash models but without a schema
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-flash");
@@ -1612,7 +1605,7 @@ mod tests {
         );
         assert_eq!(
             request.generation_config.as_ref().unwrap().response_schema,
-            None
+            Some(serde_json::Value::Object(Default::default()))
         );
     }
 
@@ -1650,6 +1643,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let request_body = GCPVertexGeminiRequest {
             contents: vec![],
@@ -1735,6 +1729,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let request_body = GCPVertexGeminiRequest {
             contents: vec![],
@@ -1909,6 +1904,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-1.5-pro-001");
         let tools = tools.unwrap();
@@ -1952,6 +1948,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-2.0-flash-lite");
         let tools = tools.unwrap();

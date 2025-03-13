@@ -287,7 +287,12 @@ async fn write_demonstration(
     .await?;
     let function_config = config.get_function(&function_name)?;
     let parsed_value = validate_parse_demonstration(function_config, &config.tools, value).await?;
-    let payload = json!({"inference_id": inference_id, "value": parsed_value, "id": feedback_id, "tags": tags});
+    let string_value = serde_json::to_string(&parsed_value).map_err(|e| {
+        Error::new(ErrorDetails::InvalidRequest {
+            message: format!("Failed to serialize parsed value to json: {}", e),
+        })
+    })?;
+    let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
@@ -493,15 +498,22 @@ impl TryFrom<DemonstrationContentBlock> for ContentBlockOutput {
     }
 }
 
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum DemonstrationOutput {
+    Chat(Vec<ContentBlockChatOutput>),
+    Json(Value),
+}
+
 // Validates that the demonstration is correct.
 // For chat functions, the value should be a string or a list of valid content blocks.
 // For json functions, the value is validated against the output schema. If it passes,
 // we construct the usual {"raw": str, "parsed": parsed_value} object, serialize it, and return it.
-async fn validate_parse_demonstration(
+pub async fn validate_parse_demonstration(
     function_config: &FunctionConfig,
     tools: &HashMap<String, Arc<StaticToolConfig>>,
     value: &Value,
-) -> Result<String, Error> {
+) -> Result<DemonstrationOutput, Error> {
     match function_config {
         FunctionConfig::Chat(chat_config) => {
             // For chat functions, the value should either be a string or a list of valid content blocks.
@@ -566,13 +578,7 @@ async fn validate_parse_demonstration(
                     }
                 }
             }
-            let serialized_parsed_content_blocks =
-                serde_json::to_string(&parsed_value).map_err(|e| {
-                    Error::new(ErrorDetails::InvalidRequest {
-                        message: format!("Failed to serialize parsed value to json: {}", e),
-                    })
-                })?;
-            Ok(serialized_parsed_content_blocks)
+            Ok(DemonstrationOutput::Chat(parsed_value))
         }
         FunctionConfig::Json(json_config) => {
             // For json functions, the value should be a valid json object.
@@ -588,16 +594,7 @@ async fn validate_parse_demonstration(
                 })
             })?;
             let json_inference_response = json!({"raw": raw, "parsed": value});
-            let serialized_json_inference_response =
-                serde_json::to_string(&json_inference_response).map_err(|e| {
-                    Error::new(ErrorDetails::InvalidRequest {
-                        message: format!(
-                            "Failed to serialize json_inference_response to json: {}",
-                            e
-                        ),
-                    })
-                })?;
-            Ok(serialized_json_inference_response)
+            Ok(DemonstrationOutput::Json(json_inference_response))
         }
     }
 }
@@ -1003,9 +1000,12 @@ mod tests {
 
         // Case 1: a string passed to a chat function
         let value = json!("Hello, world!");
-        let parsed_value = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
-            .await
-            .unwrap();
+        let parsed_value = serde_json::to_string(
+            &validate_parse_demonstration(function_config_chat_tools, &tools, &value)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
         let expected_parsed_value = serde_json::to_string(&vec![ContentBlockOutput::Text(Text {
             text: "Hello, world!".to_string(),
         })])
@@ -1015,9 +1015,12 @@ mod tests {
         // Case 2: a tool call to get_temperature, which exists
         let value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"location": "London", "unit": "celsius"}}]
         );
-        let parsed_value = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
-            .await
-            .unwrap();
+        let parsed_value = serde_json::to_string(
+            &validate_parse_demonstration(function_config_chat_tools, &tools, &value)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
         let expected_parsed_value =
             serde_json::to_string(&vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
                 id: "".to_string(),
@@ -1092,9 +1095,12 @@ mod tests {
             "name": "John",
             "age": 30
         });
-        let parsed_value = validate_parse_demonstration(function_config, &tools, &value)
-            .await
-            .unwrap();
+        let parsed_value = serde_json::to_string(
+            &validate_parse_demonstration(function_config, &tools, &value)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
         let expected_parsed_value = serde_json::to_string(&json!({
             "raw": serde_json::to_string(&value).unwrap(),
             "parsed": value

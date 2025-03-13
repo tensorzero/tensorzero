@@ -519,6 +519,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let azure_request = AzureRequest::new(&request_with_tools).unwrap();
@@ -564,6 +565,7 @@ mod tests {
             function_type: FunctionType::Json,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let azure_request = AzureRequest::new(&request_with_tools).unwrap();
@@ -708,6 +710,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let azure_response_with_metadata = AzureResponseWithMetadata {
             response: valid_response,

@@ -72,7 +72,7 @@ impl Image {
                 let response = client.get(url.clone()).send().await.map_err(|e| {
                     Error::new(ErrorDetails::BadImageFetch {
                         url: url.clone(),
-                        message: format!("Error fetching image: {e}"),
+                        message: format!("Error fetching image: {e:?}"),
                     })
                 })?;
                 let bytes = response.bytes().await.map_err(|e| {

@@ -10,30 +10,34 @@ use crate::{
 /// No way anyone could use TensorZero prior to this.
 const EARLIEST_TIMESTAMP: u64 = 1579751960;
 
-pub fn validate_episode_id(episode_id: Uuid) -> Result<(), Error> {
-    let version = episode_id.get_version_num();
+pub fn validate_tensorzero_uuid(uuid: Uuid, kind: &str) -> Result<(), Error> {
+    let version = uuid.get_version_num();
     if version != 7 {
-        return Err(ErrorDetails::InvalidEpisodeId {
+        return Err(ErrorDetails::InvalidTensorzeroUuid {
+            kind: kind.to_string(),
             message: format!("Version must be 7, got {}", version),
         }
         .into());
     }
-    let (timestamp, _) = episode_id
+    let (timestamp, _) = uuid
         .get_timestamp()
         .ok_or_else(|| {
-            Error::new(ErrorDetails::InvalidEpisodeId {
+            Error::new(ErrorDetails::InvalidTensorzeroUuid {
+                kind: kind.to_string(),
                 message: "Timestamp is missing".to_string(),
             })
         })?
         .to_unix();
     if timestamp < EARLIEST_TIMESTAMP {
-        return Err(Error::new(ErrorDetails::InvalidEpisodeId {
+        return Err(Error::new(ErrorDetails::InvalidTensorzeroUuid {
+            kind: kind.to_string(),
             message: "Timestamp is too early".to_string(),
         }));
     }
     let current_timestamp: u64 = current_timestamp();
     if timestamp > current_timestamp {
-        return Err(ErrorDetails::InvalidEpisodeId {
+        return Err(ErrorDetails::InvalidTensorzeroUuid {
+            kind: kind.to_string(),
             message: "Timestamp is in the future".to_string(),
         }
         .into());
@@ -84,17 +88,17 @@ mod tests {
     #[test]
     fn test_validate_episode_id() {
         let episode_id = Uuid::now_v7();
-        assert!(validate_episode_id(episode_id).is_ok());
+        assert!(validate_tensorzero_uuid(episode_id, "Episode").is_ok());
 
         let episode_id = uuid!("6790f6a1-3f8b-427e-ae24-f309329b9b0a");
-        assert!(validate_episode_id(episode_id).is_err());
+        assert!(validate_tensorzero_uuid(episode_id, "Episode").is_err());
 
         let episode_id = uuid!("00000000-0000-0000-0000-000000000000");
-        assert!(validate_episode_id(episode_id).is_err());
+        assert!(validate_tensorzero_uuid(episode_id, "Episode").is_err());
 
         let early_timestamp = 946684800; // 2000-01-01:00:00:00 UTC
         let early_uuid = Uuid::new_v7(Timestamp::from_unix(NoContext, early_timestamp, 0));
-        assert!(validate_episode_id(early_uuid).is_err());
+        assert!(validate_tensorzero_uuid(early_uuid, "Episode").is_err());
 
         let late_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -102,7 +106,7 @@ mod tests {
             .as_secs()
             + 10;
         let late_uuid = Uuid::new_v7(Timestamp::from_unix(NoContext, late_timestamp, 0));
-        assert!(validate_episode_id(late_uuid).is_err());
+        assert!(validate_tensorzero_uuid(late_uuid, "Episode").is_err());
     }
 
     #[test]

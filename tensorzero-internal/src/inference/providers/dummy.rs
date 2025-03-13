@@ -269,6 +269,14 @@ impl InferenceProvider for DummyProvider {
             "flaky_best_of_n_judge" => {
                 vec![r#"{"thinking": "hmmm", "answer_choice": 0}"#.to_string().into()]
             }
+            "random_answer" => {
+                vec![ContentBlockOutput::Text(Text {
+                    text: serde_json::json!({
+                        "answer": Uuid::now_v7().to_string()
+                    })
+                    .to_string(),
+                })]
+            }
             "alternate" => vec![ALTERNATE_INFER_RESPONSE_CONTENT.to_string().into()],
             "extract_images" => {
                 let images: Vec<_> = request

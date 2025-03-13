@@ -863,6 +863,7 @@ pub async fn write_completed_batch_inference<'a>(
                 inference_id,
                 episode_id,
             },
+            extra_cache_key: None,
         };
         let inference_result = function
             .prepare_response(

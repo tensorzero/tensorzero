@@ -1,4 +1,4 @@
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
 use super::ClickHouseConnectionInfo;
 use serde_json::Value;
 use uuid::Uuid;
@@ -9,9 +9,13 @@ lazy_static::lazy_static! {
 
 pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
     let clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
-    ClickHouseConnectionInfo::new(clickhouse_url.as_ref())
+    let start = std::time::Instant::now();
+    println!("Connecting to ClickHouse");
+    let res = ClickHouseConnectionInfo::new(clickhouse_url.as_ref())
         .await
-        .expect("Failed to connect to ClickHouse")
+        .expect("Failed to connect to ClickHouse");
+    println!("Connected to ClickHouse in {:?}", start.elapsed());
+    res
 }
 
 #[cfg(feature = "e2e_tests")]
