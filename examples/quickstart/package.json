@@ -1,0 +1,14 @@
+{
+  "name": "tensorzero-openai-example",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "tsx after_openai.ts"
+  },
+  "dependencies": {
+    "openai": "^4.87.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0"
+  }
+}

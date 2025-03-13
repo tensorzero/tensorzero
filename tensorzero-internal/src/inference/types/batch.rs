@@ -6,7 +6,7 @@ use crate::{
     error::{Error, ErrorDetails},
     jsonschema_util::DynamicJSONSchema,
     tool::{ToolCallConfig, ToolCallConfigDatabaseInsert},
-    uuid_util::validate_episode_id,
+    uuid_util::validate_tensorzero_uuid,
 };
 
 use super::{
@@ -321,7 +321,7 @@ impl TryFrom<BatchEpisodeIdsWithSize> for BatchEpisodeIds {
             None => (0..num_inferences).map(|_| Uuid::now_v7()).collect(),
         };
         episode_ids.iter().enumerate().try_for_each(|(i, id)| {
-            validate_episode_id(*id).map_err(|e| {
+            validate_tensorzero_uuid(*id, "Episode").map_err(|e| {
                 Error::new(ErrorDetails::BatchInputValidation {
                     index: i,
                     message: e.to_string(),

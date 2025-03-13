@@ -12,6 +12,145 @@ use tensorzero_internal::clickhouse::test_helpers::{
     select_model_inferences_clickhouse,
 };
 
+#[tokio::test]
+async fn e2e_test_best_of_n_dummy_candidates_dummy_judge() {
+    // Include randomness in put to make sure that the first request is a cache miss
+    let random_input = Uuid::now_v7();
+    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, false).await;
+    e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(random_input, true).await;
+}
+
+async fn e2e_test_best_of_n_dummy_candidates_dummy_judge_inner(
+    random_input: Uuid,
+    should_be_cached: bool,
+) {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "best_of_n_json_repeated",
+        "variant_name": "best_of_n_variant",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "value": format!("Please write me a sentence about Megumin making an explosion: {random_input}")},
+                    ]
+                }
+            ]},
+        "stream": false,
+        "cache_options": {"enabled": "on", "lookback_s": 10}
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input: Value = json!(
+        {
+            "system": {
+                "assistant_name": "AskJeeves"
+            },
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "value": format!("Please write me a sentence about Megumin making an explosion: {random_input}")},
+                    ]
+                }
+            ]
+        }
+    );
+    assert_eq!(input, correct_input);
+
+    // Check the ModelInference Table
+    let results: Vec<Value> = select_model_inferences_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 4);
+
+    // Collect model names
+    let mut model_names = std::collections::HashSet::new();
+    let mut dummy_uuids = vec![];
+
+    for result in results {
+        let id = result.get("id").unwrap().as_str().unwrap();
+        let _ = Uuid::parse_str(id).unwrap();
+        let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+        let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+        assert_eq!(inference_id_result, inference_id);
+
+        // Collect model_name
+        let model_name = result.get("model_name").unwrap().as_str().unwrap();
+        model_names.insert(model_name.to_string());
+
+        // Check that all expected fields are present
+        assert!(result.get("model_provider_name").is_some());
+        assert!(result.get("raw_request").is_some());
+        assert!(result.get("raw_response").is_some());
+        assert!(result.get("input_tokens").is_some());
+        assert!(result.get("output_tokens").is_some());
+        assert!(result.get("response_time_ms").is_some());
+        assert!(result.get("ttft_ms").is_some());
+
+        // We just check the output here, since we already have several tests covering the other fields
+        // for best_of_n
+        if model_name == "dummy::random_answer" {
+            let cached = result.get("cached").unwrap().as_bool().unwrap();
+            assert_eq!(cached, should_be_cached);
+            let output = result.get("output").unwrap().as_str().unwrap();
+            let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+            assert_eq!(output.len(), 1);
+            match &output[0] {
+                ContentBlock::Text(text) => {
+                    let parsed: Value = serde_json::from_str(&text.text).unwrap();
+                    let uuid = parsed.get("answer").unwrap().as_str().unwrap();
+                    dummy_uuids.push(uuid.to_string());
+                }
+                _ => {
+                    panic!("Expected a text block, got {:?}", output[0]);
+                }
+            }
+        }
+    }
+
+    // Check that all expected model names are present
+    let expected_model_names: std::collections::HashSet<String> =
+        ["dummy::random_answer", "dummy::best_of_n_0", "json"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+    assert_eq!(model_names, expected_model_names);
+
+    // Test that the model was actually invoked twice (producing a different UUID each time)
+    assert_eq!(dummy_uuids.len(), 2);
+    assert_ne!(dummy_uuids[0], dummy_uuids[1]);
+}
+
 /// This test calls a function which currently uses best of n.
 /// We call 2 models, one that gives the usual good response, one that
 /// gives a JSON response, and then use Gemini to select the best one.
@@ -33,7 +172,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "content": [
                         {"type": "text", "value": "Please write me a sentence about Megumin making an explosion."},
                         {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-1.5-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-2.0-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
                     ]
                 }
             ]},
@@ -92,7 +231,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "content": [
                         {"type": "text", "value": "Please write me a sentence about Megumin making an explosion."},
                         {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-1.5-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
+                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-2.0-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
                     ]
                 }
             ]
@@ -146,7 +285,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
         assert!(result.get("ttft_ms").is_some());
 
         // For the judge model we want to check that the raw_request is corredt
-        if model_name == "gemini-1.5-flash-001" {
+        if model_name == "gemini-2.0-flash-001" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
             let expected_request = json!({
@@ -219,7 +358,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                             .to_string()
                             .into(),
                         ContentBlock::Unknown {
-                            model_provider_name: Some("tensorzero::model_name::gemini-1.5-flash-001::provider_name::gcp_vertex_gemini".into()),
+                            model_provider_name: Some("tensorzero::model_name::gemini-2.0-flash-001::provider_name::gcp_vertex_gemini".into()),
                             data: serde_json::json!({"text": "My extra gemini text"})
                         }
                     ],
@@ -326,7 +465,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
 
     // Check that all expected model names are present
     let expected_model_names: std::collections::HashSet<String> =
-        ["test", "json", "gemini-1.5-flash-001"]
+        ["test", "json", "gemini-2.0-flash-001"]
             .iter()
             .map(|s| s.to_string())
             .collect();
@@ -549,7 +688,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
             }
         }
         // For the judge model we want to check that the raw_request is corredt
-        if model_name == "gemini-1.5-flash-001" {
+        if model_name == "gemini-2.0-flash-001" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
             let expected_request = json!({
@@ -606,7 +745,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
 
     // Check that all expected model names are present
     let expected_model_names: std::collections::HashSet<String> =
-        ["test", "json", "json_goodbye", "gemini-1.5-flash-001"]
+        ["test", "json", "json_goodbye", "gemini-2.0-flash-001"]
             .iter()
             .map(|s| s.to_string())
             .collect();
@@ -977,7 +1116,7 @@ async fn e2e_test_best_of_n_judge_extra_body() {
         assert!(result.get("ttft_ms").is_some());
 
         // For the judge model we want to check that the raw_request is corredt
-        if model_name == "gemini-1.5-flash-001" {
+        if model_name == "gemini-2.0-flash-001" {
             let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
             let raw_request: Value = serde_json::from_str(raw_request).unwrap();
             let expected_request = json!({

@@ -175,7 +175,8 @@ pub enum ErrorDetails {
     InvalidDiclConfig {
         message: String,
     },
-    InvalidEpisodeId {
+    InvalidTensorzeroUuid {
+        kind: String,
         message: String,
     },
     InvalidFunctionVariants {
@@ -347,7 +348,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
-            ErrorDetails::InvalidEpisodeId { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidModel { .. } => tracing::Level::ERROR,
@@ -421,7 +422,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
-            ErrorDetails::InvalidEpisodeId { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidTensorzeroUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidUuid { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InputValidation { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InternalError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -670,8 +671,8 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Invalid dynamic in-context learning config: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new", message)
             }
             ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{}", message),
-            ErrorDetails::InvalidEpisodeId { message } => {
-                write!(f, "Invalid Episode ID: {}", message)
+            ErrorDetails::InvalidTensorzeroUuid { message, kind } => {
+                write!(f, "Invalid {kind} ID: {}", message)
             }
             ErrorDetails::InvalidMessage { message } => write!(f, "{}", message),
             ErrorDetails::InvalidModel { model_name } => {
