@@ -7,6 +7,7 @@ use aws_config::Region;
 use aws_sdk_bedrockruntime::error::SdkError;
 #[cfg(feature = "e2e_tests")]
 use aws_sdk_s3::operation::get_object::GetObjectError;
+#[cfg(feature = "e2e_tests")]
 use axum::extract::{Query, State};
 use axum::{routing::get, Router};
 use base64::prelude::*;
@@ -22,9 +23,11 @@ use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
     InputMessage, InputMessageContent,
 };
+#[cfg(feature = "e2e_tests")]
 use tensorzero_internal::endpoints::object_storage::{
     get_object_handler, ObjectResponse, PathParams,
 };
+#[cfg(feature = "e2e_tests")]
 use tensorzero_internal::gateway_util::AppStateData;
 use tensorzero_internal::inference::types::TextKind;
 use tensorzero_internal::{
