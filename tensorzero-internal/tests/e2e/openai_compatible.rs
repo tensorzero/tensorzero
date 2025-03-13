@@ -49,6 +49,7 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
         .send()
         .await
         .unwrap();
+
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
@@ -63,6 +64,11 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
     assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
     let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "stop");
+    let response_model = response_json.get("model").unwrap().as_str().unwrap();
+    assert_eq!(
+        response_model,
+        "tensorzero::function_name::basic_test_no_system_schema::variant_name::test"
+    );
 
     let inference_id: Uuid = response_json
         .get("id")
@@ -205,6 +211,8 @@ async fn test_openai_compatible_route_with_default_function(
     assert_eq!(content, expected_content);
     let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "stop");
+    let response_model = response_json.get("model").unwrap().as_str().unwrap();
+    assert_eq!(response_model, prefixed_model_name);
 
     let inference_id: Uuid = response_json
         .get("id")
@@ -365,6 +373,11 @@ async fn test_openai_compatible_route_with_json_mode_on() {
     assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
     let content = message.get("content").unwrap().as_str().unwrap();
     assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+    let response_model = response_json.get("model").unwrap().as_str().unwrap();
+    assert_eq!(
+        response_model,
+        "tensorzero::function_name::basic_test_no_system_schema::variant_name::test"
+    );
 
     let inference_id: Uuid = response_json
         .get("id")
@@ -498,6 +511,11 @@ async fn test_openai_compatible_route_with_json_schema() {
     assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
     let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "stop");
+    let response_model = response_json.get("model").unwrap().as_str().unwrap();
+    assert_eq!(
+        response_model,
+        "tensorzero::function_name::basic_test_no_system_schema::variant_name::test"
+    );
 
     let inference_id: Uuid = response_json
         .get("id")
@@ -702,5 +720,7 @@ async fn test_openai_compatible_streaming_tool_call() {
             assert!(usage["prompt_tokens"].as_i64().unwrap() > 0);
             assert!(usage["completion_tokens"].as_i64().unwrap() > 0);
         }
+        let response_model = parsed_chunk.get("model").unwrap().as_str().unwrap();
+        assert_eq!(response_model, "tensorzero::model_name::openai::gpt-4o");
     }
 }
