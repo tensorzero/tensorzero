@@ -439,7 +439,7 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
         let mut messages = Vec::new();
         let mut tool_call_id_to_name = HashMap::new();
         let first_system = matches!(
-            openai_compatible_messages.get(0),
+            openai_compatible_messages.first(),
             Some(OpenAICompatibleMessage::System(_))
         );
         for message in openai_compatible_messages {
