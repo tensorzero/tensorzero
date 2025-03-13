@@ -518,6 +518,14 @@ impl Client {
             }
         }))
     }
+
+    #[cfg(feature = "e2e_tests")]
+    pub fn get_app_state_data(&self) -> Option<&AppStateData> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.state),
+            _ => None,
+        }
+    }
 }
 
 async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroError>>>(

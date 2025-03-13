@@ -129,6 +129,10 @@ async fn main() {
             delete(endpoints::datasets::delete_datapoint_handler),
         )
         .route(
+            "/internal/object_storage",
+            get(endpoints::object_storage::get_object_handler),
+        )
+        .route(
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
         )
