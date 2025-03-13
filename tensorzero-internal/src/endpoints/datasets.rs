@@ -161,8 +161,9 @@ async fn insert_from_existing(
     clickhouse: &ClickHouseConnectionInfo,
     path_params: CreatePathParams,
     existing: &ExistingInference,
-) -> Result<(), Error> {
+) -> Result<Uuid, Error> {
     let inference_data = query_inference_for_datapoint(clickhouse, existing.inference_id).await?;
+    let datapoint_id = Uuid::now_v7();
 
     match inference_data {
         TaggedInferenceDatabaseInsert::Json(inference) => {
@@ -185,7 +186,7 @@ async fn insert_from_existing(
             let datapoint = JsonInferenceDatapoint {
                 dataset_name: path_params.dataset,
                 function_name: inference.function_name,
-                id: inference.id,
+                id: datapoint_id,
                 episode_id: Some(inference.episode_id),
                 input: inference.input,
                 output,
@@ -218,7 +219,7 @@ async fn insert_from_existing(
             let datapoint = ChatInferenceDatapoint {
                 dataset_name: path_params.dataset,
                 function_name: inference.function_name,
-                id: inference.id,
+                id: datapoint_id,
                 episode_id: Some(inference.episode_id),
                 input: inference.input,
                 output,
@@ -232,7 +233,7 @@ async fn insert_from_existing(
                 .await?;
         }
     }
-    Ok(())
+    Ok(datapoint_id)
 }
 
 #[derive(Deserialize)]
@@ -252,15 +253,13 @@ pub async fn create_datapoint_handler(
     Path(path_params): Path<CreatePathParams>,
     StructuredJson(existing_inference): StructuredJson<ExistingInference>,
 ) -> Result<Json<CreateDatapointResponse>, Error> {
-    insert_from_existing(
+    let datapoint_id = insert_from_existing(
         &app_state.clickhouse_connection_info,
         path_params,
         &existing_inference,
     )
     .await?;
-    Ok(Json(CreateDatapointResponse {
-        id: existing_inference.inference_id,
-    }))
+    Ok(Json(CreateDatapointResponse { id: datapoint_id }))
 }
 
 /// The handler for the PUT `/datasets/:dataset/datapoints/:id"` endpoint.
