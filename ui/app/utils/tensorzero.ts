@@ -313,4 +313,39 @@ export class TensorZeroClient {
     }
     return (await response.json()) as FeedbackResponse;
   }
+
+  /**
+   * Inserts a datapoint from an existing inference with a given ID and setting for where to get the output from.
+   * @param datasetName - The name of the dataset to insert the datapoint into
+   * @param inferenceId - The ID of the existing inference to use as a base
+   * @param outputKind - How to handle the output field: inherit from inference, use demonstration, or none
+   * @returns A promise that resolves with the created datapoint response containing the new ID
+   */
+  async createDatapoint(
+    datasetName: string,
+    inferenceId: string,
+    outputKind: "inherit" | "demonstration" | "none" = "inherit",
+  ): Promise<{ id: string }> {
+    const url = `${this.baseUrl}/datasets/${encodeURIComponent(datasetName)}/datapoints`;
+
+    const request = {
+      inference_id: inferenceId,
+      output: outputKind,
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Create datapoint request failed with status ${response.status}`,
+      );
+    }
+
+    const body = await response.json();
+    return body as { id: string };
+  }
 }

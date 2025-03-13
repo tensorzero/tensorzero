@@ -4,8 +4,6 @@ import {
   inputSchema,
   jsonInferenceOutputSchema,
 } from "./common";
-import type { ParsedInferenceRow } from "./inference";
-import { v7 as uuidv7 } from "uuid";
 
 /**
  * Schema representing a fully-qualified row in the Chat Inference dataset.
@@ -176,40 +174,3 @@ export const DatasetDetailRowSchema = z.object({
 });
 
 export type DatasetDetailRow = z.infer<typeof DatasetDetailRowSchema>;
-
-/**
- * Converts a ParsedInferenceRow to a ParsedDatasetRow format.
- * This is useful when you want to convert inference data into a dataset-compatible format.
- * Generates a fresh UUIDv7 for the datapoint to avoid collisions when the same inference
- * is added to multiple datasets.
- */
-export function inferenceRowToDatasetRow(
-  inference: ParsedInferenceRow,
-  dataset_name: string,
-): ParsedDatasetRow {
-  const baseFields = {
-    dataset_name,
-    function_name: inference.function_name,
-    id: uuidv7(), // Generate a fresh UUIDv7 instead of using the inference ID
-    episode_id: inference.episode_id,
-    input: inference.input,
-    tags: inference.tags,
-    auxiliary: JSON.stringify({}),
-    is_deleted: false,
-    updated_at: new Date().toISOString(),
-  };
-
-  if (inference.function_type === "chat") {
-    return {
-      ...baseFields,
-      output: inference.output,
-      tool_params: inference.tool_params,
-    };
-  } else {
-    return {
-      ...baseFields,
-      output: inference.output,
-      output_schema: inference.output_schema,
-    };
-  }
-}
