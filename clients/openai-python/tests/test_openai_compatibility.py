@@ -577,6 +577,25 @@ async def test_async_json_success(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_json_success_override(async_client):
+    # Check that if we pass a string to a function with an input schema it is 400
+    # We will add explicit support for raw text in the OpenAI API later
+    messages = [
+        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {"role": "user", "content": [{"type": "text", "text": "Hi how are you?"}]},
+        {"role": "user", "content": [{"country": "Japan"}]},
+    ]
+    episode_id = str(uuid7())
+    with pytest.raises(BadRequestError) as exc_info:
+        await async_client.chat.completions.create(
+            extra_headers={"episode_id": episode_id},
+            messages=messages,
+            model="tensorzero::function_name::json_success",
+        )
+    assert '"Hi how are you?" is not of type "object"' in str(exc_info.value)
+
+
+@pytest.mark.asyncio
 async def test_async_json_invalid_system(async_client):
     messages = [
         {
