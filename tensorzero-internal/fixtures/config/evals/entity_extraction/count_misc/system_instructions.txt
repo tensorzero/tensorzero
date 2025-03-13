@@ -1,1 +1,0 @@
-The score is the number of miscellaneous items in the output. Please return it as a float.

@@ -2475,18 +2475,19 @@ dataset_name = "extract_entities_0.8"
 [evals.entity_extraction.evaluators.exact_match]
 type = "exact_match"
 
-[evals.entity_extraction.evaluators.count_misc]
+[evals.entity_extraction.evaluators.count_sports]
 type = "llm_judge"
 output_type = "float"
 optimize = "min"
 include = { reference_output = false }
 
-[evals.entity_extraction.evaluators.count_misc.variants.mini]
+[evals.entity_extraction.evaluators.count_sports.variants.mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 active = true
-system_instructions = "../../fixtures/config/evals/entity_extraction/count_misc/system_instructions.txt"
+system_instructions = "../../fixtures/config/evals/entity_extraction/count_sports/system_instructions.txt"
 json_mode = "strict"
+temperature=0.1
 
 [evals.haiku_with_outputs]
 function_name = "write_haiku"
@@ -2502,15 +2503,16 @@ dataset_name = "good-haikus-no-output"
 [evals.haiku_without_outputs.evaluators.exact_match]
 type = "exact_match"
 
-[evals.haiku_without_outputs.evaluators.count_prepositions]
+[evals.haiku_without_outputs.evaluators.topic_starts_with_f]
 type = "llm_judge"
-output_type = "float"
+output_type = "boolean"
 optimize = "min"
 include = { reference_output = false }
 
-[evals.haiku_without_outputs.evaluators.count_prepositions.variants.mini]
+[evals.haiku_without_outputs.evaluators.topic_starts_with_f.variants.mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 active = true
-system_instructions = "../../fixtures/config/evals/haiku_without_outputs/count_prepositions/system_instructions.txt"
+system_instructions = "../../fixtures/config/evals/haiku_without_outputs/topic_starts_with_f/system_instructions.txt"
 json_mode = "strict"
+temperature = 0
