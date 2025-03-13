@@ -40,7 +40,6 @@ pub async fn get_object_handler(
     State(AppStateData { config, .. }): AppState,
     Query(params): Query<PathParams>,
 ) -> Result<Json<ObjectResponse>, Error> {
-    // TODO - should we re-use the config object store if it matches?
     let storage_path: StoragePath = serde_json::from_str(&params.storage_path).map_err(|e| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Error parsing storage path: {}", e),
