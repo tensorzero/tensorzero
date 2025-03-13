@@ -724,6 +724,9 @@ fn process_chat_content(
             ContentBlockChatOutput::Thought(_thought) => {
                 // OpenAI compatible endpoint does not support thought blocks
                 // Users of this endpoint will need to check observability to see them
+                tracing::warn!(
+                    "Ignoring 'thought' content block when constructing OpenAI-compatible response"
+                );
             }
             ContentBlockChatOutput::Unknown {
                 data: _,
@@ -863,6 +866,9 @@ fn process_chat_content_chunk(
             ContentBlockChunk::Thought(_thought) => {
                 // OpenAI compatible endpoint does not support thought blocks
                 // Users of this endpoint will need to check observability to see them
+                tracing::warn!(
+                    "Ignoring 'thought' content block chunk when constructing OpenAI-compatible response"
+                );
             }
         }
     }
