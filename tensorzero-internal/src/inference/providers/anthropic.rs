@@ -1398,6 +1398,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         let details = anthropic_request_body.unwrap_err().get_owned_details();
@@ -1429,6 +1430,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1478,6 +1480,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1531,6 +1534,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());
@@ -1584,6 +1588,7 @@ mod tests {
             function_type: FunctionType::Json,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request);
         assert!(anthropic_request_body.is_ok());

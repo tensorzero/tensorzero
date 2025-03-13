@@ -2136,6 +2136,35 @@ model = "claude-3-haiku-20240307-anthropic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "implicit_tool"
 
+[functions.best_of_n_json_repeated]
+type = "json"
+system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
+output_schema = "../../fixtures/config/functions/best_of_n_json/output_schema.json"
+
+[functions.best_of_n_json_repeated.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "dummy::random_answer"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.best_of_n_json_repeated.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "json"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.best_of_n_json_repeated.variants.best_of_n_variant]
+type = "experimental_best_of_n_sampling"
+weight = 1
+candidates = ["variant0", "variant0", "variant1"]
+
+[functions.best_of_n_json_repeated.variants.best_of_n_variant.evaluator]
+model = "dummy::best_of_n_0"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
 [functions.mixture_of_n]
 type = "chat"
 system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
@@ -2218,6 +2247,33 @@ model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 json_mode = "strict"
 
+[functions.mixture_of_n_json_repeated]
+type = "json"
+system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.mixture_of_n_json_repeated.variants.variant0]
+type = "chat_completion"
+weight = 0
+model = "dummy::random_answer"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.mixture_of_n_json_repeated.variants.variant1]
+type = "chat_completion"
+weight = 0
+model = "json"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
+
+[functions.mixture_of_n_json_repeated.variants.mixture_of_n_variant]
+type = "experimental_mixture_of_n"
+weight = 1
+candidates = ["variant0", "variant0", "variant1"]
+
+[functions.mixture_of_n_json_repeated.variants.mixture_of_n_variant.fuser]
+model = "json"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+json_mode = "strict"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │

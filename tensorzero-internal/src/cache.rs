@@ -472,6 +472,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            extra_cache_key: None,
         };
         let model_provider_request = ModelProviderRequest {
             request: &model_inference_request,
@@ -495,6 +496,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            extra_cache_key: None,
         };
         let model_provider_request = ModelProviderRequest {
             request: &model_inference_request,
@@ -520,6 +522,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            extra_cache_key: None,
         };
         let model_provider_request = ModelProviderRequest {
             request: &streaming_model_inference_request,

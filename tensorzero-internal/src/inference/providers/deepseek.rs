@@ -800,6 +800,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools)
@@ -845,6 +846,7 @@ mod tests {
             function_type: FunctionType::Json,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools)
@@ -963,6 +965,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let deepseek_response_with_metadata = DeepSeekResponseWithMetadata {
             response: valid_response,
@@ -1025,6 +1028,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let messages = prepare_deepseek_messages(&request, "deepseek-chat").unwrap();
@@ -1072,6 +1076,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let messages = prepare_deepseek_messages(&request_no_system, "deepseek-chat").unwrap();
@@ -1108,6 +1113,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let messages = prepare_deepseek_messages(&request_multiple, "deepseek-chat").unwrap();

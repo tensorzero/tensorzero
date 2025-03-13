@@ -927,6 +927,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let models = ModelTable::default();
         let inference_models = InferenceModels {
@@ -979,6 +980,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let result = chat_completion_config
             .infer(
@@ -1028,6 +1030,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let err = chat_completion_config
             .infer(
@@ -1105,6 +1108,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let result = chat_completion_config
             .infer(
@@ -1181,6 +1185,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let result = chat_completion_config
             .infer(
@@ -1265,6 +1270,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let inference_params = InferenceParams::default();
         let result = chat_completion_config
@@ -1324,6 +1330,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
@@ -1336,6 +1343,7 @@ mod tests {
                 path: user_template_name.into(),
                 contents: "".to_string(),
             }),
+            extra_body: None,
             ..Default::default()
         };
         let result = chat_completion_config
@@ -1427,6 +1435,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: Some(&output_schema),
+            extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
@@ -1520,6 +1529,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: Some(&output_schema),
+            extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
@@ -1687,6 +1697,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: Some(""),
+            extra_cache_key: None,
         };
         let result = chat_completion_config
             .infer_stream(
@@ -1749,6 +1760,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            extra_cache_key: None,
         };
         let (mut stream, models_used) = chat_completion_config
             .infer_stream(
@@ -1848,6 +1860,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            extra_cache_key: None,
         };
         let model_request = chat_completion_config
             .prepare_request(
@@ -1951,6 +1964,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: Some(""),
+            extra_cache_key: None,
         };
         let mut inference_params = InferenceParams::default();
         let model_request = chat_completion_config
@@ -2028,6 +2042,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let model_request = chat_completion_config
             .prepare_request(
