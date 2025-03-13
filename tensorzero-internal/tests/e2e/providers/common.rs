@@ -1629,6 +1629,7 @@ pub async fn check_simple_inference_response(
     );
 }
 
+#[cfg_attr(not(feature = "batch_tests"), allow(dead_code))]
 pub async fn check_simple_image_inference_response(
     response_json: Value,
     episode_id: Option<Uuid>,
