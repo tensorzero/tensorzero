@@ -5,6 +5,7 @@ import {
   jsonInferenceOutputSchema,
 } from "./common";
 import type { ParsedInferenceRow } from "./inference";
+import { v7 as uuidv7 } from "uuid";
 
 /**
  * Schema representing a fully-qualified row in the Chat Inference dataset.
@@ -179,6 +180,8 @@ export type DatasetDetailRow = z.infer<typeof DatasetDetailRowSchema>;
 /**
  * Converts a ParsedInferenceRow to a ParsedDatasetRow format.
  * This is useful when you want to convert inference data into a dataset-compatible format.
+ * Generates a fresh UUIDv7 for the datapoint to avoid collisions when the same inference
+ * is added to multiple datasets.
  */
 export function inferenceRowToDatasetRow(
   inference: ParsedInferenceRow,
@@ -187,7 +190,7 @@ export function inferenceRowToDatasetRow(
   const baseFields = {
     dataset_name,
     function_name: inference.function_name,
-    id: inference.id,
+    id: uuidv7(), // Generate a fresh UUIDv7 instead of using the inference ID
     episode_id: inference.episode_id,
     input: inference.input,
     tags: inference.tags,
