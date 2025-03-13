@@ -94,7 +94,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [isEditing, setIsEditing] = useState(false);
   const toggleEditing = () => setIsEditing(!isEditing);
 
-  const handleSystemChange = (system: any) => {
+  const handleSystemChange = (system: string | object) => {
     setInput({ ...input, system });
   };
 
@@ -135,6 +135,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setVariantInferenceIsLoading(false);
   };
 
+  const handleSave = () => {
+    setIsEditing(false);
+  };
+
   return (
     <div className="container mx-auto px-4 pb-8">
       <PageLayout>
@@ -164,6 +168,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
               isDeleting={deleteFetcher.state === "submitting"}
               toggleEditing={toggleEditing}
               isEditing={isEditing}
+              onSave={handleSave}
             />
           </SectionLayout>
 

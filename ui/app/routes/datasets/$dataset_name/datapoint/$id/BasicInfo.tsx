@@ -10,6 +10,8 @@ import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import { EditButton } from "~/components/utils/EditButton";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { FunctionInfo } from "~/components/function/FunctionInfo";
+import { CancelButton } from "~/components/utils/CancelButton";
+import { SaveButton } from "~/components/utils/SaveButton";
 
 interface BasicInfoProps {
   datapoint: ParsedDatasetRow;
@@ -17,6 +19,7 @@ interface BasicInfoProps {
   onDelete: () => void;
   isDeleting: boolean;
   toggleEditing: () => void;
+  onSave: () => void;
   isEditing: boolean;
 }
 
@@ -26,6 +29,7 @@ export default function BasicInfo({
   onDelete,
   isDeleting,
   toggleEditing,
+  onSave,
   isEditing,
 }: BasicInfoProps) {
   const config = useConfig();
@@ -40,7 +44,14 @@ export default function BasicInfo({
         <CardTitle className="text-xl">Basic Information</CardTitle>
         <div className="flex gap-2">
           <TryWithVariantButton {...tryWithVariantProps} />
-          <EditButton onClick={toggleEditing} />
+          {isEditing ? (
+            <>
+              <SaveButton onClick={onSave} />
+              <CancelButton onClick={toggleEditing} />
+            </>
+          ) : (
+            <EditButton onClick={toggleEditing} />
+          )}
           <DeleteButton onClick={onDelete} isLoading={isDeleting} />
         </div>
       </CardHeader>

@@ -245,6 +245,31 @@ function ToolCallBlock({
   isEditing,
   onContentChange,
 }: ToolCallBlockProps) {
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (onContentChange) {
+      onContentChange({
+        type: "tool_call",
+        name: block.name,
+        arguments: e.target.value,
+        id: block.id,
+      });
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div className="rounded bg-slate-100 p-2 dark:bg-slate-800">
+        <div className="font-medium">Tool: {block.name}</div>
+        <textarea
+          className="mt-1 w-full rounded border border-slate-300 p-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
+          value={block.arguments}
+          onChange={handleChange}
+          rows={3}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="rounded bg-slate-100 p-2 dark:bg-slate-800">
       <div className="font-medium">Tool: {block.name}</div>
@@ -267,6 +292,31 @@ function ToolResultBlock({
   isEditing,
   onContentChange,
 }: ToolResultBlockProps) {
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (onContentChange) {
+      onContentChange({
+        type: "tool_result",
+        name: block.name,
+        result: e.target.value,
+        id: block.id,
+      });
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div className="rounded bg-slate-100 p-2 dark:bg-slate-800">
+        <div className="font-medium">Result from: {block.name}</div>
+        <textarea
+          className="mt-1 w-full rounded border border-slate-300 p-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
+          value={block.result}
+          onChange={handleChange}
+          rows={3}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="rounded bg-slate-100 p-2 dark:bg-slate-800">
       <div className="font-medium">Result from: {block.name}</div>
