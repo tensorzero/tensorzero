@@ -15,13 +15,15 @@ use crate::{
 use aws_smithy_types::base64;
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "e2e_tests", derive(PartialEq))]
 pub struct ObjectResponse {
-    data: String,
+    pub data: String,
+    pub reused_object_store: bool,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct PathParams {
-    storage_path: String,
+    pub storage_path: String,
 }
 
 /// Fetches an object using the object store and path specified by the encoded `StoragePath`.
@@ -78,5 +80,6 @@ pub async fn get_object_handler(
     })?;
     Ok(Json(ObjectResponse {
         data: base64::encode(&bytes),
+        reused_object_store: matches!(store, Cow::Borrowed(_)),
     }))
 }

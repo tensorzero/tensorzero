@@ -7,6 +7,7 @@ use aws_config::Region;
 use aws_sdk_bedrockruntime::error::SdkError;
 #[cfg(feature = "e2e_tests")]
 use aws_sdk_s3::operation::get_object::GetObjectError;
+use axum::extract::{Query, State};
 use axum::{routing::get, Router};
 use base64::prelude::*;
 use futures::StreamExt;
@@ -21,6 +22,10 @@ use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
     InputMessage, InputMessageContent,
 };
+use tensorzero_internal::endpoints::object_storage::{
+    get_object_handler, ObjectResponse, PathParams,
+};
+use tensorzero_internal::gateway_util::AppStateData;
 use tensorzero_internal::inference::types::TextKind;
 use tensorzero_internal::{
     cache::CacheEnabledMode,
@@ -569,6 +574,32 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
     assert_eq!(result, FERRIS_PNG);
 }
 
+#[cfg(feature = "e2e_tests")]
+async fn check_object_fetch(data: AppStateData, storage_path: &StoragePath) {
+    check_object_fetch_via_embedded(data.clone(), storage_path).await;
+    check_object_fetch_via_gateway(storage_path).await;
+}
+
+#[cfg(feature = "e2e_tests")]
+async fn check_object_fetch_via_embedded(data: AppStateData, storage_path: &StoragePath) {
+    let res = get_object_handler(
+        State(data),
+        Query(PathParams {
+            storage_path: serde_json::to_string(storage_path).unwrap(),
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        res.0,
+        ObjectResponse {
+            data: BASE64_STANDARD.encode(FERRIS_PNG),
+            reused_object_store: true,
+        }
+    );
+}
+
+#[cfg(feature = "e2e_tests")]
 async fn check_object_fetch_via_gateway(storage_path: &StoragePath) {
     // Try using the running HTTP gateway (which is *not* configured with an object store)
     // to fetch the `StoragePath`
@@ -584,16 +615,19 @@ async fn check_object_fetch_via_gateway(storage_path: &StoragePath) {
 
     let response_json = res.json::<Value>().await.unwrap();
     assert_eq!(
-        response_json["data"].as_str().unwrap(),
-        BASE64_STANDARD.encode(FERRIS_PNG)
+        response_json,
+        serde_json::json!({
+            "data": BASE64_STANDARD.encode(FERRIS_PNG),
+            "reused_object_store": false,
+        })
     );
 }
 
-#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+#[cfg(feature = "e2e_tests")]
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
-    let storage_path = test_base64_image_inference_with_provider_and_store(
+    let (client, storage_path) = test_base64_image_inference_with_provider_and_store(
         provider,
         &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -618,7 +652,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
     ))
     .unwrap();
     assert_eq!(result, FERRIS_PNG);
-    check_object_fetch_via_gateway(&storage_path).await;
+    check_object_fetch(client.get_app_state_data().unwrap().clone(), &storage_path).await;
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -639,18 +673,19 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
     prefix += "-";
 
-    let (expected_key, storage_path) = test_image_inference_with_provider_s3_compatible(
-        provider,
-        &StorageKind::S3Compatible {
-            bucket_name: Some(test_bucket.to_string()),
-            region: Some("us-east-1".to_string()),
-            prefix: prefix.clone(),
-            endpoint: None,
-            allow_http: None,
-        },
-        &client,
-        &format!(
-            r#"
+    let (tensorzero_client, expected_key, storage_path) =
+        test_image_inference_with_provider_s3_compatible(
+            provider,
+            &StorageKind::S3Compatible {
+                bucket_name: Some(test_bucket.to_string()),
+                region: Some("us-east-1".to_string()),
+                prefix: prefix.clone(),
+                endpoint: None,
+                allow_http: None,
+            },
+            &client,
+            &format!(
+                r#"
     [object_storage]
     type = "s3_compatible"
     region = "us-east-1"
@@ -659,13 +694,17 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
 
     {IMAGE_FUNCTION_CONFIG}
     "#
-        ),
-        test_bucket,
-        &prefix,
+            ),
+            test_bucket,
+            &prefix,
+        )
+        .await;
+
+    check_object_fetch(
+        tensorzero_client.get_app_state_data().unwrap().clone(),
+        &storage_path,
     )
     .await;
-
-    check_object_fetch_via_gateway(&storage_path).await;
 
     client
         .delete_object()
@@ -684,7 +723,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(
     toml: &str,
     bucket_name: &str,
     prefix: &str,
-) -> (String, StoragePath) {
+) -> (tensorzero::Client, String, StoragePath) {
     let expected_key =
         format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
 
@@ -707,7 +746,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(
         panic!("Expected ServiceError: {err:?}");
     }
 
-    let storage_path =
+    let (tensorzero_client, storage_path) =
         test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix)
             .await;
 
@@ -721,7 +760,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(
 
     assert_eq!(result.body.collect().await.unwrap().to_vec(), FERRIS_PNG);
 
-    (expected_key, storage_path)
+    (tensorzero_client, expected_key, storage_path)
 }
 
 async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
@@ -812,7 +851,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     kind: &StorageKind,
     config_toml: &str,
     prefix: &str,
-) -> StoragePath {
+) -> (tensorzero::Client, StoragePath) {
     let episode_id = Uuid::now_v7();
 
     let image_data = BASE64_STANDARD.encode(FERRIS_PNG);
@@ -866,7 +905,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         storage_path = Some(latest_storage_path);
     }
-    storage_path.unwrap()
+    (client, storage_path.unwrap())
 }
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
