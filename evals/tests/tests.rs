@@ -47,7 +47,7 @@ async fn run_evals_json() {
     clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
     let mut parsed_output = Vec::new();
-    let mut total_misc = 0;
+    let mut total_the = 0;
     for line in output_str.lines() {
         let parsed: EvalInfo = serde_json::from_str(line).expect("Each line should be valid JSON");
         assert!(parsed.evaluator_errors.is_empty());
@@ -106,21 +106,21 @@ async fn run_evals_json() {
 
         assert_eq!(
             feedback["metric_name"].as_str().unwrap(),
-            "tensorzero::eval_name::entity_extraction::evaluator_name::count_misc"
+            "tensorzero::eval_name::entity_extraction::evaluator_name::count_sports"
         );
         assert_eq!(
             feedback["value"],
-            parsed.evaluations["count_misc"]
+            parsed.evaluations["count_sports"]
                 .as_ref()
                 .unwrap()
                 .as_f64()
                 .unwrap()
         );
-        total_misc += feedback["value"].as_f64().unwrap() as u32;
+        total_the += feedback["value"].as_f64().unwrap() as u32;
         parsed_output.push(parsed);
     }
-    assert_eq!(parsed_output.len(), 50);
-    assert_eq!(total_misc, 60);
+    assert_eq!(parsed_output.len(), 6);
+    assert_eq!(total_the, 3);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -230,7 +230,7 @@ async fn run_llm_judge_eval_chat() {
     clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
     let mut parsed_output = Vec::new();
-    let mut total_prepositions = 0;
+    let mut total_topic_fs = 0;
     for line in output_str.lines() {
         let parsed: EvalInfo = serde_json::from_str(line).expect("Each line should be valid JSON");
         assert!(parsed.evaluator_errors.is_empty());
@@ -256,10 +256,10 @@ async fn run_llm_judge_eval_chat() {
             eval_run_id.to_string()
         );
 
-        // There should be no Boolean feedback for this eval
+        // There should be no Float feedback for this eval
         assert!(select_feedback_by_target_id_clickhouse(
             &clickhouse,
-            "BooleanMetricFeedback",
+            "FloatMetricFeedback",
             inference_id,
         )
         .await
@@ -267,35 +267,35 @@ async fn run_llm_judge_eval_chat() {
         // The exact match eval should have value None since there is no output in any of these
         assert!(parsed.evaluations["exact_match"].is_none());
 
-        // There should be Float feedback for this eval
+        // There should be Boolean feedback for this eval
         let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
             &clickhouse,
-            "FloatMetricFeedback",
+            "BooleanMetricFeedback",
             inference_id,
         )
         .await
         .unwrap();
         assert_eq!(
             clickhouse_feedback["metric_name"].as_str().unwrap(),
-            "tensorzero::eval_name::haiku_without_outputs::evaluator_name::count_prepositions"
+            "tensorzero::eval_name::haiku_without_outputs::evaluator_name::topic_starts_with_f"
         );
         assert_eq!(
             clickhouse_feedback["value"],
-            parsed.evaluations["count_prepositions"]
+            parsed.evaluations["topic_starts_with_f"]
                 .as_ref()
                 .unwrap()
-                .as_f64()
+                .as_bool()
                 .unwrap()
         );
-        total_prepositions += clickhouse_feedback["value"].as_f64().unwrap() as u32;
+        total_topic_fs += clickhouse_feedback["value"].as_bool().unwrap() as u32;
         assert_eq!(
             clickhouse_feedback["tags"]["tensorzero::eval_run_id"],
             eval_run_id.to_string()
         );
         parsed_output.push(parsed);
     }
-    assert_eq!(parsed_output.len(), 23);
-    assert_eq!(total_prepositions, 40);
+    assert_eq!(parsed_output.len(), 10);
+    assert_eq!(total_topic_fs, 3);
 }
 
 #[tokio::test(flavor = "multi_thread")]

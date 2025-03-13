@@ -310,7 +310,6 @@ impl ThrottledTensorZeroClient {
     }
 
     async fn feedback(&self, params: FeedbackParams) -> Result<()> {
-        let _permit = self.semaphore.acquire().await;
         self.client.feedback(params).await?;
         Ok(())
     }
