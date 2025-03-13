@@ -43,11 +43,11 @@ pub enum OutputFormat {
 #[command(version, about, long_about = None)]
 pub struct Args {
     /// Path to tensorzero.toml.
-    #[arg(short, long, default_value = "./config/tensorzero.toml")]
+    #[arg(long, default_value = "./config/tensorzero.toml")]
     pub config_file: PathBuf,
 
     /// URL of a running TensorZero HTTP gateway server to use for requests. This runs evals using that gateway.
-    #[arg(short, long)]
+    #[arg(long)]
     pub gateway_url: Option<Url>,
 
     /// Name of the eval to run.
