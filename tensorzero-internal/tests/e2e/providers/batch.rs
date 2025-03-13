@@ -42,7 +42,10 @@ use crate::providers::common::{
 };
 use crate::{
     common::get_gateway_endpoint,
-    providers::common::{check_inference_params_response, check_simple_inference_response},
+    providers::common::{
+        check_inference_params_response, check_simple_image_inference_response,
+        check_simple_inference_response,
+    },
 };
 
 use super::common::E2ETestProvider;
@@ -55,11 +58,11 @@ macro_rules! generate_batch_inference_tests {
         use $crate::providers::batch::test_start_inference_params_batch_inference_request_with_provider;
         use $crate::providers::batch::test_json_mode_batch_inference_request_with_provider;
         use $crate::providers::batch::test_parallel_tool_use_batch_inference_request_with_provider;
-        use $crate::providers::batch::test_start_simple_batch_inference_request_with_provider;
+        use $crate::providers::batch::test_start_simple_image_batch_inference_request_with_provider;
         use $crate::providers::batch::test_tool_multi_turn_batch_inference_request_with_provider;
         use $crate::providers::batch::test_tool_use_batch_inference_request_with_provider;
-        use $crate::providers::batch::test_poll_existing_simple_batch_inference_request_with_provider;
-        use $crate::providers::batch::test_poll_completed_simple_batch_inference_request_with_provider;
+        use $crate::providers::batch::test_poll_existing_simple_image_batch_inference_request_with_provider;
+        use $crate::providers::batch::test_poll_completed_simple_image_batch_inference_request_with_provider;
         use $crate::providers::batch::test_poll_existing_inference_params_batch_inference_request_with_provider;
         use $crate::providers::batch::test_poll_completed_inference_params_batch_inference_request_with_provider;
         use $crate::providers::batch::test_poll_existing_tool_choice_batch_inference_request_with_provider;
@@ -79,34 +82,34 @@ macro_rules! generate_batch_inference_tests {
         use $crate::providers::batch::test_poll_completed_allowed_tools_batch_inference_request_with_provider;
 
         #[tokio::test]
-        async fn test_start_simple_batch_inference_request() {
+        async fn test_start_simple_image_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
-                    test_start_simple_batch_inference_request_with_provider(provider).await;
+                    test_start_simple_image_batch_inference_request_with_provider(provider).await;
                 }
             }
         }
 
         #[tokio::test]
-        async fn test_poll_existing_simple_batch_inference_request() {
+        async fn test_poll_existing_simple_image_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
-                    test_poll_existing_simple_batch_inference_request_with_provider(provider).await;
+                    test_poll_existing_simple_image_batch_inference_request_with_provider(provider).await;
                 }
             }
         }
 
         #[tokio::test]
-        async fn test_poll_completed_simple_batch_inference_request() {
+        async fn test_poll_completed_simple_image_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.simple_inference;
             if all_providers.supports_batch_inference {
                 for provider in providers {
-                    test_poll_completed_simple_batch_inference_request_with_provider(provider).await;
+                    test_poll_completed_simple_image_batch_inference_request_with_provider(provider).await;
                 }
             }
         }
@@ -528,7 +531,9 @@ async fn insert_fake_pending_batch_inference_data(
     })
 }
 
-pub async fn test_start_simple_batch_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_start_simple_image_batch_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -541,10 +546,16 @@ pub async fn test_start_simple_batch_inference_request_with_provider(provider: E
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the name of the capital city of Japan?"
-                }
+                    "content": [
+                        {"type": "text", "text": "What kind of animal is in this image?"},
+                        {
+                            "type": "image",
+                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png"
+                        },
+                    ]
+                },
             ]}],
-        "tags": [{"foo": "bar", "test_type": "batch_simple", "variant_name": provider.variant_name}],
+        "tags": [{"foo": "bar", "test_type": "batch_simple_image", "variant_name": provider.variant_name}],
     });
 
     let response = Client::new()
@@ -617,7 +628,20 @@ pub async fn test_start_simple_batch_inference_request_with_provider(provider: E
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [
+                    {"type": "text", "value": "What kind of animal is in this image?"},
+                    {
+                        "type": "image",
+                        "image": {
+                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                            "mime_type": "image/png",
+                        },
+                        "storage_path": {
+                            "kind": {"type": "disabled"},
+                            "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                        }
+                    }
+                ]
             }
         ]
     });
@@ -625,13 +649,17 @@ pub async fn test_start_simple_batch_inference_request_with_provider(provider: E
 
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
-        role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
-    }];
-    assert_eq!(input_messages, expected_input_messages);
+    assert_eq!(input_messages.len(), 1);
+    assert_eq!(input_messages[0].role, Role::User);
+    assert_eq!(
+        input_messages[0].content[0],
+        "What kind of animal is in this image?".to_string().into()
+    );
+    assert!(
+        matches!(input_messages[0].content[1], ContentBlock::Image(_)),
+        "Unexpected input: {input_messages:?}"
+    );
+    assert_eq!(input_messages[0].content.len(), 2);
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
@@ -711,7 +739,7 @@ pub async fn test_start_simple_batch_inference_request_with_provider(provider: E
 /// this will poll the batch inference and check that the response is correct.
 ///
 /// This test polls by batch_id then by inference id.
-pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
+pub async fn test_poll_existing_simple_image_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     let clickhouse = get_clickhouse().await;
@@ -723,7 +751,7 @@ pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
         "pending",
         Some(HashMap::from([(
             "test_type".to_string(),
-            "batch_simple".to_string(),
+            "batch_simple_image".to_string(),
         )])),
     )
     .await;
@@ -755,7 +783,8 @@ pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
+    check_simple_image_inference_response(inferences_json[0].clone(), None, &provider, true, false)
+        .await;
 
     // Check the response from polling by inference_id
     let inference_id = inferences_json[0]
@@ -780,7 +809,8 @@ pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
 
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
+    check_simple_image_inference_response(inferences_json[0].clone(), None, &provider, true, false)
+        .await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -791,7 +821,7 @@ pub async fn test_poll_existing_simple_batch_inference_request_with_provider(
 /// This way the gateway will actually poll the inference data from the inference provider.
 ///
 /// This test polls by inference_id then by batch_id.
-pub async fn test_poll_completed_simple_batch_inference_request_with_provider(
+pub async fn test_poll_completed_simple_image_batch_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
     let clickhouse = get_clickhouse().await;
@@ -802,7 +832,7 @@ pub async fn test_poll_completed_simple_batch_inference_request_with_provider(
         &provider.variant_name,
         Some(HashMap::from([(
             "test_type".to_string(),
-            "batch_simple".to_string(),
+            "batch_simple_image".to_string(),
         )])),
     )
     .await;
@@ -835,7 +865,8 @@ pub async fn test_poll_completed_simple_batch_inference_request_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
+    check_simple_image_inference_response(inferences_json[0].clone(), None, &provider, true, false)
+        .await;
 
     // Poll by batch_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -860,7 +891,8 @@ pub async fn test_poll_completed_simple_batch_inference_request_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_simple_inference_response(inferences_json[0].clone(), None, &provider, true, false).await;
+    check_simple_image_inference_response(inferences_json[0].clone(), None, &provider, true, false)
+        .await;
 }
 
 pub async fn test_start_inference_params_batch_inference_request_with_provider(

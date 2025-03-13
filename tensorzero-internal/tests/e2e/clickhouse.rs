@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::sync::Arc;
 
 use paste::paste;
 use reqwest::Client;
@@ -238,4 +239,165 @@ async fn test_clean_clickhouse_start() {
         duration < std::time::Duration::from_secs(10),
         "Migrations took longer than 10 seconds: {duration:?}"
     );
+}
+
+#[tokio::test]
+async fn test_concurrent_clickhouse_migrations() {
+    let clickhouse = Arc::new(get_clean_clickhouse());
+    let num_concurrent_starts = 100;
+    let start = std::time::Instant::now();
+
+    let mut handles = Vec::with_capacity(num_concurrent_starts);
+    for _ in 0..num_concurrent_starts {
+        let clickhouse_clone = clickhouse.clone();
+        handles.push(tokio::spawn(async move {
+            migration_manager::run(&clickhouse_clone).await.unwrap();
+        }));
+    }
+    for handle in handles {
+        handle.await.unwrap();
+    }
+
+    let duration = start.elapsed();
+    assert!(
+        duration < std::time::Duration::from_secs(60),
+        "Migrations took longer than 60 seconds: {duration:?}"
+    );
+}
+
+/// Migration 0013 has some checks that enforce that concurrent migrations can't break
+/// the database.
+/// This test enforces that the migration will error if there would be an invalid database state
+/// rather than brick the database.
+#[tokio::test]
+async fn test_migration_0013_old_table() {
+    let clickhouse = get_clean_clickhouse();
+    clickhouse.create_database().await.unwrap();
+
+    // When creating a new migration, add it to the end of this array,
+    // and adjust the call to `invoke_all!` to include the new array index.
+    let migrations: [Box<dyn Migration + '_>; 9] = [
+        Box::new(Migration0000 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0002 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0003 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0004 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0005 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0006 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0008 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0009 {
+            clickhouse: &clickhouse,
+            clean_start: true,
+        }),
+        Box::new(Migration0011 {
+            clickhouse: &clickhouse,
+        }),
+    ];
+
+    // Run migrations up to right before 0013
+    for migration in migrations.iter() {
+        migration_manager::run_migration(migration.as_ref())
+            .await
+            .unwrap();
+    }
+    // Manually create a table that should not exist
+    let query = r#"
+        CREATE TABLE IF NOT EXISTS InferenceById
+        (
+            id UUID, -- must be a UUIDv7
+            function_name LowCardinality(String),
+            variant_name LowCardinality(String),
+            episode_id UUID, -- must be a UUIDv7,
+            function_type Enum('chat' = 1, 'json' = 2)
+        ) ENGINE = MergeTree()
+        ORDER BY id;
+    "#;
+    let _ = clickhouse.run_query(query.to_string(), None).await.unwrap();
+    let err = migration_manager::run_migration(&Migration0013 {
+        clean_start: false,
+        clickhouse: &clickhouse,
+    })
+    .await
+    .unwrap_err();
+    assert!(err
+        .to_string()
+        .contains("InferenceById table is in an invalid state. Please contact TensorZero team."));
+}
+
+/// For this test, we will run all the migrations up to 0011, add some data to
+/// the JSONInference table, then run migration 0013.
+/// This should fail.
+#[tokio::test]
+async fn test_migration_0013_data_no_table() {
+    let clickhouse = get_clean_clickhouse();
+    clickhouse.create_database().await.unwrap();
+
+    // When creating a new migration, add it to the end of this array,
+    // and adjust the call to `invoke_all!` to include the new array index.
+    let migrations: [Box<dyn Migration + '_>; 9] = [
+        Box::new(Migration0000 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0002 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0003 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0004 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0005 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0006 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0008 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0009 {
+            clickhouse: &clickhouse,
+            clean_start: true,
+        }),
+        Box::new(Migration0011 {
+            clickhouse: &clickhouse,
+        }),
+    ];
+
+    // Run migrations up to right before 0013
+    for migration in migrations.iter() {
+        migration_manager::run_migration(migration.as_ref())
+            .await
+            .unwrap();
+    }
+
+    // Add a row to the JsonInference table (would be very odd to have data in this table
+    // but not an InferenceById table).
+    let query = r#"
+        INSERT INTO JsonInference (id, function_name, variant_name, episode_id, input, output, output_schema, inference_params, processing_time_ms)
+        VALUES (generateUUIDv7(), 'test_function', 'test_variant', generateUUIDv7(), 'input', 'output', 'output_schema', 'params', 100)
+    "#;
+    let _ = clickhouse.run_query(query.to_string(), None).await.unwrap();
+    let err = migration_manager::run_migration(&Migration0013 {
+        clean_start: false,
+        clickhouse: &clickhouse,
+    })
+    .await
+    .unwrap_err();
+    assert!(err.to_string()
+        .contains("Data already exists in the ChatInference or JsonInference tables and InferenceById or InferenceByEpisodeId is missing. Please contact TensorZero team"));
 }

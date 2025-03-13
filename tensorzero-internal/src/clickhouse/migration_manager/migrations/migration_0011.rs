@@ -56,7 +56,7 @@ impl Migration for Migration0011<'_> {
 
         // Add the `cached` column to ModelInference
         let query = r#"
-            ALTER TABLE ModelInference ADD COLUMN cached Bool DEFAULT false;
+            ALTER TABLE ModelInference ADD COLUMN IF NOT EXISTS cached Bool DEFAULT false;
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
