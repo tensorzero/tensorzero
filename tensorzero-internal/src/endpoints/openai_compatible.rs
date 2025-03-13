@@ -435,45 +435,36 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
     fn try_from(
         openai_compatible_messages: Vec<OpenAICompatibleMessage>,
     ) -> Result<Self, Self::Error> {
-        let mut system = None;
+        let mut system_messages = Vec::new();
         let mut messages = Vec::new();
         let mut tool_call_id_to_name = HashMap::new();
-        for (index, message) in openai_compatible_messages.into_iter().enumerate() {
+        let first_system = matches!(
+            openai_compatible_messages.get(0),
+            Some(OpenAICompatibleMessage::System(_))
+        );
+        for message in openai_compatible_messages {
             match message {
                 OpenAICompatibleMessage::System(msg) => {
-                    if system.is_some() {
-                        return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                            message: "At most one system message is allowed".to_string(),
-                        }
-                        .into());
-                    }
-                    if index != 0 {
-                        return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                            message: "System message must be the first message".to_string(),
-                        }
-                        .into());
-                    }
-                    let mut system_content = convert_openai_message_content(msg.content.clone())?;
-                    if system_content.len() != 1 {
-                        return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                            message: "System message must be a single content block".to_string(),
-                        }
-                        .into());
-                    }
-                    system = Some(match system_content.remove(0) {
-                        InputMessageContent::Text(TextKind::LegacyValue { value }) => value,
-                        InputMessageContent::Text(TextKind::Text { text }) => Value::String(text),
-                        InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                            Value::Object(arguments)
-                        }
-                        InputMessageContent::RawText { value } => Value::String(value),
-                        _ => {
-                            return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                                message: "System message must be a text content block".to_string(),
+                    let system_content = convert_openai_message_content(msg.content.clone())?;
+                    for content in system_content {
+                        system_messages.push(match content {
+                            InputMessageContent::Text(TextKind::LegacyValue { value }) => value,
+                            InputMessageContent::Text(TextKind::Text { text }) => {
+                                Value::String(text)
                             }
-                            .into())
-                        }
-                    });
+                            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
+                                Value::Object(arguments)
+                            }
+                            InputMessageContent::RawText { value } => Value::String(value),
+                            _ => {
+                                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                    message: "System message must be a text content block"
+                                        .to_string(),
+                                }
+                                .into())
+                            }
+                        });
+                    }
                 }
                 OpenAICompatibleMessage::User(msg) => {
                     messages.push(InputMessage {
@@ -518,7 +509,34 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                 }
             }
         }
-        Ok(Input { system, messages })
+
+        if system_messages.len() <= 1 {
+            if system_messages.len() == 1 && !first_system {
+                tracing::warn!("Moving system message to the start of the conversation");
+            }
+            Ok(Input {
+                system: system_messages.pop(),
+                messages,
+            })
+        } else {
+            let mut output = String::new();
+            for system_message in system_messages {
+                if let Value::String(msg) = system_message {
+                    output.push_str(&msg);
+                } else {
+                    return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                        message: "Multiple system messages provided, but not all were strings"
+                            .to_string(),
+                    }
+                    .into());
+                }
+            }
+            tracing::warn!("Multiple system messages provided - they will be concatenated and moved to the start of the conversation");
+            Ok(Input {
+                system: Some(Value::String(output)),
+                messages,
+            })
+        }
     }
 }
 
@@ -1039,20 +1057,18 @@ mod tests {
         // Try 2 system messages
         let messages = vec![
             OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
-                content: Value::String("You are a helpful assistant".to_string()),
+                content: Value::String("You are a helpful assistant 1.".to_string()),
             }),
             OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
-                content: Value::String("You are a helpful assistant".to_string()),
+                content: Value::String("You are a helpful assistant 2.".to_string()),
             }),
         ];
-        let input: Result<Input, Error> = messages.try_into();
-        let details = input.unwrap_err().get_owned_details();
+        let input: Input = messages.try_into().unwrap();
         assert_eq!(
-            details,
-            ErrorDetails::InvalidOpenAICompatibleRequest {
-                message: "At most one system message is allowed".to_string(),
-            }
+            input.system,
+            Some("You are a helpful assistant 1.You are a helpful assistant 2.".into())
         );
+        assert_eq!(input.messages.len(), 0);
 
         // Try an assistant message with structured content
         let messages = vec![OpenAICompatibleMessage::Assistant(
@@ -1117,7 +1133,7 @@ mod tests {
             "Content does not contain the expected ToolCall."
         );
 
-        let invalid_messages = vec![
+        let out_of_order_messages = vec![
             OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
                 content: Some(Value::String("Assistant message".to_string())),
                 tool_calls: None,
@@ -1126,23 +1142,17 @@ mod tests {
                 content: Value::String("System message".to_string()),
             }),
         ];
-        let result: Result<Input, Error> = invalid_messages.try_into();
-        assert!(
-            result.is_err(),
-            "Conversion should fail when a system message is after an assistant message."
+        let result: Input = out_of_order_messages.try_into().unwrap();
+        assert_eq!(result.system, Some("System message".into()));
+        assert_eq!(
+            result.messages,
+            vec![InputMessage {
+                role: Role::Assistant,
+                content: vec![InputMessageContent::Text(TextKind::Text {
+                    text: "Assistant message".to_string(),
+                })],
+            }]
         );
-        if let Err(err) = result {
-            let details = err.get_owned_details();
-            match details {
-                ErrorDetails::InvalidOpenAICompatibleRequest { message } => {
-                    assert_eq!(
-                        message, "System message must be the first message",
-                        "Unexpected error message."
-                    );
-                }
-                _ => panic!("Unexpected error type."),
-            }
-        }
     }
 
     #[test]
