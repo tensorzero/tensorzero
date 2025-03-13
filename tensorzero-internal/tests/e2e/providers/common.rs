@@ -3507,13 +3507,6 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
         return;
     }
 
-    // GCP Vertex doesn't support `tool_choice: "required"` for Gemini 1.5 Flash
-    if provider.model_provider_name.contains("gcp_vertex")
-        && provider.model_name == "gemini-1.5-flash-001"
-    {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -3791,13 +3784,6 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 ) {
     // Azure and Together don't support `tool_choice: "required"`
     if provider.model_provider_name == "azure" || provider.model_provider_name == "together" {
-        return;
-    }
-
-    // GCP Vertex doesn't support `tool_choice: "required"` for Gemini 1.5 Flash
-    if provider.model_provider_name.contains("gcp_vertex")
-        && provider.model_name == "gemini-1.5-flash-001"
-    {
         return;
     }
 
@@ -5397,14 +5383,6 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // GCP Vertex doesn't support `tool_choice: "required"` for Gemini 1.5 Flash,
-    // and it won't call `get_humidity` on auto.
-    if provider.model_provider_name.contains("gcp_vertex")
-        && provider.model_name == "gemini-1.5-flash-001"
-    {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -5661,14 +5639,6 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
 pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // GCP Vertex doesn't support `tool_choice: "required"` for Gemini 1.5 Flash,
-    // and it won't call `get_humidity` on auto.
-    if provider.model_provider_name.contains("gcp_vertex")
-        && provider.model_name == "gemini-1.5-flash-001"
-    {
-        return;
-    }
-
     // OpenAI O1 doesn't support streaming responses
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;
