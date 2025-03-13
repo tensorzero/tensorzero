@@ -24,6 +24,7 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
+import type { InputMessage } from "~/utils/clickhouse/common";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -88,7 +89,18 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [variantInferenceIsLoading, setVariantInferenceIsLoading] =
     useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
+  const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
   const config = useConfig();
+  const [isEditing, setIsEditing] = useState(false);
+  const toggleEditing = () => setIsEditing(!isEditing);
+
+  const handleSystemChange = (system: any) => {
+    setInput({ ...input, system });
+  };
+
+  const handleMessagesChange = (messages: InputMessage[]) => {
+    setInput({ ...input, messages });
+  };
 
   const deleteFetcher = useFetcher();
   const handleDelete = () => {
@@ -150,12 +162,19 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
               }}
               onDelete={handleDelete}
               isDeleting={deleteFetcher.state === "submitting"}
+              toggleEditing={toggleEditing}
+              isEditing={isEditing}
             />
           </SectionLayout>
 
           <SectionLayout>
             <SectionHeader heading="Input" />
-            <Input input={datapoint.input} />
+            <Input
+              input={input}
+              isEditing={isEditing}
+              onSystemChange={handleSystemChange}
+              onMessagesChange={handleMessagesChange}
+            />
           </SectionLayout>
 
           {datapoint.output && (
