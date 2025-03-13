@@ -84,6 +84,11 @@ jobs:
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
+      - name: Launch MinIO container for E2E tests
+        run: |
+          # This will exit with status code 1 if any container exits, even if the container exits with status code 0
+          docker compose -f ci/minio-docker-compose.yml up --wait || true
+
       - name: Launch ClickHouse container for E2E tests
         run: docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait
 
@@ -183,6 +188,26 @@ jobs:
         working-directory: clients/openai-python
         run: |
           uv run pytest
+
+      - name: "Node.js: OpenAI Client: Install dependencies"
+        working-directory: clients/openai-node
+        run: |
+          pnpm install
+
+      - name: "Node.js: OpenAI Client: typecheck"
+        working-directory: clients/openai-node
+        run: |
+          pnpm run typecheck
+
+      - name: "Node.js: OpenAI Client: lint"
+        working-directory: clients/openai-node
+        run: |
+          pnpm run lint
+
+      - name: "Node.js: OpenAI Client: test"
+        working-directory: clients/openai-node
+        run: |
+          pnpm run test
 
       - name: "Python: Recipes: Install dependencies"
         working-directory: recipes

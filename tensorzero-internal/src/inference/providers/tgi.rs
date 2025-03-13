@@ -753,6 +753,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let tgi_request = TGIRequest::new(&model_name, &basic_request).unwrap();
 
@@ -789,6 +790,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let tgi_request = TGIRequest::new(&model_name, &request_with_tools).unwrap();
@@ -836,6 +838,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let tgi_request = TGIRequest::new(&model_name, &request_with_tools).unwrap();
@@ -871,6 +874,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
             extra_body: None,
+            ..Default::default()
         };
 
         let tgi_request = TGIRequest::new(&model_name, &request_with_tools).unwrap();
@@ -944,6 +948,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let tgi_response_with_metadata = TGIResponseWithMetadata {
             response: valid_response,

@@ -3,7 +3,9 @@
     allow(clippy::expect_used, clippy::unwrap_used, clippy::print_stdout)
 )]
 mod common;
+use clap::Parser;
 use std::path::PathBuf;
+use url::Url;
 
 use crate::common::write_json_fixture_to_dataset;
 use common::write_chat_fixture_to_dataset;
@@ -355,4 +357,94 @@ async fn run_llm_judge_eval_json_human_readable() {
     let err = err.to_string();
     assert!(err.contains("Failed cutoffs for evaluators:"));
     assert!(err.contains("exact_match (cutoff: 0.6, got: 0.5)"));
+}
+
+#[tokio::test]
+async fn test_parse_args() {
+    // Test default values
+    let args = Args::try_parse_from(["test"]).unwrap_err();
+    assert!(args
+        .to_string()
+        .contains("the following required arguments were not provided:"));
+    assert!(args.to_string().contains("'--name <NAME>'"));
+    assert!(args.to_string().contains("'--variant <VARIANT>'"));
+
+    // Test required arguments
+    let args =
+        Args::try_parse_from(["test", "--name", "my-eval", "--variant", "my-variant"]).unwrap();
+    assert_eq!(args.name, "my-eval");
+    assert_eq!(args.variant, "my-variant");
+    assert_eq!(args.config_file, PathBuf::from("./config/tensorzero.toml"));
+    assert_eq!(args.concurrency, 1);
+    assert_eq!(args.gateway_url, None);
+    assert_eq!(args.format, OutputFormat::HumanReadable);
+
+    // Test all arguments
+    let args = Args::try_parse_from([
+        "test",
+        "--name",
+        "my-eval",
+        "--variant",
+        "my-variant",
+        "--config-file",
+        "/path/to/config.toml",
+        "--gateway-url",
+        "http://localhost:8080",
+        "--concurrency",
+        "10",
+        "--format",
+        "jsonl",
+    ])
+    .unwrap();
+    assert_eq!(args.name, "my-eval");
+    assert_eq!(args.variant, "my-variant");
+    assert_eq!(args.config_file, PathBuf::from("/path/to/config.toml"));
+    assert_eq!(
+        args.gateway_url,
+        Some(Url::parse("http://localhost:8080").unwrap())
+    );
+    assert_eq!(args.concurrency, 10);
+    assert_eq!(args.format, OutputFormat::Jsonl);
+
+    // Test invalid URL
+    let args = Args::try_parse_from([
+        "test",
+        "--name",
+        "my-eval",
+        "--variant",
+        "my-variant",
+        "--gateway-url",
+        "not-a-url",
+    ])
+    .unwrap_err();
+    assert!(args
+        .to_string()
+        .contains("invalid value 'not-a-url' for '--gateway-url <GATEWAY_URL>'"));
+
+    // Test invalid format
+    let args = Args::try_parse_from([
+        "test",
+        "--name",
+        "my-eval",
+        "--variant",
+        "my-variant",
+        "--format",
+        "invalid",
+    ])
+    .unwrap_err();
+    assert!(args
+        .to_string()
+        .contains("invalid value 'invalid' for '--format <FORMAT>'"));
+}
+
+#[tokio::test]
+async fn test_run_eval_binary() {
+    let bin_path = env!("CARGO_BIN_EXE_evals");
+    let output = std::process::Command::new(bin_path)
+        .output()
+        .expect("Failed to execute evals binary");
+    let output_str = String::from_utf8(output.stdout).unwrap();
+    assert!(output_str.is_empty());
+    let stderr_str = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr_str.contains("the following required arguments were not provided:"));
 }

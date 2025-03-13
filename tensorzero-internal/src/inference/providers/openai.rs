@@ -2150,6 +2150,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let openai_request = OpenAIRequest::new("gpt-3.5-turbo", &basic_request).unwrap();
@@ -2191,6 +2192,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools).unwrap();
@@ -2242,6 +2244,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools).unwrap();
@@ -2282,6 +2285,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
             extra_body: None,
+            ..Default::default()
         };
 
         let openai_request = OpenAIRequest::new("gpt-4", &request_with_tools).unwrap();
@@ -2325,6 +2329,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let openai_request = OpenAIRequest::new("o1-preview", &request).unwrap();
@@ -2364,6 +2369,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let openai_request_with_system =
@@ -2432,6 +2438,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let request_body = OpenAIRequest {
@@ -2528,6 +2535,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let request_body = OpenAIRequest {
@@ -2706,6 +2714,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_with_tools);
         let tools = tools.unwrap();
@@ -2747,6 +2756,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) =
             prepare_openai_tools(&request_without_tools);

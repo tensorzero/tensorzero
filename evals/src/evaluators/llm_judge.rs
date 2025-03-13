@@ -48,7 +48,7 @@ pub(super) async fn run_llm_judge_evaluator(
             content: vec![InputMessageContent::Text(TextKind::Arguments{
                 arguments: json!({"input": serialized_datapoint_input, "generated_output": generated_output, "reference_output": reference_output})
                     .as_object()
-                    .ok_or_else(|| anyhow::anyhow!("Failed to convert LLM judge arguments to Map. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."))?
+                    .expect("Arguments should be an object")
                     .clone()
             })],
         }],
@@ -94,13 +94,7 @@ pub(super) async fn run_llm_judge_evaluator(
             .ok_or_else(|| anyhow::anyhow!("JSON output does not contain a `parsed` field"))?,
     };
     match llm_judge_config.output_type {
-        LLMJudgeOutputType::Float => Ok(Some(
-            output
-                .get("score")
-                .ok_or_else(|| anyhow::anyhow!("JSON output does not contain a `score` field"))?
-                .clone(),
-        )),
-        LLMJudgeOutputType::Boolean => Ok(Some(
+        LLMJudgeOutputType::Float | LLMJudgeOutputType::Boolean => Ok(Some(
             output
                 .get("score")
                 .ok_or_else(|| anyhow::anyhow!("JSON output does not contain a `score` field"))?
@@ -119,7 +113,10 @@ pub fn prepare_serialized_input(resolved_input: &ResolvedInput) -> Result<String
                 ResolvedInputMessageContent::Unknown { .. } => {
                     bail!("Unknown content not supported for LLM judge evals")
                 }
-                _ => {}
+                ResolvedInputMessageContent::Text { .. }
+                | ResolvedInputMessageContent::ToolCall { .. }
+                | ResolvedInputMessageContent::ToolResult { .. }
+                | ResolvedInputMessageContent::RawText { .. } => {}
             }
         }
     }

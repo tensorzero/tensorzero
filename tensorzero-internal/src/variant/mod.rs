@@ -58,7 +58,7 @@ pub enum JsonMode {
 }
 
 /// Configuration that applies to the current inference request.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct InferenceConfig<'a, 'request> {
     pub tool_config: Option<&'request ToolCallConfig>,
     pub templates: &'request TemplateConfig<'a>,
@@ -66,6 +66,11 @@ pub struct InferenceConfig<'a, 'request> {
     pub function_name: &'request str,
     pub variant_name: Option<&'request str>,
     pub ids: InferenceIds,
+    /// Optional arbitrary data, only used when constructing the cache key.
+    /// This is used by best_of_n/mixture_of_n to force different sub-variants
+    /// to have different cache keys.
+    /// This field should only ever be forwarded to `ModelInferenceRequest`
+    pub extra_cache_key: Option<String>,
 }
 
 /// Maps to the subset of Config that applies to the current inference request.
@@ -100,6 +105,7 @@ impl<'a> BatchInferenceConfig<'a> {
                     inference_id: *inference_id,
                     episode_id: *episode_id,
                 },
+                extra_cache_key: None,
             },
         )
         .collect()
@@ -429,6 +435,7 @@ where
                 function_type: FunctionType::Chat,
                 output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
                 extra_body,
+                extra_cache_key: inference_config.extra_cache_key.clone(),
             }
         }
         FunctionConfig::Json(json_config) => {
@@ -463,6 +470,7 @@ where
                 function_type: FunctionType::Json,
                 output_schema,
                 extra_body,
+                extra_cache_key: inference_config.extra_cache_key.clone(),
             }
         }
     })
@@ -645,6 +653,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
 
         // Define common inference parameters
@@ -775,6 +784,7 @@ mod tests {
             function_name: "test_function",
             variant_name: Some("test_variant"),
             dynamic_output_schema: Some(&dynamic_output_schema),
+            extra_cache_key: None,
         };
         let json_mode = JsonMode::ImplicitTool;
 
@@ -864,6 +874,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
 
         // Test case 1: Successful inference with ChatCompletionConfig and FunctionConfigChat
@@ -899,6 +910,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: None,
+            ..Default::default()
         };
 
         // Create a dummy provider config with the desired model name
@@ -1003,6 +1015,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Json,
             extra_body: None,
+            ..Default::default()
         };
 
         // Create a dummy provider config with model_name "json" to trigger JSON response
@@ -1128,6 +1141,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
 
         let model_name = "dummy_chat_model";
@@ -1163,6 +1177,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: None,
+            ..Default::default()
         };
 
         // Create a dummy provider config with the error model name
@@ -1311,6 +1326,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: None,
+            ..Default::default()
         };
 
         // Initialize inference parameters
@@ -1431,6 +1447,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: None,
+            ..Default::default()
         };
 
         // Create a dummy provider config with the error model name

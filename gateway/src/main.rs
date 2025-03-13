@@ -1,4 +1,4 @@
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::Router;
 use clap::Parser;
 use mimalloc::MiMalloc;
@@ -61,6 +61,10 @@ async fn main() {
         std::process::exit(1);
     }
 
+    if !args.default_config && config_path.is_none() {
+        tracing::warn!("Running the gateway without any config-related arguments is deprecated. Use `--default-config` to start the gateway with the default config.");
+    }
+
     let config = if let Some(path) = &config_path {
         Arc::new(
             Config::load_and_verify_from_path(Path::new(&path))
@@ -117,8 +121,16 @@ async fn main() {
             post(endpoints::datasets::create_datapoint_handler),
         )
         .route(
+            "/datasets/:dataset/datapoints/:id",
+            put(endpoints::datasets::update_datapoint_handler),
+        )
+        .route(
             "/datasets/:dataset/function/:function/kind/:kind/datapoint/:id",
             delete(endpoints::datasets::delete_datapoint_handler),
+        )
+        .route(
+            "/internal/object_storage",
+            get(endpoints::object_storage::get_object_handler),
         )
         .route(
             "/metrics",

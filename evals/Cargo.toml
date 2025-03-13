@@ -26,12 +26,21 @@ indicatif = "0.17.11"
 [dev-dependencies]
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 
-[lints]
-workspace = true
+[lints.rust]
+unsafe_code = "forbid"
+[lints.clippy]
+panic = "deny"
+print_stderr = "deny"
+print_stdout = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+unwrap_used = "deny"
+dbg_macro = "deny"
 
 
 [features]
-# Forward these features to 'evals', so that our 
+# Forward these features to 'evals', so that our
 # tests can recognize things like the `dummy` provider
 e2e_tests = ["tensorzero/e2e_tests"]
 batch_tests = ["tensorzero/batch_tests"]
