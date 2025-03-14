@@ -13,6 +13,7 @@ use tensorzero::{
     DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceResponse,
 };
 use tensorzero_internal::cache::CacheEnabledMode;
+use tensorzero_internal::config_parser::MetricConfigOptimize;
 use tensorzero_internal::evals::EvaluatorConfig;
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo, config_parser::Config, endpoints::datasets::Datapoint,
@@ -190,7 +191,7 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
         for (name, cutoff, actual) in &failures {
             writeln!(
                 writer,
-                "Failed cutoff for evaluator {} ({}, got {})",
+                "Failed cutoff for evaluator {} ({:.2}, got {:.2})",
                 name, cutoff, actual
             )?;
         }
@@ -220,8 +221,17 @@ pub fn check_evaluator_cutoffs(
             .ok_or_else(|| anyhow!("Evaluator not found for computing stats"))?;
 
         if let Some(cutoff) = evaluator_config.cutoff() {
-            if evaluator_stats.mean < cutoff {
-                failures.push((evaluator_name.clone(), cutoff, evaluator_stats.mean));
+            match evaluator_config.optimize() {
+                MetricConfigOptimize::Max => {
+                    if evaluator_stats.mean < cutoff {
+                        failures.push((evaluator_name.clone(), cutoff, evaluator_stats.mean));
+                    }
+                }
+                MetricConfigOptimize::Min => {
+                    if evaluator_stats.mean > cutoff {
+                        failures.push((evaluator_name.clone(), cutoff, evaluator_stats.mean));
+                    }
+                }
             }
         }
     }
@@ -233,7 +243,9 @@ pub fn check_evaluator_cutoffs(
 pub fn format_cutoff_failures(failures: &[(String, f32, f32)]) -> String {
     failures
         .iter()
-        .map(|(name, cutoff, actual)| format!("{} (cutoff: {}, got: {})", name, cutoff, actual))
+        .map(|(name, cutoff, actual)| {
+            format!("{} (cutoff: {:.2}, got: {:.2})", name, cutoff, actual)
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -331,7 +343,7 @@ mod tests {
         let formatted = format_cutoff_failures(&failures);
         assert_eq!(
             formatted,
-            "evaluator1 (cutoff: 0.5, got: 0.4)\nevaluator2 (cutoff: 0.6, got: 0.3)"
+            "evaluator1 (cutoff: 0.50, got: 0.40)\nevaluator2 (cutoff: 0.60, got: 0.30)"
         );
     }
 

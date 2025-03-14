@@ -323,7 +323,7 @@ async fn run_llm_judge_eval_chat_human_readable() {
     // Let's make sure this threshold passes and the output is reasonable
     run_eval(args, eval_run_id, &mut output).await.unwrap();
     let output_str = String::from_utf8(output).unwrap();
-    assert!(output_str.contains("count_prepositions: 2.13 ± 0.15"));
+    assert!(output_str.contains("topic_starts_with_f: 0.30 ± 0.14"));
     assert!(output_str.contains("exact_match: 0.00 ± 0.00"));
 }
 
@@ -352,11 +352,13 @@ async fn run_llm_judge_eval_json_human_readable() {
     // Let's make sure this threshold fails and the output is reasonable
     let err = run_eval(args, eval_run_id, &mut output).await.unwrap_err();
     let output_str = String::from_utf8(output).unwrap();
-    assert!(output_str.contains("count_misc: 1.20 ± 0.24"));
-    assert!(output_str.contains("exact_match: 0.50 ± 0.07"));
+    println!("Output: {}", output_str);
+    assert!(output_str.contains("count_sports: 0.50 ± 0.20"));
+    assert!(output_str.contains("exact_match: 0.33 ± 0.19"));
     let err = err.to_string();
+    println!("Error: {}", err);
     assert!(err.contains("Failed cutoffs for evaluators:"));
-    assert!(err.contains("exact_match (cutoff: 0.6, got: 0.5)"));
+    assert!(err.contains("exact_match (cutoff: 0.60, got: 0.33)"));
 }
 
 #[tokio::test]
