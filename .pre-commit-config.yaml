@@ -43,7 +43,7 @@ repos:
 
       - id: cargo-deny
         name: cargo deny
-        entry: cargo deny check bans
+        entry: cargo deny check advisories bans
         language: system
         types: [rust]
         pass_filenames: false
