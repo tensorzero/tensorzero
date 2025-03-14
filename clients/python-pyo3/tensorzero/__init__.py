@@ -1,7 +1,9 @@
 import typing as t
+
 import httpx
-from .tensorzero import _start_http_gateway as _start_http_gateway
+
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
+from .tensorzero import _start_http_gateway as _start_http_gateway
 from .types import (
     BaseTensorZeroError,
     ChatInferenceResponse,
