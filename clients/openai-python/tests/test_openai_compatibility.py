@@ -480,7 +480,7 @@ async def test_allow_developer_and_system(async_client):
     assert result.episode_id == episode_id
     assert (
         result.choices[0].message.content
-        == '{"system":"Developer message.System message.","messages":[{"role":"user","content":[{"type":"text","text":"User message."}]}]}'
+        == '{"system":"Developer message.\\nSystem message.","messages":[{"role":"user","content":[{"type":"text","text":"User message."}]}]}'
     )
 
 
@@ -755,7 +755,7 @@ async def test_async_multi_system_prompt(async_client):
     )
     assert (
         result.choices[0].message.content
-        == '{"system":"My first system input.My second system input.My third system input.","messages":[{"role":"user","content":[{"type":"text","text":"My text input"}]}]}'
+        == '{"system":"My first system input.\\nMy second system input.\\nMy third system input.","messages":[{"role":"user","content":[{"type":"text","text":"My text input"}]}]}'
     )
 
 

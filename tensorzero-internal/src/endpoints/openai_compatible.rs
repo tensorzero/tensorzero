@@ -520,9 +520,12 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
             })
         } else {
             let mut output = String::new();
-            for system_message in system_messages {
+            for (i, system_message) in system_messages.iter().enumerate() {
                 if let Value::String(msg) = system_message {
-                    output.push_str(&msg);
+                    if i > 0 {
+                        output.push('\n');
+                    }
+                    output.push_str(msg);
                 } else {
                     return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                         message: "Multiple system messages provided, but not all were strings"
@@ -1066,7 +1069,7 @@ mod tests {
         let input: Input = messages.try_into().unwrap();
         assert_eq!(
             input.system,
-            Some("You are a helpful assistant 1.You are a helpful assistant 2.".into())
+            Some("You are a helpful assistant 1.\nYou are a helpful assistant 2.".into())
         );
         assert_eq!(input.messages.len(), 0);
 
