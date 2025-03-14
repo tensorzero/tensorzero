@@ -1,13 +1,20 @@
+use std::future::{Future, IntoFuture};
+use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
+use axum::routing::post;
+use axum::Router;
 use reqwest::{Client, Proxy};
 use serde::de::DeserializeOwned;
+use tokio::sync::oneshot::Sender;
 use tracing::instrument;
 
 use crate::clickhouse::migration_manager;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::Config;
+use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 
 /// State for the API
@@ -28,6 +35,13 @@ impl AppStateData {
                     tracing::warn!("Deprecation Warning: The environment variable \"CLICKHOUSE_URL\" has been renamed to \"TENSORZERO_CLICKHOUSE_URL\" and will be removed in a future version. Please update your environment to use \"TENSORZERO_CLICKHOUSE_URL\" instead.");
                 })
             });
+        Self::new_with_clickhouse(config, clickhouse_url).await
+    }
+
+    async fn new_with_clickhouse(
+        config: Arc<Config<'static>>,
+        clickhouse_url: Option<String>,
+    ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let http_client = setup_http_client()?;
 
@@ -153,6 +167,71 @@ pub fn setup_http_client() -> Result<Client, Error> {
             message: format!("Failed to build HTTP client: {}", e),
         })
     })
+}
+
+pub struct ShutdownHandle {
+    #[allow(dead_code)]
+    sender: Sender<()>,
+}
+
+pub fn start_openai_compatible_gateway(
+    config_file: Option<String>,
+    clickhouse_url: Option<String>,
+) -> Result<
+    (
+        SocketAddr,
+        impl Future<Output = Result<ShutdownHandle, Error>>,
+    ),
+    Error,
+> {
+    let std_listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!("Failed to bind to a port: {}", e),
+        })
+    })?;
+    std_listener.set_nonblocking(true).map_err(|e| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!("Failed to set non-blocking mode: {}", e),
+        })
+    })?;
+    let bind_addr = std_listener.local_addr().map_err(|e| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!("Failed to get local address: {}", e),
+        })
+    })?;
+    Ok((bind_addr, async move {
+        let listener = tokio::net::TcpListener::from_std(std_listener).map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to convert to tokio listener: {}", e),
+            })
+        })?;
+        let config = if let Some(config_file) = config_file {
+            Arc::new(Config::load_and_verify_from_path(Path::new(&config_file)).await?)
+        } else {
+            Arc::new(Config::default())
+        };
+        let app_state = AppStateData::new_with_clickhouse(config, clickhouse_url).await?;
+
+        let router = Router::new()
+            .route(
+                "/openai/v1/chat/completions",
+                post(endpoints::openai_compatible::inference_handler),
+            )
+            .fallback(endpoints::fallback::handle_404)
+            .with_state(app_state);
+
+        let (sender, recv) = tokio::sync::oneshot::channel::<()>();
+        let shutdown_fut = async move {
+            let _ = recv.await;
+        };
+
+        tokio::spawn(
+            axum::serve(listener, router)
+                .with_graceful_shutdown(shutdown_fut)
+                .into_future(),
+        );
+        Ok(ShutdownHandle { sender })
+    }))
 }
 
 #[cfg(test)]
