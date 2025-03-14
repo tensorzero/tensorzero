@@ -200,6 +200,58 @@ export const FeedbackResponseSchema = z.object({
 export type FeedbackResponse = z.infer<typeof FeedbackResponseSchema>;
 
 /**
+ * Schema for tool parameters in a datapoint
+ */
+export const ToolParamsSchema = z.record(JSONValueSchema);
+export type ToolParams = z.infer<typeof ToolParamsSchema>;
+
+/**
+ * Base schema for datapoints with common fields
+ */
+const BaseDatapointSchema = z.object({
+  function_name: z.string(),
+  input: InputSchema,
+  output: JSONValueSchema,
+  tags: z.record(z.string()).optional(),
+  auxiliary: z.string().optional(),
+});
+
+/**
+ * Schema for chat inference datapoints
+ */
+export const ChatInferenceDatapointSchema = BaseDatapointSchema.extend({
+  tool_params: ToolParamsSchema.optional(),
+});
+export type ChatInferenceDatapoint = z.infer<
+  typeof ChatInferenceDatapointSchema
+>;
+
+/**
+ * Schema for JSON inference datapoints
+ */
+export const JsonInferenceDatapointSchema = BaseDatapointSchema;
+export type JsonInferenceDatapoint = z.infer<
+  typeof JsonInferenceDatapointSchema
+>;
+
+/**
+ * Combined schema for any type of datapoint
+ */
+export const DatapointSchema = z.union([
+  ChatInferenceDatapointSchema,
+  JsonInferenceDatapointSchema,
+]);
+export type Datapoint = z.infer<typeof DatapointSchema>;
+
+/**
+ * Schema for datapoint response
+ */
+export const DatapointResponseSchema = z.object({
+  id: z.string(),
+});
+export type DatapointResponse = z.infer<typeof DatapointResponseSchema>;
+
+/**
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
  */
 export class TensorZeroClient {
@@ -320,12 +372,21 @@ export class TensorZeroClient {
    * @param inferenceId - The ID of the existing inference to use as a base
    * @param outputKind - How to handle the output field: inherit from inference, use demonstration, or none
    * @returns A promise that resolves with the created datapoint response containing the new ID
+   * @throws Error if validation fails or the request fails
    */
   async createDatapoint(
     datasetName: string,
     inferenceId: string,
     outputKind: "inherit" | "demonstration" | "none" = "inherit",
-  ): Promise<{ id: string }> {
+  ): Promise<DatapointResponse> {
+    if (!datasetName || typeof datasetName !== "string") {
+      throw new Error("Dataset name must be a non-empty string");
+    }
+
+    if (!inferenceId || typeof inferenceId !== "string") {
+      throw new Error("Inference ID must be a non-empty string");
+    }
+
     const url = `${this.baseUrl}/datasets/${encodeURIComponent(datasetName)}/datapoints`;
 
     const request = {
@@ -346,7 +407,7 @@ export class TensorZeroClient {
     }
 
     const body = await response.json();
-    return body as { id: string };
+    return DatapointResponseSchema.parse(body);
   }
 
   /**
@@ -355,19 +416,27 @@ export class TensorZeroClient {
    * @param datapointId - The UUID of the datapoint to update
    * @param datapoint - The datapoint data containing function_name, input, output, and optional fields
    * @returns A promise that resolves with the response containing the datapoint ID
+   * @throws Error if validation fails or the request fails
    */
   async updateDatapoint(
     datasetName: string,
     datapointId: string,
-    datapoint: {
-      function_name: string;
-      input: Input;
-      output: JSONValue;
-      tool_params?: Record<string, any>;
-      tags?: Record<string, string>;
-      auxiliary?: string;
-    },
-  ): Promise<{ id: string }> {
+    datapoint: Datapoint,
+  ): Promise<DatapointResponse> {
+    if (!datasetName || typeof datasetName !== "string") {
+      throw new Error("Dataset name must be a non-empty string");
+    }
+
+    if (!datapointId || typeof datapointId !== "string") {
+      throw new Error("Datapoint ID must be a non-empty string");
+    }
+
+    // Validate the datapoint using the Zod schema
+    const validationResult = DatapointSchema.safeParse(datapoint);
+    if (!validationResult.success) {
+      throw new Error(`Invalid datapoint: ${validationResult.error.message}`);
+    }
+
     const url = `${this.baseUrl}/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapointId)}`;
 
     const response = await fetch(url, {
@@ -383,6 +452,6 @@ export class TensorZeroClient {
     }
 
     const body = await response.json();
-    return body as { id: string };
+    return DatapointResponseSchema.parse(body);
   }
 }
