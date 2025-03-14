@@ -1765,7 +1765,6 @@ model = "dummy::good"
                         .to_string(),
                 })],
             }],
-            ..Default::default()
         },
         include_original_response: true,
         ..Default::default()
