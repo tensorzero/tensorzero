@@ -4,21 +4,13 @@ This directory contains the code for the **[Metrics & Feedback](https://www.tens
 
 ## Running the Example
 
-1. Install the Python Dependencies:
+1. Set the `OPENAI_API_KEY` environment variable:
 
 ```bash
-# Using vanilla Python
-pip install -r requirements.txt
+export OPENAI_API_KEY="sk-..." # Replace with your OpenAI API key
 ```
 
-or
-
-```bash
-# Using uv
-uv venv && uv pip sync requirements.txt
-```
-
-2. Launch the TensorZero Gateway and ClickHouse database:
+2. Launch the TensorZero Gateway, the TensorZero UI, and a local ClickHouse database:
 
 ```bash
 docker compose up
@@ -26,14 +18,35 @@ docker compose up
 
 3. Run the example:
 
-```bash
-# Using vanilla Python
-python run.py
-```
+<details>
+<summary><b>Python</b></summary>
 
-or
+a. Install the dependencies:
 
 ```bash
-# Using uv
-uv run python run.py
+# We recommend using Python 3.9+ and a virtual environment
+pip install -r requirements.txt
 ```
+
+b. Run the example:
+
+```bash
+python main.py
+```
+
+</details>
+
+<details>
+<summary><b>HTTP</b></summary>
+
+```bash
+curl -X POST http://localhost:3000/feedback \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metric_name": "haiku_rating",
+    "inference_id": "00000000-0000-0000-0000-000000000000",
+    "value": true
+  }';
+```
+
+</details>
