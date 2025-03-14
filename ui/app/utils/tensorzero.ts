@@ -348,4 +348,41 @@ export class TensorZeroClient {
     const body = await response.json();
     return body as { id: string };
   }
+
+  /**
+   * Updates an existing datapoint in a dataset with the given ID.
+   * @param datasetName - The name of the dataset containing the datapoint
+   * @param datapointId - The UUID of the datapoint to update
+   * @param datapoint - The datapoint data containing function_name, input, output, and optional fields
+   * @returns A promise that resolves with the response containing the datapoint ID
+   */
+  async updateDatapoint(
+    datasetName: string,
+    datapointId: string,
+    datapoint: {
+      function_name: string;
+      input: Input;
+      output: JSONValue;
+      tool_params?: Record<string, any>;
+      tags?: Record<string, string>;
+      auxiliary?: string;
+    },
+  ): Promise<{ id: string }> {
+    const url = `${this.baseUrl}/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapointId)}`;
+
+    const response = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(datapoint),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Update datapoint request failed with status ${response.status}`,
+      );
+    }
+
+    const body = await response.json();
+    return body as { id: string };
+  }
 }
