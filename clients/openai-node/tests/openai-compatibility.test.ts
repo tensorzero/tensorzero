@@ -1041,3 +1041,43 @@ describe("OpenAI Compatibility", () => {
     expect(result.choices[0].message.content?.toLowerCase()).toContain("crab");
   });
 });
+
+it("should reject string input for function with input schema", async () => {
+  const messages: ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: [
+        {
+          // @ts-expect-error - custom TensorZero property
+          assistant_name: "Alfred Pennyworth",
+        },
+      ],
+    },
+    { role: "user", content: "Hi how are you?" },
+    {
+      role: "user",
+      content: [
+        {
+          // @ts-expect-error - custom TensorZero property
+          country: "Japan",
+        },
+      ],
+    },
+  ];
+
+  const episodeId = uuidv7();
+
+  await expect(
+    client.chat.completions.create(
+      {
+        messages,
+        model: "tensorzero::function_name::json_success",
+      },
+      {
+        headers: {
+          episode_id: episodeId,
+        },
+      }
+    )
+  ).rejects.toThrow(/400 "JSON Schema validation failed fo/);
+});
