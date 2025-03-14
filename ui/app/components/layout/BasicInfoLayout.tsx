@@ -7,7 +7,7 @@ interface BasicInfoLayoutProps {
 }
 
 export function BasicInfoLayout({ children, className }: BasicInfoLayoutProps) {
-  return <div className={cn("flex flex-col gap-3", className)}>{children}</div>;
+  return <div className={cn("flex flex-col gap-2", className)}>{children}</div>;
 }
 
 interface BasicInfoItemProps {
