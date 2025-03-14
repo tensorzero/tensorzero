@@ -145,6 +145,9 @@ impl ChatCompletionConfig {
                 ResolvedInputMessageContent::Image(image) => {
                     content.push(ContentBlock::Image(image.clone()));
                 }
+                ResolvedInputMessageContent::Thought(thought) => {
+                    content.push(ContentBlock::Thought(thought.clone()));
+                }
                 ResolvedInputMessageContent::Unknown {
                     data,
                     model_provider_name,

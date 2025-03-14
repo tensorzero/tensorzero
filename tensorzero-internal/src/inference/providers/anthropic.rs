@@ -26,7 +26,7 @@ use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ImageKind, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Usage,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, Usage,
 };
 use crate::model::{
     build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
@@ -147,6 +147,7 @@ impl InferenceProvider for AnthropicProvider {
                 },
             )?;
         inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let res = http_client
@@ -464,6 +465,10 @@ enum AnthropicMessageContent<'a> {
         tool_use_id: &'a str,
         content: Vec<AnthropicMessageContent<'a>>,
     },
+    Thinking {
+        thinking: &'a str,
+        signature: Option<&'a str>,
+    },
     ToolUse {
         id: &'a str,
         name: &'a str,
@@ -543,12 +548,12 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessag
                     },
                 },
             ))),
-            // We don't support thought blocks being passed in from a request.
-            // These are only possible to be passed in in the scenario where the
-            // output of a chat completion is used as an input to another model inference,
-            // i.e. a judge or something.
-            // We don't think the thoughts should be passed in in this case.
-            ContentBlock::Thought(_thought) => Ok(None),
+            ContentBlock::Thought(thought) => Ok(Some(FlattenUnknown::Normal(
+                AnthropicMessageContent::Thinking {
+                    thinking: &thought.text,
+                    signature: thought.signature.as_deref(),
+                },
+            ))),
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
@@ -784,6 +789,10 @@ pub enum AnthropicContentBlock {
     Text {
         text: String,
     },
+    Thinking {
+        thinking: String,
+        signature: String,
+    },
     ToolUse {
         id: String,
         name: String,
@@ -812,6 +821,13 @@ fn convert_to_output(
                 })?,
             }))
         }
+        FlattenUnknown::Normal(AnthropicContentBlock::Thinking {
+            thinking,
+            signature,
+        }) => Ok(ContentBlockOutput::Thought(Thought {
+            text: thinking,
+            signature: Some(signature),
+        })),
         FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown {
             data: data.into_owned(),
             model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
