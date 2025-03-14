@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     extract::{Path, State},
@@ -9,21 +9,25 @@ use uuid::Uuid;
 
 use crate::{
     clickhouse::ClickHouseConnectionInfo,
+    config_parser::Config,
     error::{Error, ErrorDetails},
-    function::FunctionConfig,
+    function::{FunctionConfig, FunctionConfigChat},
     gateway_util::{AppState, StructuredJson},
     inference::types::{
         batch::{deserialize_json_string, deserialize_optional_json_string},
         ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
         JsonInferenceDatabaseInsert, JsonInferenceOutput, ResolvedInput,
     },
-    tool::ToolCallConfigDatabaseInsert,
+    tool::{ToolCallConfigDatabaseInsert, ToolChoice},
     uuid_util::validate_tensorzero_uuid,
 };
 use tracing::instrument;
 
 pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
-use super::feedback::{validate_parse_demonstration, DemonstrationOutput};
+use super::{
+    feedback::{validate_parse_demonstration, DemonstrationOutput},
+    inference::DEFAULT_FUNCTION_NAME,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -286,10 +290,10 @@ pub async fn update_datapoint_handler(
             message: format!("Failed to deserialize `function_name``: {}", e),
         })
     })?;
-    let function_config = app_state
-        .config
-        .get_function(&function_data.function_name)?;
-    match &**function_config {
+    let function_config =
+        get_possibly_default_function(&function_data.function_name, &app_state.config)?;
+
+    match *function_config {
         FunctionConfig::Chat(_) => {
             let chat: SyntheticChatInferenceDatapoint =
                 serde_json::from_value(params).map_err(|e| {
@@ -301,7 +305,7 @@ pub async fn update_datapoint_handler(
             let resolved_input = chat.input.clone().resolve(&fetch_context).await?;
             function_config.validate_input(&chat.input)?;
             let validated_output = validate_parse_demonstration(
-                function_config,
+                &function_config,
                 &app_state.config.tools,
                 &chat.output,
             )
@@ -340,7 +344,7 @@ pub async fn update_datapoint_handler(
             let resolved_input = json.input.clone().resolve(&fetch_context).await?;
             function_config.validate_input(&json.input)?;
             let validated_json = validate_parse_demonstration(
-                function_config,
+                &function_config,
                 &app_state.config.tools,
                 &json.output,
             )
@@ -548,4 +552,23 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub tags: Option<HashMap<String, String>>,
     #[serde(default)]
     pub auxiliary: String,
+}
+
+fn get_possibly_default_function(
+    function_name: &str,
+    config: &Config,
+) -> Result<Arc<FunctionConfig>, Error> {
+    if function_name == DEFAULT_FUNCTION_NAME {
+        Ok(Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: false,
+        })))
+    } else {
+        config.get_function(function_name).cloned()
+    }
 }

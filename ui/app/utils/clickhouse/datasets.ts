@@ -13,7 +13,7 @@ export const ChatInferenceDatapointRowSchema = z
     dataset_name: z.string(),
     function_name: z.string(),
     id: z.string().uuid(),
-    episode_id: z.string().uuid(),
+    episode_id: z.string().uuid().nullable(),
     input: z.string(),
     output: z.string().nullable(),
     tool_params: z.string(),
@@ -35,7 +35,7 @@ export const JsonInferenceDatapointRowSchema = z
     dataset_name: z.string(),
     function_name: z.string(),
     id: z.string().uuid(),
-    episode_id: z.string().uuid(),
+    episode_id: z.string().uuid().nullable(),
     input: z.string(),
     output: z.string().nullable(),
     output_schema: z.string(),
@@ -169,7 +169,7 @@ export const DatasetDetailRowSchema = z.object({
   id: z.string().uuid(),
   type: z.enum(["chat", "json"]),
   function_name: z.string(),
-  episode_id: z.string().uuid(),
+  episode_id: z.string().uuid().nullable(),
   updated_at: z.string().datetime(),
 });
 

@@ -56,12 +56,39 @@ export type ToolResult = z.infer<typeof ToolResultSchema>;
 /**
  * An input message's content may be structured.
  */
-export const InputMessageContentSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("text"), value: JSONValueSchema }),
-  z.object({ type: z.literal("raw_text"), value: z.string() }),
-  z.object({ type: z.literal("tool_call"), value: ToolCallSchema }),
-  z.object({ type: z.literal("tool_result"), value: ToolResultSchema }),
+export const TextContentSchema = z.object({
+  type: z.literal("text"),
+  value: JSONValueSchema,
+});
+
+export const TextArgumentsContentSchema = z.object({
+  type: z.literal("text"),
+  arguments: JSONValueSchema,
+});
+
+export const RawTextContentSchema = z.object({
+  type: z.literal("raw_text"),
+  value: z.string(),
+});
+
+export const ToolCallContentSchema = z.object({
+  type: z.literal("tool_call"),
+  ...ToolCallSchema.shape,
+});
+
+export const ToolResultContentSchema = z.object({
+  type: z.literal("tool_result"),
+  ...ToolResultSchema.shape,
+});
+
+export const InputMessageContentSchema = z.union([
+  TextContentSchema,
+  TextArgumentsContentSchema,
+  RawTextContentSchema,
+  ToolCallContentSchema,
+  ToolResultContentSchema,
 ]);
+
 export type InputMessageContent = z.infer<typeof InputMessageContentSchema>;
 
 /**
@@ -430,6 +457,7 @@ export class TensorZeroClient {
     if (!datapointId || typeof datapointId !== "string") {
       throw new Error("Datapoint ID must be a non-empty string");
     }
+    console.log("datapoint", datapoint);
 
     // Validate the datapoint using the Zod schema
     const validationResult = DatapointSchema.safeParse(datapoint);

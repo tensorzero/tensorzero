@@ -64,14 +64,16 @@ export default function BasicInfo({
               functionType={type}
             />
           </div>
-          <div>
-            <dt className="text-lg font-semibold">Episode ID</dt>
-            <dd>
-              <Link to={`/observability/episodes/${datapoint.episode_id}`}>
-                <Code>{datapoint.episode_id}</Code>
-              </Link>
-            </dd>
-          </div>
+          {datapoint.episode_id && (
+            <div>
+              <dt className="text-lg font-semibold">Episode ID</dt>
+              <dd>
+                <Link to={`/observability/episodes/${datapoint.episode_id}`}>
+                  <Code>{datapoint.episode_id}</Code>
+                </Link>
+              </dd>
+            </div>
+          )}
           <div>
             <dt className="text-lg font-semibold">Timestamp</dt>
             <dd>{new Date(datapoint.updated_at).toLocaleString()}</dd>

@@ -27,6 +27,45 @@ import {
 } from "~/components/layout/PageLayout";
 import type { InputMessage } from "~/utils/clickhouse/common";
 
+/**
+ * Transforms input from clickhouse format to TensorZero client format
+ */
+function transformInputForTensorZero(input: any) {
+  return {
+    system: input.system,
+    messages: input.messages.map((msg: any) => ({
+      role: msg.role as "system" | "user" | "assistant" | "tool",
+      content: msg.content.map((c: any) => {
+        if (c.type === "text") {
+          return { type: "text" as const, value: c.value };
+        } else if (c.type === "tool_call") {
+          return {
+            type: "tool_call" as const,
+            id: c.id,
+            name: c.name,
+            arguments: c.arguments,
+          };
+        } else if (c.type === "tool_result") {
+          return {
+            type: "tool_result" as const,
+            id: c.id,
+            name: c.name,
+            result: c.result,
+          };
+        } else if (c.type === "image") {
+          // Skip image content as it's not supported in the target schema
+          return {
+            type: "text" as const,
+            value: "[Image content not supported]",
+          };
+        }
+        // Fallback case
+        return { type: "text" as const, value: "Unsupported content type" };
+      }),
+    })),
+  };
+}
+
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
 
@@ -42,40 +81,56 @@ export async function action({ request }: ActionFunctionArgs) {
     output_schema: formData.get("output_schema")
       ? JSON.parse(formData.get("output_schema") as string)
       : undefined,
+    tool_params: formData.get("tool_params")
+      ? JSON.parse(formData.get("tool_params") as string)
+      : undefined,
     tags: JSON.parse(formData.get("tags") as string),
     auxiliary: formData.get("auxiliary"),
     is_deleted: formData.get("is_deleted") === "true",
     updated_at: formData.get("updated_at"),
   };
+  const cleanedData = Object.fromEntries(
+    Object.entries(rawData).filter(([_, value]) => value !== undefined),
+  );
   const action = formData.get("action");
-
+  console.log("rawData", rawData);
   const parsedFormData: ParsedDatasetRow =
-    ParsedDatasetRowSchema.parse(rawData);
+    ParsedDatasetRowSchema.parse(cleanedData);
   if (action === "delete") {
     await deleteDatapointServer(parsedFormData);
+    const datasetCounts = await getDatasetCounts();
+    const datasetCount = datasetCounts.find(
+      (count) => count.dataset_name === parsedFormData.dataset_name,
+    );
+
+    if (datasetCount === undefined) {
+      return redirect("/datasets");
+    }
+    return redirect(`/datasets/${parsedFormData.dataset_name}`);
   } else if (action === "save") {
+    // Transform input to match TensorZero client's expected format
+    const transformedInput = transformInputForTensorZero(parsedFormData.input);
+    const transformedOutput = transformOutputForTensorZero(
+      parsedFormData.output,
+    );
+    console.log("transformedInput", JSON.stringify(transformedInput, null, 2));
+    console.log(
+      "transformedOutput",
+      JSON.stringify(transformedOutput, null, 2),
+    );
     await tensorZeroClient.updateDatapoint(
       parsedFormData.dataset_name,
       parsedFormData.id,
       {
         function_name: parsedFormData.function_name,
-        input: parsedFormData.input,
-        output: parsedFormData.output,
+        input: transformedInput,
+        output: transformedOutput,
         tags: parsedFormData.tags || {},
         auxiliary: parsedFormData.auxiliary,
       },
     );
+    return;
   }
-
-  const datasetCounts = await getDatasetCounts();
-  const datasetCount = datasetCounts.find(
-    (count) => count.dataset_name === parsedFormData.dataset_name,
-  );
-
-  if (datasetCount === undefined) {
-    return redirect("/datasets");
-  }
-  return redirect(`/datasets/${parsedFormData.dataset_name}`);
 }
 
 export async function loader({
@@ -126,7 +181,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     Object.entries(datapoint).forEach(([key, value]) => {
       if (value === undefined) return;
       if (value === null) {
-        formData.append(key, "null");
+        // do nothing
       } else if (typeof value === "object") {
         formData.append(key, JSON.stringify(value));
       } else {
@@ -140,7 +195,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   const handleDelete = () => submitDatapointAction("delete");
-  const handleSave = () => submitDatapointAction("save");
+  const handleSave = () => {
+    submitDatapointAction("save");
+    setIsEditing(false);
+  };
 
   const variants = Object.keys(
     config.functions[datapoint.function_name]?.variants || {},
@@ -249,4 +307,11 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </div>
     );
   }
+}
+
+function transformOutputForTensorZero(output: any) {
+  if ("raw" in output) {
+    return JSON.parse(output.raw);
+  }
+  return output;
 }
