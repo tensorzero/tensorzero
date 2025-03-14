@@ -17,7 +17,7 @@ with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client
 
     feedback_response = client.feedback(
         metric_name="haiku_rating",
-        inference_id=inference_response.inference_id,  # alternatively, you can assigned to an episode_id
+        inference_id=inference_response.inference_id,  # alternatively, you can assign feedback to an episode_id
         value=True,  # let's assume it deserves a 👍
     )
 
@@ -34,7 +34,7 @@ with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client
     comment_response = client.feedback(
         metric_name="comment",
         inference_id=inference_response.inference_id,
-        value="Never mentioned you're an artificial intelligence, AI, bot, or anything like that.",
+        value="Never mention you're an artificial intelligence, AI, bot, or anything like that.",
     )
 
     print(comment_response)
