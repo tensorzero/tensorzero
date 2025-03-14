@@ -58,8 +58,10 @@ __all__ = [
     "patch_openai_client",
 ]
 
+T = t.TypeVar("T", bound=t.Any)
 
-def _attach_fields(client: object, gateway: object) -> None:
+
+def _attach_fields(client: T, gateway: t.Any) -> T:
     if hasattr(client, "__tensorzero_gateway"):
         raise RuntimeError(
             "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
@@ -70,7 +72,7 @@ def _attach_fields(client: object, gateway: object) -> None:
     return client
 
 
-async def _async_attach_fields(client: object, awaitable: t.Awaitable[t.Any]) -> t.Any:
+async def _async_attach_fields(client: T, awaitable: t.Awaitable[t.Any]) -> T:
     gateway = await awaitable
     return _attach_fields(client, gateway)
 
@@ -84,10 +86,7 @@ class ATTENTION_TENSORZERO_PLEASE_AWAIT_RESULT_OF_PATCH_OPENAI_CLIENT(httpx.URL)
         )
 
 
-T = t.TypeVar("T")
-
-
-def close_patched_openai_client_gateway(client: T):
+def close_patched_openai_client_gateway(client: t.Any) -> None:
     """
     Closes the TensorZero gateway associated with a patched OpenAI client from `tensorzero.patch_openai_client`
     After calling this function, the patched client becomes unusable

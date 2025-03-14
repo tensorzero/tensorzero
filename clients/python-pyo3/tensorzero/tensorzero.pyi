@@ -1,6 +1,7 @@
 from typing import (
     Any,
     AsyncGenerator,
+    Awaitable,
     Dict,
     Generator,
     List,
@@ -294,11 +295,10 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 # Internal helper method
 def _start_http_gateway(
     *,
-    client: object,
-    gateway_url: Optional[str],
+    config_file: Optional[str],
     clickhouse_url: Optional[str],
     async_setup: bool,
-) -> object: ...
+) -> Union[Any, Awaitable[Any]]: ...
 
 __all__ = [
     "AsyncTensorZeroGateway",
