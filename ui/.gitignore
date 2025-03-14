@@ -9,5 +9,3 @@
 # TS stuff
 *.tsbuildinfo
 .eslintcache
-
-run_e2e_ui.sh

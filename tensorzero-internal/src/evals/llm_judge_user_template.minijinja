@@ -1,6 +1,13 @@
-Input: {{input}}
+# Input
 
-Generated Output: {{generated_output}}
-{% if reference_output %}
-Reference Output: {{reference_output}}
-{% endif %}
+{{input}}
+
+# Generated Output
+
+{{generated_output}}
+
+{%- if reference_output -%}
+# Reference Output
+
+{{reference_output}}
+{%- endif -%}
