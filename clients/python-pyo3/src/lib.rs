@@ -81,12 +81,12 @@ impl LocalHttpGateway {
 
 #[pyfunction]
 #[pyo3(signature = (*, config_file, clickhouse_url, async_setup))]
-fn _start_http_gateway<'a>(
-    py: Python<'a>,
+fn _start_http_gateway(
+    py: Python<'_>,
     config_file: Option<String>,
     clickhouse_url: Option<String>,
     async_setup: bool,
-) -> PyResult<Bound<'a, PyAny>> {
+) -> PyResult<Bound<'_, PyAny>> {
     let (bind_addr, gateway_fut) =
         match tensorzero_internal::gateway_util::start_openai_compatible_gateway(
             config_file,
