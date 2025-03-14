@@ -42,6 +42,9 @@ pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,
     pub debug: bool,
+    /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
+    /// Defaults to `false`
+    pub enable_template_filesystem_access: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -190,6 +193,8 @@ pub struct UninitializedGatewayConfig {
     pub observability: ObservabilityConfig,
     #[serde(default)]
     pub debug: bool,
+    #[serde(default)]
+    pub enable_template_filesystem_access: bool,
 }
 
 impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
@@ -216,6 +221,7 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
                 async_writes: config.observability.async_writes,
             },
             debug: config.debug,
+            enable_template_filesystem_access: config.enable_template_filesystem_access,
         })
     }
 }
@@ -342,7 +348,13 @@ impl<'c> Config<'c> {
 
         // Initialize the templates
         let template_paths = config.get_templates();
-        config.templates.initialize(template_paths)?;
+        config.templates.initialize(
+            template_paths,
+            config
+                .gateway
+                .enable_template_filesystem_access
+                .then_some(base_path.clone()),
+        )?;
 
         // Validate the config
         config.validate()?;
