@@ -531,7 +531,7 @@ model = "anthropic::claude-3-haiku-20240307"
 
 [functions.image_test.variants.google_ai_studio]
 type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-1.5-flash-8b"
+model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.image_test.variants.gcp_vertex]
 type = "chat_completion"

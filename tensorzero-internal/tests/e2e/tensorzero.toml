@@ -155,20 +155,20 @@ location = "us-central1"
 project_id = "tensorzero-public"
 
 
-[models."gemini-1.5-flash-8b"]
+[models."gemini-2.0-flash-lite"]
 routing = ["google_ai_studio_gemini"]
 
-[models."gemini-1.5-flash-8b".providers.google_ai_studio_gemini]
+[models."gemini-2.0-flash-lite".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
-model_name = "gemini-1.5-flash-8b"
+model_name = "gemini-2.0-flash-lite"
 
 
-[models."gemini-1.5-flash-8b-dynamic"]
+[models."gemini-2.0-flash-lite-dynamic"]
 routing = ["google_ai_studio_gemini"]
 
-[models."gemini-1.5-flash-8b-dynamic".providers.google_ai_studio_gemini]
+[models."gemini-2.0-flash-lite-dynamic".providers.google_ai_studio_gemini]
 type = "google_ai_studio_gemini"
-model_name = "gemini-1.5-flash-8b"
+model_name = "gemini-2.0-flash-lite"
 api_key_location = "dynamic::google_ai_studio_api_key"
 
 [models."gemini-1.5-pro-002"]
@@ -636,26 +636,26 @@ max_tokens = 100
 
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
-model = "gemini-1.5-flash-8b"
+model = "gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b-extra-body]
 type = "chat_completion"
-model = "gemini-1.5-flash-8b"
+model = "gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{pointer = "/generationConfig/temperature", value = 0.123 }]
 
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b-dynamic]
 type = "chat_completion"
-model = "gemini-1.5-flash-8b-dynamic"
+model = "gemini-2.0-flash-lite-dynamic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b-shorthand]
 type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-1.5-flash-8b"
+model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -1185,7 +1185,7 @@ max_tokens = 100
 
 [functions.json_success.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
-model = "gemini-1.5-flash-8b"
+model = "gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "on"
@@ -1193,7 +1193,7 @@ max_tokens = 100
 
 [functions.json_success.variants.google-ai-studio-gemini-flash-8b-default]
 type = "chat_completion"
-model = "gemini-1.5-flash-8b"
+model = "gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
@@ -1202,7 +1202,7 @@ json_mode = "strict"
 
 [functions.json_success.variants.google-ai-studio-gemini-flash-8b-implicit]
 type = "chat_completion"
-model = "gemini-1.5-flash-8b"
+model = "gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -1577,7 +1577,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
-model = "gemini-1.5-flash-8b"
+model = "gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
@@ -1585,7 +1585,7 @@ max_tokens = 100
 
 [functions.dynamic_json.variants.google-ai-studio-gemini-flash-8b-default]
 type = "chat_completion"
-model = "gemini-1.5-flash-8b"
+model = "gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 max_tokens = 100
@@ -1593,7 +1593,7 @@ json_mode = "strict"
 
 [functions.dynamic_json.variants.google-ai-studio-gemini-flash-8b-implicit]
 type = "chat_completion"
-model = "gemini-1.5-flash-8b"
+model = "gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "implicit_tool"
@@ -1966,7 +1966,7 @@ max_tokens = 100
 
 [functions.weather_helper.variants.google-ai-studio-gemini-flash-8b]
 type = "chat_completion"
-model = "gemini-1.5-flash-8b"
+model = "gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
