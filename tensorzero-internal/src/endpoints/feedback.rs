@@ -513,11 +513,11 @@ pub enum DemonstrationOutput {
 // we construct the usual {"raw": str, "parsed": parsed_value} object, serialize it, and return it.
 pub async fn validate_parse_demonstration(
     function_config: &FunctionConfig,
-    tools: &HashMap<String, Arc<StaticToolConfig>>,
     value: &Value,
+    dynamic_demonstration_info: DynamicDemonstrationInfo,
 ) -> Result<DemonstrationOutput, Error> {
-    match function_config {
-        FunctionConfig::Chat(chat_config) => {
+    match (function_config, dynamic_demonstration_info) {
+        (FunctionConfig::Chat(_), DynamicDemonstrationInfo::Chat(tool_call_config)) => {
             // For chat functions, the value should either be a string or a list of valid content blocks.
             let content_blocks = match value {
                 Value::String(s) => {
@@ -545,24 +545,11 @@ pub async fn validate_parse_demonstration(
                     .into());
                 }
             };
-            let tool_config = ToolCallConfig::new(
-                &chat_config.tools,
-                &chat_config.tool_choice,
-                chat_config.parallel_tool_calls,
-                tools,
-                // TODO (#348): Eventually we should allow dynamic tools here as well.
-                DynamicToolParams {
-                    allowed_tools: None,
-                    additional_tools: None,
-                    tool_choice: None,
-                    parallel_tool_calls: None,
-                },
-            )?;
             let content_blocks: Vec<ContentBlockOutput> = content_blocks
                 .into_iter()
                 .map(|block| block.try_into())
                 .collect::<Result<Vec<ContentBlockOutput>, Error>>()?;
-            let parsed_value = parse_chat_output(content_blocks, tool_config.as_ref()).await;
+            let parsed_value = parse_chat_output(content_blocks, Some(&tool_call_config)).await;
             for block in &parsed_value {
                 if let ContentBlockChatOutput::ToolCall(tool_call) = block {
                     if tool_call.name.is_none() {
@@ -582,10 +569,10 @@ pub async fn validate_parse_demonstration(
             }
             Ok(DemonstrationOutput::Chat(parsed_value))
         }
-        FunctionConfig::Json(json_config) => {
+(FunctionConfig::Json(_), DynamicDemonstrationInfo::Json(output_schema)) => {
             // For json functions, the value should be a valid json object.
             // TODO (#348): Eventually we should allow dynamic output_schema here as well.
-            json_config.output_schema.validate(value).map_err(|e| {
+            output_schema.validate(value).map_err(|e| {
                 Error::new(ErrorDetails::InvalidRequest {
                     message: format!("Demonstration does not fit function output schema: {}", e),
                 })
@@ -598,15 +585,30 @@ pub async fn validate_parse_demonstration(
             let json_inference_response = json!({"raw": raw, "parsed": value});
             Ok(DemonstrationOutput::Json(json_inference_response))
         }
+        _ => Err(ErrorDetails::Inference { message: "The DynamicDemonstrationInfo does not match the function type. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string()}.into()) 
     }
 }
 
+/// Represents the different types of dynamic demonstration information that can be retrieved
+#[derive(Debug)]
+enum DynamicDemonstrationInfo {
+    Chat(ToolCallConfig),
+    Json(Value),
+}
+
+/// In order to properly validate demonstration data we need to fetch the information that was
+/// passed to the inference at runtime.
+/// If we don't do this then we might allow some e.g. tool calls or output schemas that would not
+/// have been valid. Similarly, we might reject some tools or output schemas that were actually
+/// valid.
+/// This function grabs either the tool call or output schema information that was used at the
+/// time of the actual inference in order to validate the demonstration data.
 async fn get_dynamic_demonstration_info(
     clickhouse_client: &ClickHouseConnectionInfo,
     inference_id: Uuid,
     function_name: &str,
     function_config: &FunctionConfig,
-) -> Result<(Option<Value>, Option<Value>), Error> {
+) -> Result<DynamicDemonstrationInfo, Error> {
     match function_config {
         FunctionConfig::Chat(..) => {
             let parameterized_query = "SELECT tool_params FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
@@ -626,14 +628,13 @@ async fn get_dynamic_demonstration_info(
                 })
             })?;
 
-            let tool_call_config: ToolCallConfigDatabaseInsert =
+            let tool_call_db_insert: ToolCallConfigDatabaseInsert =
                 serde_json::from_value(result_value).map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
                         message: format!("Failed to parse tool call config: {}", e),
                     })
                 })?;
-
-            todo!()
+            Ok(DynamicDemonstrationInfo::Chat(tool_call_db_insert.into()))
         }
         FunctionConfig::Json(..) => {
             let parameterized_query = "SELECT output_schema FROM JsonInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
@@ -666,7 +667,7 @@ async fn get_dynamic_demonstration_info(
                     message: format!("Failed to parse output schema: {}", e),
                 })
             })?;
-            Ok((None, Some(output_schema)))
+            Ok(DynamicDemonstrationInfo::Json(output_schema))
         }
     }
 }

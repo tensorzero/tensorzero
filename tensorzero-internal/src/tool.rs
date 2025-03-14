@@ -512,27 +512,6 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
     }
 }
 
-impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
-    fn from(db_insert: ToolCallConfigDatabaseInsert) -> Self {
-        Self {
-            tools_available: db_insert
-                .tools_available
-                .into_iter()
-                .map(|tool| {
-                    ToolConfig::Dynamic(DynamicToolConfig {
-                        description: tool.description,
-                        parameters: DynamicJSONSchema::new(tool.parameters),
-                        name: tool.name,
-                        strict: tool.strict,
-                    })
-                })
-                .collect(),
-            tool_choice: db_insert.tool_choice,
-            parallel_tool_calls: db_insert.parallel_tool_calls,
-        }
-    }
-}
-
 /// For use in initializing JSON functions
 /// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments
 pub fn create_implicit_tool_call_config(schema: JSONSchemaFromPath) -> ToolCallConfig {
