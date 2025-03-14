@@ -352,11 +352,9 @@ async fn run_llm_judge_eval_json_human_readable() {
     // Let's make sure this threshold fails and the output is reasonable
     let err = run_eval(args, eval_run_id, &mut output).await.unwrap_err();
     let output_str = String::from_utf8(output).unwrap();
-    println!("Output: {}", output_str);
     assert!(output_str.contains("count_sports: 0.50 ± 0.20"));
     assert!(output_str.contains("exact_match: 0.33 ± 0.19"));
     let err = err.to_string();
-    println!("Error: {}", err);
     assert!(err.contains("Failed cutoffs for evaluators:"));
     assert!(err.contains("exact_match (cutoff: 0.60, got: 0.33)"));
 }
