@@ -20,7 +20,9 @@ use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
 };
-use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCall, ToolCallConfig};
+use crate::tool::{
+    DynamicToolParams, StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
+};
 use crate::uuid_util::uuid_elapsed;
 
 use super::validate_tags;
@@ -595,6 +597,76 @@ pub async fn validate_parse_demonstration(
             })?;
             let json_inference_response = json!({"raw": raw, "parsed": value});
             Ok(DemonstrationOutput::Json(json_inference_response))
+        }
+    }
+}
+
+async fn get_dynamic_demonstration_info(
+    clickhouse_client: &ClickHouseConnectionInfo,
+    inference_id: Uuid,
+    function_name: &str,
+    function_config: &FunctionConfig,
+) -> Result<(Option<Value>, Option<Value>), Error> {
+    match function_config {
+        FunctionConfig::Chat(..) => {
+            let parameterized_query = "SELECT tool_params FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
+            let result = clickhouse_client
+                .run_query(
+                    parameterized_query,
+                    Some(&HashMap::from([
+                        ("function_name", function_name),
+                        ("inference_id", &inference_id.to_string()),
+                    ])),
+                )
+                .await?;
+
+            let result_value = serde_json::from_str::<Value>(&result).map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseQuery {
+                    message: format!("Failed to parse demonstration result: {}", e),
+                })
+            })?;
+
+            let tool_call_config: ToolCallConfigDatabaseInsert =
+                serde_json::from_value(result_value).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to parse tool call config: {}", e),
+                    })
+                })?;
+
+            todo!()
+        }
+        FunctionConfig::Json(..) => {
+            let parameterized_query = "SELECT output_schema FROM JsonInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
+            let result = clickhouse_client
+                .run_query(
+                    parameterized_query,
+                    Some(&HashMap::from([
+                        ("function_name", function_name),
+                        ("inference_id", &inference_id.to_string()),
+                    ])),
+                )
+                .await?;
+            let result_value = serde_json::from_str::<Value>(&result).map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseQuery {
+                    message: format!("Failed to parse demonstration result: {}", e),
+                })
+            })?;
+            let output_schema_str = result_value
+                .get("output_schema")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: "Failed to get output schema from demonstration result"
+                            .to_string(),
+                    })
+                })?;
+
+            let output_schema = serde_json::from_str::<Value>(&output_schema_str).map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseQuery {
+                    message: format!("Failed to parse output schema: {}", e),
+                })
+            })?;
+            Ok((None, Some(output_schema)))
         }
     }
 }
