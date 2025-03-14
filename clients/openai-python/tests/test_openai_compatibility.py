@@ -167,8 +167,9 @@ async def test_async_inference_streaming(async_client):
             assert chunk.episode_id == previous_episode_id
         previous_inference_id = chunk.id
         previous_episode_id = chunk.episode_id
-        variant_name = chunk.model
-        assert variant_name == "test"
+        assert (
+            chunk.model == "tensorzero::function_name::basic_test::variant_name::test"
+        )
         if i + 1 < len(chunks):
             assert len(chunk.choices) == 1
             assert chunk.choices[0].delta.content == expected_text[i]
@@ -299,7 +300,10 @@ async def test_async_tool_call_inference(async_client):
         model="tensorzero::function_name::weather_helper",
         top_p=0.5,
     )
-    assert result.model == "variant"
+    assert (
+        result.model
+        == "tensorzero::function_name::weather_helper::variant_name::variant"
+    )
     assert result.choices[0].message.content is None
     assert result.choices[0].message.tool_calls is not None
     tool_calls = result.choices[0].message.tool_calls
@@ -332,7 +336,10 @@ async def test_async_malformed_tool_call_inference(async_client):
         model="tensorzero::function_name::weather_helper",
         presence_penalty=0.5,
     )
-    assert result.model == "bad_tool"
+    assert (
+        result.model
+        == "tensorzero::function_name::weather_helper::variant_name::bad_tool"
+    )
     assert result.choices[0].message.content is None
     assert result.choices[0].message.tool_calls is not None
     tool_calls = result.choices[0].message.tool_calls
@@ -378,8 +385,10 @@ async def test_async_tool_call_streaming(async_client):
             assert chunk.episode_id == previous_episode_id
         previous_inference_id = chunk.id
         previous_episode_id = chunk.episode_id
-        variant_name = chunk.model
-        assert variant_name == "variant"
+        assert (
+            chunk.model
+            == "tensorzero::function_name::weather_helper::variant_name::variant"
+        )
         if i + 1 < len(chunks):
             assert len(chunk.choices) == 1
             assert chunk.choices[0].delta.content is None
@@ -438,8 +447,9 @@ async def test_async_json_streaming(async_client):
             assert chunk.episode_id == previous_episode_id
         previous_inference_id = chunk.id
         previous_episode_id = chunk.episode_id
-        variant_name = chunk.model
-        assert variant_name == "test"
+        assert (
+            chunk.model == "tensorzero::function_name::json_success::variant_name::test"
+        )
         if i + 1 < len(chunks):
             assert chunk.choices[0].delta.content == expected_text[i]
         else:
@@ -515,7 +525,7 @@ async def test_async_json_success_developer(async_client):
         messages=messages,
         model="tensorzero::function_name::json_success",
     )
-    assert result.model == "test"
+    assert result.model == "tensorzero::function_name::json_success::variant_name::test"
     assert result.episode_id == episode_id
     assert result.choices[0].message.content == '{"answer":"Hello"}'
     assert result.choices[0].message.tool_calls is None
@@ -548,7 +558,7 @@ async def test_async_json_success_non_deprecated(async_client):
         messages=messages,
         model="tensorzero::function_name::json_success",
     )
-    assert result.model == "test"
+    assert result.model == "tensorzero::function_name::json_success::variant_name::test"
     assert result.episode_id == episode_id
     assert result.choices[0].message.content == '{"answer":"Hello"}'
     assert result.choices[0].message.tool_calls is None
@@ -568,7 +578,7 @@ async def test_async_json_success(async_client):
         messages=messages,
         model="tensorzero::function_name::json_success",
     )
-    assert result.model == "test"
+    assert result.model == "tensorzero::function_name::json_success::variant_name::test"
     assert result.episode_id == episode_id
     assert result.choices[0].message.content == '{"answer":"Hello"}'
     assert result.choices[0].message.tool_calls is None
@@ -614,7 +624,7 @@ async def test_async_json_failure(async_client):
         messages=messages,
         model="tensorzero::function_name::json_fail",
     )
-    assert result.model == "test"
+    assert result.model == "tensorzero::function_name::json_fail::variant_name::test"
     assert (
         result.choices[0].message.content
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -669,7 +679,7 @@ async def test_dynamic_tool_use_inference_openai(async_client):
         model="tensorzero::function_name::basic_test",
         tools=tools,
     )
-    assert result.model == "openai"
+    assert result.model == "tensorzero::function_name::basic_test::variant_name::openai"
     assert result.episode_id == episode_id
     assert result.choices[0].message.content is None
     assert len(result.choices[0].message.tool_calls) == 1
@@ -709,7 +719,9 @@ async def test_dynamic_json_mode_inference_openai(async_client):
         model="tensorzero::function_name::dynamic_json",
         response_format={"type": "json_schema", "json_schema": output_schema},
     )
-    assert result.model == "openai"
+    assert (
+        result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
+    )
     assert result.episode_id == episode_id
     json_content = json.loads(result.choices[0].message.content)
     assert "tokyo" in json_content["response"].lower()
