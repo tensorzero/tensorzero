@@ -291,6 +291,15 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         exc_tb: Optional[object],
     ) -> None: ...
 
+# Internal helper method
+def _start_http_gateway(
+    *,
+    client: object,
+    gateway_url: Optional[str],
+    clickhouse_url: Optional[str],
+    async_setup: bool,
+) -> object: ...
+
 __all__ = [
     "AsyncTensorZeroGateway",
     "BaseTensorZeroGateway",

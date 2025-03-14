@@ -18,11 +18,13 @@ use pyo3::{
     prelude::*,
     sync::GILOnceCell,
     types::{PyDict, PyString, PyType},
+    IntoPyObjectExt,
 };
 use python_helpers::{
     deserialize_from_pydict, parse_feedback_response, parse_inference_chunk,
     parse_inference_response, parse_tool, python_uuid_to_uuid, serialize_to_dict,
 };
+use tensorzero_internal::gateway_util::ShutdownHandle;
 use tensorzero_rust::{
     err_to_http, CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput,
@@ -44,6 +46,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BaseTensorZeroGateway>()?;
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
+    m.add_class::<LocalHttpGateway>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
@@ -54,7 +57,86 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     JSON_DUMPS
         .set(m.py(), json_dumps.unbind())
         .expect("Failed to set JSON_DUMPS");
+
+    m.add_wrapped(wrap_pyfunction!(_start_http_gateway))
+        .expect("Failed to add start_http_gateway");
+
     Ok(())
+}
+
+#[pyclass]
+struct LocalHttpGateway {
+    #[pyo3(get)]
+    base_url: String,
+    #[allow(dead_code)]
+    shutdown_handle: Option<ShutdownHandle>,
+}
+
+#[pymethods]
+impl LocalHttpGateway {
+    fn close(&mut self) {
+        self.shutdown_handle.take();
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (*, config_file, clickhouse_url, async_setup))]
+fn _start_http_gateway<'a>(
+    py: Python<'a>,
+    config_file: Option<String>,
+    clickhouse_url: Option<String>,
+    async_setup: bool,
+) -> PyResult<Bound<'a, PyAny>> {
+    let (bind_addr, gateway_fut) =
+        match tensorzero_internal::gateway_util::start_openai_compatible_gateway(
+            config_file,
+            clickhouse_url,
+        ) {
+            Ok(res) => res,
+            Err(e) => {
+                return Python::with_gil(|py| {
+                    Err(convert_error(
+                        py,
+                        TensorZeroError::Other { source: e.into() },
+                    )?)
+                });
+            }
+        };
+    let base_url = format!("http://{bind_addr}/openai/v1");
+    if async_setup {
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let res = gateway_fut.await;
+            match res {
+                Ok(shutdown_handle) => Ok(LocalHttpGateway {
+                    base_url,
+                    shutdown_handle: Some(shutdown_handle),
+                }),
+                Err(e) => Python::with_gil(|py| {
+                    Err(convert_error(
+                        py,
+                        TensorZeroError::Other { source: e.into() },
+                    )?)
+                }),
+            }
+        })
+    } else {
+        let shutdown_handle = match tokio_block_on_without_gil(py, gateway_fut) {
+            Ok(shutdown_handle) => shutdown_handle,
+            Err(e) => {
+                return Python::with_gil(|py| {
+                    Err(convert_error(
+                        py,
+                        TensorZeroError::Other { source: e.into() },
+                    )?)
+                });
+            }
+        };
+        Ok(LocalHttpGateway {
+            base_url,
+            shutdown_handle: Some(shutdown_handle),
+        }
+        .into_bound_py_any(py)?)
+    }
 }
 
 // TODO - this should extend the python `ABC` class once pyo3 supports it: https://github.com/PyO3/pyo3/issues/991
