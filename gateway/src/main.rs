@@ -102,11 +102,11 @@ async fn main() {
             post(endpoints::batch_inference::start_batch_inference_handler),
         )
         .route(
-            "/batch_inference/:batch_id",
+            "/batch_inference/{batch_id}",
             get(endpoints::batch_inference::poll_batch_inference_handler),
         )
         .route(
-            "/batch_inference/:batch_id/inference/:inference_id",
+            "/batch_inference/{batch_id}/inference/{inference_id}",
             get(endpoints::batch_inference::poll_batch_inference_handler),
         )
         .route(
@@ -117,15 +117,15 @@ async fn main() {
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
         .route(
-            "/datasets/:dataset/datapoints",
+            "/datasets/{dataset}/datapoints",
             post(endpoints::datasets::create_datapoint_handler),
         )
         .route(
-            "/datasets/:dataset/datapoints/:id",
+            "/datasets/{dataset}/datapoints/{id}",
             put(endpoints::datasets::update_datapoint_handler),
         )
         .route(
-            "/datasets/:dataset/function/:function/kind/:kind/datapoint/:id",
+            "/datasets/{dataset}/function/{function}/kind/{kind}/datapoint/{id}",
             delete(endpoints::datasets::delete_datapoint_handler),
         )
         .route(
