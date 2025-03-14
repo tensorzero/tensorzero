@@ -103,6 +103,7 @@ def close_patched_openai_client_gateway(client: t.Any) -> None:
 
 def patch_openai_client(
     client: T,
+    *,
     config_file: t.Optional[str] = None,
     clickhouse_url: t.Optional[str] = None,
     async_setup=False,
