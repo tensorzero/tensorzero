@@ -161,6 +161,7 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
                     &mut writer,
                 )?;
             }
+            // TODO (#1341): Return errors as JSONL as well
             Ok(Err(e)) => {
                 tracing::warn!("Task error: {}", e);
             }
