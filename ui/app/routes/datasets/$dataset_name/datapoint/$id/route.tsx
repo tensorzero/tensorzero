@@ -17,6 +17,7 @@ import {
   deleteDatapoint as deleteDatapointServer,
   getDatasetCounts,
 } from "~/utils/clickhouse/datasets.server";
+import { tensorZeroClient } from "~/utils/tensorzero.server";
 import {
   PageHeader,
   PageLayout,
@@ -46,10 +47,26 @@ export async function action({ request }: ActionFunctionArgs) {
     is_deleted: formData.get("is_deleted") === "true",
     updated_at: formData.get("updated_at"),
   };
+  const action = formData.get("action");
 
   const parsedFormData: ParsedDatasetRow =
     ParsedDatasetRowSchema.parse(rawData);
-  await deleteDatapointServer(parsedFormData);
+  if (action === "delete") {
+    await deleteDatapointServer(parsedFormData);
+  } else if (action === "save") {
+    await tensorZeroClient.updateDatapoint(
+      parsedFormData.dataset_name,
+      parsedFormData.id,
+      {
+        function_name: parsedFormData.function_name,
+        input: parsedFormData.input,
+        output: parsedFormData.output,
+        tags: parsedFormData.tags || {},
+        auxiliary: parsedFormData.auxiliary,
+      },
+    );
+  }
+
   const datasetCounts = await getDatasetCounts();
   const datasetCount = datasetCounts.find(
     (count) => count.dataset_name === parsedFormData.dataset_name,
@@ -102,8 +119,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setInput({ ...input, messages });
   };
 
-  const deleteFetcher = useFetcher();
-  const handleDelete = () => {
+  const fetcher = useFetcher();
+
+  const submitDatapointAction = (action: string) => {
     const formData = new FormData();
     Object.entries(datapoint).forEach(([key, value]) => {
       if (value === undefined) return;
@@ -115,10 +133,14 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         formData.append(key, String(value));
       }
     });
+    formData.append("action", action);
 
     // Submit to the local action by targeting the current route (".")
-    deleteFetcher.submit(formData, { method: "post", action: "." });
+    fetcher.submit(formData, { method: "post", action: "." });
   };
+
+  const handleDelete = () => submitDatapointAction("delete");
+  const handleSave = () => submitDatapointAction("save");
 
   const variants = Object.keys(
     config.functions[datapoint.function_name]?.variants || {},
@@ -133,10 +155,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setIsModalOpen(false);
     setSelectedVariant(null);
     setVariantInferenceIsLoading(false);
-  };
-
-  const handleSave = () => {
-    setIsEditing(false);
   };
 
   return (
@@ -165,7 +183,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
                 isLoading: variantInferenceIsLoading,
               }}
               onDelete={handleDelete}
-              isDeleting={deleteFetcher.state === "submitting"}
+              isDeleting={fetcher.state === "submitting"}
               toggleEditing={toggleEditing}
               isEditing={isEditing}
               onSave={handleSave}
