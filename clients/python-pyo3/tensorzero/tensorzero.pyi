@@ -299,9 +299,16 @@ def _start_http_gateway(
     clickhouse_url: Optional[str],
     async_setup: bool,
 ) -> Union[Any, Awaitable[Any]]: ...
+@final
+class LocalHttpGateway(object):
+    base_url: str
+
+    def close(self) -> None: ...
 
 __all__ = [
     "AsyncTensorZeroGateway",
     "BaseTensorZeroGateway",
     "TensorZeroGateway",
+    "LocalHttpGateway",
+    "_start_http_gateway",
 ]
