@@ -797,9 +797,12 @@ async def test_async_multi_block_image_base64(async_client):
     )
     assert "crab" in result.choices[0].message.content.lower()
 
+
 def test_patch_sync_openai_client_sync_setup():
     client = OpenAI()
-    client = tensorzero.patch_openai_client(client, "../../examples/readme/config/tensorzero.toml", clickhouse_url=None)
+    client = tensorzero.patch_openai_client(
+        client, "../../examples/readme/config/tensorzero.toml", clickhouse_url=None
+    )
     response = client.chat.completions.create(
         model="tensorzero::model_name::dummy::json",
         messages=[
@@ -811,10 +814,13 @@ def test_patch_sync_openai_client_sync_setup():
     )
     assert response.choices[0].message.content == '{"answer":"Hello"}'
 
+
 @pytest.mark.asyncio
 async def test_patch_sync_openai_client_async_setup():
     client = OpenAI()
-    client = await tensorzero.patch_openai_client(client, "../../examples/readme/config/tensorzero.toml", async_setup=True)
+    client = await tensorzero.patch_openai_client(
+        client, "../../examples/readme/config/tensorzero.toml", async_setup=True
+    )
     response = client.chat.completions.create(
         model="tensorzero::model_name::dummy::json",
         messages=[
@@ -825,6 +831,7 @@ async def test_patch_sync_openai_client_async_setup():
         ],
     )
     assert response.choices[0].message.content == '{"answer":"Hello"}'
+
 
 def test_patch_openai_client_no_config():
     client = OpenAI()
@@ -840,28 +847,43 @@ def test_patch_openai_client_no_config():
     )
     assert response.choices[0].message.content == '{"answer":"Hello"}'
 
+
 def test_patch_openai_client_with_config():
     client = OpenAI()
-    client = tensorzero.patch_openai_client(client, config_file="../../tensorzero-internal/tests/e2e/tensorzero.toml")
+    client = tensorzero.patch_openai_client(
+        client, config_file="../../tensorzero-internal/tests/e2e/tensorzero.toml"
+    )
     response = client.chat.completions.create(
         model="tensorzero::function_name::json_success",
         messages=[
             {
                 "role": "system",
-                "content": [{"type": "text", "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"}}],
+                "content": [
+                    {
+                        "type": "text",
+                        "tensorzero::arguments": {
+                            "assistant_name": "Alfred Pennyworth"
+                        },
+                    }
+                ],
             },
             {
                 "role": "user",
-                "content": [{"type": "text", "tensorzero::arguments": {"country": "Japan"}}],
-            }
+                "content": [
+                    {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+                ],
+            },
         ],
     )
     assert response.choices[0].message.content == '{"answer":"Hello"}'
+
 
 @pytest.mark.asyncio
 async def test_patch_async_openai_client_sync_setup():
     client = AsyncOpenAI()
-    client = tensorzero.patch_openai_client(client, "../../examples/readme/config/tensorzero.toml", clickhouse_url=None)
+    client = tensorzero.patch_openai_client(
+        client, "../../examples/readme/config/tensorzero.toml", clickhouse_url=None
+    )
     response = await client.chat.completions.create(
         model="tensorzero::model_name::dummy::json",
         messages=[
@@ -873,10 +895,13 @@ async def test_patch_async_openai_client_sync_setup():
     )
     assert response.choices[0].message.content == '{"answer":"Hello"}'
 
+
 @pytest.mark.asyncio
 async def test_patch_async_openai_client_async_setup():
     client = AsyncOpenAI()
-    client = await tensorzero.patch_openai_client(client, "../../examples/readme/config/tensorzero.toml", async_setup=True)
+    client = await tensorzero.patch_openai_client(
+        client, "../../examples/readme/config/tensorzero.toml", async_setup=True
+    )
     response = await client.chat.completions.create(
         model="tensorzero::model_name::dummy::json",
         messages=[
@@ -887,14 +912,22 @@ async def test_patch_async_openai_client_async_setup():
         ],
     )
     assert response.choices[0].message.content == '{"answer":"Hello"}'
+
 
 @pytest.mark.asyncio
 async def test_patch_openai_missing_await():
     client = OpenAI()
 
-    with pytest.warns(RuntimeWarning, match="coroutine '_async_attach_fields' was never awaited"):
-        tensorzero.patch_openai_client(client, "../../examples/readme/config/tensorzero.toml", clickhouse_url=None, async_setup=True)
-    
+    with pytest.warns(
+        RuntimeWarning, match="coroutine '_async_attach_fields' was never awaited"
+    ):
+        tensorzero.patch_openai_client(
+            client,
+            "../../examples/readme/config/tensorzero.toml",
+            clickhouse_url=None,
+            async_setup=True,
+        )
+
     with pytest.raises(RuntimeError) as exc_info:
         client.chat.completions.create(
             model="tensorzero::model_name::openai::gpt-4o-mini",
@@ -905,13 +938,24 @@ async def test_patch_openai_missing_await():
                 }
             ],
         )
-    assert str(exc_info.value) == "TensorZero: Please await the result of `tensorzero.patch_openai_client` before using the client."
+    assert (
+        str(exc_info.value)
+        == "TensorZero: Please await the result of `tensorzero.patch_openai_client` before using the client."
+    )
+
 
 @pytest.mark.asyncio
 async def test_patch_async_openai_missing_await():
     client = AsyncOpenAI()
-    with pytest.warns(RuntimeWarning, match="coroutine '_async_attach_fields' was never awaited"):
-        tensorzero.patch_openai_client(client, "../../examples/readme/config/tensorzero.toml", clickhouse_url=None, async_setup=True)
+    with pytest.warns(
+        RuntimeWarning, match="coroutine '_async_attach_fields' was never awaited"
+    ):
+        tensorzero.patch_openai_client(
+            client,
+            "../../examples/readme/config/tensorzero.toml",
+            clickhouse_url=None,
+            async_setup=True,
+        )
     with pytest.raises(RuntimeError) as exc_info:
         await client.chat.completions.create(
             model="tensorzero::model_name::openai::gpt-4o-mini",
@@ -922,38 +966,73 @@ async def test_patch_async_openai_missing_await():
                 }
             ],
         )
-    assert str(exc_info.value) == "TensorZero: Please await the result of `tensorzero.patch_openai_client` before using the client."
+    assert (
+        str(exc_info.value)
+        == "TensorZero: Please await the result of `tensorzero.patch_openai_client` before using the client."
+    )
 
 
 def test_repeated_patch_openai_client_sync_setup():
     sync_client = OpenAI()
-    tensorzero.patch_openai_client(sync_client, "../../examples/readme/config/tensorzero.toml")
+    tensorzero.patch_openai_client(
+        sync_client, "../../examples/readme/config/tensorzero.toml"
+    )
     with pytest.raises(RuntimeError) as exc_info:
-        tensorzero.patch_openai_client(sync_client, "../../examples/readme/config/tensorzero.toml")
-    assert str(exc_info.value) == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
+        tensorzero.patch_openai_client(
+            sync_client, "../../examples/readme/config/tensorzero.toml"
+        )
+    assert (
+        str(exc_info.value)
+        == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
+    )
 
     async_client = AsyncOpenAI()
-    tensorzero.patch_openai_client(async_client, "../../examples/readme/config/tensorzero.toml")
+    tensorzero.patch_openai_client(
+        async_client, "../../examples/readme/config/tensorzero.toml"
+    )
     with pytest.raises(RuntimeError) as exc_info:
-        tensorzero.patch_openai_client(async_client, "../../examples/readme/config/tensorzero.toml")
-    assert str(exc_info.value) == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
+        tensorzero.patch_openai_client(
+            async_client, "../../examples/readme/config/tensorzero.toml"
+        )
+    assert (
+        str(exc_info.value)
+        == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
+    )
+
 
 @pytest.mark.asyncio
 async def test_repeated_patch_openai_client_async_setup():
     sync_client = OpenAI()
-    await tensorzero.patch_openai_client(sync_client, "../../examples/readme/config/tensorzero.toml", async_setup=True)
+    await tensorzero.patch_openai_client(
+        sync_client, "../../examples/readme/config/tensorzero.toml", async_setup=True
+    )
     with pytest.raises(RuntimeError) as exc_info:
-        await tensorzero.patch_openai_client(sync_client, "../../examples/readme/config/tensorzero.toml")
-    assert str(exc_info.value) == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
+        await tensorzero.patch_openai_client(
+            sync_client, "../../examples/readme/config/tensorzero.toml"
+        )
+    assert (
+        str(exc_info.value)
+        == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
+    )
 
     async_client = AsyncOpenAI()
-    await tensorzero.patch_openai_client(async_client, "../../examples/readme/config/tensorzero.toml", async_setup=True)
+    await tensorzero.patch_openai_client(
+        async_client, "../../examples/readme/config/tensorzero.toml", async_setup=True
+    )
     with pytest.raises(RuntimeError) as exc_info:
-        await tensorzero.patch_openai_client(async_client, "../../examples/readme/config/tensorzero.toml")
-    assert str(exc_info.value) == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
+        await tensorzero.patch_openai_client(
+            async_client, "../../examples/readme/config/tensorzero.toml"
+        )
+    assert (
+        str(exc_info.value)
+        == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
+    )
+
 
 @pytest.mark.asyncio
 async def test_close_patch_openai_client():
     sync_client = OpenAI()
-    await tensorzero.patch_openai_client(sync_client, "../../examples/readme/config/tensorzero.toml", async_setup=True)
+    await tensorzero.patch_openai_client(
+        sync_client, "../../examples/readme/config/tensorzero.toml", async_setup=True
+    )
     tensorzero.close_patched_openai_client_gateway(sync_client)
