@@ -13,16 +13,30 @@ import {
   BasicInfoItemTitle,
   BasicInfoItemContent,
 } from "~/components/layout/BasicInfoLayout";
+import Chip from "~/components/ui/Chip";
 import {
-  EpisodeChip,
-  FunctionChip,
-  VariantChip,
-  TimestampChip,
-  ProcessingTimeChip,
-} from "~/components/ui/Chip";
+  Functions,
+  SupervisedFineTuning,
+  Episodes,
+  Placeholder,
+} from "~/components/icons/Icons";
 
 const FF_ENABLE_DATASETS =
   import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
+
+// Helper function for formatting dates
+const formatDate = (date: Date) => {
+  const options: Intl.DateTimeFormatOptions = {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hour12: true,
+  };
+
+  return new Date(date).toLocaleString("en-US", options);
+};
 
 interface BasicInfoProps {
   inference: ParsedInferenceRow;
@@ -54,10 +68,12 @@ export default function BasicInfo({
         <BasicInfoItem>
           <BasicInfoItemTitle>Function</BasicInfoItemTitle>
           <BasicInfoItemContent>
-            <FunctionChip
-              name={inference.function_name}
+            <Chip
+              icon={<Functions />}
+              label={inference.function_name}
+              secondaryLabel={inference.function_type}
               link={`/observability/functions/${inference.function_name}`}
-              type={inference.function_type}
+              font="mono"
             />
           </BasicInfoItemContent>
         </BasicInfoItem>
@@ -65,10 +81,12 @@ export default function BasicInfo({
         <BasicInfoItem>
           <BasicInfoItemTitle>Variant</BasicInfoItemTitle>
           <BasicInfoItemContent>
-            <VariantChip
-              name={inference.variant_name}
+            <Chip
+              label={inference.variant_name}
+              icon={<SupervisedFineTuning />}
+              secondaryLabel={variantType}
               link={`/observability/functions/${inference.function_name}/variants/${inference.variant_name}`}
-              type={variantType}
+              font="mono"
             />
           </BasicInfoItemContent>
         </BasicInfoItem>
@@ -76,9 +94,11 @@ export default function BasicInfo({
         <BasicInfoItem>
           <BasicInfoItemTitle>Episode</BasicInfoItemTitle>
           <BasicInfoItemContent>
-            <EpisodeChip
-              text={inference.episode_id}
+            <Chip
+              icon={<Episodes className="text-foreground-tertiary" />}
+              label={inference.episode_id}
               link={`/observability/episodes/${inference.episode_id}`}
+              font="mono"
             />
           </BasicInfoItemContent>
         </BasicInfoItem>
@@ -86,19 +106,15 @@ export default function BasicInfo({
         <BasicInfoItem>
           <BasicInfoItemTitle>Usage</BasicInfoItemTitle>
           <BasicInfoItemContent>
-            <div className="flex flex-row gap-4">
-              <div className="flex flex-row gap-1">
-                <span className="text-foreground-secondary">Input </span>
-                <span className="text-foreground-primary">
-                  {inferenceUsage?.input_tokens ?? ""}
-                </span>
-              </div>
-              <div className="flex flex-row gap-1">
-                <span className="text-foreground-secondary">Output </span>
-                <span className="text-foreground-primary">
-                  {inferenceUsage?.output_tokens ?? ""}
-                </span>
-              </div>
+            <div className="flex flex-row gap-2">
+              <Chip
+                icon={<Placeholder />}
+                label={`${inferenceUsage?.input_tokens ?? ""} tok`}
+              />
+              <Chip
+                icon={<Placeholder />}
+                label={`${inferenceUsage?.output_tokens ?? ""} tok`}
+              />
             </div>
           </BasicInfoItemContent>
         </BasicInfoItem>
@@ -106,15 +122,19 @@ export default function BasicInfo({
         <BasicInfoItem>
           <BasicInfoItemTitle>Timestamp</BasicInfoItemTitle>
           <BasicInfoItemContent>
-            <TimestampChip timestamp={inference.timestamp} />
+            <Chip
+              icon={<Placeholder className="text-foreground-tertiary" />}
+              label={formatDate(new Date(inference.timestamp))}
+            />
           </BasicInfoItemContent>
         </BasicInfoItem>
 
         <BasicInfoItem>
           <BasicInfoItemTitle>Processing Time</BasicInfoItemTitle>
           <BasicInfoItemContent>
-            <ProcessingTimeChip
-              processingTimeMs={inference.processing_time_ms}
+            <Chip
+              icon={<Placeholder className="text-foreground-tertiary" />}
+              label={`${inference.processing_time_ms} ms`}
             />
           </BasicInfoItemContent>
         </BasicInfoItem>

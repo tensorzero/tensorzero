@@ -10,17 +10,20 @@ use uuid::Uuid;
 use crate::{
     clickhouse::ClickHouseConnectionInfo,
     error::{Error, ErrorDetails},
+    function::FunctionConfig,
     gateway_util::{AppState, StructuredJson},
-    inference::types::batch::{deserialize_json_string, deserialize_optional_json_string},
     inference::types::{
-        ChatInferenceDatabaseInsert, ContentBlockChatOutput, JsonInferenceDatabaseInsert,
-        JsonInferenceOutput, ResolvedInput,
+        batch::{deserialize_json_string, deserialize_optional_json_string},
+        ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
+        JsonInferenceDatabaseInsert, JsonInferenceOutput, ResolvedInput,
     },
     tool::ToolCallConfigDatabaseInsert,
+    uuid_util::validate_tensorzero_uuid,
 };
 use tracing::instrument;
 
 pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
+use super::feedback::{validate_parse_demonstration, DemonstrationOutput};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -154,33 +157,21 @@ FORMAT JSONEachRow;"#
     Ok(inference_data)
 }
 
-/// The handler for the `/datasets/:dataset/datapoints` endpoint.
-/// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`
-/// based on an existing inference (specified by `inference_id`).
-///
-/// The inference is mostly copied as-is, except for the 'output' field.
-/// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
-#[instrument(name = "create_datapoint", skip(app_state))]
-pub async fn create_datapoint_handler(
-    State(app_state): AppState,
-    Path(path_params): Path<CreatePathParams>,
-    StructuredJson(params): StructuredJson<CreateDatapointParams>,
-) -> Result<Json<CreateDatapointResponse>, Error> {
-    let inference_data =
-        query_inference_for_datapoint(&app_state.clickhouse_connection_info, params.inference_id)
-            .await?;
+async fn insert_from_existing(
+    clickhouse: &ClickHouseConnectionInfo,
+    path_params: CreatePathParams,
+    existing: &ExistingInference,
+) -> Result<Uuid, Error> {
+    let inference_data = query_inference_for_datapoint(clickhouse, existing.inference_id).await?;
+    let datapoint_id = Uuid::now_v7();
 
     match inference_data {
         TaggedInferenceDatabaseInsert::Json(inference) => {
-            let output = match params.output {
+            let output = match existing.output {
                 OutputKind::Inherit => Some(inference.output),
                 OutputKind::Demonstration => {
-                    let demonstration = query_demonstration(
-                        &app_state.clickhouse_connection_info,
-                        params.inference_id,
-                        1,
-                    )
-                    .await?;
+                    let demonstration =
+                        query_demonstration(clickhouse, existing.inference_id, 1).await?;
                     Some(serde_json::from_str(&demonstration.value).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
@@ -195,7 +186,7 @@ pub async fn create_datapoint_handler(
             let datapoint = JsonInferenceDatapoint {
                 dataset_name: path_params.dataset,
                 function_name: inference.function_name,
-                id: inference.id,
+                id: datapoint_id,
                 episode_id: Some(inference.episode_id),
                 input: inference.input,
                 output,
@@ -204,23 +195,18 @@ pub async fn create_datapoint_handler(
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
             };
-            app_state
-                .clickhouse_connection_info
+            clickhouse
                 .write(&[datapoint], "JsonInferenceDatapoint")
                 .await?;
         }
         TaggedInferenceDatabaseInsert::Chat(inference) => {
-            let output = match params.output {
+            let output = match existing.output {
                 OutputKind::Inherit => Some(inference.output),
                 OutputKind::Demonstration => {
-                    let demonstration = query_demonstration(
-                        &app_state.clickhouse_connection_info,
-                        params.inference_id,
-                        1,
-                    )
-                    .await?;
+                    let demonstration =
+                        query_demonstration(clickhouse, existing.inference_id, 1).await?;
                     Some(serde_json::from_str(&demonstration.value).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
+                        Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
                                 "Failed to deserialize chat demonstration output: {}",
                                 e
@@ -233,7 +219,7 @@ pub async fn create_datapoint_handler(
             let datapoint = ChatInferenceDatapoint {
                 dataset_name: path_params.dataset,
                 function_name: inference.function_name,
-                id: inference.id,
+                id: datapoint_id,
                 episode_id: Some(inference.episode_id),
                 input: inference.input,
                 output,
@@ -242,13 +228,153 @@ pub async fn create_datapoint_handler(
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
             };
+            clickhouse
+                .write(&[datapoint], "ChatInferenceDatapoint")
+                .await?;
+        }
+    }
+    Ok(datapoint_id)
+}
+
+#[derive(Deserialize)]
+struct WithFunctionName {
+    function_name: String,
+}
+
+/// The handler for the POST `/datasets/:dataset/datapoints` endpoint.
+/// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`
+/// based on an existing inference (specified by `inference_id`).
+///
+/// The inference is mostly copied as-is, except for the 'output' field.
+/// Based on the 'output' parameter, the output is copied, ignored, or fetched from a demonstration.
+#[instrument(name = "create_datapoint", skip(app_state))]
+pub async fn create_datapoint_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<CreatePathParams>,
+    StructuredJson(existing_inference): StructuredJson<ExistingInference>,
+) -> Result<Json<CreateDatapointResponse>, Error> {
+    let datapoint_id = insert_from_existing(
+        &app_state.clickhouse_connection_info,
+        path_params,
+        &existing_inference,
+    )
+    .await?;
+    Ok(Json(CreateDatapointResponse { id: datapoint_id }))
+}
+
+/// The handler for the PUT `/datasets/:dataset/datapoints/:id"` endpoint.
+/// This writes a datapoint with the given id, overwriting any existing datapoint
+/// with the same id.
+///
+/// The input and output are validated against the function schema
+/// (retrieved from the `function_name` argument in the body).
+#[instrument(name = "update_datapoint", skip(app_state))]
+pub async fn update_datapoint_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<UpdatePathParams>,
+    // This is deserialized as either a `SyntheticChatInferenceDatapoint` or `SyntheticJsonInferenceDatapoint`,
+    // based on the type of the function looked up from the `function_name` key.
+    StructuredJson(params): StructuredJson<serde_json::Value>,
+) -> Result<Json<CreateDatapointResponse>, Error> {
+    validate_tensorzero_uuid(path_params.id, "Datapoint")?;
+    let fetch_context = FetchContext {
+        client: &app_state.http_client,
+        object_store_info: &app_state.config.object_store_info,
+    };
+    let function_data: WithFunctionName = serde_json::from_value(params.clone()).map_err(|e| {
+        Error::new(ErrorDetails::InvalidRequest {
+            message: format!("Failed to deserialize `function_name``: {}", e),
+        })
+    })?;
+    let function_config = app_state
+        .config
+        .get_function(&function_data.function_name)?;
+    match &**function_config {
+        FunctionConfig::Chat(_) => {
+            let chat: SyntheticChatInferenceDatapoint =
+                serde_json::from_value(params).map_err(|e| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("Failed to deserialize chat datapoint: {}", e),
+                    })
+                })?;
+
+            let resolved_input = chat.input.clone().resolve(&fetch_context).await?;
+            function_config.validate_input(&chat.input)?;
+            let validated_output = validate_parse_demonstration(
+                function_config,
+                &app_state.config.tools,
+                &chat.output,
+            )
+            .await?;
+
+            let DemonstrationOutput::Chat(output) = validated_output else {
+                return Err(Error::new(ErrorDetails::InternalError {
+                    message: "Expected chat output from validate_parse_demonstration".to_string(),
+                }));
+            };
+
+            let datapoint = ChatInferenceDatapoint {
+                dataset_name: path_params.dataset,
+                function_name: chat.function_name,
+                id: path_params.id,
+                episode_id: None,
+                input: resolved_input,
+                output: Some(output),
+                tool_params: chat.tool_params,
+                tags: chat.tags,
+                auxiliary: chat.auxiliary,
+                is_deleted: false,
+            };
             app_state
                 .clickhouse_connection_info
                 .write(&[datapoint], "ChatInferenceDatapoint")
                 .await?;
         }
+        FunctionConfig::Json(_) => {
+            let json: SyntheticJsonInferenceDatapoint =
+                serde_json::from_value(params).map_err(|e| {
+                    Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("Failed to deserialize chat datapoint: {}", e),
+                    })
+                })?;
+            let resolved_input = json.input.clone().resolve(&fetch_context).await?;
+            function_config.validate_input(&json.input)?;
+            let validated_json = validate_parse_demonstration(
+                function_config,
+                &app_state.config.tools,
+                &json.output,
+            )
+            .await?;
+            let DemonstrationOutput::Json(json_out) = validated_json else {
+                return Err(Error::new(ErrorDetails::InternalError {
+                    message: "Expected JSON output from validate_parse_demonstration".to_string(),
+                }));
+            };
+            let json_out: JsonInferenceOutput = serde_json::from_value(json_out).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to deserialize validated JSON output: {}", e),
+                })
+            })?;
+            let datapoint = JsonInferenceDatapoint {
+                dataset_name: path_params.dataset,
+                function_name: json.function_name,
+                id: path_params.id,
+                episode_id: None,
+                input: resolved_input,
+                output: Some(json_out),
+                // We currently don't support creating synthetic datapoints with 'output_schema'
+                output_schema: serde_json::Value::Object(Default::default()),
+                tags: json.tags,
+                auxiliary: json.auxiliary,
+                is_deleted: false,
+            };
+            app_state
+                .clickhouse_connection_info
+                .write(&[datapoint], "JsonInferenceDatapoint")
+                .await?;
+        }
     }
-    Ok(Json(CreateDatapointResponse {}))
+    Ok(Json(CreateDatapointResponse { id: path_params.id }))
 }
 
 #[instrument(name = "delete_datapoint", skip(app_state))]
@@ -300,6 +426,12 @@ pub struct CreatePathParams {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct UpdatePathParams {
+    pub dataset: String,
+    pub id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct DeletePathParams {
     pub dataset: String,
     pub function: String,
@@ -308,7 +440,7 @@ pub struct DeletePathParams {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CreateDatapointParams {
+pub struct ExistingInference {
     pub output: OutputKind,
     pub inference_id: Uuid,
 }
@@ -330,7 +462,9 @@ impl DatapointKind {
 }
 
 #[derive(Debug, Serialize)]
-pub struct CreateDatapointResponse {}
+pub struct CreateDatapointResponse {
+    id: Uuid,
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Datapoint {
@@ -367,6 +501,7 @@ pub struct ChatInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<HashMap<String, String>>,
     pub auxiliary: String,
     pub is_deleted: bool,
@@ -383,7 +518,34 @@ pub struct JsonInferenceDatapoint {
     #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub output: Option<JsonInferenceOutput>,
     pub output_schema: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<HashMap<String, String>>,
     pub auxiliary: String,
     pub is_deleted: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SyntheticChatInferenceDatapoint {
+    pub function_name: String,
+    pub input: Input,
+    pub output: serde_json::Value,
+    #[serde(default)]
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(default)]
+    pub tags: Option<HashMap<String, String>>,
+    #[serde(default)]
+    pub auxiliary: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SyntheticJsonInferenceDatapoint {
+    pub function_name: String,
+    pub input: Input,
+    pub output: serde_json::Value,
+    #[serde(default)]
+    pub tags: Option<HashMap<String, String>>,
+    #[serde(default)]
+    pub auxiliary: String,
 }

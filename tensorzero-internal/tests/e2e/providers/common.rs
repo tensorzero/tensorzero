@@ -7,6 +7,8 @@ use aws_config::Region;
 use aws_sdk_bedrockruntime::error::SdkError;
 #[cfg(feature = "e2e_tests")]
 use aws_sdk_s3::operation::get_object::GetObjectError;
+#[cfg(feature = "e2e_tests")]
+use axum::extract::{Query, State};
 use axum::{routing::get, Router};
 use base64::prelude::*;
 use futures::StreamExt;
@@ -21,6 +23,12 @@ use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
     InputMessage, InputMessageContent,
 };
+#[cfg(feature = "e2e_tests")]
+use tensorzero_internal::endpoints::object_storage::{
+    get_object_handler, ObjectResponse, PathParams,
+};
+#[cfg(feature = "e2e_tests")]
+use tensorzero_internal::gateway_util::AppStateData;
 use tensorzero_internal::inference::types::TextKind;
 use tensorzero_internal::{
     cache::CacheEnabledMode,
@@ -523,7 +531,7 @@ model = "anthropic::claude-3-haiku-20240307"
 
 [functions.image_test.variants.google_ai_studio]
 type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-1.5-flash-8b"
+model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.image_test.variants.gcp_vertex]
 type = "chat_completion"
@@ -569,11 +577,60 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
     assert_eq!(result, FERRIS_PNG);
 }
 
-#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+#[cfg(feature = "e2e_tests")]
+async fn check_object_fetch(data: AppStateData, storage_path: &StoragePath) {
+    check_object_fetch_via_embedded(data.clone(), storage_path).await;
+    check_object_fetch_via_gateway(storage_path).await;
+}
+
+#[cfg(feature = "e2e_tests")]
+async fn check_object_fetch_via_embedded(data: AppStateData, storage_path: &StoragePath) {
+    let res = get_object_handler(
+        State(data),
+        Query(PathParams {
+            storage_path: serde_json::to_string(storage_path).unwrap(),
+        }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        res.0,
+        ObjectResponse {
+            data: BASE64_STANDARD.encode(FERRIS_PNG),
+            reused_object_store: true,
+        }
+    );
+}
+
+#[cfg(feature = "e2e_tests")]
+async fn check_object_fetch_via_gateway(storage_path: &StoragePath) {
+    // Try using the running HTTP gateway (which is *not* configured with an object store)
+    // to fetch the `StoragePath`
+    let client = reqwest::Client::new();
+    let res = client
+        .get(get_gateway_endpoint(&format!(
+            "/internal/object_storage?storage_path={}",
+            serde_json::to_string(storage_path).unwrap()
+        )))
+        .send()
+        .await
+        .unwrap();
+
+    let response_json = res.json::<Value>().await.unwrap();
+    assert_eq!(
+        response_json,
+        serde_json::json!({
+            "data": BASE64_STANDARD.encode(FERRIS_PNG),
+            "reused_object_store": false,
+        })
+    );
+}
+
+#[cfg(feature = "e2e_tests")]
 pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
     println!("Temporary image dir: {}", temp_dir.path().to_string_lossy());
-    test_base64_image_inference_with_provider_and_store(
+    let (client, storage_path) = test_base64_image_inference_with_provider_and_store(
         provider,
         &StorageKind::Filesystem {
             path: temp_dir.path().to_string_lossy().to_string(),
@@ -598,6 +655,7 @@ pub async fn test_image_inference_with_provider_filesystem(provider: E2ETestProv
     ))
     .unwrap();
     assert_eq!(result, FERRIS_PNG);
+    check_object_fetch(client.get_app_state_data().unwrap().clone(), &storage_path).await;
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -618,18 +676,19 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
     let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
     prefix += "-";
 
-    test_image_inference_with_provider_s3_compatible(
-        provider,
-        &StorageKind::S3Compatible {
-            bucket_name: Some(test_bucket.to_string()),
-            region: Some("us-east-1".to_string()),
-            prefix: prefix.clone(),
-            endpoint: None,
-            allow_http: None,
-        },
-        &client,
-        &format!(
-            r#"
+    let (tensorzero_client, expected_key, storage_path) =
+        test_image_inference_with_provider_s3_compatible(
+            provider,
+            &StorageKind::S3Compatible {
+                bucket_name: Some(test_bucket.to_string()),
+                region: Some("us-east-1".to_string()),
+                prefix: prefix.clone(),
+                endpoint: None,
+                allow_http: None,
+            },
+            &client,
+            &format!(
+                r#"
     [object_storage]
     type = "s3_compatible"
     region = "us-east-1"
@@ -638,11 +697,25 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
 
     {IMAGE_FUNCTION_CONFIG}
     "#
-        ),
-        test_bucket,
-        &prefix,
+            ),
+            test_bucket,
+            &prefix,
+        )
+        .await;
+
+    check_object_fetch(
+        tensorzero_client.get_app_state_data().unwrap().clone(),
+        &storage_path,
     )
     .await;
+
+    client
+        .delete_object()
+        .key(&expected_key)
+        .bucket(test_bucket)
+        .send()
+        .await
+        .unwrap();
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -653,7 +726,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(
     toml: &str,
     bucket_name: &str,
     prefix: &str,
-) {
+) -> (tensorzero::Client, String, StoragePath) {
     let expected_key =
         format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
 
@@ -676,7 +749,9 @@ pub async fn test_image_inference_with_provider_s3_compatible(
         panic!("Expected ServiceError: {err:?}");
     }
 
-    test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix).await;
+    let (tensorzero_client, storage_path) =
+        test_base64_image_inference_with_provider_and_store(provider, storage_kind, toml, prefix)
+            .await;
 
     let result = client
         .get_object()
@@ -688,13 +763,7 @@ pub async fn test_image_inference_with_provider_s3_compatible(
 
     assert_eq!(result.body.collect().await.unwrap().to_vec(), FERRIS_PNG);
 
-    client
-        .delete_object()
-        .key(&expected_key)
-        .bucket(bucket_name)
-        .send()
-        .await
-        .unwrap();
+    (tensorzero_client, expected_key, storage_path)
 }
 
 async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
@@ -785,12 +854,13 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     kind: &StorageKind,
     config_toml: &str,
     prefix: &str,
-) {
+) -> (tensorzero::Client, StoragePath) {
     let episode_id = Uuid::now_v7();
 
     let image_data = BASE64_STANDARD.encode(FERRIS_PNG);
 
     let client = make_embedded_gateway_with_config(config_toml).await;
+    let mut storage_path = None;
 
     for should_be_cached in [false, true] {
         let response = client
@@ -826,7 +896,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
             panic!("Expected non-streaming inference response");
         };
 
-        check_base64_image_response(
+        let latest_storage_path = check_base64_image_response(
             response,
             Some(episode_id),
             &provider,
@@ -836,7 +906,9 @@ pub async fn test_base64_image_inference_with_provider_and_store(
         )
         .await;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        storage_path = Some(latest_storage_path);
     }
+    (client, storage_path.unwrap())
 }
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
@@ -1050,7 +1122,7 @@ pub async fn check_base64_image_response(
     should_be_cached: bool,
     kind: &StorageKind,
     prefix: &str,
-) {
+) -> StoragePath {
     let inference_id = response.inference_id();
 
     let episode_id_response = response.episode_id();
@@ -1147,28 +1219,31 @@ pub async fn check_base64_image_response(
     let model_inference_id = result.get("id").unwrap().as_str().unwrap();
     assert!(Uuid::parse_str(model_inference_id).is_ok());
 
+    let expected_storage_path = StoragePath {
+        kind: kind.clone(),
+        path: Path::parse(format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png")).unwrap(),
+    };
+
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
     assert_eq!(
         input_messages,
-        vec![
-            RequestMessage {
-                role: Role::User,
-                content: vec![ContentBlock::Text(Text {
+        vec![RequestMessage {
+            role: Role::User,
+            content: vec![
+                ContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
-                }), ContentBlock::Image(ImageWithPath {
+                }),
+                ContentBlock::Image(ImageWithPath {
                     image: Base64Image {
                         url: None,
                         data: None,
                         mime_type: ImageKind::Png,
                     },
-                    storage_path: StoragePath {
-                        kind: kind.clone(),
-                        path: Path::parse(format!("{prefix}observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png")).unwrap(),
-                    }
-                })]
-            },
-        ]
+                    storage_path: expected_storage_path.clone(),
+                })
+            ]
+        },]
     );
 
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
@@ -1193,6 +1268,7 @@ pub async fn check_base64_image_response(
         result.get("cached").unwrap().as_bool().unwrap(),
         should_be_cached
     );
+    expected_storage_path
 }
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
@@ -1529,6 +1605,215 @@ pub async fn check_simple_inference_response(
     }];
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+
+    if !is_batch {
+        // Check the InferenceTag Table
+        let result = select_inference_tags_clickhouse(
+            &clickhouse,
+            hardcoded_function_name,
+            "foo",
+            "bar",
+            inference_id,
+        )
+        .await
+        .unwrap();
+        let id = result.get("inference_id").unwrap().as_str().unwrap();
+        let id = Uuid::parse_str(id).unwrap();
+        assert_eq!(id, inference_id);
+    }
+    assert_eq!(
+        result.get("cached").unwrap().as_bool().unwrap(),
+        should_be_cached
+    );
+}
+
+#[cfg_attr(not(feature = "batch_tests"), allow(dead_code))]
+pub async fn check_simple_image_inference_response(
+    response_json: Value,
+    episode_id: Option<Uuid>,
+    provider: &E2ETestProvider,
+    is_batch: bool,
+    should_be_cached: bool,
+) {
+    let hardcoded_function_name = "basic_test";
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
+    let episode_id_response = Uuid::parse_str(episode_id_response).unwrap();
+    if let Some(episode_id) = episode_id {
+        assert_eq!(episode_id_response, episode_id);
+    }
+
+    let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let content = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content.len(), 1);
+    let content_block = content.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let content = content_block.get("text").unwrap().as_str().unwrap();
+    assert!(content.to_lowercase().contains("crab"));
+
+    let usage = response_json.get("usage").unwrap();
+    let input_tokens = usage.get("input_tokens").unwrap().as_u64().unwrap();
+    let output_tokens = usage.get("output_tokens").unwrap().as_u64().unwrap();
+    if should_be_cached {
+        assert_eq!(input_tokens, 0);
+        assert_eq!(output_tokens, 0);
+    } else {
+        assert!(input_tokens > 0);
+        assert!(output_tokens > 0);
+    }
+    let finish_reason = response_json
+        .get("finish_reason")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    // Some providers return "stop" and others return "length"
+    assert!(finish_reason == "stop" || finish_reason == "length");
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Check if ClickHouse is ok - ChatInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ChatInference: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, hardcoded_function_name);
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    if let Some(episode_id) = episode_id {
+        assert_eq!(retrieved_episode_id, episode_id);
+    }
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "Dr. Mehta"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "value": "What kind of animal is in this image?"},
+                    {
+                        "type": "image",
+                        "image": {
+                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                            "mime_type": "image/png",
+                        },
+                        "storage_path": {
+                            "kind": {"type": "disabled"},
+                            "path": "observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                        }
+                    }
+                ]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    let content_blocks = result.get("output").unwrap().as_str().unwrap();
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert_eq!(content_blocks.len(), 1);
+    let content_block = content_blocks.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(content_block_type, "text");
+    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(clickhouse_content, content);
+
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    assert!(tool_params.is_empty());
+
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params = inference_params.get("chat_completion").unwrap();
+    assert!(inference_params.get("temperature").is_none());
+    assert!(inference_params.get("seed").is_none());
+    let max_tokens = if provider.model_name.starts_with("o1") {
+        1000
+    } else {
+        100
+    };
+    assert_eq!(
+        inference_params
+            .get("max_tokens")
+            .unwrap()
+            .as_u64()
+            .unwrap(),
+        max_tokens
+    );
+
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    }
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    let model_inference_id = result.get("id").unwrap().as_str().unwrap();
+    assert!(Uuid::parse_str(model_inference_id).is_ok());
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
+
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    assert!(raw_response.to_lowercase().contains("tokyo"));
+    assert!(serde_json::from_str::<Value>(raw_response).is_ok());
+
+    let input_tokens = result.get("input_tokens").unwrap();
+    let output_tokens = result.get("output_tokens").unwrap();
+    assert!(input_tokens.as_u64().unwrap() > 0);
+    assert!(output_tokens.as_u64().unwrap() > 0);
+    if !is_batch && !should_be_cached {
+        let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+        assert!(response_time_ms > 0);
+        assert!(result.get("ttft_ms").unwrap().is_null());
+    }
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta"
+    );
+    let output = result.get("output").unwrap().as_str().unwrap();
+    assert!(
+        output.to_lowercase().contains("crab"),
+        "Unexpected output: {output}",
+    );
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 1);
 
@@ -3507,13 +3792,6 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
         return;
     }
 
-    // GCP Vertex doesn't support `tool_choice: "required"` for Gemini 1.5 Flash
-    if provider.model_provider_name.contains("gcp_vertex")
-        && provider.model_name == "gemini-1.5-flash-001"
-    {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -3791,13 +4069,6 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
 ) {
     // Azure and Together don't support `tool_choice: "required"`
     if provider.model_provider_name == "azure" || provider.model_provider_name == "together" {
-        return;
-    }
-
-    // GCP Vertex doesn't support `tool_choice: "required"` for Gemini 1.5 Flash
-    if provider.model_provider_name.contains("gcp_vertex")
-        && provider.model_name == "gemini-1.5-flash-001"
-    {
         return;
     }
 
@@ -5397,14 +5668,6 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
 pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // GCP Vertex doesn't support `tool_choice: "required"` for Gemini 1.5 Flash,
-    // and it won't call `get_humidity` on auto.
-    if provider.model_provider_name.contains("gcp_vertex")
-        && provider.model_name == "gemini-1.5-flash-001"
-    {
-        return;
-    }
-
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -5661,14 +5924,6 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
 pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // GCP Vertex doesn't support `tool_choice: "required"` for Gemini 1.5 Flash,
-    // and it won't call `get_humidity` on auto.
-    if provider.model_provider_name.contains("gcp_vertex")
-        && provider.model_name == "gemini-1.5-flash-001"
-    {
-        return;
-    }
-
     // OpenAI O1 doesn't support streaming responses
     if provider.model_provider_name == "openai" && provider.model_name.starts_with("o1") {
         return;

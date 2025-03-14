@@ -1,5 +1,7 @@
 #![allow(clippy::print_stdout)]
 
+use std::time::Duration;
+
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
 use tensorzero_internal::endpoints::datasets::CLICKHOUSE_DATETIME_FORMAT;
@@ -9,6 +11,388 @@ use crate::common::get_gateway_endpoint;
 use tensorzero_internal::clickhouse::test_helpers::{
     get_clickhouse, select_chat_datapoint_clickhouse, select_json_datapoint_clickhouse,
 };
+
+#[tokio::test]
+async fn test_datapoint_insert_synthetic_chat() {
+    let clickhouse = get_clickhouse().await;
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&serde_json::json!({
+            "function_name": "basic_test",
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "output": [{"type": "text", "text": "My synthetic output"}],
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let resp_json = resp.json::<Value>().await.unwrap();
+
+    if !status.is_success() {
+        panic!("Bad request: {:?}", resp_json);
+    }
+
+    let id: Uuid = resp_json
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    assert_eq!(id, datapoint_id);
+
+    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
+        .await
+        .unwrap();
+
+    let updated_at = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("updated_at")
+        .unwrap();
+    let updated_at = chrono::NaiveDateTime::parse_from_str(
+        updated_at.as_str().unwrap(),
+        CLICKHOUSE_DATETIME_FORMAT,
+    )
+    .unwrap()
+    .and_utc();
+    assert!(
+        chrono::Utc::now()
+            .signed_duration_since(updated_at)
+            .num_seconds()
+            < 5,
+        "Unexpected updated_at: {updated_at:?}"
+    );
+
+    let expected = serde_json::json!({
+      "dataset_name": dataset_name,
+      "function_name": "basic_test",
+      "id": id.to_string(),
+      "episode_id": null,
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"My synthetic input\"}]}]}",
+      "output": "[{\"type\":\"text\",\"text\":\"My synthetic output\"}]",
+      "tool_params": "",
+      "tags": {},
+      "auxiliary": "",
+      "is_deleted": false
+    });
+    assert_eq!(datapoint, expected);
+}
+
+#[tokio::test]
+async fn test_datapoint_insert_synthetic_json() {
+    let clickhouse = get_clickhouse().await;
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&serde_json::json!({
+            "function_name": "json_success",
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+            "output": {"answer": "Hello"},
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let resp_json = resp.json::<Value>().await.unwrap();
+
+    if !status.is_success() {
+        panic!("Bad request: {:?}", resp_json);
+    }
+
+    let id: Uuid = resp_json
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
+        .await
+        .unwrap();
+
+    let updated_at = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("updated_at")
+        .unwrap();
+    let updated_at = chrono::NaiveDateTime::parse_from_str(
+        updated_at.as_str().unwrap(),
+        CLICKHOUSE_DATETIME_FORMAT,
+    )
+    .unwrap()
+    .and_utc();
+    assert!(
+        chrono::Utc::now()
+            .signed_duration_since(updated_at)
+            .num_seconds()
+            < 5,
+        "Unexpected updated_at: {updated_at:?}"
+    );
+
+    let expected = serde_json::json!({
+      "dataset_name": dataset_name,
+      "function_name": "json_success",
+      "id": id,
+      "episode_id": null,
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"US\"}}]}]}",
+      "output": "{\"raw\":\"{\\\"answer\\\":\\\"Hello\\\"}\",\"parsed\":{\"answer\":\"Hello\"}}",
+      "output_schema": "{}",
+      "tags": {},
+      "auxiliary": "",
+      "is_deleted": false
+    });
+    assert_eq!(datapoint, expected);
+
+    // Sleep to ensure that we get a different `updated_at` timestamp
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    // Now, update the existing datapoint and verify that it changes in clickhouse
+    let new_resp = client
+    .put(get_gateway_endpoint(&format!(
+        "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+    )))
+    .json(&serde_json::json!({
+        "function_name": "json_success",
+        "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+        "output": {"answer": "New answer"},
+    }))
+    .send()
+    .await
+    .unwrap();
+
+    assert!(
+        new_resp.status().is_success(),
+        "Bad request: {:?}",
+        new_resp.text().await.unwrap()
+    );
+
+    // Force deduplication to run
+    clickhouse
+        .run_query("OPTIMIZE TABLE ChatInferenceDatapoint".to_string(), None)
+        .await
+        .unwrap();
+
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
+        .await
+        .unwrap();
+
+    let new_updated_at = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("updated_at")
+        .unwrap();
+    let new_updated_at = chrono::NaiveDateTime::parse_from_str(
+        new_updated_at.as_str().unwrap(),
+        CLICKHOUSE_DATETIME_FORMAT,
+    )
+    .unwrap()
+    .and_utc();
+    assert!(
+        chrono::Utc::now()
+            .signed_duration_since(new_updated_at)
+            .num_seconds()
+            < 5,
+        "Unexpected updated_at: {new_updated_at:?}"
+    );
+
+    assert!(
+        new_updated_at > updated_at,
+        "Expected updated_at to change: new_updated_at={new_updated_at:?} updated_at={updated_at:?}"
+    );
+
+    let expected = serde_json::json!({
+      "dataset_name": dataset_name,
+      "function_name": "json_success",
+      "id": id,
+      "episode_id": null,
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"US\"}}]}]}",
+      "output": "{\"raw\":\"{\\\"answer\\\":\\\"New answer\\\"}\",\"parsed\":{\"answer\":\"New answer\"}}",
+      "output_schema": "{}",
+      "tags": {},
+      "auxiliary": "",
+      "is_deleted": false
+    });
+    assert_eq!(datapoint, expected);
+}
+
+#[tokio::test]
+async fn test_datapoint_insert_invalid_input_synthetic_json() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&serde_json::json!({
+            "function_name": "json_success",
+            "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "output": "Not a json object",
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let resp_json = resp.json::<Value>().await.unwrap();
+    let err_msg = resp_json
+        .get("error")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        err_msg.contains("\"My synthetic input\" is not of type \"object\""),
+        "Unexpected response: {resp_json}"
+    );
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_datapoint_insert_invalid_input_synthetic_chat() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&serde_json::json!({
+            "function_name": "variant_failover",
+            "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "output": "Not a json object",
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let resp_json = resp.json::<Value>().await.unwrap();
+    let err_msg = resp_json
+        .get("error")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        err_msg.contains("\"My synthetic input\" is not of type \"object\""),
+        "Unexpected response: {resp_json}"
+    );
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_datapoint_insert_invalid_output_synthetic_json() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&serde_json::json!({
+            "function_name": "json_success",
+            "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+            "output": "Not a json object",
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let resp_json = resp.json::<Value>().await.unwrap();
+    let err_msg = resp_json
+        .get("error")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        err_msg.contains("is not of type \"object\""),
+        "Unexpected response: {resp_json}"
+    );
+    assert!(
+        err_msg.contains("\"Not a json object\" is not of type \"object\""),
+        "Unexpected response: {resp_json}"
+    );
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_datapoint_insert_synthetic_bad_uuid() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_uuid_v4 = "1b3e1480-a24a-4a69-942e-da960f9045fc";
+
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_uuid_v4}",
+        )))
+        .json(&serde_json::json!({
+            "function_name": "basic_test",
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let resp_json = resp.json::<Value>().await.unwrap();
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        resp_json,
+        serde_json::json!({
+            "error": "Invalid Datapoint ID: Version must be 7, got 4",
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_datapoint_insert_synthetic_bad_params() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&serde_json::json!({
+            "function_name": "basic_test",
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let resp_json = resp.json::<Value>().await.unwrap();
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        resp_json,
+        serde_json::json!({
+            "error": "Failed to deserialize chat datapoint: missing field `input`",
+        })
+    );
+}
 
 #[tokio::test]
 async fn test_datapoint_insert_output_inherit_chat() {
@@ -54,8 +438,11 @@ async fn test_datapoint_insert_output_inherit_chat() {
     if !resp.status().is_success() {
         panic!("Bad request: {:?}", resp.text().await.unwrap());
     }
+    let datapoint_id =
+        Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
+    assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -81,7 +468,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "basic_test",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Hello, world!\"}]}]}",
       "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
@@ -94,7 +481,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
 
     let resp = client
         .delete(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/function/basic_test/kind/chat/datapoint/{inference_id}",
+            "/datasets/{dataset_name}/function/basic_test/kind/chat/datapoint/{datapoint_id}",
         )))
         .send()
         .await
@@ -110,7 +497,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
         .await
         .unwrap();
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -136,7 +523,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "basic_test",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Hello, world!\"}]}]}",
       "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
@@ -224,8 +611,12 @@ async fn test_datapoint_insert_output_none_chat() {
     if !resp.status().is_success() {
         panic!("Bad request: {:?}", resp.text().await.unwrap());
     }
+    let datapoint_id =
+        Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
+    assert_ne!(datapoint_id, inference_id);
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -251,7 +642,7 @@ async fn test_datapoint_insert_output_none_chat() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "basic_test",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Hello, world!\"}]}]}",
       "output": null,
@@ -306,8 +697,8 @@ async fn test_datapoint_insert_output_demonstration_chat() {
         panic!("Bad request: {:?}", response.text().await.unwrap());
     }
 
-    // Sleep to allow writing demonstration before making datapoint
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Sleep to ensure that we wrote to ClickHouse
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
@@ -324,8 +715,11 @@ async fn test_datapoint_insert_output_demonstration_chat() {
     if !resp.status().is_success() {
         panic!("Bad request: {:?}", resp.text().await.unwrap());
     }
+    let datapoint_id =
+        Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
+    assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -356,7 +750,7 @@ async fn test_datapoint_insert_output_demonstration_chat() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "basic_test",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Hello, world!\"}]}]}",
       "output": "[{\"type\":\"text\",\"text\":\"My demonstration chat answer\"}]",
@@ -412,8 +806,11 @@ async fn test_datapoint_insert_output_inherit_json() {
     if !resp.status().is_success() {
         panic!("Bad request: {:?}", resp.text().await.unwrap());
     }
+    let datapoint_id =
+        Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
+    assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -439,7 +836,7 @@ async fn test_datapoint_insert_output_inherit_json() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "json_success",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"Japan\"}}]}]}",
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"Hello\\\"}\",\"parsed\":{\"answer\":\"Hello\"}}",
@@ -452,7 +849,7 @@ async fn test_datapoint_insert_output_inherit_json() {
 
     let resp = client
         .delete(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/function/json_success/kind/json/datapoint/{inference_id}",
+            "/datasets/{dataset_name}/function/json_success/kind/json/datapoint/{datapoint_id}",
         )))
         .send()
         .await
@@ -468,7 +865,7 @@ async fn test_datapoint_insert_output_inherit_json() {
         .await
         .unwrap();
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -494,7 +891,7 @@ async fn test_datapoint_insert_output_inherit_json() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "json_success",
-      "id": inference_id,
+      "id": datapoint_id,
       "episode_id": episode_id,
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"Japan\"}}]}]}",
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"Hello\\\"}\",\"parsed\":{\"answer\":\"Hello\"}}",
@@ -559,8 +956,11 @@ async fn test_datapoint_insert_output_none_json() {
     if !resp.status().is_success() {
         panic!("Bad request: {:?}", resp.text().await.unwrap());
     }
+    let datapoint_id =
+        Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
+    assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -586,7 +986,7 @@ async fn test_datapoint_insert_output_none_json() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "json_success",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"Japan\"}}]}]}",
       "output":null,
@@ -659,8 +1059,11 @@ async fn test_datapoint_insert_output_demonstration_json() {
     if !resp.status().is_success() {
         panic!("Bad request: {:?}", resp.text().await.unwrap());
     }
+    let datapoint_id =
+        Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
+    assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -691,7 +1094,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "json_success",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"Japan\"}}]}]}",
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"My demonstration answer\\\"}\",\"parsed\":{\"answer\":\"My demonstration answer\"}}",

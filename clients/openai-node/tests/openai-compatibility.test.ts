@@ -224,8 +224,9 @@ describe("OpenAI Compatibility", () => {
       // @ts-expect-error - custom TensorZero property
       previousEpisodeId = chunk.episode_id;
 
-      const variantName = chunk.model;
-      expect(variantName).toBe("test");
+      expect(chunk.model).toBe(
+        "tensorzero::function_name::basic_test::variant_name::test"
+      );
 
       if (i + 1 < chunks.length) {
         expect(chunk.choices.length).toBe(1);
@@ -419,7 +420,9 @@ describe("OpenAI Compatibility", () => {
       }
     );
 
-    expect(result.model).toBe("variant");
+    expect(result.model).toBe(
+      "tensorzero::function_name::weather_helper::variant_name::variant"
+    );
     expect(result.choices[0].message.content).toBeNull();
     expect(result.choices[0].message.tool_calls).not.toBeNull();
 
@@ -471,7 +474,9 @@ describe("OpenAI Compatibility", () => {
       }
     );
 
-    expect(result.model).toBe("bad_tool");
+    expect(result.model).toBe(
+      "tensorzero::function_name::weather_helper::variant_name::bad_tool"
+    );
     expect(result.choices[0].message.content).toBeNull();
     expect(result.choices[0].message.tool_calls).not.toBeNull();
 
@@ -550,8 +555,9 @@ describe("OpenAI Compatibility", () => {
       // @ts-expect-error - custom TensorZero property
       previousEpisodeId = chunk.episode_id;
 
-      const variantName = chunk.model;
-      expect(variantName).toBe("variant");
+      expect(chunk.model).toBe(
+        "tensorzero::function_name::weather_helper::variant_name::variant"
+      );
 
       if (i + 1 < chunks.length) {
         expect(chunk.choices.length).toBe(1);
@@ -648,8 +654,9 @@ describe("OpenAI Compatibility", () => {
       // @ts-expect-error - custom TensorZero property
       previousEpisodeId = chunk.episode_id;
 
-      const variantName = chunk.model;
-      expect(variantName).toBe("test");
+      expect(chunk.model).toBe(
+        "tensorzero::function_name::json_success::variant_name::test"
+      );
 
       if (i + 1 < chunks.length) {
         expect(chunk.choices[0].delta.content).toBe(expectedText[i]);
@@ -698,7 +705,9 @@ describe("OpenAI Compatibility", () => {
       }
     );
 
-    expect(result.model).toBe("test");
+    expect(result.model).toBe(
+      "tensorzero::function_name::json_success::variant_name::test"
+    );
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
     expect(result.choices[0].message.content).toBe('{"answer":"Hello"}');
@@ -741,7 +750,9 @@ describe("OpenAI Compatibility", () => {
       }
     );
 
-    expect(result.model).toBe("test");
+    expect(result.model).toBe(
+      "tensorzero::function_name::json_success::variant_name::test"
+    );
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
     expect(result.choices[0].message.content).toBe('{"answer":"Hello"}');
@@ -816,7 +827,9 @@ describe("OpenAI Compatibility", () => {
       }
     );
 
-    expect(result.model).toBe("test");
+    expect(result.model).toBe(
+      "tensorzero::function_name::json_fail::variant_name::test"
+    );
     expect(result.choices[0].message.content).toBe(
       "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
     );
@@ -886,7 +899,9 @@ describe("OpenAI Compatibility", () => {
       }
     );
 
-    expect(result.model).toBe("openai");
+    expect(result.model).toBe(
+      "tensorzero::function_name::basic_test::variant_name::openai"
+    );
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
     expect(result.choices[0].message.content).toBeNull();
@@ -952,7 +967,9 @@ describe("OpenAI Compatibility", () => {
       }
     );
 
-    expect(result.model).toBe("openai");
+    expect(result.model).toBe(
+      "tensorzero::function_name::dynamic_json::variant_name::openai"
+    );
     // @ts-expect-error - custom TensorZero property
     expect(result.episode_id).toBe(episodeId);
 
@@ -1040,4 +1057,44 @@ describe("OpenAI Compatibility", () => {
 
     expect(result.choices[0].message.content?.toLowerCase()).toContain("crab");
   });
+});
+
+it("should reject string input for function with input schema", async () => {
+  const messages: ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: [
+        {
+          // @ts-expect-error - custom TensorZero property
+          assistant_name: "Alfred Pennyworth",
+        },
+      ],
+    },
+    { role: "user", content: "Hi how are you?" },
+    {
+      role: "user",
+      content: [
+        {
+          // @ts-expect-error - custom TensorZero property
+          country: "Japan",
+        },
+      ],
+    },
+  ];
+
+  const episodeId = uuidv7();
+
+  await expect(
+    client.chat.completions.create(
+      {
+        messages,
+        model: "tensorzero::function_name::json_success",
+      },
+      {
+        headers: {
+          episode_id: episodeId,
+        },
+      }
+    )
+  ).rejects.toThrow(/400 "JSON Schema validation failed fo/);
 });
