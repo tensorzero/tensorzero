@@ -1,0 +1,1 @@
+The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.

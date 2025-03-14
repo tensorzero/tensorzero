@@ -247,3 +247,43 @@ pub async fn select_latest_batch_request_clickhouse(
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }
+
+#[cfg(feature = "e2e_tests")]
+pub async fn select_feedback_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    table_name: &str,
+    feedback_id: Uuid,
+) -> Option<Value> {
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM {} WHERE id = '{}' FORMAT JSONEachRow",
+        table_name, feedback_id
+    );
+
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}
+
+#[cfg(feature = "e2e_tests")]
+pub async fn select_feedback_by_target_id_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    table_name: &str,
+    target_id: Uuid,
+) -> Option<Value> {
+    let query = format!(
+        "SELECT * FROM {} WHERE target_id = '{}' FORMAT JSONEachRow",
+        table_name, target_id
+    );
+
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}
