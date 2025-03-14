@@ -366,8 +366,8 @@ async fn test_parse_args() {
     assert!(args
         .to_string()
         .contains("the following required arguments were not provided:"));
-    assert!(args.to_string().contains("'--name <NAME>'"));
-    assert!(args.to_string().contains("'--variant <VARIANT>'"));
+    assert!(args.to_string().contains("--name <NAME>"));
+    assert!(args.to_string().contains("--variant <VARIANT>"));
 
     // Test required arguments
     let args =
