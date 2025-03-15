@@ -16,6 +16,7 @@ use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
+use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
 };
@@ -575,7 +576,7 @@ pub async fn validate_parse_demonstration(
             }
             Ok(DemonstrationOutput::Chat(parsed_value))
         }
-(FunctionConfig::Json(_), DynamicDemonstrationInfo::Json(output_schema)) => {
+        (FunctionConfig::Json(_), DynamicDemonstrationInfo::Json(output_schema)) => {
             // For json functions, the value should be a valid json object.
             // TODO (#348): Eventually we should allow dynamic output_schema here as well.
             JSONSchemaFromPath::from_value(&output_schema)?.validate(value).map_err(|e| {
@@ -600,6 +601,12 @@ pub async fn validate_parse_demonstration(
 pub enum DynamicDemonstrationInfo {
     Chat(ToolCallConfig),
     Json(Value),
+}
+
+#[derive(Debug, Deserialize)]
+struct ToolParamsResult {
+    #[serde(deserialize_with = "deserialize_json_string")]
+    tool_params: ToolCallConfigDatabaseInsert,
 }
 
 /// In order to properly validate demonstration data we need to fetch the information that was
@@ -628,19 +635,16 @@ async fn get_dynamic_demonstration_info(
                 )
                 .await?;
 
-            let result_value = serde_json::from_str::<Value>(&result).map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseQuery {
-                    message: format!("Failed to parse demonstration result: {}", e),
-                })
-            })?;
-
-            let tool_call_db_insert: ToolCallConfigDatabaseInsert =
-                serde_json::from_value(result_value).map_err(|e| {
+            let tool_params_result =
+                serde_json::from_str::<ToolParamsResult>(&result).map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to parse tool call config: {}", e),
+                        message: format!("Failed to parse demonstration result: {}", e),
                     })
                 })?;
-            Ok(DynamicDemonstrationInfo::Chat(tool_call_db_insert.into()))
+
+            Ok(DynamicDemonstrationInfo::Chat(
+                tool_params_result.tool_params.into(),
+            ))
         }
         FunctionConfig::Json(..) => {
             let parameterized_query = "SELECT output_schema FROM JsonInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
@@ -1233,5 +1237,44 @@ mod tests {
         assert!(err
             .to_string()
             .contains("Demonstration does not fit function output schema"));
+
+        // Case 7: Mismatched function type - Chat function with JSON demonstration info
+        let value = json!("Hello, world!");
+        let dynamic_demonstration_info = DynamicDemonstrationInfo::Json(output_schema.clone());
+        let err = validate_parse_demonstration(
+            function_config_chat_tools,
+            &value,
+            dynamic_demonstration_info,
+        )
+        .await
+        .unwrap_err();
+        let details = err.get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::Inference {
+                message: "The DynamicDemonstrationInfo does not match the function type. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string()
+            }
+        );
+
+        // Case 8: Mismatched function type - JSON function with Chat demonstration info
+        let value = json!({
+            "name": "John",
+            "age": 30
+        });
+        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
+            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        });
+        let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
+            .await
+            .unwrap_err();
+        let details = err.get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::Inference {
+                message: "The DynamicDemonstrationInfo does not match the function type. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string()
+            }
+        );
     }
 }

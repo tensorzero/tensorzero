@@ -1,4 +1,3 @@
-use crate::inference::types::batch::deserialize_json_string;
 use derive_builder::Builder;
 use futures::stream::Peekable;
 use futures::Stream;
@@ -21,6 +20,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
+use crate::inference::types::batch::deserialize_json_string;
 use crate::variant::chat_completion::ExtraBodyConfig;
 use crate::{cache::CacheData, config_parser::ObjectStoreInfo};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
