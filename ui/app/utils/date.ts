@@ -12,62 +12,53 @@ export const formatDate = (date: Date) => {
  * Format date with time including seconds
  */
 export const formatDateWithSeconds = (date: Date) => {
-  const options: Intl.DateTimeFormatOptions = {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-    second: "numeric",
-    hour12: true,
-  };
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
 
-  return new Date(date).toLocaleString("en-US", options);
+  const time = new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }).format(date);
+
+  return `${year}-${month}-${day} ${time}`;
 };
 
 /**
  * Get relative time string (e.g. "2 hours ago")
  */
 export const getRelativeTimeString = (date: Date) => {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  const diffMonths = Math.floor(diffDays / 30);
+  const diff = (date.getTime() - new Date().getTime()) / 1000;
+  const absDiff = Math.abs(diff);
 
-  if (diffMonths > 0) {
-    return `${diffMonths} month${diffMonths > 1 ? "s" : ""}, ${diffDays % 30} day${diffDays % 30 !== 1 ? "s" : ""}, ${diffHours % 24} hour${diffHours % 24 !== 1 ? "s" : ""} ago`;
-  } else if (diffDays > 0) {
-    return `${diffDays} day${diffDays > 1 ? "s" : ""}, ${diffHours % 24} hour${diffHours % 24 !== 1 ? "s" : ""} ago`;
-  } else if (diffHours > 0) {
-    return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+  if (absDiff < 60) {
+    // < 1 minute: display in seconds
+    return new Intl.RelativeTimeFormat("en-US", {
+      style: "long",
+    }).format(Math.floor(diff), "second");
+  } else if (absDiff < 60 * 60) {
+    // < 1 hour: display in minutes
+    return new Intl.RelativeTimeFormat("en-US", {
+      style: "long",
+    }).format(Math.floor(diff / 60), "minute");
+  } else if (absDiff < 60 * 60 * 24) {
+    // < 1 day: display in hours
+    return new Intl.RelativeTimeFormat("en-US", {
+      style: "long",
+    }).format(Math.floor(diff / (60 * 60)), "hour");
+  } else if (absDiff < 60 * 60 * 24 * 30) {
+    // < 1 month: display in days
+    return new Intl.RelativeTimeFormat("en-US", {
+      style: "long",
+    }).format(Math.floor(diff / (60 * 60 * 24)), "day");
   } else {
-    return `${diffMinutes} minute${diffMinutes !== 1 ? "s" : ""} ago`;
+    // > 1 month: display in weeks
+    return new Intl.RelativeTimeFormat("en-US", {
+      style: "long",
+    }).format(Math.floor(diff / (60 * 60 * 24 * 7)), "week");
   }
-};
-
-/**
- * Format date as MM/DD/YYYY
- */
-export const formatDateShort = (date: Date) => {
-  return date.toLocaleDateString("en-US", {
-    month: "2-digit",
-    day: "2-digit",
-    year: "numeric",
-  });
-};
-
-/**
- * Format time as H:MM:SS AM/PM with user's local timezone
- */
-export const formatTimeWithTimezone = (date: Date) => {
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-    timeZoneName: "short",
-  });
 };
 
 /**
@@ -77,8 +68,15 @@ export const getTimestampTooltipData = (timestamp: string | number | Date) => {
   const date = new Date(timestamp);
 
   return {
-    formattedDate: formatDateShort(date),
-    formattedTime: formatTimeWithTimezone(date),
+    // "Monday, January 20, 2025"
+    formattedDate: date.toLocaleDateString("en-US", {
+      dateStyle: "full",
+    }),
+    // "1:23:45 PM EST"
+    formattedTime: date.toLocaleTimeString("en-US", {
+      timeStyle: "long",
+    }),
+    // "2 hours ago"
     relativeTime: getRelativeTimeString(date),
   };
 };

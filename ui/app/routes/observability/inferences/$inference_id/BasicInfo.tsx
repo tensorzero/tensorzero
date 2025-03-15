@@ -136,12 +136,12 @@ export default function BasicInfo({
               <Chip
                 icon={<Input className="text-fg-tertiary" />}
                 label={`${inferenceUsage?.input_tokens ?? ""} tok`}
-                tooltip="Input tokens"
+                tooltip="Input Tokens"
               />
               <Chip
                 icon={<Output className="text-fg-tertiary" />}
                 label={`${inferenceUsage?.output_tokens ?? ""} tok`}
-                tooltip="Output tokens"
+                tooltip="Output Tokens"
               />
             </div>
           </BasicInfoItemContent>
