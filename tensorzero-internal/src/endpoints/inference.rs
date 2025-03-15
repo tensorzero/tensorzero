@@ -760,7 +760,13 @@ async fn write_inference(
         match result {
             InferenceResult::Chat(result) => {
                 let chat_inference =
-                    ChatInferenceDatabaseInsert::new(result, input.clone(), metadata);
+                    match ChatInferenceDatabaseInsert::new(result, input.clone(), metadata) {
+                        Ok(inference) => inference,
+                        Err(_) => {
+                            // We will have already constructed / logged the error here -> we can't write so we just return
+                            return;
+                        }
+                    };
                 let _ = clickhouse_connection_info
                     .write(&[chat_inference], "ChatInference")
                     .await;

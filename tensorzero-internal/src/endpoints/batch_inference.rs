@@ -893,7 +893,8 @@ pub async fn write_completed_batch_inference<'a>(
         model_inference_rows_to_write.extend(inference_result.get_serialized_model_inferences());
         match inference_result {
             InferenceResult::Chat(chat_result) => {
-                let chat_inference = ChatInferenceDatabaseInsert::new(chat_result, input, metadata);
+                let chat_inference =
+                    ChatInferenceDatabaseInsert::new(chat_result, input, metadata)?;
                 inference_rows_to_write.push(InferenceDatabaseInsert::Chat(chat_inference));
             }
             InferenceResult::Json(json_result) => {

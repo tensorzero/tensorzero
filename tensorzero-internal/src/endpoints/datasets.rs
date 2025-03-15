@@ -23,7 +23,9 @@ use crate::{
 use tracing::instrument;
 
 pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
-use super::feedback::{validate_parse_demonstration, DemonstrationOutput};
+use super::feedback::{
+    validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -300,10 +302,12 @@ pub async fn update_datapoint_handler(
 
             let resolved_input = chat.input.clone().resolve(&fetch_context).await?;
             function_config.validate_input(&chat.input)?;
+            let dynamic_demonstration_info =
+                DynamicDemonstrationInfo::Chat(chat.tool_params.clone().into());
             let validated_output = validate_parse_demonstration(
                 function_config,
-                &app_state.config.tools,
                 &chat.output,
+                dynamic_demonstration_info,
             )
             .await?;
 
@@ -339,10 +343,12 @@ pub async fn update_datapoint_handler(
                 })?;
             let resolved_input = json.input.clone().resolve(&fetch_context).await?;
             function_config.validate_input(&json.input)?;
+            let dynamic_demonstration_info =
+                DynamicDemonstrationInfo::Json(json.output_schema.into());
             let validated_json = validate_parse_demonstration(
                 function_config,
-                &app_state.config.tools,
                 &json.output,
+                dynamic_demonstration_info,
             )
             .await?;
             let DemonstrationOutput::Json(json_out) = validated_json else {
@@ -498,9 +504,8 @@ pub struct ChatInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(deserialize_with = "deserialize_optional_json_string")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(deserialize_with = "deserialize_json_string")]
+    pub tool_params: ToolCallConfigDatabaseInsert,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<HashMap<String, String>>,
     pub auxiliary: String,
@@ -530,8 +535,7 @@ pub struct SyntheticChatInferenceDatapoint {
     pub function_name: String,
     pub input: Input,
     pub output: serde_json::Value,
-    #[serde(default)]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub tool_params: ToolCallConfigDatabaseInsert,
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
     #[serde(default)]
@@ -544,6 +548,7 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub function_name: String,
     pub input: Input,
     pub output: serde_json::Value,
+    pub output_schema: serde_json::Value,
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
     #[serde(default)]

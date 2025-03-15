@@ -1,5 +1,4 @@
 use crate::inference::types::batch::deserialize_json_string;
-use crate::inference::types::batch::deserialize_optional_json_string;
 use derive_builder::Builder;
 use futures::stream::Peekable;
 use futures::Stream;
@@ -610,9 +609,8 @@ pub struct ChatInferenceDatabaseInsert {
     pub input: ResolvedInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(deserialize_with = "deserialize_json_string")]
+    pub tool_params: ToolCallConfigDatabaseInsert,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u32>,
@@ -1060,15 +1058,22 @@ impl ChatInferenceDatabaseInsert {
         chat_result: ChatInferenceResult,
         input: ResolvedInput,
         metadata: InferenceDatabaseInsertMetadata,
-    ) -> Self {
+    ) -> Result<Self, Error> {
         let processing_time_ms = metadata
             .processing_time
             .map(|duration| duration.as_millis() as u32);
+        let tool_params = match metadata.tool_config.map(ToolCallConfigDatabaseInsert::from) {
+            Some(params) => params,
+            None => {
+                return Err(Error::new(ErrorDetails::Inference {
+                    message: "Tool params are required for writing chat inferences. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports".to_string(),
+                }));
+            }
+        };
 
-        let tool_params = metadata.tool_config.map(ToolCallConfigDatabaseInsert::from);
         let inference_params = chat_result.inference_params;
 
-        Self {
+        Ok(Self {
             id: chat_result.inference_id,
             function_name: metadata.function_name,
             variant_name: metadata.variant_name,
@@ -1079,7 +1084,7 @@ impl ChatInferenceDatabaseInsert {
             output: chat_result.content,
             processing_time_ms,
             tags: metadata.tags,
-        }
+        })
     }
 }
 

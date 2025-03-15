@@ -1,6 +1,5 @@
 use std::cmp::max;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::State;
@@ -20,9 +19,8 @@ use crate::gateway_util::{AppState, AppStateData, StructuredJson};
 use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
 };
-use crate::tool::{
-    DynamicToolParams, StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
-};
+use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
 use crate::uuid_util::uuid_elapsed;
 
 use super::validate_tags;
@@ -288,7 +286,15 @@ async fn write_demonstration(
     )
     .await?;
     let function_config = config.get_function(&function_name)?;
-    let parsed_value = validate_parse_demonstration(function_config, &config.tools, value).await?;
+    let dynamic_demonstration_info = get_dynamic_demonstration_info(
+        &connection_info,
+        inference_id,
+        &function_name,
+        function_config,
+    )
+    .await?;
+    let parsed_value =
+        validate_parse_demonstration(function_config, value, dynamic_demonstration_info).await?;
     let string_value = serde_json::to_string(&parsed_value).map_err(|e| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Failed to serialize parsed value to json: {}", e),
@@ -572,7 +578,7 @@ pub async fn validate_parse_demonstration(
 (FunctionConfig::Json(_), DynamicDemonstrationInfo::Json(output_schema)) => {
             // For json functions, the value should be a valid json object.
             // TODO (#348): Eventually we should allow dynamic output_schema here as well.
-            output_schema.validate(value).map_err(|e| {
+            JSONSchemaFromPath::from_value(&output_schema)?.validate(value).map_err(|e| {
                 Error::new(ErrorDetails::InvalidRequest {
                     message: format!("Demonstration does not fit function output schema: {}", e),
                 })
@@ -591,7 +597,7 @@ pub async fn validate_parse_demonstration(
 
 /// Represents the different types of dynamic demonstration information that can be retrieved
 #[derive(Debug)]
-enum DynamicDemonstrationInfo {
+pub enum DynamicDemonstrationInfo {
     Chat(ToolCallConfig),
     Json(Value),
 }
@@ -676,12 +682,13 @@ async fn get_dynamic_demonstration_info(
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     use crate::config_parser::{Config, MetricConfig, MetricConfigOptimize};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::testing::get_unit_test_app_state_data;
-    use crate::tool::{ToolCallOutput, ToolChoice};
+    use crate::tool::{StaticToolConfig, ToolCallOutput, ToolChoice};
 
     #[tokio::test]
     async fn test_get_feedback_metadata() {
