@@ -344,7 +344,7 @@ pub async fn update_datapoint_handler(
             let resolved_input = json.input.clone().resolve(&fetch_context).await?;
             function_config.validate_input(&json.input)?;
             let dynamic_demonstration_info =
-                DynamicDemonstrationInfo::Json(json.output_schema.into());
+                DynamicDemonstrationInfo::Json(json.output_schema.clone());
             let validated_json = validate_parse_demonstration(
                 function_config,
                 &json.output,
