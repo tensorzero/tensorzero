@@ -38,13 +38,13 @@ body {
     font-size: 1rem;
     line-height: 1.5rem;
   }
-  
+
   .font-mono {
     font-weight: var(--font-weight-normal);
     font-size: 0.875rem;
     line-height: 1.25rem;
   }
-  
+
   :root {
     --background-primary: 0 0% 100%;
     --background-secondary: 0 0% 98.5%;
