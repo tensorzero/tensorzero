@@ -43,10 +43,10 @@ export default function EpisodesTable({
         </TableHeader>
         <TableBody>
           {episodes.length === 0 ? (
-            <TableRow className="hover:bg-background-primary">
+            <TableRow className="hover:bg-bg-primary">
               <TableCell
                 colSpan={3}
-                className="px-3 py-2.5 text-center text-foreground-muted"
+                className="px-3 py-2.5 text-center text-fg-muted"
               >
                 No episodes found
               </TableCell>

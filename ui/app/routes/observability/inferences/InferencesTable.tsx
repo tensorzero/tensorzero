@@ -31,10 +31,10 @@ export default function InferencesTable({
         </TableHeader>
         <TableBody>
           {inferences.length === 0 ? (
-            <TableRow className="hover:bg-background-primary">
+            <TableRow className="hover:bg-bg-primary">
               <TableCell
                 colSpan={5}
-                className="px-3 py-8 text-center text-foreground-muted"
+                className="px-3 py-8 text-center text-fg-muted"
               >
                 No inferences found
               </TableCell>

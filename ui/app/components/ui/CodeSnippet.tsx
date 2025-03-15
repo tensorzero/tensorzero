@@ -112,7 +112,7 @@ export function CodeSnippetContent({
     <div className="relative">
       {label && <Badge className="mb-2">{label}</Badge>}
 
-      <div className="relative rounded-lg bg-background-primary">
+      <div className="relative rounded-lg bg-bg-primary">
         {shouldShowCopyButton && (
           <Button
             variant="outline"
@@ -153,7 +153,7 @@ export function CodeSnippetContent({
             <pre
               className={`flex-1 overflow-x-auto whitespace-pre break-words p-4`}
             >
-              <code className="font-mono text-sm leading-6 text-foreground-secondary">
+              <code className="font-mono text-sm leading-6 text-fg-muted">
                 {lines.map((line, i) => (
                   <div key={i} className="h-[1.5rem]">
                     {line || " "}
