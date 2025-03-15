@@ -1,29 +1,37 @@
 export const formatDate = (date: Date) => {
-  return date.toLocaleString("en-US", {
+  const formattedDate = date.toLocaleString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
+  });
+
+  const formattedTime = new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
-  });
+    hour12: true,
+  }).format(date);
+
+  return `${formattedDate} · ${formattedTime}`;
 };
 
 /**
  * Format date with time including seconds
  */
 export const formatDateWithSeconds = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const formattedDate = date.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 
-  const time = new Intl.DateTimeFormat("en-US", {
+  const formattedTime = new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     hour12: true,
   }).format(date);
 
-  return `${year}-${month}-${day} ${time}`;
+  return `${formattedDate} · ${formattedTime}`;
 };
 
 /**
