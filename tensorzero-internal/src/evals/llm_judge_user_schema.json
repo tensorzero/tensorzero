@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["input", "output"],
+  "required": ["input", "generated_output", "reference_output"],
   "additionalProperties": false,
   "properties": {
     "input": {

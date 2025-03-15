@@ -22,7 +22,6 @@ use crate::{
     },
 };
 
-pub const LLM_JUDGE_SYSTEM_SCHEMA_TEXT: &str = include_str!("llm_judge_system_schema.json");
 pub const LLM_JUDGE_USER_SCHEMA_TEXT: &str = include_str!("llm_judge_user_schema.json");
 pub const LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT: &str =
     include_str!("llm_judge_float_output_schema.json");
@@ -38,8 +37,30 @@ pub struct EvalConfig {
 
 #[derive(Debug)]
 pub enum EvaluatorConfig {
-    ExactMatch,
+    ExactMatch(ExactMatchConfig),
     LLMJudge(LLMJudgeConfig),
+}
+
+impl EvaluatorConfig {
+    pub fn cutoff(&self) -> Option<f32> {
+        match self {
+            EvaluatorConfig::ExactMatch(config) => config.cutoff,
+            EvaluatorConfig::LLMJudge(config) => config.cutoff,
+        }
+    }
+
+    pub fn optimize(&self) -> MetricConfigOptimize {
+        match self {
+            EvaluatorConfig::ExactMatch(_) => MetricConfigOptimize::Max,
+            EvaluatorConfig::LLMJudge(config) => config.optimize.into(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ExactMatchConfig {
+    #[serde(default)]
+    pub cutoff: Option<f32>,
 }
 
 #[derive(Debug)]
@@ -47,6 +68,7 @@ pub struct LLMJudgeConfig {
     pub output_type: LLMJudgeOutputType,
     pub include: LLMJudgeIncludeConfig,
     pub optimize: LLMJudgeOptimize,
+    pub cutoff: Option<f32>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -189,7 +211,7 @@ impl UninitializedEvalConfig {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum UninitializedEvaluatorConfig {
-    ExactMatch,
+    ExactMatch(ExactMatchConfig),
     #[serde(rename = "llm_judge")]
     LLMJudge(UninitializedLLMJudgeConfig),
 }
@@ -201,6 +223,8 @@ struct UninitializedLLMJudgeConfig {
     optimize: LLMJudgeOptimize,
     #[serde(default)]
     include: LLMJudgeIncludeConfig,
+    #[serde(default)]
+    cutoff: Option<f32>,
 }
 
 impl UninitializedEvaluatorConfig {
@@ -220,8 +244,8 @@ impl UninitializedEvaluatorConfig {
             .into());
         }
         match self {
-            UninitializedEvaluatorConfig::ExactMatch => Ok((
-                EvaluatorConfig::ExactMatch,
+            UninitializedEvaluatorConfig::ExactMatch(params) => Ok((
+                EvaluatorConfig::ExactMatch(params),
                 None,
                 MetricConfig {
                     r#type: MetricConfigType::Boolean,
@@ -252,12 +276,6 @@ impl UninitializedEvaluatorConfig {
                     }
                     .into());
                 }
-                let system_schema_value = serde_json::from_str(LLM_JUDGE_SYSTEM_SCHEMA_TEXT)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::JsonSchema {
-                            message: format!("Failed to parse LLM judge system schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
-                        })
-                    })?;
                 let user_schema_value = serde_json::from_str(LLM_JUDGE_USER_SCHEMA_TEXT)
                     .map_err(|e| {
                         Error::new(ErrorDetails::JsonSchema {
@@ -279,7 +297,7 @@ impl UninitializedEvaluatorConfig {
                     create_implicit_tool_call_config(output_schema.clone());
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
-                    system_schema: Some(JSONSchemaFromPath::from_value(&system_schema_value)?),
+                    system_schema: None,
                     user_schema: Some(JSONSchemaFromPath::from_value(&user_schema_value)?),
                     assistant_schema: None,
                     output_schema,
@@ -290,6 +308,7 @@ impl UninitializedEvaluatorConfig {
                         output_type: params.output_type,
                         include: params.include,
                         optimize: params.optimize,
+                        cutoff: params.cutoff,
                     }),
                     Some(function_config),
                     MetricConfig {
@@ -351,11 +370,17 @@ impl UninitializedLLMJudgeVariantConfig {
                     )),
                     contents: templated_system_instructions,
                 };
+                let user_template = PathWithContents {
+                    path: PathBuf::from(format!(
+                        "tensorzero::llm_judge::{eval_name}::{evaluator_name}::user"
+                    )),
+                    contents: include_str!("llm_judge_user_template.minijinja").to_string(),
+                };
                 Ok(VariantConfig::ChatCompletion(ChatCompletionConfig {
                     weight: Some(if params.active { 1.0 } else { 0.0 }),
                     model: params.model,
                     system_template: Some(system_template),
-                    user_template: None,
+                    user_template: Some(user_template),
                     assistant_template: None,
                     temperature: params.temperature,
                     top_p: params.top_p,
@@ -447,7 +472,7 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch,
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.4) }),
             );
 
             let uninitialized_config = UninitializedEvalConfig {
@@ -463,10 +488,10 @@ mod tests {
             assert_eq!(config.dataset_name, "test_dataset");
             assert_eq!(config.function_name, function_name);
             assert_eq!(config.evaluators.len(), 1);
-            assert!(matches!(
-                config.evaluators.get("em_evaluator").unwrap(),
-                EvaluatorConfig::ExactMatch
-            ));
+            match config.evaluators.get("em_evaluator").unwrap() {
+                EvaluatorConfig::ExactMatch(params) => assert_eq!(params.cutoff, Some(0.4)),
+                _ => panic!("Expected ExactMatch evaluator"),
+            }
             // No additional function configs for exact match
             assert_eq!(additional_functions.len(), 0);
 
@@ -520,6 +545,7 @@ mod tests {
                 include: LLMJudgeIncludeConfig {
                     reference_output: false,
                 },
+                cutoff: None,
             };
 
             let mut evaluators = HashMap::new();
@@ -563,7 +589,7 @@ mod tests {
                 FunctionConfig::Json(json_config) => {
                     assert_eq!(json_config.variants.len(), 1);
                     assert!(json_config.variants.contains_key("test_variant"));
-                    assert!(json_config.system_schema.is_some());
+                    assert!(json_config.system_schema.is_none());
                     assert!(json_config.user_schema.is_some());
                     assert!(json_config.output_schema.value.is_object());
                 }
@@ -636,6 +662,7 @@ mod tests {
                 include: LLMJudgeIncludeConfig {
                     reference_output: true,
                 },
+                cutoff: None,
             };
 
             let mut evaluators = HashMap::new();
@@ -713,7 +740,7 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch,
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
             let uninitialized_config = UninitializedEvalConfig {
@@ -735,7 +762,7 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch,
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
             let uninitialized_config = UninitializedEvalConfig {
@@ -816,6 +843,7 @@ mod tests {
                 include: LLMJudgeIncludeConfig {
                     reference_output: false,
                 },
+                cutoff: Some(0.3),
             };
 
             let mut evaluators = HashMap::new();
@@ -864,7 +892,7 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "foo::invalid_name".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch,
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
             let uninitialized_config = UninitializedEvalConfig {
@@ -917,6 +945,7 @@ mod tests {
                 include: LLMJudgeIncludeConfig {
                     reference_output: true,
                 },
+                cutoff: None,
             };
 
             let mut evaluators = HashMap::new();
