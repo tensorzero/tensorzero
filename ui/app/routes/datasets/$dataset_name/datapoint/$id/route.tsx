@@ -132,7 +132,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             Dataset{" "}
             <Link
               to={`/datasets/${datapoint.dataset_name}`}
-              className="rounded bg-background-tertiary px-1.5 py-1 font-mono font-semibold"
+              className="rounded bg-bg-tertiary px-1.5 py-1 font-mono font-semibold"
             >
               {datapoint.dataset_name}
             </Link>

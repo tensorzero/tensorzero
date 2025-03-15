@@ -30,10 +30,7 @@ export function BasicInfoItemTitle({
 }: BasicInfoItemTitleProps) {
   return (
     <div
-      className={cn(
-        "w-40 py-1 text-left text-sm text-foreground-secondary",
-        className,
-      )}
+      className={cn("w-32 py-1 text-left text-sm text-fg-secondary", className)}
     >
       {children}
     </div>
@@ -51,10 +48,7 @@ export function BasicInfoItemContent({
 }: BasicInfoItemContentProps) {
   return (
     <div
-      className={cn(
-        "ml-6 flex-1 text-left text-sm text-foreground-primary",
-        className,
-      )}
+      className={cn("ml-6 flex-1 text-left text-sm text-fg-primary", className)}
     >
       {children}
     </div>

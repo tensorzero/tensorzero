@@ -1,13 +1,21 @@
 import React from "react";
 import { Link } from "react-router";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "~/components/ui/tooltip";
 
 interface ChipProps {
-  label: string;
   icon?: React.ReactNode;
+  label: string;
   secondaryLabel?: string;
   link?: string;
   className?: string;
   font?: "sans" | "mono";
+  tooltip?: React.ReactNode;
+  iconBg?: string;
 }
 
 export const Chip: React.FC<ChipProps> = ({
@@ -17,32 +25,53 @@ export const Chip: React.FC<ChipProps> = ({
   link,
   className = "",
   font = "sans",
+  tooltip,
+  iconBg = "bg-none",
 }) => {
   const baseClasses =
-    "inline-flex items-center text-sm text-foreground-primary py-1 px-2 gap-2 rounded-md";
-  const hoverClasses = link ? "hover:bg-background-muted cursor-pointer" : "";
+    "inline-flex items-center text-sm text-fg-primary py-1 px-2 gap-1.5 rounded-md";
+  const hoverClasses = link ? "hover:bg-bg-hover cursor-pointer" : "";
   const fontClasses = font === "mono" ? "font-mono" : "font-sans";
   const combinedClasses = `${baseClasses} ${hoverClasses} ${fontClasses} ${className}`;
 
   const content = (
     <>
-      {icon}
+      {icon && (
+        <div
+          className={`${iconBg} ml-[-2px] flex size-5 items-center justify-center rounded-sm`}
+        >
+          {icon}
+        </div>
+      )}
       <span>{label}</span>
       {secondaryLabel && (
-        <span className="text-foreground-tertiary">{secondaryLabel}</span>
+        <span className="text-fg-tertiary">{secondaryLabel}</span>
       )}
     </>
   );
 
-  if (link) {
+  const chipContent = link ? (
+    <Link to={link} className={combinedClasses}>
+      {content}
+    </Link>
+  ) : (
+    <div className={combinedClasses}>{content}</div>
+  );
+
+  if (tooltip) {
     return (
-      <Link to={link} className={combinedClasses}>
-        {content}
-      </Link>
+      <TooltipProvider>
+        <Tooltip delayDuration={100}>
+          <TooltipTrigger asChild>{chipContent}</TooltipTrigger>
+          <TooltipContent className="border border-border bg-bg-secondary text-fg-primary shadow-lg">
+            {tooltip}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
 
-  return <div className={combinedClasses}>{content}</div>;
+  return chipContent;
 };
 
 export default Chip;

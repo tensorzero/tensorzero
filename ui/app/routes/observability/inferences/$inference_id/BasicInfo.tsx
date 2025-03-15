@@ -15,27 +15,47 @@ import {
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
 import {
-  Functions,
-  SupervisedFineTuning,
-  Episodes,
-  Placeholder,
+  TypeChat,
+  TypeJson,
+  Timer,
+  Calendar,
+  Input,
+  Output,
 } from "~/components/icons/Icons";
+import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
 
 const FF_ENABLE_DATASETS =
   import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
 
-// Helper function for formatting dates
-const formatDate = (date: Date) => {
-  const options: Intl.DateTimeFormatOptions = {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-    second: "numeric",
-    hour12: true,
-  };
+// Helper function to get the appropriate icon and background based on function type
+const getFunctionIcon = (functionType: string) => {
+  switch (functionType?.toLowerCase()) {
+    default:
+      return {
+        icon: <TypeJson className="text-fg-type-json" />,
+        iconBg: "bg-bg-type-json",
+      };
+    case "chat":
+    case "conversation":
+      return {
+        icon: <TypeChat className="text-fg-type-chat" />,
+        iconBg: "bg-bg-type-chat",
+      };
+  }
+};
 
-  return new Date(date).toLocaleString("en-US", options);
+// Create timestamp tooltip component
+const createTimestampTooltip = (timestamp: string | number | Date) => {
+  const { formattedDate, formattedTime, relativeTime } =
+    getTimestampTooltipData(timestamp);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div>{formattedDate}</div>
+      <div>{formattedTime}</div>
+      <div>{relativeTime}</div>
+    </div>
+  );
 };
 
 interface BasicInfoProps {
@@ -62,14 +82,22 @@ export default function BasicInfo({
   const variantType =
     config.functions[inference.function_name]?.variants[inference.variant_name]
       ?.type;
+
+  // Create timestamp tooltip
+  const timestampTooltip = createTimestampTooltip(inference.timestamp);
+
+  // Get function icon and background
+  const functionIconConfig = getFunctionIcon(inference.function_type);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       <BasicInfoLayout>
         <BasicInfoItem>
           <BasicInfoItemTitle>Function</BasicInfoItemTitle>
           <BasicInfoItemContent>
             <Chip
-              icon={<Functions />}
+              icon={functionIconConfig.icon}
+              iconBg={functionIconConfig.iconBg}
               label={inference.function_name}
               secondaryLabel={inference.function_type}
               link={`/observability/functions/${inference.function_name}`}
@@ -83,7 +111,6 @@ export default function BasicInfo({
           <BasicInfoItemContent>
             <Chip
               label={inference.variant_name}
-              icon={<SupervisedFineTuning />}
               secondaryLabel={variantType}
               link={`/observability/functions/${inference.function_name}/variants/${inference.variant_name}`}
               font="mono"
@@ -95,7 +122,6 @@ export default function BasicInfo({
           <BasicInfoItemTitle>Episode</BasicInfoItemTitle>
           <BasicInfoItemContent>
             <Chip
-              icon={<Episodes className="text-foreground-tertiary" />}
               label={inference.episode_id}
               link={`/observability/episodes/${inference.episode_id}`}
               font="mono"
@@ -106,14 +132,16 @@ export default function BasicInfo({
         <BasicInfoItem>
           <BasicInfoItemTitle>Usage</BasicInfoItemTitle>
           <BasicInfoItemContent>
-            <div className="flex flex-row gap-2">
+            <div className="flex flex-row gap-1">
               <Chip
-                icon={<Placeholder />}
+                icon={<Input className="text-fg-tertiary" />}
                 label={`${inferenceUsage?.input_tokens ?? ""} tok`}
+                tooltip="Input tokens"
               />
               <Chip
-                icon={<Placeholder />}
+                icon={<Output className="text-fg-tertiary" />}
                 label={`${inferenceUsage?.output_tokens ?? ""} tok`}
+                tooltip="Output tokens"
               />
             </div>
           </BasicInfoItemContent>
@@ -123,8 +151,9 @@ export default function BasicInfo({
           <BasicInfoItemTitle>Timestamp</BasicInfoItemTitle>
           <BasicInfoItemContent>
             <Chip
-              icon={<Placeholder className="text-foreground-tertiary" />}
-              label={formatDate(new Date(inference.timestamp))}
+              icon={<Calendar className="text-fg-tertiary" />}
+              label={formatDateWithSeconds(new Date(inference.timestamp))}
+              tooltip={timestampTooltip}
             />
           </BasicInfoItemContent>
         </BasicInfoItem>
@@ -133,27 +162,9 @@ export default function BasicInfo({
           <BasicInfoItemTitle>Processing Time</BasicInfoItemTitle>
           <BasicInfoItemContent>
             <Chip
-              icon={<Placeholder className="text-foreground-tertiary" />}
+              icon={<Timer className="text-fg-tertiary" />}
               label={`${inference.processing_time_ms} ms`}
             />
-          </BasicInfoItemContent>
-        </BasicInfoItem>
-
-        <BasicInfoItem>
-          <BasicInfoItemTitle>Tags</BasicInfoItemTitle>
-          <BasicInfoItemContent>
-            {Object.keys(inference.tags).length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(inference.tags).map(([key, value]) => (
-                  <div key={key} className="flex items-center gap-1">
-                    <span className="text-foreground-secondary">{key}:</span>
-                    <span className="text-foreground-primary">{value}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <span className="text-foreground-secondary">No tags</span>
-            )}
           </BasicInfoItemContent>
         </BasicInfoItem>
       </BasicInfoLayout>
