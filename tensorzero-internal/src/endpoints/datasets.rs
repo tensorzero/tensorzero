@@ -344,7 +344,7 @@ pub async fn update_datapoint_handler(
             let json: SyntheticJsonInferenceDatapoint =
                 serde_json::from_value(params).map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
-                        message: format!("Failed to deserialize chat datapoint: {}", e),
+                        message: format!("Failed to deserialize JSON datapoint: {}", e),
                     })
                 })?;
             let resolved_input = json.input.clone().resolve(&fetch_context).await?;
