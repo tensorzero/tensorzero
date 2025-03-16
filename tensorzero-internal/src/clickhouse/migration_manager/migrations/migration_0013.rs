@@ -81,12 +81,24 @@ impl Migration for Migration0013<'_> {
         let query = "SHOW CREATE TABLE InferenceById".to_string();
         let result = self.clickhouse.run_query(query, None).await?;
         if !result.contains("UInt128") {
-            return Ok(true);
+            return Err(ErrorDetails::ClickHouseMigration {
+                id: "0013".to_string(),
+                message:
+                    "InferenceById table is in an invalid state. Please contact TensorZero team."
+                        .to_string(),
+            }
+            .into());
         }
         let query = "SHOW CREATE TABLE InferenceByEpisodeId".to_string();
         let result = self.clickhouse.run_query(query, None).await?;
         if !result.contains("UInt128") {
-            return Ok(true);
+            return Err(ErrorDetails::ClickHouseMigration {
+                id: "0013".to_string(),
+                message:
+                    "InferenceByEpisodeId table is in an invalid state. Please contact TensorZero team."
+                        .to_string(),
+            }
+            .into());
         }
         let query = "SELECT 1 FROM system.functions WHERE name = 'uint_to_uuid'".to_string();
         let result = self.clickhouse.run_query(query, None).await?;
@@ -109,19 +121,64 @@ impl Migration for Migration0013<'_> {
             })?
             + view_offset)
             .as_secs();
+        let query = "SELECT toUInt32(COUNT())  FROM ChatInference".to_string();
+        let chat_count: usize = self
+            .clickhouse
+            .run_query(query, None)
+            .await?
+            .trim()
+            .parse()
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0013".to_string(),
+                    message: format!("failed to query if data is in Chat table: {e}"),
+                })
+            })?;
+        let query = "SELECT toUInt32(COUNT())  FROM JsonInference".to_string();
+        let json_count: usize = self
+            .clickhouse
+            .run_query(query, None)
+            .await?
+            .trim()
+            .parse()
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: "0013".to_string(),
+                    message: format!("failed to query if data is in Json table: {e}"),
+                })
+            })?;
+        let inference_by_id_exists =
+            check_table_exists(self.clickhouse, "InferenceById", "0013").await?;
+        let inference_by_episode_id_exists =
+            check_table_exists(self.clickhouse, "InferenceByEpisodeId", "0013").await?;
+        let json_has_data = json_count > 0;
+        let chat_has_data = chat_count > 0;
+        if (json_has_data || chat_has_data)
+            && (!inference_by_id_exists || !inference_by_episode_id_exists)
+        {
+            return Err(ErrorDetails::ClickHouseMigration {
+                id: "0013".to_string(),
+                message: "Data already exists in the ChatInference or JsonInference tables and InferenceById or InferenceByEpisodeId is missing. Please contact TensorZero team.".to_string(),
+            }
+            .into());
+        }
         // Drop the original tables and materialized views (if they exist)
-        let query = "DROP TABLE IF EXISTS InferenceById".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
-        let query = "DROP VIEW IF EXISTS ChatInferenceByIdView".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
-        let query = "DROP VIEW IF EXISTS JsonInferenceByIdView".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
-        let query = "DROP TABLE IF EXISTS InferenceByEpisodeId".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
-        let query = "DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
-        let query = "DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
+        // NOTE: We are removing these drops to ensure idempotency in migrations
+        //       This should not affect any TensorZero users that are up to date as of 2025-03
+        //       If you are seeing issues with this migration please contact the TensorZero team.
+        //       We can drop these because we are now erroring if the database is not up to date.
+        // let query = "DROP TABLE IF EXISTS InferenceById".to_string();
+        // let _ = self.clickhouse.run_query(query, None).await?;
+        // let query = "DROP VIEW IF EXISTS ChatInferenceByIdView".to_string();
+        // let _ = self.clickhouse.run_query(query, None).await?;
+        // let query = "DROP VIEW IF EXISTS JsonInferenceByIdView".to_string();
+        // let _ = self.clickhouse.run_query(query, None).await?;
+        // let query = "DROP TABLE IF EXISTS InferenceByEpisodeId".to_string();
+        // let _ = self.clickhouse.run_query(query, None).await?;
+        // let query = "DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView".to_string();
+        // let _ = self.clickhouse.run_query(query, None).await?;
+        // let query = "DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView".to_string();
+        // let _ = self.clickhouse.run_query(query, None).await?;
         // Create the new tables with UInt128 primary keys
         // Create the `InferenceById` table
         let query = r#"
@@ -169,7 +226,7 @@ impl Migration for Migration0013<'_> {
         // IMPORTANT: The function_type column is now correctly set to 'chat'
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW ChatInferenceByIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByIdView
             TO InferenceById
             AS
                 SELECT
@@ -188,7 +245,7 @@ impl Migration for Migration0013<'_> {
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW JsonInferenceByIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByIdView
             TO InferenceById
             AS
                 SELECT
@@ -208,7 +265,7 @@ impl Migration for Migration0013<'_> {
         // IMPORTANT: The function_type column is now correctly set to 'chat'
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW ChatInferenceByEpisodeIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS ChatInferenceByEpisodeIdView
             TO InferenceByEpisodeId
             AS
                 SELECT
@@ -228,7 +285,7 @@ impl Migration for Migration0013<'_> {
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW JsonInferenceByEpisodeIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS JsonInferenceByEpisodeIdView
             TO InferenceByEpisodeId
             AS
                 SELECT
@@ -244,6 +301,7 @@ impl Migration for Migration0013<'_> {
         );
         let _ = self.clickhouse.run_query(query, None).await?;
 
+        /*
         if !self.clean_start {
             // Sleep for the duration specified by view_offset to allow the materialized views to catch up
             tokio::time::sleep(view_offset).await;
@@ -328,7 +386,7 @@ impl Migration for Migration0013<'_> {
                 insert_json_inference_by_episode_id
             )?;
         }
-
+        */
         Ok(())
     }
 

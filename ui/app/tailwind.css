@@ -2,10 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --font-weight-thin: 100;
+  --font-weight-light: 300;
+  --font-weight-normal: 450;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 620;
+  --font-weight-bold: 700;
+  --font-weight-black: 900;
+}
+
 html,
 body {
   @apply bg-background dark:bg-background;
-
+  font-weight: var(--font-weight-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   @media (prefers-color-scheme: dark) {
     color-scheme: dark;
   }
@@ -19,6 +32,19 @@ body {
 }
 
 @layer base {
+  /* Set default styles for font families */
+  .font-sans {
+    font-weight: var(--font-weight-normal);
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+
+  .font-mono {
+    font-weight: var(--font-weight-normal);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
   :root {
     --background-primary: 0 0% 100%;
     --background-secondary: 0 0% 98.5%;

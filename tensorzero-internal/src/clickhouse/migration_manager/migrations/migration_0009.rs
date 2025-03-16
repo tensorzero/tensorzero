@@ -93,7 +93,7 @@ impl Migration for Migration0009<'_> {
         };
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW BooleanMetricFeedbackByTargetIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS BooleanMetricFeedbackByTargetIdView
             TO BooleanMetricFeedbackByTargetId
             AS
                 SELECT
@@ -127,7 +127,7 @@ impl Migration for Migration0009<'_> {
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW CommentFeedbackByTargetIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS CommentFeedbackByTargetIdView
             TO CommentFeedbackByTargetId
             AS
                 SELECT
@@ -160,7 +160,7 @@ impl Migration for Migration0009<'_> {
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let query = format!(
             r#"
-            CREATE MATERIALIZED VIEW DemonstrationFeedbackByInferenceIdView
+            CREATE MATERIALIZED VIEW IF NOT EXISTS DemonstrationFeedbackByInferenceIdView
             TO DemonstrationFeedbackByInferenceId
             AS
                 SELECT
@@ -198,7 +198,7 @@ impl Migration for Migration0009<'_> {
         };
         let query = format!(
             r#"
-           CREATE MATERIALIZED VIEW FloatMetricFeedbackByTargetIdView
+           CREATE MATERIALIZED VIEW IF NOT EXISTS FloatMetricFeedbackByTargetIdView
            TO FloatMetricFeedbackByTargetId
            AS
                SELECT

@@ -438,8 +438,11 @@ async fn test_datapoint_insert_output_inherit_chat() {
     if !resp.status().is_success() {
         panic!("Bad request: {:?}", resp.text().await.unwrap());
     }
+    let datapoint_id =
+        Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
+    assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -465,7 +468,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "basic_test",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Hello, world!\"}]}]}",
       "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
@@ -478,7 +481,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
 
     let resp = client
         .delete(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/function/basic_test/kind/chat/datapoint/{inference_id}",
+            "/datasets/{dataset_name}/function/basic_test/kind/chat/datapoint/{datapoint_id}",
         )))
         .send()
         .await
@@ -494,7 +497,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
         .await
         .unwrap();
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -520,7 +523,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "basic_test",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Hello, world!\"}]}]}",
       "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
@@ -608,8 +611,12 @@ async fn test_datapoint_insert_output_none_chat() {
     if !resp.status().is_success() {
         panic!("Bad request: {:?}", resp.text().await.unwrap());
     }
+    let datapoint_id =
+        Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
+    assert_ne!(datapoint_id, inference_id);
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -635,7 +642,7 @@ async fn test_datapoint_insert_output_none_chat() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "basic_test",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Hello, world!\"}]}]}",
       "output": null,
@@ -708,8 +715,11 @@ async fn test_datapoint_insert_output_demonstration_chat() {
     if !resp.status().is_success() {
         panic!("Bad request: {:?}", resp.text().await.unwrap());
     }
+    let datapoint_id =
+        Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
+    assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -740,7 +750,7 @@ async fn test_datapoint_insert_output_demonstration_chat() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "basic_test",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Hello, world!\"}]}]}",
       "output": "[{\"type\":\"text\",\"text\":\"My demonstration chat answer\"}]",
@@ -796,8 +806,11 @@ async fn test_datapoint_insert_output_inherit_json() {
     if !resp.status().is_success() {
         panic!("Bad request: {:?}", resp.text().await.unwrap());
     }
+    let datapoint_id =
+        Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
+    assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -823,7 +836,7 @@ async fn test_datapoint_insert_output_inherit_json() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "json_success",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"Japan\"}}]}]}",
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"Hello\\\"}\",\"parsed\":{\"answer\":\"Hello\"}}",
@@ -836,7 +849,7 @@ async fn test_datapoint_insert_output_inherit_json() {
 
     let resp = client
         .delete(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/function/json_success/kind/json/datapoint/{inference_id}",
+            "/datasets/{dataset_name}/function/json_success/kind/json/datapoint/{datapoint_id}",
         )))
         .send()
         .await
@@ -852,7 +865,7 @@ async fn test_datapoint_insert_output_inherit_json() {
         .await
         .unwrap();
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -878,7 +891,7 @@ async fn test_datapoint_insert_output_inherit_json() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "json_success",
-      "id": inference_id,
+      "id": datapoint_id,
       "episode_id": episode_id,
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"Japan\"}}]}]}",
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"Hello\\\"}\",\"parsed\":{\"answer\":\"Hello\"}}",
@@ -943,8 +956,11 @@ async fn test_datapoint_insert_output_none_json() {
     if !resp.status().is_success() {
         panic!("Bad request: {:?}", resp.text().await.unwrap());
     }
+    let datapoint_id =
+        Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
+    assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -970,7 +986,7 @@ async fn test_datapoint_insert_output_none_json() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "json_success",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"Japan\"}}]}]}",
       "output":null,
@@ -1043,8 +1059,11 @@ async fn test_datapoint_insert_output_demonstration_json() {
     if !resp.status().is_success() {
         panic!("Bad request: {:?}", resp.text().await.unwrap());
     }
+    let datapoint_id =
+        Uuid::parse_str(resp.json::<Value>().await.unwrap()["id"].as_str().unwrap()).unwrap();
+    assert_ne!(datapoint_id, inference_id);
 
-    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, inference_id)
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, datapoint_id)
         .await
         .unwrap();
 
@@ -1075,7 +1094,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
     let expected = serde_json::json!({
       "dataset_name": dataset_name,
       "function_name": "json_success",
-      "id": inference_id.to_string(),
+      "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"Japan\"}}]}]}",
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"My demonstration answer\\\"}\",\"parsed\":{\"answer\":\"My demonstration answer\"}}",
