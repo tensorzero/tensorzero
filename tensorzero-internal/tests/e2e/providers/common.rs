@@ -199,7 +199,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::reasoning::test_streaming_reasoning_inference_request_with_provider_json_mode;
         use $crate::providers::common::test_short_inference_request_with_provider;
         use $crate::providers::common::test_multi_turn_parallel_tool_use_inference_request_with_provider;
-        // use $crate::providers::common::test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider;
 
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
@@ -397,7 +397,6 @@ macro_rules! generate_provider_tests {
         }
         $crate::make_gateway_test_functions!(test_dynamic_tool_use_inference_request);
 
-
         async fn test_dynamic_tool_use_streaming_inference_request(client: tensorzero::Client) {
             let providers = $func().await.dynamic_tool_use_inference;
             for provider in providers {
@@ -523,14 +522,14 @@ macro_rules! generate_provider_tests {
             }
         }
 
-        // #[cfg(feature = "e2e_tests")]
-        // #[tokio::test]
-        // async fn test_multi_turn_parallel_tool_use_streaming_inference_request() {
-        //     let providers = $func().await.parallel_tool_use_inference;
-        //     for provider in providers {
-        //         test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider(provider).await;
-        //     }
-        // }
+        #[cfg(feature = "e2e_tests")]
+        #[tokio::test]
+        async fn test_multi_turn_parallel_tool_use_streaming_inference_request() {
+            let providers = $func().await.parallel_tool_use_inference;
+            for provider in providers {
+                test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider(provider).await;
+            }
+        }
     };
 }
 
@@ -9280,6 +9279,11 @@ async fn check_short_inference_response(
 pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Together's model is too dumb to figure multi-turn tool + parallel tool calls... It keeps calling the same tool over and over.
+    if provider.model_provider_name == "together" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let mut payload = json!({
@@ -9392,7 +9396,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
 
-    println!("API response: {response_json:#?}");
+    println!("Second API response: {response_json:#?}");
 
     check_multi_turn_parallel_tool_use_inference_response(
         response_json,
@@ -9564,6 +9568,11 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
 pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
+    // Together's model is too dumb to figure multi-turn tool + parallel tool calls... It keeps calling the same tool over and over.
+    if provider.model_provider_name == "together" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let mut payload = json!({
@@ -9692,12 +9701,10 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     assert!(found_done_chunk);
 
     let mut inference_id = None;
-    let mut get_temperature_tool_id: Option<String> = None;
-    let mut get_temperature_arguments = String::new();
-    let mut get_humidity_tool_id: Option<String> = None;
-    let mut get_humidity_arguments = String::new();
     let mut input_tokens = 0;
     let mut output_tokens = 0;
+
+    let mut output_content = String::new();
 
     for chunk in chunks {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
@@ -9721,35 +9728,8 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
             let block_type = block.get("type").unwrap().as_str().unwrap();
 
             match block_type {
-                "tool_call" => {
-                    let block_tool_id = block.get("id").unwrap().as_str().unwrap();
-                    let tool_name = block.get("raw_name").unwrap().as_str().unwrap();
-                    let chunk_arguments = block.get("raw_arguments").unwrap().as_str().unwrap();
-
-                    match tool_name {
-                        "get_temperature" => {
-                            match &get_temperature_tool_id {
-                                None => get_temperature_tool_id = Some(block_tool_id.to_string()),
-                                Some(tool_id) => assert_eq!(tool_id, block_tool_id),
-                            };
-                            get_temperature_arguments.push_str(chunk_arguments);
-                        }
-                        "get_humidity" => {
-                            match &get_humidity_tool_id {
-                                None => get_humidity_tool_id = Some(block_tool_id.to_string()),
-                                Some(tool_id) => assert_eq!(tool_id, block_tool_id),
-                            };
-                            get_humidity_arguments.push_str(chunk_arguments);
-                        }
-                        _ => {
-                            panic!("Unexpected tool name: {}", tool_name);
-                        }
-                    }
-                }
                 "text" => {
-                    // Sometimes the model will also return some text
-                    // (e.g. "Sure, here's the weather in Tokyo:" + tool call)
-                    // We mostly care about the tool call, so we'll ignore the text.
+                    output_content.push_str(block.get("text").unwrap().as_str().unwrap());
                 }
                 _ => {
                     panic!("Unexpected block type: {}", block_type);
@@ -9774,11 +9754,13 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
         assert!(output_tokens > 0);
     }
 
+    // Check that the output contains the values
+    println!("Output content: {output_content:#?}");
+    assert!(output_content.contains("70"));
+    assert!(output_content.contains("30"));
+
+    // Check inference_id
     let inference_id = inference_id.unwrap();
-    let get_temperature_tool_id = get_temperature_tool_id.unwrap();
-    let get_humidity_tool_id = get_humidity_tool_id.unwrap();
-    assert!(serde_json::from_str::<Value>(&get_temperature_arguments).is_ok());
-    assert!(serde_json::from_str::<Value>(&get_humidity_arguments).is_ok());
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -9807,159 +9789,20 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
-    let correct_input: Value = json!(
-        {
-            "system": {
-                "assistant_name": "Dr. Mehta"
-            },
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."}]
-                }
-            ]
-        }
-    );
-    assert_eq!(input, correct_input);
+
+    let last_input_message = input["messages"].as_array().unwrap().last().unwrap();
+    assert_eq!(last_input_message["role"], "user");
+    let last_input_message_content = last_input_message["content"].as_array().unwrap();
+    assert_eq!(last_input_message_content.len(), 2);
+    for tool_result in last_input_message_content {
+        assert_eq!(tool_result["type"], "tool_result");
+    }
 
     let output_clickhouse: Vec<Value> =
         serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
-    assert!(!output_clickhouse.is_empty()); // could be > 1 if the model returns text as well
-
-    // Validate the `get_temperature` tool call
-    let content_block = output_clickhouse
-        .iter()
-        .find(|block| block["name"] == "get_temperature")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-    assert_eq!(
-        content_block.get("id").unwrap().as_str().unwrap(),
-        get_temperature_tool_id
-    );
-    assert_eq!(
-        content_block
-            .get("raw_arguments")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        get_temperature_arguments
-    );
-    assert_eq!(
-        content_block.get("raw_name").unwrap().as_str().unwrap(),
-        "get_temperature"
-    );
-    assert_eq!(
-        content_block.get("arguments").unwrap().as_object().unwrap(),
-        &serde_json::from_str::<serde_json::Map<String, Value>>(&get_temperature_arguments)
-            .unwrap()
-    );
-
-    // Validate the `get_humidity` tool call
-    let content_block = output_clickhouse
-        .iter()
-        .find(|block| block["name"] == "get_humidity")
-        .unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
-    assert_eq!(content_block_type, "tool_call");
-    assert_eq!(
-        content_block.get("id").unwrap().as_str().unwrap(),
-        get_humidity_tool_id
-    );
-    assert_eq!(
-        content_block
-            .get("raw_arguments")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        get_humidity_arguments
-    );
-    assert_eq!(
-        content_block.get("arguments").unwrap().as_object().unwrap(),
-        &serde_json::from_str::<serde_json::Map<String, Value>>(&get_humidity_arguments).unwrap()
-    );
-    assert_eq!(
-        content_block.get("raw_name").unwrap().as_str().unwrap(),
-        "get_humidity"
-    );
-
-    let tool_params: Value =
-        serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
-    assert_eq!(tool_params["tool_choice"], "auto");
-    assert_eq!(tool_params["parallel_tool_calls"], true);
-
-    let tools_available = tool_params["tools_available"].as_array().unwrap();
-    assert_eq!(tools_available.len(), 2);
-
-    let tool = tools_available
-        .iter()
-        .find(|tool| tool["name"] == "get_temperature")
-        .unwrap();
-    assert_eq!(
-        tool["description"],
-        "Get the current temperature in a given location"
-    );
-    assert_eq!(tool["strict"], false);
-
-    let tool_parameters = tool["parameters"].as_object().unwrap();
-    assert_eq!(tool_parameters["type"], "object");
-    assert!(tool_parameters.get("properties").is_some());
-    assert!(tool_parameters.get("required").is_some());
-    assert_eq!(tool_parameters["additionalProperties"], false);
-
-    let properties = tool_parameters["properties"].as_object().unwrap();
-    assert!(properties.contains_key("location"));
-    assert!(properties.contains_key("units"));
-
-    let location = properties["location"].as_object().unwrap();
-    assert_eq!(location["type"], "string");
-    assert_eq!(
-        location["description"],
-        "The location to get the temperature for (e.g. \"New York\")"
-    );
-
-    let units = properties["units"].as_object().unwrap();
-    assert_eq!(units["type"], "string");
-    assert_eq!(
-        units["description"],
-        "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")"
-    );
-    let units_enum = units["enum"].as_array().unwrap();
-    assert_eq!(units_enum.len(), 2);
-    assert!(units_enum.contains(&json!("fahrenheit")));
-    assert!(units_enum.contains(&json!("celsius")));
-
-    let required = tool_parameters["required"].as_array().unwrap();
-    assert!(required.contains(&json!("location")));
-
-    let tool = tools_available
-        .iter()
-        .find(|tool| tool["name"] == "get_humidity")
-        .unwrap();
-    assert_eq!(
-        tool["description"],
-        "Get the current humidity in a given location"
-    );
-    assert_eq!(tool["strict"], false);
-
-    let tool_parameters = tool["parameters"].as_object().unwrap();
-    assert_eq!(tool_parameters["type"], "object");
-    assert!(tool_parameters.get("properties").is_some());
-    assert!(tool_parameters.get("required").is_some());
-    assert_eq!(tool_parameters["additionalProperties"], false);
-
-    let properties = tool_parameters["properties"].as_object().unwrap();
-    assert!(properties.contains_key("location"));
-
-    let location = properties["location"].as_object().unwrap();
-    assert_eq!(location["type"], "string");
-    assert_eq!(
-        location["description"],
-        "The location to get the humidity for (e.g. \"New York\")"
-    );
-
-    let required = tool_parameters["required"].as_array().unwrap();
-    assert!(required.contains(&json!("location")));
+    println!("Output clickhouse: {output_clickhouse:#?}");
+    println!("Output content: {output_content:#?}");
+    assert_eq!(output_clickhouse[0]["text"], output_content);
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -9991,7 +9834,8 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
-    assert!(raw_response.contains("get_temperature"));
+    assert!(raw_response.contains("70"));
+    assert!(raw_response.contains("30"));
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
         assert!(serde_json::from_str::<Value>(line).is_ok());
@@ -10025,28 +9869,33 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     );
     let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
     let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
-    let expected_input_messages = vec![RequestMessage {
-        role: Role::User,
-        content: vec!["What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
-            .to_string()
-            .into()],
-    }];
-    assert_eq!(input_messages, expected_input_messages);
-    let output = result.get("output").unwrap().as_str().unwrap();
-    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 2);
-    let mut tool_call_names = vec![];
-    for block in output {
-        match block {
-            ContentBlock::ToolCall(tool_call) => {
-                tool_call_names.push(tool_call.name);
-                serde_json::from_str::<Value>(&tool_call.arguments).unwrap();
+    let last_input_message = input_messages.last().unwrap();
+    assert_eq!(last_input_message.role, Role::User);
+    let last_input_message_content = &last_input_message.content;
+    assert_eq!(last_input_message_content.len(), 2);
+    for tool_result in last_input_message_content {
+        match tool_result {
+            ContentBlock::ToolResult(tool_result) => {
+                assert!(
+                    tool_result.name == "get_temperature" || tool_result.name == "get_humidity"
+                );
             }
             _ => {
-                panic!("Expected a tool call, got {:?}", block);
+                panic!("Expected a tool call, got {:?}", tool_result);
             }
         }
     }
-    assert!(tool_call_names.contains(&"get_temperature".to_string()));
-    assert!(tool_call_names.contains(&"get_humidity".to_string()));
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
+    assert_eq!(output.len(), 1);
+    let output_content = output.first().unwrap();
+    match output_content {
+        ContentBlock::Text(text) => {
+            assert!(text.text.to_lowercase().contains("70"));
+            assert!(text.text.to_lowercase().contains("30"));
+        }
+        _ => {
+            panic!("Expected a text block, got {:?}", output_content);
+        }
+    }
 }
