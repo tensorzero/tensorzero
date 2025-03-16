@@ -11,9 +11,9 @@ use url::Url;
 
 use super::helpers::inject_extra_body;
 use super::openai::{
-    get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
-    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAISystemRequestMessage,
-    StreamOptions,
+    get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_assistant_messages,
+    tensorzero_to_openai_user_messages, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
+    OpenAISystemRequestMessage, StreamOptions,
 };
 use super::provider_trait::InferenceProvider;
 use crate::cache::ModelProviderRequest;
@@ -23,7 +23,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseArgs,
+    ProviderInferenceResponse, ProviderInferenceResponseArgs, Role,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
@@ -420,7 +420,12 @@ pub(super) fn prepare_vllm_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        messages.extend(tensorzero_to_openai_messages(message)?);
+        match message.role {
+            Role::User => messages.extend(tensorzero_to_openai_user_messages(&message.content)?),
+            Role::Assistant => {
+                messages.extend(tensorzero_to_openai_assistant_messages(&message.content)?)
+            }
+        }
     }
     if let Some(system_msg) = tensorzero_to_vllm_system_message(request.system.as_deref()) {
         messages.insert(0, system_msg);

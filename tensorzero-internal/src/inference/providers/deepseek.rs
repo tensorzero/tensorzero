@@ -22,15 +22,16 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,
 };
 use crate::inference::types::{
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk, Role,
 };
 use crate::model::{Credential, CredentialLocation, ModelProvider};
 use crate::tool::ToolCallChunk;
 
 use super::helpers::inject_extra_body;
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
-    tensorzero_to_openai_system_message, OpenAIAssistantRequestMessage, OpenAIFinishReason,
+    get_chat_url, handle_openai_error, prepare_openai_tools,
+    tensorzero_to_openai_assistant_messages, tensorzero_to_openai_system_message,
+    tensorzero_to_openai_user_messages, OpenAIAssistantRequestMessage, OpenAIFinishReason,
     OpenAIRequestMessage, OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAITool,
     OpenAIToolChoice, OpenAIUsage, OpenAIUserContent, OpenAIUserRequestMessage, StreamOptions,
 };
@@ -605,7 +606,12 @@ pub(super) fn prepare_deepseek_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        messages.extend(tensorzero_to_openai_messages(message)?);
+        match message.role {
+            Role::User => messages.extend(tensorzero_to_openai_user_messages(&message.content)?),
+            Role::Assistant => {
+                messages.extend(tensorzero_to_openai_assistant_messages(&message.content)?)
+            }
+        }
     }
     // If this is an R1 model, prepend the system message as the first user message instead of using it as a system message
     if model_name.to_lowercase().contains("reasoner") {
@@ -736,8 +742,12 @@ fn coalesce_consecutive_messages(messages: Vec<OpenAIRequestMessage>) -> Vec<Ope
             }
             (OpenAIRequestMessage::Assistant(curr), OpenAIRequestMessage::Assistant(next)) => {
                 let combined_content = match (curr.content.as_ref(), next.content.as_ref()) {
-                    (Some(c1), Some(c2)) => Some(format!("{}\n\n{}", c1, c2)),
-                    (Some(c), None) | (None, Some(c)) => Some(c.to_string()),
+                    (Some(c1), Some(c2)) => {
+                        let mut combined = c1.clone();
+                        combined.extend(c2.iter().cloned());
+                        Some(combined)
+                    }
+                    (Some(c), None) | (None, Some(c)) => Some(c.clone()),
                     (None, None) => None,
                 };
 
@@ -752,7 +762,7 @@ fn coalesce_consecutive_messages(messages: Vec<OpenAIRequestMessage>) -> Vec<Ope
                 };
 
                 result[i] = OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                    content: combined_content.map(Cow::Owned),
+                    content: combined_content,
                     tool_calls: combined_tool_calls,
                 });
                 result.remove(i + 1);
@@ -771,8 +781,9 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::providers::openai::{
-        OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
-        OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
+        OpenAIAssistantContent, OpenAIRequestFunctionCall, OpenAIRequestToolCall,
+        OpenAIToolRequestMessage, OpenAIToolType, OpenAIUsage, SpecificToolChoice,
+        SpecificToolFunction,
     };
     use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{
@@ -1142,7 +1153,7 @@ mod tests {
         tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
     ) -> OpenAIRequestMessage<'a> {
         OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-            content: content.map(Cow::Borrowed),
+            content: content.map(|c| vec![OpenAIAssistantContent::Text { text: c.into() }]),
             tool_calls,
         })
     }
@@ -1213,10 +1224,20 @@ mod tests {
             assistant_message(Some("Ass1"), Some(vec![tool_call1.clone()])),
             assistant_message(Some("Ass2"), Some(vec![tool_call2.clone()])),
         ];
+        let content = vec![
+            OpenAIAssistantContent::Text {
+                text: "Ass1".into(),
+            },
+            OpenAIAssistantContent::Text {
+                text: "Ass2".into(),
+            },
+        ];
         let output = coalesce_consecutive_messages(input);
-        let expected = vec![assistant_message(
-            Some("Ass1\n\nAss2"),
-            Some(vec![tool_call1.clone(), tool_call2.clone()]),
+        let expected = vec![OpenAIRequestMessage::Assistant(
+            OpenAIAssistantRequestMessage {
+                content: Some(content),
+                tool_calls: Some(vec![tool_call1.clone(), tool_call2.clone()]),
+            },
         )];
         assert_eq!(output, expected);
 
@@ -1265,7 +1286,17 @@ mod tests {
             assistant_message(Some("Ass1"), None),
             tool_message("Tool1", "id1"),
             tool_message("Tool2", "id2"),
-            assistant_message(Some("Ass2\n\nAss3"), None),
+            OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
+                content: Some(vec![
+                    OpenAIAssistantContent::Text {
+                        text: "Ass2".into(),
+                    },
+                    OpenAIAssistantContent::Text {
+                        text: "Ass3".into(),
+                    },
+                ]),
+                tool_calls: None,
+            }),
         ];
         assert_eq!(output, expected);
 
@@ -1277,9 +1308,14 @@ mod tests {
         ];
         let output = coalesce_consecutive_messages(input);
         // First merge: ("A1", None) => "A1" with tool_calls preserved; then ("A1", "A3") => "A1\n\nA3".
-        let expected = vec![assistant_message(
-            Some("A1\n\nA3"),
-            Some(vec![tool_call1.clone()]),
+        let expected = vec![OpenAIRequestMessage::Assistant(
+            OpenAIAssistantRequestMessage {
+                content: Some(vec![
+                    OpenAIAssistantContent::Text { text: "A1".into() },
+                    OpenAIAssistantContent::Text { text: "A3".into() },
+                ]),
+                tool_calls: Some(vec![tool_call1.clone()]),
+            },
         )];
         assert_eq!(output, expected);
     }

@@ -17,7 +17,7 @@ use crate::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-        ProviderInferenceResponseArgs,
+        ProviderInferenceResponseArgs, Role,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
 };
@@ -26,9 +26,9 @@ use super::{
     helpers::inject_extra_body,
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
-        tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse,
-        OpenAIResponseChoice, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
-        OpenAIToolType,
+        tensorzero_to_openai_assistant_messages, tensorzero_to_openai_user_messages,
+        OpenAIFunction, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
+        OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType,
     },
     provider_trait::InferenceProvider,
 };
@@ -370,7 +370,12 @@ fn prepare_fireworks_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        messages.extend(tensorzero_to_openai_messages(message)?);
+        match message.role {
+            Role::User => messages.extend(tensorzero_to_openai_user_messages(&message.content)?),
+            Role::Assistant => {
+                messages.extend(tensorzero_to_openai_assistant_messages(&message.content)?)
+            }
+        }
     }
     if let Some(system_msg) = tensorzero_to_fireworks_system_message(request.system.as_deref()) {
         messages.insert(0, system_msg);
