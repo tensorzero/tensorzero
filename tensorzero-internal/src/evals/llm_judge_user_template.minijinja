@@ -1,0 +1,13 @@
+# Input
+
+{{input}}
+
+# Generated Output
+
+{{generated_output}}
+
+{%- if reference_output -%}
+# Reference Output
+
+{{reference_output}}
+{%- endif -%}
