@@ -328,7 +328,7 @@ export async function insertRowsForDataset(
     SELECT
       '${validatedParams.data.dataset_name}' as dataset_name,
       function_name,
-      id,
+      generateUUIDv7() as id,
       episode_id,
       input,
       output,

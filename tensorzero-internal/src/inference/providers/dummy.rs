@@ -308,6 +308,14 @@ impl InferenceProvider for DummyProvider {
                     })?,
                 })]
             }
+            "llm_judge::true" => vec![r#"{"thinking": "hmmm", "score": true}"#.to_string().into()],
+            "llm_judge::false" => {
+                vec![r#"{"thinking": "hmmm", "score": false}"#.to_string().into()]
+            }
+            "llm_judge::zero" => vec![r#"{"thinking": "hmmm", "score": 0}"#.to_string().into()],
+            "llm_judge::one" => {
+                vec![r#"{"thinking": "hmmm", "score": 1}"#.to_string().into()]
+            }
             _ => vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()],
         };
         let raw_request = DUMMY_RAW_REQUEST.to_string();
