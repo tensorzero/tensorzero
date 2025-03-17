@@ -2188,3 +2188,93 @@ async def test_close_patch_openai_client():
         async_setup=True,
     )
     tensorzero.close_patched_openai_client_gateway(sync_client)
+@pytest.mark.asyncio
+async def test_async_multi_turn_parallel_tool_use(async_client):
+    episode_id = str(uuid7())
+
+    system = {"assistant_name": "Dr. Mehta"}
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.",
+                }
+            ],
+        },
+    ]
+
+    response = await async_client.inference(
+        function_name="weather_helper_parallel",
+        variant_name="openai",
+        episode_id=episode_id,
+        input={
+            "messages": messages,
+            "system": system,
+        },
+        parallel_tool_calls=True,
+    )
+
+    messages.append(
+        {
+            "role": "assistant",
+            "content": response.content,
+        }
+    )
+
+    assert len(response.content) == 2
+
+    new_content_blocks = []
+
+    for content_block in response.content:
+        if content_block.type == "text":
+            print("Got a text block...")
+        elif content_block.type == "tool_call":
+            if content_block.name == "get_temperature":
+                print("Calling get_temperature tool...")
+                new_content_blocks.append(
+                    {
+                        "type": "tool_result",
+                        "id": content_block.id,
+                        "name": "get_temperature",
+                        "result": "70",
+                    }
+                )
+            elif content_block.name == "get_humidity":
+                print("Calling get_humidity tool...")
+                new_content_blocks.append(
+                    {
+                        "type": "tool_result",
+                        "id": content_block.id,
+                        "name": "get_humidity",
+                        "result": "30",
+                    }
+                )
+            else:
+                print("Unknown tool call")
+        else:
+            print("Unknown content block type")
+
+    messages.append(
+        {
+            "role": "user",
+            "content": new_content_blocks,
+        }
+    )
+
+    response = await async_client.inference(
+        function_name="weather_helper_parallel",
+        variant_name="openai",
+        episode_id=episode_id,
+        input={
+            "messages": messages,
+            "system": system,
+        },
+    )
+
+    assistant_message = response.content[0].text
+
+    assert "70" in assistant_message
+    assert "30" in assistant_message

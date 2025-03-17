@@ -102,7 +102,6 @@ pub async fn setup_clickhouse(
 /// and instead simply assume that the request body is a JSON object.
 pub struct StructuredJson<T>(pub T);
 
-#[axum::async_trait]
 impl<S, T> FromRequest<S> for StructuredJson<T>
 where
     Json<T>: FromRequest<S, Rejection = JsonRejection>,
@@ -243,6 +242,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
+            enable_template_filesystem_access: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -292,6 +292,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
+            enable_template_filesystem_access: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -312,6 +313,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
+            enable_template_filesystem_access: false,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -334,6 +336,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
+            enable_template_filesystem_access: false,
         };
         let config = Config {
             gateway: gateway_config,
