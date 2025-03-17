@@ -112,12 +112,7 @@ fn _start_http_gateway(
         match tokio_block_on_without_gil(py, gateway_fut) {
             Ok(gateway) => Ok(gateway.into_bound_py_any(py)?),
             Err(e) => {
-                return Python::with_gil(|py| {
-                    Err(convert_error(
-                        py,
-                        TensorZeroError::Other { source: e.into() },
-                    )?)
-                });
+                Python::with_gil(|py| Err(convert_error(py, TensorZeroError::Other { source: e })?))
             }
         }
     }
