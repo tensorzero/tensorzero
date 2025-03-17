@@ -280,6 +280,14 @@ impl InferenceProvider for DummyProvider {
                 })]
             }
             "alternate" => vec![ALTERNATE_INFER_RESPONSE_CONTENT.to_string().into()],
+            #[allow(clippy::unwrap_used)]
+            "echo_request_messages" => vec![ContentBlockOutput::Text(Text {
+                text: serde_json::to_string(&json!({
+                    "system": request.system,
+                    "messages": request.messages,
+                }))
+                .unwrap(),
+            })],
             "extract_images" => {
                 let images: Vec<_> = request
                     .messages
