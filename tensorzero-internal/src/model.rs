@@ -1366,7 +1366,7 @@ impl ShorthandModelConfig for ModelConfig {
         for provider in &self.routing {
             if provider.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
-                    message: format!("`models.{model_name}.routing`: Provider name cannot start with 'tensorzero::': {provider}"),
+                    message: format!("`models.{model_name}.routing`: Provider name cannot contain '::' - {provider}"),
                 }
                 .into());
             }

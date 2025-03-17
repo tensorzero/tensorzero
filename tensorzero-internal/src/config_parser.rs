@@ -415,11 +415,9 @@ impl<'c> Config<'c> {
     fn validate(&mut self) -> Result<(), Error> {
         // Validate each function
         for (function_name, function) in &self.functions {
-            if function_name.starts_with("tensorzero::") {
+            if function_name.contains("::") {
                 return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Function name cannot start with 'tensorzero::': {function_name}"
-                    ),
+                    message: format!("Function name cannot contain '::' - {function_name}"),
                 }
                 .into());
             }
@@ -443,9 +441,9 @@ impl<'c> Config<'c> {
                 }
                 .into());
             }
-            if metric_name.starts_with("tensorzero::") {
+            if metric_name.contains("::") {
                 return Err(ErrorDetails::Config {
-                    message: format!("Metric name cannot start with 'tensorzero::': {metric_name}"),
+                    message: format!("Metric name cannot contain '::' - {metric_name}"),
                 }
                 .into());
             }
@@ -453,9 +451,9 @@ impl<'c> Config<'c> {
 
         // Validate each model
         for (model_name, model) in self.models.iter_static_models() {
-            if model_name.starts_with("tensorzero::") {
+            if model_name.contains("::") {
                 return Err(ErrorDetails::Config {
-                    message: format!("Model name cannot start with 'tensorzero::': {model_name}"),
+                    message: format!("Model name cannot contain '::' - {model_name}"),
                 }
                 .into());
             }
@@ -463,10 +461,10 @@ impl<'c> Config<'c> {
         }
 
         for embedding_model_name in self.embedding_models.keys() {
-            if embedding_model_name.starts_with("tensorzero::") {
+            if embedding_model_name.contains("::") {
                 return Err(ErrorDetails::Config {
                     message: format!(
-                        "Embedding model name cannot start with 'tensorzero::': {embedding_model_name}"
+                        "Embedding model name cannot contain '::' - {embedding_model_name}"
                     ),
                 }
                 .into());
@@ -475,9 +473,9 @@ impl<'c> Config<'c> {
 
         // Validate each tool
         for tool_name in self.tools.keys() {
-            if tool_name.starts_with("tensorzero::") {
+            if tool_name.contains("::") {
                 return Err(ErrorDetails::Config {
-                    message: format!("Tool name cannot start with 'tensorzero::': {tool_name}"),
+                    message: format!("Tool name cannot contain '::' - {tool_name}"),
                 }
                 .into());
             }
@@ -1757,8 +1755,33 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
-                message: "Function name cannot start with 'tensorzero::': tensorzero::bad_function"
-                    .to_string()
+                message: "Function name cannot contain '::' - tensorzero::bad_function".to_string()
+            })
+        );
+    }
+
+    /// Ensure that the config validation fails when a function name contains '::'
+    #[test]
+    fn test_config_validate_function_name_double_colon() {
+        let mut config = get_sample_valid_config();
+
+        // Rename an existing function to start with `tensorzero::`
+        let old_function_entry = config["functions"]
+            .as_table_mut()
+            .unwrap()
+            .remove("generate_draft")
+            .expect("Did not find function `generate_draft`");
+        config["functions"]
+            .as_table_mut()
+            .unwrap()
+            .insert("my::bad_function".to_string(), old_function_entry);
+
+        let base_path = PathBuf::new();
+        let result = Config::load_from_toml(config, base_path);
+        assert_eq!(
+            result.unwrap_err(),
+            Error::new(ErrorDetails::Config {
+                message: "Function name cannot contain '::' - my::bad_function".to_string()
             })
         );
     }
@@ -1784,8 +1807,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
-                message: "Metric name cannot start with 'tensorzero::': tensorzero::bad_metric"
-                    .to_string()
+                message: "Metric name cannot contain '::' - tensorzero::bad_metric".to_string()
             })
         );
     }
@@ -1868,8 +1890,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
-                message: "Tool name cannot start with 'tensorzero::': tensorzero::bad_tool"
-                    .to_string()
+                message: "Tool name cannot contain '::' - tensorzero::bad_tool".to_string()
             })
         );
     }
@@ -1953,7 +1974,7 @@ mod tests {
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
 
-        assert!(result.unwrap_err().to_string().contains("`models.gpt-3.5-turbo.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
+        assert!(result.unwrap_err().to_string().contains("`models.gpt-3.5-turbo.routing`: Provider name cannot contain '::' - tensorzero::openai"));
     }
 
     /// Ensure that get_templates returns the correct templates

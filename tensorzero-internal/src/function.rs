@@ -276,9 +276,7 @@ impl FunctionConfig {
         for (variant_name, variant) in self.variants() {
             if variant_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Variant name cannot start with 'tensorzero::': {variant_name}"
-                    ),
+                    message: format!("Variant name cannot contain '::' - {variant_name}"),
                 }
                 .into());
             }

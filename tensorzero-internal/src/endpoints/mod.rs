@@ -18,7 +18,7 @@ fn validate_tags(tags: &HashMap<String, String>, internal: bool) -> Result<(), E
     for tag_name in tags.keys() {
         if tag_name.starts_with("tensorzero::") {
             return Err(Error::new(ErrorDetails::InvalidRequest {
-                message: format!("Tag name cannot start with 'tensorzero::': {tag_name}"),
+                message: format!("Tag name cannot contain '::' - {tag_name}"),
             }));
         }
     }
