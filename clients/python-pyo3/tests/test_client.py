@@ -2066,16 +2066,12 @@ async def test_patch_async_openai_client_async_setup():
 @pytest.mark.asyncio
 async def test_patch_openai_missing_await():
     client = OpenAI()
-
-    with pytest.warns(
-        RuntimeWarning, match="coroutine '_async_attach_fields' was never awaited"
-    ):
-        tensorzero.patch_openai_client(
-            client,
-            config_file="../../examples/readme/config/tensorzero.toml",
-            clickhouse_url=None,
-            async_setup=True,
-        )
+    patch_fut = tensorzero.patch_openai_client(
+        client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        clickhouse_url=None,
+        async_setup=True,
+    )
 
     with pytest.raises(RuntimeError) as exc_info:
         client.chat.completions.create(
@@ -2091,20 +2087,19 @@ async def test_patch_openai_missing_await():
         str(exc_info.value)
         == "TensorZero: Please await the result of `tensorzero.patch_openai_client` before using the client."
     )
+    # Await this before we exit the test, to avoid spurious 'Event loop is closed' errors
+    await patch_fut
 
 
 @pytest.mark.asyncio
 async def test_patch_async_openai_missing_await():
     client = AsyncOpenAI()
-    with pytest.warns(
-        RuntimeWarning, match="coroutine '_async_attach_fields' was never awaited"
-    ):
-        tensorzero.patch_openai_client(
-            client,
-            config_file="../../examples/readme/config/tensorzero.toml",
-            clickhouse_url=None,
-            async_setup=True,
-        )
+    patch_fut = tensorzero.patch_openai_client(
+        client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        clickhouse_url=None,
+        async_setup=True,
+    )
     with pytest.raises(RuntimeError) as exc_info:
         await client.chat.completions.create(
             model="tensorzero::model_name::openai::gpt-4o-mini",
@@ -2119,6 +2114,8 @@ async def test_patch_async_openai_missing_await():
         str(exc_info.value)
         == "TensorZero: Please await the result of `tensorzero.patch_openai_client` before using the client."
     )
+    # Await this before we exit the test, to avoid spurious 'Event loop is closed' errors
+    await patch_fut
 
 
 def test_repeated_patch_openai_client_sync_setup():
