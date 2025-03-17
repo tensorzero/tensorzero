@@ -147,7 +147,7 @@ impl InferenceProvider for AnthropicProvider {
                 },
             )?;
         inject_extra_body(
-            request.extra_body,
+            &request.extra_body,
             model_provider,
             tensorzero_model_name,
             &mut request_body,

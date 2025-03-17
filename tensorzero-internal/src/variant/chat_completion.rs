@@ -1198,6 +1198,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: vec![],
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -1283,6 +1284,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: vec![],
             extra_cache_key: None,
         };
         let inference_params = InferenceParams::default();
@@ -1343,6 +1345,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            extra_body: vec![],
             extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1448,6 +1451,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: Some(&output_schema),
+            extra_body: vec![],
             extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1542,6 +1546,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: Some(&output_schema),
+            extra_body: vec![],
             extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
@@ -1710,6 +1715,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: Some(""),
+            extra_body: vec![],
             extra_cache_key: None,
         };
         let result = chat_completion_config
@@ -1773,6 +1779,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            extra_body: vec![],
             extra_cache_key: None,
         };
         let (mut stream, models_used) = chat_completion_config
@@ -1873,6 +1880,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            extra_body: vec![],
             extra_cache_key: None,
         };
         let model_request = chat_completion_config
@@ -1977,6 +1985,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: Some(""),
+            extra_body: vec![],
             extra_cache_key: None,
         };
         let mut inference_params = InferenceParams::default();
@@ -2055,6 +2064,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: vec![],
             extra_cache_key: None,
         };
         let model_request = chat_completion_config
