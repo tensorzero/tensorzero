@@ -55,15 +55,37 @@ pub async fn inference_handler(
     headers: HeaderMap,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
-    let params = (headers, openai_compatible_params).try_into()?;
+    let params: Params = (headers, openai_compatible_params).try_into()?;
+
+    // The prefix for the response's `model` field depends on the inference target
+    // (We run this disambiguation deep in the `inference` call below but we don't get the decision out, so we duplicate it here)
+    let response_model_prefix = match (&params.function_name, &params.model_name) {
+        (Some(function_name), None) => Ok::<String, Error>(format!(
+            "tensorzero::function_name::{}::variant_name::",
+            function_name,
+        )),
+        (None, Some(_model_name)) => Ok("tensorzero::model_name::".to_string()),
+        (Some(_), Some(_)) => Err(ErrorDetails::InvalidInferenceTarget {
+            message: "Only one of `function_name` or `model_name` can be provided".to_string(),
+        }
+        .into()),
+        (None, None) => Err(ErrorDetails::InvalidInferenceTarget {
+            message: "Either `function_name` or `model_name` must be provided".to_string(),
+        }
+        .into()),
+    }?;
+
     let response = inference(config, &http_client, clickhouse_connection_info, params).await?;
+
     match response {
         InferenceOutput::NonStreaming(response) => {
-            let openai_compatible_response = OpenAICompatibleResponse::from(response);
+            let openai_compatible_response =
+                OpenAICompatibleResponse::from((response, response_model_prefix));
             Ok(Json(openai_compatible_response).into_response())
         }
         InferenceOutput::Streaming(stream) => {
-            let openai_compatible_stream = prepare_serialized_openai_compatible_events(stream);
+            let openai_compatible_stream =
+                prepare_serialized_openai_compatible_events(stream, response_model_prefix);
             Ok(Sse::new(openai_compatible_stream)
                 .keep_alive(axum::response::sse::KeepAlive::new())
                 .into_response())
@@ -655,11 +677,12 @@ impl From<OpenAICompatibleToolCall> for ToolCall {
     }
 }
 
-impl From<InferenceResponse> for OpenAICompatibleResponse {
-    fn from(inference_response: InferenceResponse) -> Self {
+impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
+    fn from((inference_response, response_model_prefix): (InferenceResponse, String)) -> Self {
         match inference_response {
             InferenceResponse::Chat(response) => {
                 let (content, tool_calls) = process_chat_content(response.content);
+
                 OpenAICompatibleResponse {
                     id: response.inference_id.to_string(),
                     choices: vec![OpenAICompatibleChoice {
@@ -672,7 +695,7 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
                         },
                     }],
                     created: current_timestamp() as u32,
-                    model: response.variant_name,
+                    model: format!("{response_model_prefix}{}", response.variant_name),
                     system_fingerprint: "".to_string(),
                     object: "chat.completion".to_string(),
                     usage: response.usage.into(),
@@ -691,7 +714,7 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
                     },
                 }],
                 created: current_timestamp() as u32,
-                model: response.variant_name,
+                model: format!("{response_model_prefix}{}", response.variant_name),
                 system_fingerprint: "".to_string(),
                 object: "chat.completion".to_string(),
                 usage: OpenAICompatibleUsage {
@@ -793,6 +816,7 @@ struct OpenAICompatibleDelta {
 fn convert_inference_response_chunk_to_openai_compatible(
     chunk: InferenceResponseChunk,
     tool_id_to_index: &mut HashMap<String, usize>,
+    response_model_prefix: &str,
 ) -> Vec<OpenAICompatibleResponseChunk> {
     let response_chunk = match chunk {
         InferenceResponseChunk::Chat(c) => {
@@ -809,7 +833,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
                     },
                 }],
                 created: current_timestamp() as u32,
-                model: c.variant_name,
+                model: format!("{response_model_prefix}{}", c.variant_name),
                 system_fingerprint: "".to_string(),
                 object: "chat.completion.chunk".to_string(),
                 usage: c.usage.map(|usage| usage.into()),
@@ -827,7 +851,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
                 },
             }],
             created: current_timestamp() as u32,
-            model: c.variant_name,
+            model: format!("{response_model_prefix}{}", c.variant_name),
             system_fingerprint: "".to_string(),
             object: "chat.completion.chunk".to_string(),
             usage: c.usage.map(|usage| usage.into()),
@@ -879,6 +903,7 @@ fn process_chat_content_chunk(
 /// When None is passed in, we send "[DONE]" to the client to signal the end of the stream
 fn prepare_serialized_openai_compatible_events(
     mut stream: InferenceStream,
+    response_model_prefix: String,
 ) -> impl Stream<Item = Result<Event, Error>> {
     async_stream::stream! {
         let mut tool_id_to_index = HashMap::new();
@@ -889,7 +914,7 @@ fn prepare_serialized_openai_compatible_events(
             let Ok(chunk) = chunk else {
                 continue;
             };
-            let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index);
+            let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index, &response_model_prefix);
             for chunk in openai_compatible_chunks {
                 let mut chunk_json = serde_json::to_value(chunk).map_err(|e| {
                     Error::new(ErrorDetails::Inference {

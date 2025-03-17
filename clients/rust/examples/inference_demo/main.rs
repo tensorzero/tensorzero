@@ -48,7 +48,7 @@ async fn main() {
         }
         (None, Some(config_file)) => ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(config_file),
-            clickhouse_url: std::env::var("CLICKHOUSE_URL").ok(),
+            clickhouse_url: std::env::var("TENSORZERO_CLICKHOUSE_URL").ok(),
             timeout: None,
         }),
         (Some(_), Some(_)) => {

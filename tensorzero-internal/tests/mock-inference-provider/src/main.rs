@@ -41,7 +41,7 @@ fn make_router() -> axum::Router {
             axum::routing::post(completions_handler),
         )
         .route(
-            "/azure/openai/deployments/:deployment/chat/completions",
+            "/azure/openai/deployments/{deployment}/chat/completions",
             axum::routing::post(completions_handler),
         )
         .route("/status", axum::routing::get(status_handler))

@@ -85,7 +85,7 @@ export default function Home() {
       <div className="container mx-auto my-16 max-w-[960px]">
         <div id="observability" className="mb-16">
           <h2 className="mb-1 text-2xl font-medium">Observability</h2>
-          <p className="mb-6 max-w-[640px] text-sm text-foreground-muted">
+          <p className="mb-6 max-w-[640px] text-sm text-foreground-tertiary">
             Monitor metrics across models and prompts and debug individual API
             calls.
           </p>
@@ -113,7 +113,7 @@ export default function Home() {
 
         <div id="optimization" className="mb-12">
           <h2 className="mb-1 text-2xl font-medium">Optimization</h2>
-          <p className="mb-6 max-w-[640px] text-sm text-foreground-muted">
+          <p className="mb-6 max-w-[640px] text-sm text-foreground-tertiary">
             Optimize your prompts, models, and inference strategies.
           </p>
           <div className="grid gap-6 md:grid-cols-3">
@@ -129,7 +129,9 @@ export default function Home() {
         <div className="mt-16 border-t border-gray-200 pt-16">
           <div className="grid gap-8 md:grid-cols-3">
             <div>
-              <h3 className="mb-4 text-sm text-foreground-muted">Learn more</h3>
+              <h3 className="mb-4 text-sm text-foreground-tertiary">
+                Learn more
+              </h3>
               <div className="flex flex-col gap-3">
                 <FooterLink
                   source="https://www.tensorzero.com/docs"
@@ -147,7 +149,7 @@ export default function Home() {
             </div>
 
             <div>
-              <h3 className="mb-4 text-sm text-foreground-muted">
+              <h3 className="mb-4 text-sm text-foreground-tertiary">
                 Ask a question
               </h3>
               <div className="flex flex-col gap-3">
@@ -167,7 +169,7 @@ export default function Home() {
             </div>
 
             <div>
-              <h3 className="mb-4 text-sm text-foreground-muted">
+              <h3 className="mb-4 text-sm text-foreground-tertiary">
                 Explore TensorZero
               </h3>
               <div className="flex flex-col gap-3">
