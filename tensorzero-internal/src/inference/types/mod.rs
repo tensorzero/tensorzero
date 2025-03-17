@@ -381,6 +381,10 @@ pub struct ModelInferenceRequest<'a> {
     pub function_type: FunctionType,
     pub output_schema: Option<&'a Value>,
     pub extra_body: Option<&'a ExtraBodyConfig>,
+    /// Optional arbitrary data, only used when constructing the cache key.
+    /// This is used by best_of_n/mixture_of_n to force different sub-variants
+    /// to have different cache keys.
+    pub extra_cache_key: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1477,6 +1481,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         tool_config,
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
+        extra_cache_key: None,
     };
     function
         .prepare_response(

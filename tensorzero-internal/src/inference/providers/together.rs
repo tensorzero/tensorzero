@@ -904,6 +904,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let together_request =
@@ -1004,6 +1005,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let together_response_with_metadata = TogetherResponseWithMetadata {
             response: valid_response,

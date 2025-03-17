@@ -82,7 +82,7 @@ where
                         .with_upgrades()
                         .await
                     {
-                        tracing::error!("Error in proxy: {}", err);
+                        tracing::error!("Error in proxy: {err:?}");
                     }
                 });
             }

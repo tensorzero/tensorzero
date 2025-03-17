@@ -1189,6 +1189,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let result = GeminiRequest::new(&inference_request);
         let details = result.unwrap_err().get_owned_details();
@@ -1226,6 +1227,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let result = GeminiRequest::new(&inference_request);
         let request = result.unwrap();
@@ -1276,6 +1278,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
             extra_body: None,
+            ..Default::default()
         };
         // JSON schema should be supported for Gemini Pro models
         let result = GeminiRequest::new(&inference_request);
@@ -1378,6 +1381,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let request_body = GeminiRequest {
             contents: vec![],
@@ -1466,6 +1470,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let request_body = GeminiRequest {
             contents: vec![],
@@ -1643,6 +1648,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools);
         let tools = tools.unwrap();
@@ -1685,6 +1691,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools);
         let tools = tools.unwrap();
