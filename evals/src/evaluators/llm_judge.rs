@@ -116,7 +116,8 @@ pub fn prepare_serialized_input(resolved_input: &ResolvedInput) -> Result<String
                 ResolvedInputMessageContent::Text { .. }
                 | ResolvedInputMessageContent::ToolCall { .. }
                 | ResolvedInputMessageContent::ToolResult { .. }
-                | ResolvedInputMessageContent::RawText { .. } => {}
+                | ResolvedInputMessageContent::RawText { .. }
+                | ResolvedInputMessageContent::Thought(_) => {}
             }
         }
     }
