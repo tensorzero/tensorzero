@@ -1356,7 +1356,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                 thought.text,
                                 &mut ttft,
                                 chunk.latency,
-                                // TODO - handle streaming thinking signatures
+                                // TODO - handle streaming thinking signatures (https://github.com/tensorzero/tensorzero/issues/1370)
                                 |text| {
                                     ContentBlockOutput::Thought(Thought {
                                         text,

@@ -243,7 +243,7 @@ async fn test_thinking_signature() {
 
     println!("Original tensorzero_content_blocks: {tensorzero_content_blocks:?}");
 
-    // TODO - remove the need for this
+    // TODO - support passing tool call in directly (https://github.com/tensorzero/tensorzero/issues/1366)
     tensorzero_content_blocks[2]["arguments"] =
         Value::String(serde_json::to_string(&tensorzero_content_blocks[2]["arguments"]).unwrap());
     tensorzero_content_blocks[2]
