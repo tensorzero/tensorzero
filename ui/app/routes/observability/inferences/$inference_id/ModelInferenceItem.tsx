@@ -77,13 +77,7 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
                     null,
                     2,
                   );
-                } catch (e) {
-                  console.warn(
-                    "Failed to parse raw_request JSON:",
-                    e,
-                    "Data:",
-                    inference.raw_request,
-                  );
+                } catch {
                   return inference.raw_request;
                 }
               })()}
@@ -106,13 +100,7 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
                     null,
                     2,
                   );
-                } catch (e) {
-                  console.warn(
-                    "Failed to parse raw_response JSON:",
-                    e,
-                    "Data:",
-                    inference.raw_response,
-                  );
+                } catch {
                   return inference.raw_response;
                 }
               })()}
