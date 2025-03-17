@@ -2023,7 +2023,7 @@ async def test_async_multi_turn_parallel_tool_use(async_client):
         },
     )
 
-    assistant_message = response.choices[0].message
+    assistant_message = response.content[0].text
 
-    assert "70" in assistant_message.content
-    assert "30" in assistant_message.content
+    assert "70" in assistant_message
+    assert "30" in assistant_message
