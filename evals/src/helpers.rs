@@ -68,6 +68,7 @@ async fn resolved_input_message_content_to_input_message_content(
         ResolvedInputMessageContent::RawText { value } => {
             Ok(InputMessageContent::RawText { value })
         }
+        ResolvedInputMessageContent::Thought(thought) => Ok(InputMessageContent::Thought(thought)),
         ResolvedInputMessageContent::Image(_image) => {
             // TODO: Implement image support for evals
             // This will involve grabbing the image from object storage using the object storage client included in `tensorzero-internal`

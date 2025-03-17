@@ -1925,6 +1925,14 @@ system_schema = "../../fixtures/config/functions/weather_helper/system_schema.js
 tools = ["get_temperature"]
 tool_choice = "auto"
 
+[functions.weather_helper.variants.anthropic-thinking]
+type = "chat_completion"
+weight = 0
+model = "claude-3-7-sonnet-20250219-thinking"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+# This must be at least as large as `thinking.budget_tokens`
+max_tokens = 1200
+
 [functions.weather_helper.variants.variant]
 type = "chat_completion"
 weight = 1
