@@ -193,8 +193,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_image_url_inference_with_provider_filesystem;
         use $crate::providers::common::test_tool_use_tool_choice_specific_streaming_inference_request_with_provider;
         use $crate::providers::common::test_extra_body_with_provider;
-        use $crate::providers::reasoning::test_reasoning_inference_request_with_provider;
-        use $crate::providers::reasoning::test_streaming_reasoning_inference_request_with_provider;
+        use $crate::providers::reasoning::test_reasoning_inference_request_simple_with_provider;
+        use $crate::providers::reasoning::test_streaming_reasoning_inference_request_simple_with_provider;
         use $crate::providers::reasoning::test_reasoning_inference_request_with_provider_json_mode;
         use $crate::providers::reasoning::test_streaming_reasoning_inference_request_with_provider_json_mode;
         use $crate::providers::common::test_short_inference_request_with_provider;
@@ -212,19 +212,19 @@ macro_rules! generate_provider_tests {
 
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
-        async fn test_reasoning_inference_request() {
+        async fn test_reasoning_inference_request_simple() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_reasoning_inference_request_with_provider(provider).await;
+                test_reasoning_inference_request_simple_with_provider(provider).await;
             }
         }
 
         #[cfg(feature = "e2e_tests")]
         #[tokio::test]
-        async fn test_streaming_reasoning_inference_request() {
+        async fn test_streaming_reasoning_inference_request_simple() {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
-                test_streaming_reasoning_inference_request_with_provider(provider).await;
+                test_streaming_reasoning_inference_request_simple_with_provider(provider).await;
             }
         }
 

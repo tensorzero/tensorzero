@@ -17,7 +17,7 @@ use tensorzero_internal::inference::types::{ContentBlock, RequestMessage};
 use uuid::Uuid;
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
-pub async fn test_reasoning_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
@@ -247,7 +247,9 @@ pub async fn test_reasoning_inference_request_with_provider(provider: E2ETestPro
 }
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
-pub async fn test_streaming_reasoning_inference_request_with_provider(provider: E2ETestProvider) {
+pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
+    provider: E2ETestProvider,
+) {
     use reqwest_eventsource::{Event, RequestBuilderExt};
     use serde_json::Value;
 

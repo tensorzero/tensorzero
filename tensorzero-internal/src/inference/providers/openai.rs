@@ -826,12 +826,12 @@ pub(super) struct OpenAISystemRequestMessage<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIUserRequestMessage<'a> {
-    #[serde(serialize_with = "serialize_user_content_vec")]
-    pub(super) content: Vec<OpenAIUserContent<'a>>,
+    #[serde(serialize_with = "serialize_text_content_vec")]
+    pub(super) content: Vec<OpenAIContentBlock<'a>>,
 }
 
-fn serialize_user_content_vec<S>(
-    content: &Vec<OpenAIUserContent<'_>>,
+fn serialize_text_content_vec<S>(
+    content: &Vec<OpenAIContentBlock<'_>>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>
 where
@@ -839,28 +839,34 @@ where
 {
     // If we have a single text block, serialize it as a string
     // to stay compatible with older providers which may not support content blocks
-    if let [OpenAIUserContent::Text { text }] = &content.as_slice() {
+    if let [OpenAIContentBlock::Text { text }] = &content.as_slice() {
         text.serialize(serializer)
     } else {
         content.serialize(serializer)
     }
 }
 
+fn serialize_optional_text_content_vec<S>(
+    content: &Option<Vec<OpenAIContentBlock<'_>>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match content {
+        Some(vec) => serialize_text_content_vec(vec, serializer),
+        None => serializer.serialize_none(),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
-pub enum OpenAIUserContent<'a> {
+pub enum OpenAIContentBlock<'a> {
     Text { text: Cow<'a, str> },
     ImageUrl { image_url: OpenAIImageUrl },
     Unknown { data: Cow<'a, Value> },
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum OpenAIAssistantContent<'a> {
-    Text { text: Cow<'a, str> },
-    ImageUrl { image_url: OpenAIImageUrl },
-    Unknown { data: Cow<'a, Value> },
-}
-
-impl Serialize for OpenAIUserContent<'_> {
+impl Serialize for OpenAIContentBlock<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -872,11 +878,11 @@ impl Serialize for OpenAIUserContent<'_> {
             ImageUrl { image_url: &'a OpenAIImageUrl },
         }
         match self {
-            OpenAIUserContent::Text { text } => Helper::Text { text }.serialize(serializer),
-            OpenAIUserContent::ImageUrl { image_url } => {
+            OpenAIContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
+            OpenAIContentBlock::ImageUrl { image_url } => {
                 Helper::ImageUrl { image_url }.serialize(serializer)
             }
-            OpenAIUserContent::Unknown { data } => data.serialize(serializer),
+            OpenAIContentBlock::Unknown { data } => data.serialize(serializer),
         }
     }
 }
@@ -915,8 +921,11 @@ impl<'a> From<&'a ToolCall> for OpenAIRequestToolCall<'a> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(super) struct OpenAIAssistantRequestMessage<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<Vec<OpenAIAssistantContent<'a>>>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_optional_text_content_vec"
+    )]
+    pub content: Option<Vec<OpenAIContentBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
 }
@@ -942,20 +951,18 @@ impl OpenAIRequestMessage<'_> {
         match self {
             OpenAIRequestMessage::System(msg) => msg.content.to_lowercase().contains(value),
             OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
-                OpenAIUserContent::Text { text } => text.to_lowercase().contains(value),
-                OpenAIUserContent::ImageUrl { .. } => false,
+                OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
+                OpenAIContentBlock::ImageUrl { .. } => false,
                 // Don't inspect the contents of 'unknown' blocks
-                OpenAIUserContent::Unknown { data: _ } => false,
+                OpenAIContentBlock::Unknown { data: _ } => false,
             }),
             OpenAIRequestMessage::Assistant(msg) => {
                 if let Some(content) = &msg.content {
                     content.iter().any(|c| match c {
-                        OpenAIAssistantContent::Text { text } => {
-                            text.to_lowercase().contains(value)
-                        }
-                        OpenAIAssistantContent::ImageUrl { .. } => false,
+                        OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
+                        OpenAIContentBlock::ImageUrl { .. } => false,
                         // Don't inspect the contents of 'unknown' blocks
-                        OpenAIAssistantContent::Unknown { data: _ } => false,
+                        OpenAIContentBlock::Unknown { data: _ } => false,
                     })
                 } else {
                     false
@@ -1081,7 +1088,7 @@ fn tensorzero_to_openai_user_messages(
     for block in content_blocks.iter() {
         match block {
             ContentBlock::Text(Text { text }) => {
-                user_content_blocks.push(OpenAIUserContent::Text {
+                user_content_blocks.push(OpenAIContentBlock::Text {
                     text: Cow::Borrowed(text),
                 });
             }
@@ -1100,7 +1107,7 @@ fn tensorzero_to_openai_user_messages(
                 image,
                 storage_path: _,
             }) => {
-                user_content_blocks.push(OpenAIUserContent::ImageUrl {
+                user_content_blocks.push(OpenAIContentBlock::ImageUrl {
                     image_url: OpenAIImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64Image` (with missing image data)
@@ -1123,7 +1130,7 @@ fn tensorzero_to_openai_user_messages(
                 data,
                 model_provider_name: _,
             } => {
-                user_content_blocks.push(OpenAIUserContent::Unknown {
+                user_content_blocks.push(OpenAIContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
             }
@@ -1150,7 +1157,7 @@ fn tensorzero_to_openai_assistant_messages(
     for block in content_blocks.iter() {
         match block {
             ContentBlock::Text(Text { text }) => {
-                assistant_content_blocks.push(OpenAIAssistantContent::Text {
+                assistant_content_blocks.push(OpenAIContentBlock::Text {
                     text: Cow::Borrowed(text),
                 });
             }
@@ -1175,7 +1182,7 @@ fn tensorzero_to_openai_assistant_messages(
                 image,
                 storage_path: _,
             }) => {
-                assistant_content_blocks.push(OpenAIAssistantContent::ImageUrl {
+                assistant_content_blocks.push(OpenAIContentBlock::ImageUrl {
                     image_url: OpenAIImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64Image` (with missing image data)
@@ -1198,7 +1205,7 @@ fn tensorzero_to_openai_assistant_messages(
                 data,
                 model_provider_name: _,
             } => {
-                assistant_content_blocks.push(OpenAIAssistantContent::Unknown {
+                assistant_content_blocks.push(OpenAIContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
             }
@@ -1449,7 +1456,7 @@ impl<'a> OpenAIRequest<'a> {
             if let Some(OpenAIRequestMessage::System(_)) = messages.first() {
                 if let OpenAIRequestMessage::System(system_msg) = messages.remove(0) {
                     let user_msg = OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                        content: vec![OpenAIUserContent::Text {
+                        content: vec![OpenAIContentBlock::Text {
                             text: system_msg.content,
                         }],
                     });
@@ -2471,7 +2478,7 @@ mod tests {
         assert!(
             matches!(
                 openai_request_with_system.messages[0],
-                OpenAIRequestMessage::User(ref msg) if msg.content == [OpenAIUserContent::Text { text: "This is the system message".into() }]
+                OpenAIRequestMessage::User(ref msg) if msg.content == [OpenAIContentBlock::Text { text: "This is the system message".into() }]
             ),
             "Unexpected messages: {:?}",
             openai_request_with_system.messages
@@ -2865,7 +2872,7 @@ mod tests {
             OpenAIRequestMessage::User(content) => {
                 assert_eq!(
                     content.content,
-                    &[OpenAIUserContent::Text {
+                    &[OpenAIContentBlock::Text {
                         text: "Hello".into()
                     }]
                 );
@@ -2885,10 +2892,10 @@ mod tests {
                 assert_eq!(
                     content.content,
                     vec![
-                        OpenAIUserContent::Text {
+                        OpenAIContentBlock::Text {
                             text: "Hello".into()
                         },
-                        OpenAIUserContent::Text {
+                        OpenAIContentBlock::Text {
                             text: "How are you?".into()
                         }
                     ]
@@ -2912,7 +2919,7 @@ mod tests {
             OpenAIRequestMessage::Assistant(content) => {
                 assert_eq!(
                     content.content,
-                    Some(vec![OpenAIAssistantContent::Text {
+                    Some(vec![OpenAIContentBlock::Text {
                         text: "Hello".into()
                     }])
                 );
@@ -3164,12 +3171,12 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIUserContent::Text {
+                content: vec![OpenAIContentBlock::Text {
                     text: "Please respond in JSON format.".into(),
                 }],
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIAssistantContent::Text {
+                content: Some(vec![OpenAIContentBlock::Text {
                     text: "Sure, here is the data.".into(),
                 }]),
                 tool_calls: None,
@@ -3186,12 +3193,12 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIUserContent::Text {
+                content: vec![OpenAIContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIAssistantContent::Text {
+                content: Some(vec![OpenAIContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
@@ -3209,12 +3216,12 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIUserContent::Text {
+                content: vec![OpenAIContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIAssistantContent::Text {
+                content: Some(vec![OpenAIContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
@@ -3231,12 +3238,12 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIUserContent::Text {
+                content: vec![OpenAIContentBlock::Text {
                     text: "Hello, how are you?".into(),
                 }],
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIAssistantContent::Text {
+                content: Some(vec![OpenAIContentBlock::Text {
                     text: "I am fine, thank you!".into(),
                 }]),
                 tool_calls: None,
@@ -3252,7 +3259,7 @@ mod tests {
         let system = Some("Respond using JSON.\n\nSystem instructions");
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-            content: vec![OpenAIUserContent::Text {
+            content: vec![OpenAIContentBlock::Text {
                 text: "Hello, how are you?".into(),
             }],
         })];
@@ -3267,12 +3274,12 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::On;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIUserContent::Text {
+                content: vec![OpenAIContentBlock::Text {
                     text: "Tell me a joke.".into(),
                 }],
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIAssistantContent::Text {
+                content: Some(vec![OpenAIContentBlock::Text {
                     text: "Sure, here's one for you.".into(),
                 }]),
                 tool_calls: None,
@@ -3289,12 +3296,12 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let messages = vec![
             OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                content: vec![OpenAIUserContent::Text {
+                content: vec![OpenAIContentBlock::Text {
                     text: "Provide a summary of the news.".into(),
                 }],
             }),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-                content: Some(vec![OpenAIAssistantContent::Text {
+                content: Some(vec![OpenAIContentBlock::Text {
                     text: "Here's the summary.".into(),
                 }]),
                 tool_calls: None,
@@ -3318,7 +3325,7 @@ mod tests {
         let system = None;
         let json_mode = ModelInferenceRequestJsonMode::Off;
         let messages = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-            content: vec![OpenAIUserContent::Text {
+            content: vec![OpenAIContentBlock::Text {
                 text: "Please include JSON in your response.".into(),
             }],
         })];
@@ -3413,7 +3420,7 @@ mod tests {
     fn test_serialize_user_messages() {
         // Test that a single message is serialized as 'content: string'
         let message = OpenAIUserRequestMessage {
-            content: vec![OpenAIUserContent::Text {
+            content: vec![OpenAIContentBlock::Text {
                 text: "My single message".into(),
             }],
         };
@@ -3423,10 +3430,10 @@ mod tests {
         // Test that a multiple messages are serialized as an array of content blocks
         let message = OpenAIUserRequestMessage {
             content: vec![
-                OpenAIUserContent::Text {
+                OpenAIContentBlock::Text {
                     text: "My first message".into(),
                 },
-                OpenAIUserContent::Text {
+                OpenAIContentBlock::Text {
                     text: "My second message".into(),
                 },
             ],

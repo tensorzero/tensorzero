@@ -30,9 +30,9 @@ use crate::tool::ToolCallChunk;
 use super::helpers::inject_extra_body;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
-    tensorzero_to_openai_system_message, OpenAIAssistantRequestMessage, OpenAIFinishReason,
-    OpenAIRequestMessage, OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAITool,
-    OpenAIToolChoice, OpenAIUsage, OpenAIUserContent, OpenAIUserRequestMessage, StreamOptions,
+    tensorzero_to_openai_system_message, OpenAIAssistantRequestMessage, OpenAIContentBlock,
+    OpenAIFinishReason, OpenAIRequestMessage, OpenAIResponseToolCall, OpenAISystemRequestMessage,
+    OpenAITool, OpenAIToolChoice, OpenAIUsage, OpenAIUserRequestMessage, StreamOptions,
 };
 
 lazy_static! {
@@ -613,7 +613,7 @@ pub(super) fn prepare_deepseek_messages<'a>(
             messages.insert(
                 0,
                 OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-                    content: vec![OpenAIUserContent::Text {
+                    content: vec![OpenAIContentBlock::Text {
                         text: Cow::Borrowed(system),
                     }],
                 }),
@@ -775,9 +775,8 @@ mod tests {
     use uuid::Uuid;
 
     use crate::inference::providers::openai::{
-        OpenAIAssistantContent, OpenAIRequestFunctionCall, OpenAIRequestToolCall,
-        OpenAIToolRequestMessage, OpenAIToolType, OpenAIUsage, SpecificToolChoice,
-        SpecificToolFunction,
+        OpenAIRequestFunctionCall, OpenAIRequestToolCall, OpenAIToolRequestMessage, OpenAIToolType,
+        OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
     };
     use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{
@@ -1049,10 +1048,10 @@ mod tests {
                 assert_eq!(
                     user_msg.content,
                     vec![
-                        OpenAIUserContent::Text {
+                        OpenAIContentBlock::Text {
                             text: "System prompt".into(),
                         },
-                        OpenAIUserContent::Text {
+                        OpenAIContentBlock::Text {
                             text: "Hello".into(),
                         },
                     ]
@@ -1137,7 +1136,7 @@ mod tests {
     }
     fn user_message(content: &str) -> OpenAIRequestMessage {
         OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-            content: vec![OpenAIUserContent::Text {
+            content: vec![OpenAIContentBlock::Text {
                 text: content.into(),
             }],
         })
@@ -1147,7 +1146,7 @@ mod tests {
         tool_calls: Option<Vec<OpenAIRequestToolCall<'a>>>,
     ) -> OpenAIRequestMessage<'a> {
         OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
-            content: content.map(|c| vec![OpenAIAssistantContent::Text { text: c.into() }]),
+            content: content.map(|c| vec![OpenAIContentBlock::Text { text: c.into() }]),
             tool_calls,
         })
     }
@@ -1203,10 +1202,10 @@ mod tests {
         let output = coalesce_consecutive_messages(input);
         let expected = vec![OpenAIRequestMessage::User(OpenAIUserRequestMessage {
             content: vec![
-                OpenAIUserContent::Text {
+                OpenAIContentBlock::Text {
                     text: "User1".into(),
                 },
-                OpenAIUserContent::Text {
+                OpenAIContentBlock::Text {
                     text: "User2".into(),
                 },
             ],
@@ -1219,10 +1218,10 @@ mod tests {
             assistant_message(Some("Ass2"), Some(vec![tool_call2.clone()])),
         ];
         let content = vec![
-            OpenAIAssistantContent::Text {
+            OpenAIContentBlock::Text {
                 text: "Ass1".into(),
             },
-            OpenAIAssistantContent::Text {
+            OpenAIContentBlock::Text {
                 text: "Ass2".into(),
             },
         ];
@@ -1282,10 +1281,10 @@ mod tests {
             tool_message("Tool2", "id2"),
             OpenAIRequestMessage::Assistant(OpenAIAssistantRequestMessage {
                 content: Some(vec![
-                    OpenAIAssistantContent::Text {
+                    OpenAIContentBlock::Text {
                         text: "Ass2".into(),
                     },
-                    OpenAIAssistantContent::Text {
+                    OpenAIContentBlock::Text {
                         text: "Ass3".into(),
                     },
                 ]),
@@ -1305,8 +1304,8 @@ mod tests {
         let expected = vec![OpenAIRequestMessage::Assistant(
             OpenAIAssistantRequestMessage {
                 content: Some(vec![
-                    OpenAIAssistantContent::Text { text: "A1".into() },
-                    OpenAIAssistantContent::Text { text: "A3".into() },
+                    OpenAIContentBlock::Text { text: "A1".into() },
+                    OpenAIContentBlock::Text { text: "A3".into() },
                 ]),
                 tool_calls: Some(vec![tool_call1.clone()]),
             },
