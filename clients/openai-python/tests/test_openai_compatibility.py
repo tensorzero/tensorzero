@@ -486,7 +486,7 @@ async def test_allow_developer_and_system(async_client):
         messages=messages,
         model="tensorzero::model_name::dummy::echo_request_messages",
     )
-    assert result.model == "dummy::echo_request_messages"
+    assert result.model == "tensorzero::model_name::dummy::echo_request_messages"
     assert result.episode_id == episode_id
     assert (
         result.choices[0].message.content
