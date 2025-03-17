@@ -100,21 +100,14 @@ fn _start_http_gateway(
     };
     if async_setup {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let res = gateway_fut.await;
-            match res {
-                Ok(gateway) => Ok(gateway),
-                Err(e) => Python::with_gil(|py| {
-                    Err(convert_error(py, TensorZeroError::Other { source: e })?)
-                }),
-            }
+            gateway_fut.await.map_err(|e| {
+                Python::with_gil(|py| convert_error(py, TensorZeroError::Other { source: e }))
+            })
         })
     } else {
-        match tokio_block_on_without_gil(py, gateway_fut) {
-            Ok(gateway) => Ok(gateway.into_bound_py_any(py)?),
-            Err(e) => {
-                Python::with_gil(|py| Err(convert_error(py, TensorZeroError::Other { source: e })?))
-            }
-        }
+        Ok(tokio_block_on_without_gil(py, gateway_fut)
+            .map_err(|e| convert_error(py, TensorZeroError::Other { source: e }))?
+            .into_bound_py_any(py)?)
     }
 }
 
