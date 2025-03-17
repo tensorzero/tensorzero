@@ -7,7 +7,7 @@ use clap::Parser;
 use dataset::query_dataset;
 use evaluators::evaluate_inference;
 use helpers::{get_tool_params_args, resolved_input_to_input, setup_logging};
-use stats::{EvalInfo, EvalStats};
+use stats::{EvalError, EvalInfo, EvalStats, EvalUpdate};
 use tensorzero::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
     DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceResponse,
@@ -109,6 +109,7 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
     let variant = Arc::new(args.variant);
     let eval_name = Arc::new(args.name);
     let dataset_len = dataset.len();
+    let mut task_id_to_datapoint_id = HashMap::new();
 
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
@@ -119,8 +120,8 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
         let eval_name = eval_name.clone();
         let eval_run_id_clone = eval_run_id;
         let datapoint = Arc::new(datapoint);
-
-        join_set.spawn(async move {
+        let datapoint_id = datapoint.id();
+        let abort_handle = join_set.spawn(async move {
             let inference_response = Arc::new(
                 infer_datapoint(
                     &client_clone,
@@ -149,26 +150,37 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
                 eval_result,
             ))
         });
+        task_id_to_datapoint_id.insert(abort_handle.id(), datapoint_id);
     }
 
     // Collect results
     let mut eval_stats = EvalStats::new(args.format, dataset_len);
 
-    while let Some(result) = join_set.join_next().await {
+    while let Some(result) = join_set.join_next_with_id().await {
         match result {
-            Ok(Ok((datapoint, inference_response, eval_result))) => {
+            Ok((_, Ok((datapoint, inference_response, eval_result)))) => {
                 eval_stats.push(
-                    EvalInfo::new(datapoint, inference_response, eval_result),
+                    EvalUpdate::Success(EvalInfo::new(datapoint, inference_response, eval_result)),
                     &mut writer,
                 )?;
             }
-            // TODO (#1341): Return errors as JSONL as well
-            Ok(Err(e)) => {
+            Ok((task_id, Err(e))) => {
                 tracing::warn!("Task error: {}", e);
+                eval_stats.push(
+                    EvalUpdate::Error(EvalError {
+                        datapoint_id: task_id_to_datapoint_id[&task_id],
+                        message: e.to_string(),
+                    }),
+                    &mut writer,
+                )?;
             }
-            Err(e) => {
-                tracing::warn!("Failed to join task: {}", e);
-            }
+            Err(e) => eval_stats.push(
+                EvalUpdate::Error(EvalError {
+                    datapoint_id: task_id_to_datapoint_id[&e.id()],
+                    message: e.to_string(),
+                }),
+                &mut writer,
+            )?,
         }
     }
 

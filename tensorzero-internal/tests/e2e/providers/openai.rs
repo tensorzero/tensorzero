@@ -1302,8 +1302,8 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     use tensorzero_internal::inference::types::storage::StorageKind;
 
     // These are set in `ci/minio-docker-compose.yml`
-    let minio_access_key_id = "tensorzero".to_string();
-    let minio_secret_access_key = "tensorzero".to_string();
+    let minio_access_key_id = "tensorzero-root".to_string();
+    let minio_secret_access_key = "tensorzero-root".to_string();
 
     let credentials = Credentials::from_keys(&minio_access_key_id, &minio_secret_access_key, None);
 

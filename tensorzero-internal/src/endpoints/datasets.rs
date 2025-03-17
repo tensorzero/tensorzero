@@ -25,7 +25,7 @@ use tracing::instrument;
 
 pub const CLICKHOUSE_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 use super::{
-    feedback::{validate_parse_demonstration, DemonstrationOutput},
+    feedback::{validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo},
     inference::DEFAULT_FUNCTION_NAME,
 };
 
@@ -304,10 +304,18 @@ pub async fn update_datapoint_handler(
 
             let resolved_input = chat.input.clone().resolve(&fetch_context).await?;
             function_config.validate_input(&chat.input)?;
+            // If there are no tool params in the SyntheticChatInferenceDatapoint, we use the default tool params (empty tools).
+            // This is consistent with how they are serialized at inference time.
+            let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(
+                chat.tool_params
+                    .clone()
+                    .map(|x| x.into())
+                    .unwrap_or_default(),
+            );
             let validated_output = validate_parse_demonstration(
                 &function_config,
-                &app_state.config.tools,
                 &chat.output,
+                dynamic_demonstration_info,
             )
             .await?;
 
@@ -338,15 +346,16 @@ pub async fn update_datapoint_handler(
             let json: SyntheticJsonInferenceDatapoint =
                 serde_json::from_value(params).map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
-                        message: format!("Failed to deserialize chat datapoint: {}", e),
+                        message: format!("Failed to deserialize JSON datapoint: {}", e),
                     })
                 })?;
             let resolved_input = json.input.clone().resolve(&fetch_context).await?;
             function_config.validate_input(&json.input)?;
+            let dynamic_demonstration_info = DynamicDemonstrationInfo::Json(json.output_schema);
             let validated_json = validate_parse_demonstration(
                 &function_config,
-                &app_state.config.tools,
                 &json.output,
+                dynamic_demonstration_info,
             )
             .await?;
             let DemonstrationOutput::Json(json_out) = validated_json else {
@@ -505,6 +514,13 @@ impl Datapoint {
             Datapoint::JsonInference(datapoint) => Some(&datapoint.output_schema),
         }
     }
+
+    pub fn id(&self) -> Uuid {
+        match self {
+            Datapoint::ChatInference(datapoint) => datapoint.id,
+            Datapoint::JsonInference(datapoint) => datapoint.id,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -642,6 +658,7 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub function_name: String,
     pub input: Input,
     pub output: serde_json::Value,
+    pub output_schema: serde_json::Value,
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
     #[serde(default)]

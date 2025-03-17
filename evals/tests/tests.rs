@@ -9,7 +9,7 @@ use url::Url;
 
 use crate::common::write_json_fixture_to_dataset;
 use common::write_chat_fixture_to_dataset;
-use evals::{run_eval, stats::EvalInfo, Args, OutputFormat};
+use evals::{run_eval, stats::EvalUpdate, Args, OutputFormat};
 use tensorzero::InferenceResponse;
 use tensorzero_internal::{
     clickhouse::test_helpers::{
@@ -49,8 +49,17 @@ async fn run_evals_json() {
     let mut parsed_output = Vec::new();
     let mut total_the = 0;
     for line in output_str.lines() {
-        let parsed: EvalInfo = serde_json::from_str(line).expect("Each line should be valid JSON");
-        assert!(parsed.evaluator_errors.is_empty());
+        let parsed: EvalUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed = match parsed {
+            EvalUpdate::Success(eval_info) => eval_info,
+            EvalUpdate::Error(eval_error) => {
+                panic!("Eval error: {}", eval_error.message);
+            }
+        };
+        assert_eq!(parsed.evaluator_errors.len(), 1);
+        let error = parsed.evaluator_errors.get("error").unwrap();
+        assert!(error.contains("Dummy error in inference"));
         let inference_id = parsed.response.inference_id();
         let clickhouse_inference = select_json_inference_clickhouse(&clickhouse, inference_id)
             .await
@@ -151,7 +160,14 @@ async fn run_exact_match_eval_chat() {
     let output_str = String::from_utf8(output).unwrap();
     let mut parsed_output = Vec::new();
     for line in output_str.lines() {
-        let parsed: EvalInfo = serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed: EvalUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed = match parsed {
+            EvalUpdate::Success(eval_info) => eval_info,
+            EvalUpdate::Error(eval_error) => {
+                panic!("Eval error: {}", eval_error.message);
+            }
+        };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
         let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
@@ -232,7 +248,14 @@ async fn run_llm_judge_eval_chat() {
     let mut parsed_output = Vec::new();
     let mut total_topic_fs = 0;
     for line in output_str.lines() {
-        let parsed: EvalInfo = serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed: EvalUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed = match parsed {
+            EvalUpdate::Success(eval_info) => eval_info,
+            EvalUpdate::Error(eval_error) => {
+                panic!("Eval error: {}", eval_error.message);
+            }
+        };
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
         let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
@@ -448,4 +471,46 @@ async fn test_run_eval_binary() {
     assert!(output_str.is_empty());
     let stderr_str = String::from_utf8(output.stderr).unwrap();
     assert!(stderr_str.contains("the following required arguments were not provided:"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn run_evals_errors() {
+    let clickhouse = get_clickhouse().await;
+    write_json_fixture_to_dataset(&PathBuf::from(&format!(
+        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    )))
+    .await;
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let eval_run_id = Uuid::now_v7();
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        name: "entity_extraction".to_string(),
+        variant: "dummy_error".to_string(),
+        concurrency: 10,
+        format: OutputFormat::Jsonl,
+    };
+
+    let mut output = Vec::new();
+    run_eval(args, eval_run_id, &mut output).await.unwrap();
+    clickhouse_flush_async_insert(&clickhouse).await;
+    let output_str = String::from_utf8(output).unwrap();
+    for line in output_str.lines() {
+        let parsed: EvalUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let error = match parsed {
+            EvalUpdate::Success(eval_info) => panic!(
+                "Eval success shouldn't happen: {}",
+                serde_json::to_string_pretty(&eval_info).unwrap()
+            ),
+            EvalUpdate::Error(eval_error) => eval_error,
+        };
+        assert!(error
+            .message
+            .contains("Error sending request to Dummy provider"));
+    }
 }
