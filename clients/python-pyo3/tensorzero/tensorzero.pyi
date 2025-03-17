@@ -188,6 +188,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         config_file: Optional[str] = None,
         clickhouse_url: Optional[str] = None,
         timeout: Optional[float] = None,
+        use_async: bool = True,
     ) -> "AsyncTensorZeroGateway":
         """
         Build an AsyncTensorZeroGateway instance.
@@ -195,6 +196,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
         :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
+        :param use_async (Optional): If True, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and return an `AsyncTensorZeroGateway` directly.
         """
 
     async def inference(  # type: ignore[override]
