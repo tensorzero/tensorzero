@@ -87,41 +87,30 @@ fn _start_http_gateway(
     clickhouse_url: Option<String>,
     async_setup: bool,
 ) -> PyResult<Bound<'_, PyAny>> {
-    let (bind_addr, gateway_fut) =
-        match tensorzero_internal::gateway_util::start_openai_compatible_gateway(
+    let gateway_fut = async move {
+        let (addr, handle) = tensorzero_internal::gateway_util::start_openai_compatible_gateway(
             config_file,
             clickhouse_url,
-        ) {
-            Ok(res) => res,
-            Err(e) => {
-                return Python::with_gil(|py| {
-                    Err(convert_error(
-                        py,
-                        TensorZeroError::Other { source: e.into() },
-                    )?)
-                });
-            }
-        };
-    let base_url = format!("http://{bind_addr}/openai/v1");
+        )
+        .await?;
+        Ok(LocalHttpGateway {
+            base_url: format!("http://{}/openai/v1", addr),
+            shutdown_handle: Some(handle),
+        })
+    };
     if async_setup {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let res = gateway_fut.await;
             match res {
-                Ok(shutdown_handle) => Ok(LocalHttpGateway {
-                    base_url,
-                    shutdown_handle: Some(shutdown_handle),
-                }),
+                Ok(gateway) => Ok(gateway),
                 Err(e) => Python::with_gil(|py| {
-                    Err(convert_error(
-                        py,
-                        TensorZeroError::Other { source: e.into() },
-                    )?)
+                    Err(convert_error(py, TensorZeroError::Other { source: e })?)
                 }),
             }
         })
     } else {
-        let shutdown_handle = match tokio_block_on_without_gil(py, gateway_fut) {
-            Ok(shutdown_handle) => shutdown_handle,
+        match tokio_block_on_without_gil(py, gateway_fut) {
+            Ok(gateway) => Ok(gateway.into_bound_py_any(py)?),
             Err(e) => {
                 return Python::with_gil(|py| {
                     Err(convert_error(
@@ -130,12 +119,7 @@ fn _start_http_gateway(
                     )?)
                 });
             }
-        };
-        Ok(LocalHttpGateway {
-            base_url,
-            shutdown_handle: Some(shutdown_handle),
         }
-        .into_bound_py_any(py)?)
     }
 }
 

@@ -1,4 +1,4 @@
-use std::future::{Future, IntoFuture};
+use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
@@ -177,69 +177,52 @@ pub struct ShutdownHandle {
 /// Starts a new HTTP TensorZero gateway on an unused port, with only the openai-compatible endpoint enabled.
 /// This is used in by `patch_openai_client` in the Python client to allow pointing the OpenAI client
 /// at a local gateway (via `base_url`).
-/// 
+///
 /// Returns the address the gateway is listening on, and a future resolves (after the gateway starts up)
 /// to a `ShutdownHandle` which shuts down the gateway when dropped.
-pub fn start_openai_compatible_gateway(
+pub async fn start_openai_compatible_gateway(
     config_file: Option<String>,
     clickhouse_url: Option<String>,
-) -> Result<
-    (
-        SocketAddr,
-        impl Future<Output = Result<ShutdownHandle, Error>>,
-    ),
-    Error,
-> {
-    // We construct a `std::net::TcpListener` so that we can bind without requiring an `.await`
-    let std_listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| {
-        Error::new(ErrorDetails::InternalError {
-            message: format!("Failed to bind to a port: {}", e),
-        })
-    })?;
-    // `tokio::net::TcpListener` requires non-blocking mode
-    std_listener.set_nonblocking(true).map_err(|e| {
-        Error::new(ErrorDetails::InternalError {
-            message: format!("Failed to set non-blocking mode: {}", e),
-        })
-    })?;
-    let bind_addr = std_listener.local_addr().map_err(|e| {
+) -> Result<(SocketAddr, ShutdownHandle), Error> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to bind to a port: {}", e),
+            })
+        })?;
+    let bind_addr = listener.local_addr().map_err(|e| {
         Error::new(ErrorDetails::InternalError {
             message: format!("Failed to get local address: {}", e),
         })
     })?;
-    Ok((bind_addr, async move {
-        let listener = tokio::net::TcpListener::from_std(std_listener).map_err(|e| {
-            Error::new(ErrorDetails::InternalError {
-                message: format!("Failed to convert to tokio listener: {}", e),
-            })
-        })?;
-        let config = if let Some(config_file) = config_file {
-            Arc::new(Config::load_and_verify_from_path(Path::new(&config_file)).await?)
-        } else {
-            Arc::new(Config::default())
-        };
-        let app_state = AppStateData::new_with_clickhouse(config, clickhouse_url).await?;
 
-        let router = Router::new()
-            .route(
-                "/openai/v1/chat/completions",
-                post(endpoints::openai_compatible::inference_handler),
-            )
-            .fallback(endpoints::fallback::handle_404)
-            .with_state(app_state);
+    let config = if let Some(config_file) = config_file {
+        Arc::new(Config::load_and_verify_from_path(Path::new(&config_file)).await?)
+    } else {
+        Arc::new(Config::default())
+    };
+    let app_state = AppStateData::new_with_clickhouse(config, clickhouse_url).await?;
 
-        let (sender, recv) = tokio::sync::oneshot::channel::<()>();
-        let shutdown_fut = async move {
-            let _ = recv.await;
-        };
+    let router = Router::new()
+        .route(
+            "/openai/v1/chat/completions",
+            post(endpoints::openai_compatible::inference_handler),
+        )
+        .fallback(endpoints::fallback::handle_404)
+        .with_state(app_state);
 
-        tokio::spawn(
-            axum::serve(listener, router)
-                .with_graceful_shutdown(shutdown_fut)
-                .into_future(),
-        );
-        Ok(ShutdownHandle { sender })
-    }))
+    let (sender, recv) = tokio::sync::oneshot::channel::<()>();
+    let shutdown_fut = async move {
+        let _ = recv.await;
+    };
+
+    tokio::spawn(
+        axum::serve(listener, router)
+            .with_graceful_shutdown(shutdown_fut)
+            .into_future(),
+    );
+    Ok((bind_addr, ShutdownHandle { sender }))
 }
 
 #[cfg(test)]
