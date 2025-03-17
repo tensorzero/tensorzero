@@ -648,7 +648,7 @@ struct UninitializedFunctionConfigChat {
     #[serde(default)]
     tool_choice: ToolChoice,
     #[serde(default)]
-    parallel_tool_calls: bool,
+    parallel_tool_calls: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
