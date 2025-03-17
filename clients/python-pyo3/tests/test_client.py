@@ -1945,6 +1945,7 @@ def test_patch_sync_openai_client_sync_setup():
         client,
         config_file="../../examples/readme/config/tensorzero.toml",
         clickhouse_url=None,
+        async_setup=False,
     )
     response = client.chat.completions.create(
         model="tensorzero::model_name::dummy::json",
@@ -1980,7 +1981,7 @@ async def test_patch_sync_openai_client_async_setup():
 
 def test_patch_openai_client_no_config():
     client = OpenAI()
-    client = tensorzero.patch_openai_client(client)
+    client = tensorzero.patch_openai_client(client, async_setup=False)
     response = client.chat.completions.create(
         model="tensorzero::model_name::dummy::json",
         messages=[
@@ -1996,7 +1997,9 @@ def test_patch_openai_client_no_config():
 def test_patch_openai_client_with_config():
     client = OpenAI()
     client = tensorzero.patch_openai_client(
-        client, config_file="../../tensorzero-internal/tests/e2e/tensorzero.toml"
+        client,
+        config_file="../../tensorzero-internal/tests/e2e/tensorzero.toml",
+        async_setup=False,
     )
     response = client.chat.completions.create(
         model="tensorzero::function_name::json_success",
@@ -2030,6 +2033,7 @@ async def test_patch_async_openai_client_sync_setup():
         client,
         config_file="../../examples/readme/config/tensorzero.toml",
         clickhouse_url=None,
+        async_setup=False,
     )
     response = await client.chat.completions.create(
         model="tensorzero::model_name::dummy::json",
@@ -2121,11 +2125,15 @@ async def test_patch_async_openai_missing_await():
 def test_repeated_patch_openai_client_sync_setup():
     sync_client = OpenAI()
     tensorzero.patch_openai_client(
-        sync_client, config_file="../../examples/readme/config/tensorzero.toml"
+        sync_client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        async_setup=False,
     )
     with pytest.raises(RuntimeError) as exc_info:
         tensorzero.patch_openai_client(
-            sync_client, config_file="../../examples/readme/config/tensorzero.toml"
+            sync_client,
+            config_file="../../examples/readme/config/tensorzero.toml",
+            async_setup=False,
         )
     assert (
         str(exc_info.value)
@@ -2134,11 +2142,15 @@ def test_repeated_patch_openai_client_sync_setup():
 
     async_client = AsyncOpenAI()
     tensorzero.patch_openai_client(
-        async_client, config_file="../../examples/readme/config/tensorzero.toml"
+        async_client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        async_setup=False,
     )
     with pytest.raises(RuntimeError) as exc_info:
         tensorzero.patch_openai_client(
-            async_client, config_file="../../examples/readme/config/tensorzero.toml"
+            async_client,
+            config_file="../../examples/readme/config/tensorzero.toml",
+            async_setup=False,
         )
     assert (
         str(exc_info.value)

@@ -106,7 +106,7 @@ def patch_openai_client(
     *,
     config_file: t.Optional[str] = None,
     clickhouse_url: t.Optional[str] = None,
-    async_setup=False,
+    async_setup=True,
 ) -> t.Union[T, t.Awaitable[T]]:
     """
     Starts a new TensorZero gateway, and patching the provided OpenAI client to use it
