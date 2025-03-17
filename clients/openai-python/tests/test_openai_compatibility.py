@@ -27,7 +27,7 @@ from uuid import UUID
 
 import pytest
 import pytest_asyncio
-from openai import AsyncOpenAI, BadRequestError, OpenAI
+from openai import AsyncOpenAI, BadRequestError
 from pydantic import BaseModel, ValidationError
 from tensorzero.util import uuid7
 

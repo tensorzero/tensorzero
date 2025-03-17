@@ -28,11 +28,11 @@ from dataclasses import dataclass
 from enum import Enum
 from os import path
 from uuid import UUID
-from openai import OpenAI, AsyncOpenAI
-import tensorzero
 
 import pytest
 import pytest_asyncio
+import tensorzero
+from openai import AsyncOpenAI, OpenAI
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
@@ -2188,6 +2188,8 @@ async def test_close_patch_openai_client():
         async_setup=True,
     )
     tensorzero.close_patched_openai_client_gateway(sync_client)
+
+
 @pytest.mark.asyncio
 async def test_async_multi_turn_parallel_tool_use(async_client):
     episode_id = str(uuid7())
