@@ -67,7 +67,7 @@ def _attach_fields(client: T, gateway: t.Any) -> T:
             "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
         )
     client.base_url = gateway.base_url
-    # Store the gateway so that it doesn't get garbat
+    # Store the gateway so that it doesn't get garbage collected
     client.__tensorzero_gateway = gateway
     return client
 

@@ -174,6 +174,12 @@ pub struct ShutdownHandle {
     sender: Sender<()>,
 }
 
+/// Starts a new HTTP TensorZero gateway on an unused port, with only the openai-compatible endpoint enabled.
+/// This is used in by `patch_openai_client` in the Python client to allow pointing the OpenAI client
+/// at a local gateway (via `base_url`).
+/// 
+/// Returns the address the gateway is listening on, and a future resolves (after the gateway starts up)
+/// to a `ShutdownHandle` which shuts down the gateway when dropped.
 pub fn start_openai_compatible_gateway(
     config_file: Option<String>,
     clickhouse_url: Option<String>,
@@ -184,11 +190,13 @@ pub fn start_openai_compatible_gateway(
     ),
     Error,
 > {
+    // We construct a `std::net::TcpListener` so that we can bind without requiring an `.await`
     let std_listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(|e| {
         Error::new(ErrorDetails::InternalError {
             message: format!("Failed to bind to a port: {}", e),
         })
     })?;
+    // `tokio::net::TcpListener` requires non-blocking mode
     std_listener.set_nonblocking(true).map_err(|e| {
         Error::new(ErrorDetails::InternalError {
             message: format!("Failed to set non-blocking mode: {}", e),
