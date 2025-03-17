@@ -99,6 +99,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const action = formData.get("action");
   const parsedFormData: ParsedDatasetRow =
     ParsedDatasetRowSchema.parse(cleanedData);
+  console.log("parsedFormData", parsedFormData);
   if (action === "delete") {
     await deleteDatapointServer(parsedFormData);
     const datasetCounts = await getDatasetCounts();
@@ -125,6 +126,18 @@ export async function action({ request }: ActionFunctionArgs) {
         output: transformedOutput,
         tags: parsedFormData.tags || {},
         auxiliary: parsedFormData.auxiliary,
+        ...("output_schema" in parsedFormData
+          ? {
+              output_schema:
+                parsedFormData["output_schema" as keyof typeof parsedFormData],
+            }
+          : {}),
+        ...("tool_params" in parsedFormData
+          ? {
+              tool_params:
+                parsedFormData["tool_params" as keyof typeof parsedFormData],
+            }
+          : {}),
       },
     );
     return;
@@ -176,7 +189,11 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
   const submitDatapointAction = (action: string) => {
     const formData = new FormData();
-    Object.entries(datapoint).forEach(([key, value]) => {
+
+    // Create a copy of datapoint with updated input if we're saving
+    const dataToSubmit = { ...datapoint, input };
+
+    Object.entries(dataToSubmit).forEach(([key, value]) => {
       if (value === undefined) return;
       if (value === null) {
         // do nothing
@@ -308,8 +325,10 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 }
 
 function transformOutputForTensorZero(output: ParsedDatasetRow["output"]) {
-  if (output === null) {
+  if (output === null || output === undefined) {
     return null;
+  } else if ("raw" in output) {
+    return JSON.parse(output.raw);
   } else if (typeof output === "object") {
     return JSON.parse(JSON.stringify(output));
   } else {

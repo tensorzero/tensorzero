@@ -99,7 +99,6 @@ export async function action({ request }: Route.ActionArgs) {
     inference_id.toString(),
     output.toString() as "inherit" | "demonstration" | "none",
   );
-  console.log(datapoint);
   return redirect(`/datasets/${dataset.toString()}/datapoint/${datapoint.id}`);
 }
 

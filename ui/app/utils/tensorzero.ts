@@ -256,7 +256,9 @@ export type ChatInferenceDatapoint = z.infer<
 /**
  * Schema for JSON inference datapoints
  */
-export const JsonInferenceDatapointSchema = BaseDatapointSchema;
+export const JsonInferenceDatapointSchema = BaseDatapointSchema.extend({
+  output_schema: JSONValueSchema,
+});
 export type JsonInferenceDatapoint = z.infer<
   typeof JsonInferenceDatapointSchema
 >;
