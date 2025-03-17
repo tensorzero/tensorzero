@@ -158,6 +158,9 @@ function ToolCallBlock({
       </div>
     );
   }
+  // TODO (Viraj): unify this with the other ToolCallBlock in Input.tsx
+  // handle JSON validation here and in the JSON output component
+  throw new Error("Not implemented");
 
   return (
     <div className="rounded-md bg-muted p-4">

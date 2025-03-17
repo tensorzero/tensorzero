@@ -6,7 +6,7 @@ import type {
 } from "~/utils/clickhouse/common";
 import { SkeletonImage } from "./SkeletonImage";
 import { SystemContent } from "./SystemContent";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 // Base interface with just the common required properties
 interface BaseInputProps {
@@ -274,27 +274,51 @@ function ToolCallBlock({
   isEditing,
   onContentChange,
 }: ToolCallBlockProps) {
+  const [displayValue, setDisplayValue] = useState(block.arguments);
+  const [jsonError, setJsonError] = useState<string | null>(null);
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (onContentChange) {
-      onContentChange({
-        type: "tool_call",
-        name: block.name,
-        arguments: e.target.value,
-        id: block.id,
-      });
+      const newValue = e.target.value;
+      setDisplayValue(newValue);
+
+      try {
+        const parsedValue = JSON.parse(newValue);
+        setJsonError(null);
+        onContentChange({
+          type: "tool_call",
+          name: block.name,
+          arguments: parsedValue,
+          id: block.id,
+        });
+      } catch {
+        setJsonError("Invalid JSON format");
+      }
     }
   };
+
+  useEffect(() => {
+    // Update display value when block.arguments changes externally
+    setDisplayValue(block.arguments);
+  }, [block.arguments]);
 
   if (isEditing) {
     return (
       <div className="rounded bg-slate-100 p-2 dark:bg-slate-800">
         <div className="font-medium">Tool: {block.name}</div>
         <textarea
-          className="mt-1 w-full rounded border border-slate-300 p-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
-          value={block.arguments}
+          className={`mt-1 w-full rounded border p-2 font-mono text-sm ${
+            jsonError
+              ? "border-red-500 dark:border-red-500"
+              : "border-slate-300 dark:border-slate-700"
+          } dark:bg-slate-800`}
+          value={displayValue}
           onChange={handleChange}
           rows={3}
         />
+        {jsonError && (
+          <div className="mt-1 text-sm text-red-500">{jsonError}</div>
+        )}
       </div>
     );
   }
