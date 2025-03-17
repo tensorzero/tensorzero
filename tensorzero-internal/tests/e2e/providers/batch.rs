@@ -1465,7 +1465,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
     let expected_tool_params = [
         json!({
             "tool_choice": "auto",
-            "parallel_tool_calls": false,
+            "parallel_tool_calls": null,
             "tools_available": [{
                 "name": "get_temperature",
                 "description": "Get the current temperature in a given location",
@@ -1513,7 +1513,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
                 "strict": false
             }],
             "tool_choice": "auto",
-            "parallel_tool_calls": false
+            "parallel_tool_calls": null
         }),
         json!({
             "tools_available": [{
@@ -1539,7 +1539,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
                 "strict": false
             }],
             "tool_choice": "required",
-            "parallel_tool_calls": false
+            "parallel_tool_calls": null
         }),
         json!({
             "tools_available": [{
@@ -1565,7 +1565,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
                 "strict": false
             }],
             "tool_choice": "none",
-            "parallel_tool_calls": false
+            "parallel_tool_calls": null
         }),
         json!({
             "tools_available": [{
@@ -1608,7 +1608,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
             "tool_choice": {
                 "specific": "self_destruct"
             },
-            "parallel_tool_calls": false
+            "parallel_tool_calls": null
         }),
     ];
 
@@ -2118,7 +2118,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
             "strict": false
         }],
         "tool_choice": "required",
-        "parallel_tool_calls": false
+        "parallel_tool_calls": null
     });
     assert_eq!(tool_params, expected_tool_params);
 
@@ -2524,7 +2524,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();
-    let expected_tool_params = json!({"tools_available":[{"description":"Get the current temperature in a given location","parameters":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"location":{"type":"string","description":"The location to get the temperature for (e.g. \"New York\")"},"units":{"type":"string","description":"The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")","enum":["fahrenheit","celsius"]}},"required":["location"],"additionalProperties":false},"name":"get_temperature","strict":false}],"tool_choice":"auto","parallel_tool_calls":false});
+    let expected_tool_params = json!({"tools_available":[{"description":"Get the current temperature in a given location","parameters":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"location":{"type":"string","description":"The location to get the temperature for (e.g. \"New York\")"},"units":{"type":"string","description":"The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")","enum":["fahrenheit","celsius"]}},"required":["location"],"additionalProperties":false},"name":"get_temperature","strict":false}],"tool_choice":"auto","parallel_tool_calls":null});
     assert_eq!(tool_params, expected_tool_params);
 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
@@ -2911,7 +2911,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
             "strict": false
         }],
         "tool_choice": "auto",
-        "parallel_tool_calls": false
+        "parallel_tool_calls": null
     });
     assert_eq!(tool_params, expected_tool_params);
 
@@ -3398,8 +3398,14 @@ pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_p
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
-    check_parallel_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
-        .await;
+    check_parallel_tool_use_inference_response(
+        inferences_json[0].clone(),
+        &provider,
+        None,
+        true,
+        true.into(),
+    )
+    .await;
 
     // Check the response from polling by inference_id
     let inference_id = inferences_json[0]
@@ -3425,8 +3431,14 @@ pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_p
 
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
-    check_parallel_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
-        .await;
+    check_parallel_tool_use_inference_response(
+        inferences_json[0].clone(),
+        &provider,
+        None,
+        true,
+        true.into(),
+    )
+    .await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -3481,8 +3493,14 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_parallel_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
-        .await;
+    check_parallel_tool_use_inference_response(
+        inferences_json[0].clone(),
+        &provider,
+        None,
+        true,
+        true.into(),
+    )
+    .await;
 
     // Poll by batch_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -3507,8 +3525,14 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_parallel_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
-        .await;
+    check_parallel_tool_use_inference_response(
+        inferences_json[0].clone(),
+        &provider,
+        None,
+        true,
+        true.into(),
+    )
+    .await;
 }
 
 pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ETestProvider) {

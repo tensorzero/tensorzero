@@ -410,7 +410,7 @@ impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
     type Error = Error;
 
     fn try_from(tool_call_config: &'a ToolCallConfig) -> Result<Self, Error> {
-        let disable_parallel_tool_use = Some(!tool_call_config.parallel_tool_calls);
+        let disable_parallel_tool_use = Some(tool_call_config.parallel_tool_calls == Some(false));
         let tool_choice = &tool_call_config.tool_choice;
 
         match tool_choice {
@@ -1214,7 +1214,7 @@ mod tests {
         // Need to cover all 4 cases
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: Some(false),
             tools_available: vec![],
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
@@ -1227,7 +1227,7 @@ mod tests {
 
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: true,
+            parallel_tool_calls: Some(true),
             tools_available: vec![],
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
@@ -1241,7 +1241,7 @@ mod tests {
 
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Required,
-            parallel_tool_calls: true,
+            parallel_tool_calls: Some(true),
             tools_available: vec![],
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
@@ -1255,7 +1255,7 @@ mod tests {
 
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Specific("test".to_string()),
-            parallel_tool_calls: false,
+            parallel_tool_calls: Some(false),
             tools_available: vec![],
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);

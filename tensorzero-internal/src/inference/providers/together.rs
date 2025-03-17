@@ -932,7 +932,7 @@ mod tests {
                 }
             }))
         );
-        assert_eq!(together_request.parallel_tool_calls, Some(false));
+        assert_eq!(together_request.parallel_tool_calls, None);
     }
 
     #[test]

@@ -1366,3 +1366,56 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     )
     .await;
 }
+
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+pub async fn test_parallel_tool_use_default_true_inference_request() {
+    use crate::providers::common::check_parallel_tool_use_inference_response;
+
+    let episode_id = Uuid::now_v7();
+
+    let provider = E2ETestProvider {
+        variant_name: "openai".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    };
+
+    // We don't specify `parallel_tool_use` in the request, so it shouldn't get passed to OpenAI,
+    // resulting in their default value (`true`)
+    let payload = json!({
+        "function_name": "weather_helper_parallel",
+        "episode_id": episode_id,
+        "input":{
+            "system": {"assistant_name": "Dr. Mehta"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+                }
+            ]},
+        "stream": false,
+        "variant_name": provider.variant_name,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check if the API response is fine
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+    check_parallel_tool_use_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+        false,
+        Value::Null,
+    )
+    .await;
+}
