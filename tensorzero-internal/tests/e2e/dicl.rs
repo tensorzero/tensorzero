@@ -397,7 +397,7 @@ async fn embed_insert_example(
 /// Testing a DICL variant
 /// Trying to get the LLM to learn that Pinocchio is a liar from examples
 #[tokio::test]
-pub async fn test_dicl_inference_request() {
+pub async fn test_dicl_inference_request_simple() {
     let clickhouse = get_clickhouse().await;
     let episode_id = Uuid::now_v7();
     let variant_name = "dicl";
