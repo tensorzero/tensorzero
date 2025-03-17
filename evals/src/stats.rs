@@ -87,6 +87,11 @@ impl EvalStats {
     }
 }
 
+pub enum EvalUpdate {
+    Success(EvalInfo),
+    Error(EvalError),
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct EvalInfo {
     pub datapoint: Datapoint,
