@@ -234,6 +234,7 @@ impl InferenceProvider for DummyProvider {
             "reasoner" => vec![
                 ContentBlockOutput::Thought(Thought {
                     text: "hmmm".to_string(),
+                    signature: None,
                 }),
                 ContentBlockOutput::Text(Text {
                     text: DUMMY_INFER_RESPONSE_CONTENT.to_string(),
@@ -242,6 +243,7 @@ impl InferenceProvider for DummyProvider {
             "json_reasoner" => vec![
                 ContentBlockOutput::Thought(Thought {
                     text: "hmmm".to_string(),
+                    signature: None,
                 }),
                 ContentBlockOutput::Text(Text {
                     text: DUMMY_JSON_RESPONSE_RAW.to_string(),
@@ -278,6 +280,14 @@ impl InferenceProvider for DummyProvider {
                 })]
             }
             "alternate" => vec![ALTERNATE_INFER_RESPONSE_CONTENT.to_string().into()],
+            #[allow(clippy::unwrap_used)]
+            "echo_request_messages" => vec![ContentBlockOutput::Text(Text {
+                text: serde_json::to_string(&json!({
+                    "system": request.system,
+                    "messages": request.messages,
+                }))
+                .unwrap(),
+            })],
             "extract_images" => {
                 let images: Vec<_> = request
                     .messages
@@ -307,6 +317,16 @@ impl InferenceProvider for DummyProvider {
             "llm_judge::zero" => vec![r#"{"thinking": "hmmm", "score": 0}"#.to_string().into()],
             "llm_judge::one" => {
                 vec![r#"{"thinking": "hmmm", "score": 1}"#.to_string().into()]
+            }
+            "llm_judge::error" => {
+                return Err(ErrorDetails::InferenceClient {
+                    message: "Dummy error in inference".to_string(),
+                    raw_request: Some("raw request".to_string()),
+                    raw_response: None,
+                    status_code: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                }
+                .into());
             }
             _ => vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()],
         };
