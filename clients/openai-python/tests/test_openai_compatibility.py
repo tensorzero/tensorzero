@@ -828,7 +828,7 @@ async def test_async_multi_turn_parallel_tool_use(async_client):
             "content": [
                 {
                     "type": "text",
-                    "text": "What is the weather like in Tokyo? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.",
+                    "text": "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.",
                 }
             ],
         },

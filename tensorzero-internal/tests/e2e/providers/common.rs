@@ -9294,7 +9294,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+                    "content": "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
                 }
             ]},
         "parallel_tool_calls": true,
@@ -9583,7 +9583,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+                    "content": "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
                 }
             ]},
         "parallel_tool_calls": true,

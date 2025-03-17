@@ -1208,7 +1208,7 @@ it("should handle multi-turn parallel tool calls using TensorZero gateway direct
       content: [
         {
           type: "text",
-          text: "What is the weather like in Tokyo? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.",
+          text: "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.",
         },
       ],
     },
