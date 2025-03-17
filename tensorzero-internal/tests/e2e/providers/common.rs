@@ -1804,14 +1804,14 @@ pub async fn check_simple_image_inference_response(
     assert_eq!(model_provider_name, provider.model_provider_name);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
-    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(raw_request.to_lowercase().contains("animal"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
-    assert!(raw_response.to_lowercase().contains("tokyo"));
+    assert!(raw_response.to_lowercase().contains("crab"));
     assert!(serde_json::from_str::<Value>(raw_response).is_ok());
 
     let input_tokens = result.get("input_tokens").unwrap();

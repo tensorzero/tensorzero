@@ -20,10 +20,12 @@ pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
 
 #[cfg(feature = "e2e_tests")]
 pub async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo) {
-    clickhouse
+    if let Err(e) = clickhouse
         .run_query("SYSTEM FLUSH ASYNC INSERT QUEUE".to_string(), None)
         .await
-        .unwrap();
+    {
+        tracing::warn!("Failed to run `SYSTEM FLUSH ASYNC INSERT QUEUE`: {}", e);
+    }
 }
 
 #[allow(dead_code)]
