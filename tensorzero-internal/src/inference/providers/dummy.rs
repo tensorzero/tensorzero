@@ -308,6 +308,16 @@ impl InferenceProvider for DummyProvider {
             "llm_judge::one" => {
                 vec![r#"{"thinking": "hmmm", "score": 1}"#.to_string().into()]
             }
+            "llm_judge::error" => {
+                return Err(ErrorDetails::InferenceClient {
+                    message: "Dummy error in inference".to_string(),
+                    raw_request: Some("raw request".to_string()),
+                    raw_response: None,
+                    status_code: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                }
+                .into());
+            }
             _ => vec![DUMMY_INFER_RESPONSE_CONTENT.to_string().into()],
         };
         let raw_request = DUMMY_RAW_REQUEST.to_string();

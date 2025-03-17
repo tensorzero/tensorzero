@@ -6,12 +6,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::InferenceResponse;
 use tensorzero_internal::{endpoints::datasets::Datapoint, evals::EvaluatorConfig};
+use uuid::Uuid;
 
 use crate::{evaluators, OutputFormat};
 
 pub(crate) struct EvalStats {
     pub output_format: OutputFormat,
     pub eval_infos: Vec<EvalInfo>,
+    pub eval_errors: Vec<EvalError>,
     pub progress_bar: Option<ProgressBar>,
 }
 
@@ -24,14 +26,15 @@ impl EvalStats {
         Self {
             output_format,
             eval_infos: Vec::new(),
+            eval_errors: Vec::new(),
             progress_bar,
         }
     }
 
-    pub(crate) fn push(&mut self, eval_info: EvalInfo, writer: &mut impl Write) -> Result<()> {
+    pub(crate) fn push(&mut self, eval_update: EvalUpdate, writer: &mut impl Write) -> Result<()> {
         match self.output_format {
             OutputFormat::Jsonl => {
-                writeln!(writer, "{}", serde_json::to_string(&eval_info)?)?;
+                writeln!(writer, "{}", serde_json::to_string(&eval_update)?)?;
             }
             OutputFormat::HumanReadable => {
                 if let Some(progress_bar) = &mut self.progress_bar {
@@ -39,7 +42,12 @@ impl EvalStats {
                 }
             }
         }
-        self.eval_infos.push(eval_info);
+        match eval_update {
+            EvalUpdate::Success(eval_info) => self.eval_infos.push(eval_info),
+            EvalUpdate::Error(eval_error) => {
+                self.eval_errors.push(eval_error);
+            }
+        }
         Ok(())
     }
 
@@ -87,6 +95,12 @@ impl EvalStats {
     }
 }
 
+// We allow large enum variants because
+// we expect the Success case way more often so it's ok to pay the cost
+// of a large enum here.
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
 pub enum EvalUpdate {
     Success(EvalInfo),
     Error(EvalError),
@@ -125,6 +139,12 @@ impl EvalInfo {
             evaluator_errors,
         }
     }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct EvalError {
+    pub datapoint_id: Uuid,
+    pub message: String,
 }
 
 /// Statistics computed about a particular evaluator
