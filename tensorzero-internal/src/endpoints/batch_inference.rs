@@ -864,6 +864,7 @@ pub async fn write_completed_batch_inference<'a>(
                 episode_id,
             },
             extra_body: vec![],
+            extra_cache_key: None,
         };
         let inference_result = function
             .prepare_response(

@@ -220,19 +220,36 @@ impl BestOfNSamplingConfig {
         let candidate_variants = self
             .candidates
             .iter()
-            .map(|candidate| {
+            .enumerate()
+            .map(|(i, candidate)| {
                 let variant = function.variants().get(candidate).ok_or_else(|| {
                     Error::new(ErrorDetails::UnknownCandidate {
                         name: candidate.to_string(),
                     })
                 })?;
-                Ok((candidate.to_string(), variant))
+                // Inject the candidate index into the cache key. This prevents us from using the same cache entry
+                // for identical candidates, allowing users to evaluate the same candidate multiple times
+                // to generate (potentially) different responses.
+                // Note - we intentionally *only* inject the index, and not any other variant/model name
+                // information. This means that multiple top-level 'best_of_n' variants will be able to share
+                // the same cache entries. For example, consider two top-level best-of-n variants with
+                // sub variants:
+                // [A, B, A, C]
+                // [A, B, C, D]
+                //
+                // The first two evaluations (A and B) will share the same cache key, since
+                // the sub-variant will make the same request (and have the same injected index)
+                // However, the 'A, C' and 'C, D' evaluations will all have distinct cache keys:
+                // (A, 2), (C, 3), (C, 2), (D, 4)
+                let mut config = inference_config.clone();
+                config.extra_cache_key = Some(format!("candidate_{i}"));
+                Ok((candidate.to_string(), variant, config))
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
         // Start the inference tasks (we keep the names around for logging)
         let mut inference_futures = Vec::new();
-        for (candidate_name, candidate_variant) in &candidate_variants {
+        for (candidate_name, candidate_variant, config) in candidate_variants.iter() {
             inference_futures.push((
                 candidate_name.clone(),
                 timeout(
@@ -241,7 +258,7 @@ impl BestOfNSamplingConfig {
                         input,
                         models,
                         function,
-                        inference_config,
+                        config,
                         clients,
                         InferenceParams::default(),
                     ),
@@ -664,6 +681,7 @@ impl EvaluatorConfig {
                     // TODO  - expose this to best_of_n
                     inference_extra_body: vec![],
                 }),
+                extra_cache_key: inference_config.extra_cache_key.clone(),
             },
             skipped_indices,
         ))
@@ -1210,6 +1228,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             extra_body: vec![],
+            extra_cache_key: None,
         };
 
         let selected = best_of_n_variant

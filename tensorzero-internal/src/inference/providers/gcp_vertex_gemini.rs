@@ -1396,6 +1396,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
         let details = result.unwrap_err().get_owned_details();
@@ -1433,6 +1434,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
         let request = result.unwrap();
@@ -1483,6 +1485,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
             extra_body: None,
+            ..Default::default()
         };
         // JSON schema should be supported for Gemini Pro models
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-1.5-pro-001");
@@ -1550,6 +1553,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
             extra_body: None,
+            ..Default::default()
         };
         // JSON mode should be supported for Gemini Flash models but without a schema
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-flash");
@@ -1649,6 +1653,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let request_body = GCPVertexGeminiRequest {
             contents: vec![],
@@ -1734,6 +1739,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let request_body = GCPVertexGeminiRequest {
             contents: vec![],
@@ -1908,6 +1914,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-1.5-pro-001");
         let tools = tools.unwrap();
@@ -1951,6 +1958,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-2.0-flash-lite");
         let tools = tools.unwrap();

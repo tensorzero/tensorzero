@@ -85,7 +85,9 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch ClickHouse container for E2E tests
-        run: docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait
+        run: |
+          # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
+          docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up -d --wait || true
 
       - name: Launch the provider-proxy cache for E2E tests
         run: |

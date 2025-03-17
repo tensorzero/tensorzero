@@ -18,11 +18,13 @@ use pyo3::{
     prelude::*,
     sync::GILOnceCell,
     types::{PyDict, PyString, PyType},
+    IntoPyObjectExt,
 };
 use python_helpers::{
     deserialize_from_pydict, parse_feedback_response, parse_inference_chunk,
     parse_inference_response, parse_tool, python_uuid_to_uuid, serialize_to_dict,
 };
+use tensorzero_internal::gateway_util::ShutdownHandle;
 use tensorzero_rust::{
     err_to_http, CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput,
@@ -44,6 +46,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BaseTensorZeroGateway>()?;
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
+    m.add_class::<LocalHttpGateway>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
@@ -54,7 +57,58 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     JSON_DUMPS
         .set(m.py(), json_dumps.unbind())
         .expect("Failed to set JSON_DUMPS");
+
+    m.add_wrapped(wrap_pyfunction!(_start_http_gateway))
+        .expect("Failed to add start_http_gateway");
+
     Ok(())
+}
+
+#[pyclass]
+struct LocalHttpGateway {
+    #[pyo3(get)]
+    base_url: String,
+    #[allow(dead_code)]
+    shutdown_handle: Option<ShutdownHandle>,
+}
+
+#[pymethods]
+impl LocalHttpGateway {
+    fn close(&mut self) {
+        self.shutdown_handle.take();
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (*, config_file, clickhouse_url, async_setup))]
+fn _start_http_gateway(
+    py: Python<'_>,
+    config_file: Option<String>,
+    clickhouse_url: Option<String>,
+    async_setup: bool,
+) -> PyResult<Bound<'_, PyAny>> {
+    let gateway_fut = async move {
+        let (addr, handle) = tensorzero_internal::gateway_util::start_openai_compatible_gateway(
+            config_file,
+            clickhouse_url,
+        )
+        .await?;
+        Ok(LocalHttpGateway {
+            base_url: format!("http://{}/openai/v1", addr),
+            shutdown_handle: Some(handle),
+        })
+    };
+    if async_setup {
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            gateway_fut.await.map_err(|e| {
+                Python::with_gil(|py| convert_error(py, TensorZeroError::Other { source: e }))
+            })
+        })
+    } else {
+        Ok(tokio_block_on_without_gil(py, gateway_fut)
+            .map_err(|e| convert_error(py, TensorZeroError::Other { source: e }))?
+            .into_bound_py_any(py)?)
+    }
 }
 
 // TODO - this should extend the python `ABC` class once pyo3 supports it: https://github.com/PyO3/pyo3/issues/991
@@ -92,12 +146,7 @@ impl AsyncStreamWrapper {
             // We need to interact with Python objects here (to build up a Python `InferenceChunk`),
             // so we need the GIL
             Python::with_gil(|py| {
-                let chunk = match chunk {
-                    Ok(chunk) => chunk,
-                    Err(e) => {
-                        return Err(convert_error(py, err_to_http(e))?);
-                    }
-                };
+                let chunk = chunk.map_err(|e| convert_error(py, err_to_http(e)))?;
                 parse_inference_chunk(py, chunk)
             })
         })
@@ -123,10 +172,7 @@ impl StreamWrapper {
         let Some(chunk) = chunk else {
             return Err(PyStopIteration::new_err(()));
         };
-        let chunk = match chunk {
-            Ok(chunk) => chunk,
-            Err(e) => return Err(convert_error(py, err_to_http(e))?),
-        };
+        let chunk = chunk.map_err(|e| convert_error(py, err_to_http(e)))?;
         parse_inference_chunk(py, chunk)
     }
 }
@@ -511,7 +557,7 @@ impl TensorZeroGateway {
         // and then return the result to the Python caller directly (not wrapped in a Python `Future`).
         match tokio_block_on_without_gil(py, fut) {
             Ok(resp) => Ok(parse_feedback_response(py, resp)?.into_any()),
-            Err(e) => Err(convert_error(py, e)?),
+            Err(e) => Err(convert_error(py, e)),
         }
     }
 
@@ -594,16 +640,15 @@ impl TensorZeroGateway {
 
         // We're in the synchronous `TensorZeroGateway` class, so we need to block on the Rust future,
         // and then return the result to the Python caller directly (not wrapped in a Python `Future`).
-        let resp = tokio_block_on_without_gil(py, fut);
+        let resp = tokio_block_on_without_gil(py, fut).map_err(|e| convert_error(py, e))?;
         match resp {
-            Ok(InferenceOutput::NonStreaming(data)) => parse_inference_response(py, data),
-            Ok(InferenceOutput::Streaming(stream)) => Ok(StreamWrapper {
+            InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
+            InferenceOutput::Streaming(stream) => Ok(StreamWrapper {
                 stream: Arc::new(Mutex::new(stream)),
             }
             .into_pyobject(py)?
             .into_any()
             .unbind()),
-            Err(e) => Err(convert_error(py, e)?),
         }
     }
 }
@@ -826,15 +871,17 @@ impl AsyncTensorZeroGateway {
             let res = client.inference(params).await;
             // We need to interact with Python objects here (to build up a Python inference response),
             // so we need the GIL
-            Python::with_gil(|py| match res {
-                Ok(InferenceOutput::NonStreaming(data)) => parse_inference_response(py, data),
-                Ok(InferenceOutput::Streaming(stream)) => Ok(AsyncStreamWrapper {
-                    stream: Arc::new(Mutex::new(stream)),
+            Python::with_gil(|py| {
+                let output = res.map_err(|e| convert_error(py, e))?;
+                match output {
+                    InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
+                    InferenceOutput::Streaming(stream) => Ok(AsyncStreamWrapper {
+                        stream: Arc::new(Mutex::new(stream)),
+                    }
+                    .into_pyobject(py)?
+                    .into_any()
+                    .unbind()),
                 }
-                .into_pyobject(py)?
-                .into_any()
-                .unbind()),
-                Err(e) => Err(convert_error(py, e)?),
             })
         })
     }
@@ -882,7 +929,7 @@ impl AsyncTensorZeroGateway {
             // so we need the GIL
             Python::with_gil(|py| match res {
                 Ok(resp) => Ok(parse_feedback_response(py, resp)?.into_any()),
-                Err(e) => Err(convert_error(py, e)?),
+                Err(e) => Err(convert_error(py, e)),
             })
         })
     }
@@ -892,15 +939,19 @@ impl AsyncTensorZeroGateway {
 // This lint currently does nothing on stable, but let's include it
 // so that it will start working automatically when it's stabilized
 #[deny(non_exhaustive_omitted_patterns)]
-fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyResult<PyErr> {
+fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyErr {
     match e {
         TensorZeroError::Http {
             status_code,
             text,
             source: _,
-        } => tensorzero_error(py, status_code, text),
-        TensorZeroError::Other { source } => tensorzero_internal_error(py, &source.to_string()),
-        TensorZeroError::RequestTimeout => tensorzero_internal_error(py, &e.to_string()),
+        } => tensorzero_error(py, status_code, text).unwrap_or_else(|e| e),
+        TensorZeroError::Other { source } => {
+            tensorzero_internal_error(py, &source.to_string()).unwrap_or_else(|e| e)
+        }
+        TensorZeroError::RequestTimeout => {
+            tensorzero_internal_error(py, &e.to_string()).unwrap_or_else(|e| e)
+        }
         // Required due to the `#[non_exhaustive]` attribute on `TensorZeroError` - we want to force
         // downstream consumers to handle all possible error types, but the compiler also requires us
         // to do this (since our python bindings are in a different crate from the Rust client.)

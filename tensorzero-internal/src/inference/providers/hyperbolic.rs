@@ -454,6 +454,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let hyperbolic_request =
@@ -540,6 +541,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let hyperbolic_response_with_metadata = HyperbolicResponseWithMetadata {
             response: valid_response,

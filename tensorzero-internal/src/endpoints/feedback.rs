@@ -1,6 +1,5 @@
 use std::cmp::max;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::State;
@@ -17,10 +16,12 @@ use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
+use crate::inference::types::batch::deserialize_optional_json_string;
 use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, Text,
 };
-use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCall, ToolCallConfig};
+use crate::jsonschema_util::JSONSchemaFromPath;
+use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
 use crate::uuid_util::uuid_elapsed;
 
 use super::validate_tags;
@@ -286,8 +287,21 @@ async fn write_demonstration(
     )
     .await?;
     let function_config = config.get_function(&function_name)?;
-    let parsed_value = validate_parse_demonstration(function_config, &config.tools, value).await?;
-    let payload = json!({"inference_id": inference_id, "value": parsed_value, "id": feedback_id, "tags": tags});
+    let dynamic_demonstration_info = get_dynamic_demonstration_info(
+        &connection_info,
+        inference_id,
+        &function_name,
+        function_config,
+    )
+    .await?;
+    let parsed_value =
+        validate_parse_demonstration(function_config, value, dynamic_demonstration_info).await?;
+    let string_value = serde_json::to_string(&parsed_value).map_err(|e| {
+        Error::new(ErrorDetails::InvalidRequest {
+            message: format!("Failed to serialize parsed value to json: {}", e),
+        })
+    })?;
+    let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
     if !dryrun {
         tokio::spawn(async move {
             let _ = connection_info
@@ -493,17 +507,24 @@ impl TryFrom<DemonstrationContentBlock> for ContentBlockOutput {
     }
 }
 
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum DemonstrationOutput {
+    Chat(Vec<ContentBlockChatOutput>),
+    Json(Value),
+}
+
 // Validates that the demonstration is correct.
 // For chat functions, the value should be a string or a list of valid content blocks.
 // For json functions, the value is validated against the output schema. If it passes,
 // we construct the usual {"raw": str, "parsed": parsed_value} object, serialize it, and return it.
-async fn validate_parse_demonstration(
+pub async fn validate_parse_demonstration(
     function_config: &FunctionConfig,
-    tools: &HashMap<String, Arc<StaticToolConfig>>,
     value: &Value,
-) -> Result<String, Error> {
-    match function_config {
-        FunctionConfig::Chat(chat_config) => {
+    dynamic_demonstration_info: DynamicDemonstrationInfo,
+) -> Result<DemonstrationOutput, Error> {
+    match (function_config, dynamic_demonstration_info) {
+        (FunctionConfig::Chat(_), DynamicDemonstrationInfo::Chat(tool_call_config)) => {
             // For chat functions, the value should either be a string or a list of valid content blocks.
             let content_blocks = match value {
                 Value::String(s) => {
@@ -531,24 +552,11 @@ async fn validate_parse_demonstration(
                     .into());
                 }
             };
-            let tool_config = ToolCallConfig::new(
-                &chat_config.tools,
-                &chat_config.tool_choice,
-                chat_config.parallel_tool_calls,
-                tools,
-                // TODO (#348): Eventually we should allow dynamic tools here as well.
-                DynamicToolParams {
-                    allowed_tools: None,
-                    additional_tools: None,
-                    tool_choice: None,
-                    parallel_tool_calls: None,
-                },
-            )?;
             let content_blocks: Vec<ContentBlockOutput> = content_blocks
                 .into_iter()
                 .map(|block| block.try_into())
                 .collect::<Result<Vec<ContentBlockOutput>, Error>>()?;
-            let parsed_value = parse_chat_output(content_blocks, tool_config.as_ref()).await;
+            let parsed_value = parse_chat_output(content_blocks, Some(&tool_call_config)).await;
             for block in &parsed_value {
                 if let ContentBlockChatOutput::ToolCall(tool_call) = block {
                     if tool_call.name.is_none() {
@@ -566,38 +574,119 @@ async fn validate_parse_demonstration(
                     }
                 }
             }
-            let serialized_parsed_content_blocks =
-                serde_json::to_string(&parsed_value).map_err(|e| {
+            Ok(DemonstrationOutput::Chat(parsed_value))
+        }
+        (FunctionConfig::Json(_), DynamicDemonstrationInfo::Json(output_schema)) => {
+            // For json functions, the value should be a valid json object.
+            JSONSchemaFromPath::from_value(&output_schema)?
+                .validate(value)
+                .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
-                        message: format!("Failed to serialize parsed value to json: {}", e),
+                        message: format!(
+                            "Demonstration does not fit function output schema: {}",
+                            e
+                        ),
                     })
                 })?;
-            Ok(serialized_parsed_content_blocks)
-        }
-        FunctionConfig::Json(json_config) => {
-            // For json functions, the value should be a valid json object.
-            // TODO (#348): Eventually we should allow dynamic output_schema here as well.
-            json_config.output_schema.validate(value).map_err(|e| {
-                Error::new(ErrorDetails::InvalidRequest {
-                    message: format!("Demonstration does not fit function output schema: {}", e),
-                })
-            })?;
             let raw = serde_json::to_string(value).map_err(|e| {
                 Error::new(ErrorDetails::InvalidRequest {
                     message: format!("Failed to serialize demonstration to json: {}", e),
                 })
             })?;
             let json_inference_response = json!({"raw": raw, "parsed": value});
-            let serialized_json_inference_response =
-                serde_json::to_string(&json_inference_response).map_err(|e| {
-                    Error::new(ErrorDetails::InvalidRequest {
-                        message: format!(
-                            "Failed to serialize json_inference_response to json: {}",
-                            e
-                        ),
+            Ok(DemonstrationOutput::Json(json_inference_response))
+        }
+        _ => Err(ErrorDetails::Inference { message: "The DynamicDemonstrationInfo does not match the function type. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string()}.into())
+    }
+}
+
+/// Represents the different types of dynamic demonstration information that can be retrieved
+#[derive(Debug)]
+pub enum DynamicDemonstrationInfo {
+    Chat(ToolCallConfig),
+    Json(Value),
+}
+
+#[derive(Debug, Deserialize)]
+struct ToolParamsResult {
+    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    tool_params: Option<ToolCallConfigDatabaseInsert>,
+}
+
+/// In order to properly validate demonstration data we need to fetch the information that was
+/// passed to the inference at runtime.
+/// If we don't do this then we might allow some e.g. tool calls or output schemas that would not
+/// have been valid. Similarly, we might reject some tools or output schemas that were actually
+/// valid.
+/// This function grabs either the tool call or output schema information that was used at the
+/// time of the actual inference in order to validate the demonstration data.
+async fn get_dynamic_demonstration_info(
+    clickhouse_client: &ClickHouseConnectionInfo,
+    inference_id: Uuid,
+    function_name: &str,
+    function_config: &FunctionConfig,
+) -> Result<DynamicDemonstrationInfo, Error> {
+    match function_config {
+        FunctionConfig::Chat(..) => {
+            let parameterized_query = "SELECT tool_params FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
+            let result = clickhouse_client
+                .run_query(
+                    parameterized_query,
+                    Some(&HashMap::from([
+                        ("function_name", function_name),
+                        ("inference_id", &inference_id.to_string()),
+                    ])),
+                )
+                .await?;
+
+            let tool_params_result =
+                serde_json::from_str::<ToolParamsResult>(&result).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to parse demonstration result: {}", e),
                     })
                 })?;
-            Ok(serialized_json_inference_response)
+
+            Ok(DynamicDemonstrationInfo::Chat(
+                // If the tool params are not present in the database, we use the default tool params (empty tools).
+                // This is consistent with how they are serialized at inference time.
+                tool_params_result
+                    .tool_params
+                    .map(|x| x.into())
+                    .unwrap_or_default(),
+            ))
+        }
+        FunctionConfig::Json(..) => {
+            let parameterized_query = "SELECT output_schema FROM JsonInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
+            let result = clickhouse_client
+                .run_query(
+                    parameterized_query,
+                    Some(&HashMap::from([
+                        ("function_name", function_name),
+                        ("inference_id", &inference_id.to_string()),
+                    ])),
+                )
+                .await?;
+            let result_value = serde_json::from_str::<Value>(&result).map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseQuery {
+                    message: format!("Failed to parse demonstration result: {}", e),
+                })
+            })?;
+            let output_schema_str = result_value
+                .get("output_schema")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: "Failed to get output schema from demonstration result"
+                            .to_string(),
+                    })
+                })?;
+
+            let output_schema = serde_json::from_str::<Value>(output_schema_str).map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseQuery {
+                    message: format!("Failed to parse output schema: {}", e),
+                })
+            })?;
+            Ok(DynamicDemonstrationInfo::Json(output_schema))
         }
     }
 }
@@ -606,12 +695,13 @@ async fn validate_parse_demonstration(
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     use crate::config_parser::{Config, MetricConfig, MetricConfigOptimize};
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::JSONSchemaFromPath;
     use crate::testing::get_unit_test_app_state_data;
-    use crate::tool::{ToolCallOutput, ToolChoice};
+    use crate::tool::{StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
 
     #[tokio::test]
     async fn test_get_feedback_metadata() {
@@ -1003,9 +1093,21 @@ mod tests {
 
         // Case 1: a string passed to a chat function
         let value = json!("Hello, world!");
-        let parsed_value = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
+        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
+            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        });
+        let parsed_value = serde_json::to_string(
+            &validate_parse_demonstration(
+                function_config_chat_tools,
+                &value,
+                dynamic_demonstration_info,
+            )
             .await
-            .unwrap();
+            .unwrap(),
+        )
+        .unwrap();
         let expected_parsed_value = serde_json::to_string(&vec![ContentBlockOutput::Text(Text {
             text: "Hello, world!".to_string(),
         })])
@@ -1015,9 +1117,21 @@ mod tests {
         // Case 2: a tool call to get_temperature, which exists
         let value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"location": "London", "unit": "celsius"}}]
         );
-        let parsed_value = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
+        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
+            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        });
+        let parsed_value = serde_json::to_string(
+            &validate_parse_demonstration(
+                function_config_chat_tools,
+                &value,
+                dynamic_demonstration_info,
+            )
             .await
-            .unwrap();
+            .unwrap(),
+        )
+        .unwrap();
         let expected_parsed_value =
             serde_json::to_string(&vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
                 id: "".to_string(),
@@ -1035,9 +1149,18 @@ mod tests {
         // Case 3: a tool call to get_humidity, which does not exist
         let value = json!([{"type": "tool_call", "name": "get_humidity", "arguments": {"location": "London", "unit": "celsius"}}]
         );
-        let err = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
-            .await
-            .unwrap_err();
+        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
+            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        });
+        let err = validate_parse_demonstration(
+            function_config_chat_tools,
+            &value,
+            dynamic_demonstration_info,
+        )
+        .await
+        .unwrap_err();
         let details = err.get_owned_details();
         assert_eq!(
             details,
@@ -1049,9 +1172,18 @@ mod tests {
         // Case 4: a tool call to get_temperature, which exists but has bad arguments (place instead of location)
         let value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"place": "London", "unit": "celsius"}}]
         );
-        let err = validate_parse_demonstration(function_config_chat_tools, &tools, &value)
-            .await
-            .unwrap_err();
+        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
+            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        });
+        let err = validate_parse_demonstration(
+            function_config_chat_tools,
+            &value,
+            dynamic_demonstration_info,
+        )
+        .await
+        .unwrap_err();
         let details = err.get_owned_details();
         assert_eq!(
             details,
@@ -1077,13 +1209,12 @@ mod tests {
           "additionalProperties": false
         });
         let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
-        let output_schema = JSONSchemaFromPath::from_value(&output_schema).unwrap();
         let function_config = Box::leak(Box::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             system_schema: None,
             user_schema: None,
             assistant_schema: None,
-            output_schema,
+            output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
         })));
 
@@ -1092,20 +1223,66 @@ mod tests {
             "name": "John",
             "age": 30
         });
-        let parsed_value = validate_parse_demonstration(function_config, &tools, &value)
-            .await
-            .unwrap();
+        let dynamic_demonstration_info = DynamicDemonstrationInfo::Json(output_schema.clone());
+        let parsed_value = serde_json::to_string(
+            &validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
         let expected_parsed_value = serde_json::to_string(&json!({
             "raw": serde_json::to_string(&value).unwrap(),
             "parsed": value
         }))
         .unwrap();
         assert_eq!(expected_parsed_value, parsed_value);
-
         // Case 6: a JSON function with incorrect output
         let value = json!("Hello, world!");
-        validate_parse_demonstration(function_config, &tools, &value)
+        let dynamic_demonstration_info = DynamicDemonstrationInfo::Json(output_schema.clone());
+        let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
             .await
             .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("Demonstration does not fit function output schema"));
+
+        // Case 7: Mismatched function type - Chat function with JSON demonstration info
+        let value = json!("Hello, world!");
+        let dynamic_demonstration_info = DynamicDemonstrationInfo::Json(output_schema.clone());
+        let err = validate_parse_demonstration(
+            function_config_chat_tools,
+            &value,
+            dynamic_demonstration_info,
+        )
+        .await
+        .unwrap_err();
+        let details = err.get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::Inference {
+                message: "The DynamicDemonstrationInfo does not match the function type. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string()
+            }
+        );
+
+        // Case 8: Mismatched function type - JSON function with Chat demonstration info
+        let value = json!({
+            "name": "John",
+            "age": 30
+        });
+        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
+            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
+        });
+        let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
+            .await
+            .unwrap_err();
+        let details = err.get_owned_details();
+        assert_eq!(
+            details,
+            ErrorDetails::Inference {
+                message: "The DynamicDemonstrationInfo does not match the function type. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string()
+            }
+        );
     }
 }

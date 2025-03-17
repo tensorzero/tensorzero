@@ -39,7 +39,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
-use crate::uuid_util::validate_episode_id;
+use crate::uuid_util::validate_tensorzero_uuid;
 use crate::variant::chat_completion::ChatCompletionConfig;
 use crate::variant::{InferenceConfig, InferenceExtraBody, JsonMode, Variant, VariantConfig};
 
@@ -207,7 +207,7 @@ pub async fn inference(
 
     // Retrieve or generate the episode ID
     let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
-    validate_episode_id(episode_id)?;
+    validate_tensorzero_uuid(episode_id, "Episode")?;
     tracing::Span::current().record("episode_id", episode_id.to_string());
 
     validate_tags(&params.tags, params.internal)?;
@@ -290,6 +290,7 @@ pub async fn inference(
             episode_id,
         },
         extra_body: vec![],
+        extra_cache_key: None,
     };
     let inference_clients = InferenceClients {
         http_client,

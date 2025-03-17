@@ -66,6 +66,7 @@ async fn test_cache_write_and_read() {
         function_type: FunctionType::Chat,
         output_schema: None,
         extra_body: None,
+        ..Default::default()
     };
     let model_provider_request = ModelProviderRequest {
         request: &model_inference_request,
@@ -189,6 +190,7 @@ async fn test_cache_stream_write_and_read() {
         function_type: FunctionType::Chat,
         output_schema: None,
         extra_body: None,
+        ..Default::default()
     };
     let model_provider_request = ModelProviderRequest {
         request: &model_inference_request,

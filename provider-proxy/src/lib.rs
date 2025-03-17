@@ -63,17 +63,19 @@ fn save_cache_body(
 ) -> Result<(), anyhow::Error> {
     let path_str = path.to_string_lossy().into_owned();
     tracing::info!(path = path_str, "Finished processing request");
+    let body_str = String::from_utf8(body.to_vec())
+        .with_context(|| format!("Failed to convert body to string for path {path_str}"))?;
+    let mut reconstructed = hyper::Response::from_parts(parts, body_str);
+    reconstructed.extensions_mut().clear();
+    let json_response =
+        http_serde_ext::response::serialize(&reconstructed, serde_json::value::Serializer)
+            .with_context(|| format!("Failed to serialize response for path {path_str}"))?;
+    let json_str = serde_json::to_string(&json_response)
+        .with_context(|| format!("Failed to stringify response for path {path_str}"))?;
+    // Open the file after we've constructed our json string, to avoid creating an empty
+    // file if we fail to serialize the response
     match OpenOptions::new().write(true).create_new(true).open(&path) {
         Ok(mut file) => {
-            let body_str = String::from_utf8(body.to_vec())
-                .with_context(|| format!("Failed to convert body to string for path {path_str}"))?;
-            let mut reconstructed = hyper::Response::from_parts(parts, body_str);
-            reconstructed.extensions_mut().clear();
-            let json_response =
-                http_serde_ext::response::serialize(&reconstructed, serde_json::value::Serializer)
-                    .with_context(|| format!("Failed to serialize response for path {path_str}"))?;
-            let json_str = serde_json::to_string(&json_response)
-                .with_context(|| format!("Failed to stringify response for path {path_str}"))?;
             file.write_all(json_str.as_bytes())
                 .with_context(|| format!("Failed to write to file for path {path_str}"))?;
             file.write_all(b"\n").with_context(|| {

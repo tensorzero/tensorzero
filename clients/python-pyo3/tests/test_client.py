@@ -31,6 +31,8 @@ from uuid import UUID
 
 import pytest
 import pytest_asyncio
+import tensorzero
+from openai import AsyncOpenAI, OpenAI
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
@@ -1935,3 +1937,358 @@ def test_uuid7_import():
     from tensorzero.util import uuid7
 
     assert uuid7() is not None
+
+
+def test_patch_sync_openai_client_sync_setup():
+    client = OpenAI()
+    client = tensorzero.patch_openai_client(
+        client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        clickhouse_url=None,
+        async_setup=False,
+    )
+    response = client.chat.completions.create(
+        model="tensorzero::model_name::dummy::json",
+        messages=[
+            {
+                "role": "user",
+                "content": "Write a haiku about artificial intelligence.",
+            }
+        ],
+    )
+    assert response.choices[0].message.content == '{"answer":"Hello"}'
+
+
+@pytest.mark.asyncio
+async def test_patch_sync_openai_client_async_setup():
+    client = OpenAI()
+    client = await tensorzero.patch_openai_client(
+        client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        async_setup=True,
+    )
+    response = client.chat.completions.create(
+        model="tensorzero::model_name::dummy::json",
+        messages=[
+            {
+                "role": "user",
+                "content": "Write a haiku about artificial intelligence.",
+            }
+        ],
+    )
+    assert response.choices[0].message.content == '{"answer":"Hello"}'
+
+
+def test_patch_openai_client_no_config():
+    client = OpenAI()
+    client = tensorzero.patch_openai_client(client, async_setup=False)
+    response = client.chat.completions.create(
+        model="tensorzero::model_name::dummy::json",
+        messages=[
+            {
+                "role": "user",
+                "content": "Write a haiku about artificial intelligence.",
+            }
+        ],
+    )
+    assert response.choices[0].message.content == '{"answer":"Hello"}'
+
+
+def test_patch_openai_client_with_config():
+    client = OpenAI()
+    client = tensorzero.patch_openai_client(
+        client,
+        config_file="../../tensorzero-internal/tests/e2e/tensorzero.toml",
+        async_setup=False,
+    )
+    response = client.chat.completions.create(
+        model="tensorzero::function_name::json_success",
+        messages=[
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "tensorzero::arguments": {
+                            "assistant_name": "Alfred Pennyworth"
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
+                ],
+            },
+        ],
+    )
+    assert response.choices[0].message.content == '{"answer":"Hello"}'
+
+
+@pytest.mark.asyncio
+async def test_patch_async_openai_client_sync_setup():
+    client = AsyncOpenAI()
+    client = tensorzero.patch_openai_client(
+        client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        clickhouse_url=None,
+        async_setup=False,
+    )
+    response = await client.chat.completions.create(
+        model="tensorzero::model_name::dummy::json",
+        messages=[
+            {
+                "role": "user",
+                "content": "Write a haiku about artificial intelligence.",
+            }
+        ],
+    )
+    assert response.choices[0].message.content == '{"answer":"Hello"}'
+
+
+@pytest.mark.asyncio
+async def test_patch_async_openai_client_async_setup():
+    client = AsyncOpenAI()
+    client = await tensorzero.patch_openai_client(
+        client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        async_setup=True,
+    )
+    response = await client.chat.completions.create(
+        model="tensorzero::model_name::dummy::json",
+        messages=[
+            {
+                "role": "user",
+                "content": "Write a haiku about artificial intelligence.",
+            }
+        ],
+    )
+    assert response.choices[0].message.content == '{"answer":"Hello"}'
+
+
+@pytest.mark.asyncio
+async def test_patch_openai_missing_await():
+    client = OpenAI()
+    patch_fut = tensorzero.patch_openai_client(
+        client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        clickhouse_url=None,
+        async_setup=True,
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        client.chat.completions.create(
+            model="tensorzero::model_name::openai::gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Write a haiku about artificial intelligence.",
+                }
+            ],
+        )
+    assert (
+        str(exc_info.value)
+        == "TensorZero: Please await the result of `tensorzero.patch_openai_client` before using the client."
+    )
+    # Await this before we exit the test, to avoid spurious 'Event loop is closed' errors
+    await patch_fut
+
+
+@pytest.mark.asyncio
+async def test_patch_async_openai_missing_await():
+    client = AsyncOpenAI()
+    patch_fut = tensorzero.patch_openai_client(
+        client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        clickhouse_url=None,
+        async_setup=True,
+    )
+    with pytest.raises(RuntimeError) as exc_info:
+        await client.chat.completions.create(
+            model="tensorzero::model_name::openai::gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Write a haiku about artificial intelligence.",
+                }
+            ],
+        )
+    assert (
+        str(exc_info.value)
+        == "TensorZero: Please await the result of `tensorzero.patch_openai_client` before using the client."
+    )
+    # Await this before we exit the test, to avoid spurious 'Event loop is closed' errors
+    await patch_fut
+
+
+def test_repeated_patch_openai_client_sync_setup():
+    sync_client = OpenAI()
+    tensorzero.patch_openai_client(
+        sync_client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        async_setup=False,
+    )
+    with pytest.raises(RuntimeError) as exc_info:
+        tensorzero.patch_openai_client(
+            sync_client,
+            config_file="../../examples/readme/config/tensorzero.toml",
+            async_setup=False,
+        )
+    assert (
+        str(exc_info.value)
+        == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
+    )
+
+    async_client = AsyncOpenAI()
+    tensorzero.patch_openai_client(
+        async_client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        async_setup=False,
+    )
+    with pytest.raises(RuntimeError) as exc_info:
+        tensorzero.patch_openai_client(
+            async_client,
+            config_file="../../examples/readme/config/tensorzero.toml",
+            async_setup=False,
+        )
+    assert (
+        str(exc_info.value)
+        == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
+    )
+
+
+@pytest.mark.asyncio
+async def test_repeated_patch_openai_client_async_setup():
+    sync_client = OpenAI()
+    await tensorzero.patch_openai_client(
+        sync_client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        async_setup=True,
+    )
+    with pytest.raises(RuntimeError) as exc_info:
+        await tensorzero.patch_openai_client(
+            sync_client, config_file="../../examples/readme/config/tensorzero.toml"
+        )
+    assert (
+        str(exc_info.value)
+        == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
+    )
+
+    async_client = AsyncOpenAI()
+    await tensorzero.patch_openai_client(
+        async_client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        async_setup=True,
+    )
+    with pytest.raises(RuntimeError) as exc_info:
+        await tensorzero.patch_openai_client(
+            async_client, config_file="../../examples/readme/config/tensorzero.toml"
+        )
+    assert (
+        str(exc_info.value)
+        == "TensorZero: Already called 'tensorzero.patch_openai_client' on this OpenAI client."
+    )
+
+
+@pytest.mark.asyncio
+async def test_close_patch_openai_client():
+    sync_client = OpenAI()
+    await tensorzero.patch_openai_client(
+        sync_client,
+        config_file="../../examples/readme/config/tensorzero.toml",
+        async_setup=True,
+    )
+    tensorzero.close_patched_openai_client_gateway(sync_client)
+
+
+@pytest.mark.asyncio
+async def test_async_multi_turn_parallel_tool_use(async_client):
+    episode_id = str(uuid7())
+
+    system = {"assistant_name": "Dr. Mehta"}
+
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.",
+                }
+            ],
+        },
+    ]
+
+    response = await async_client.inference(
+        function_name="weather_helper_parallel",
+        variant_name="openai",
+        episode_id=episode_id,
+        input={
+            "messages": messages,
+            "system": system,
+        },
+        parallel_tool_calls=True,
+    )
+
+    messages.append(
+        {
+            "role": "assistant",
+            "content": response.content,
+        }
+    )
+
+    assert len(response.content) == 2
+
+    new_content_blocks = []
+
+    for content_block in response.content:
+        if content_block.type == "text":
+            print("Got a text block...")
+        elif content_block.type == "tool_call":
+            if content_block.name == "get_temperature":
+                print("Calling get_temperature tool...")
+                new_content_blocks.append(
+                    {
+                        "type": "tool_result",
+                        "id": content_block.id,
+                        "name": "get_temperature",
+                        "result": "70",
+                    }
+                )
+            elif content_block.name == "get_humidity":
+                print("Calling get_humidity tool...")
+                new_content_blocks.append(
+                    {
+                        "type": "tool_result",
+                        "id": content_block.id,
+                        "name": "get_humidity",
+                        "result": "30",
+                    }
+                )
+            else:
+                print("Unknown tool call")
+        else:
+            print("Unknown content block type")
+
+    messages.append(
+        {
+            "role": "user",
+            "content": new_content_blocks,
+        }
+    )
+
+    response = await async_client.inference(
+        function_name="weather_helper_parallel",
+        variant_name="openai",
+        episode_id=episode_id,
+        input={
+            "messages": messages,
+            "system": system,
+        },
+    )
+
+    assistant_message = response.content[0].text
+
+    assert "70" in assistant_message
+    assert "30" in assistant_message

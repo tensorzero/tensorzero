@@ -493,6 +493,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
             extra_body: None,
+            ..Default::default()
         };
 
         let vllm_request = VLLMRequest::new("llama-v3-8b", &request_with_tools).unwrap();
@@ -530,6 +531,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
             extra_body: None,
+            ..Default::default()
         };
 
         let err = VLLMRequest::new("llama-v3-8b", &request_with_tools).unwrap_err();
@@ -604,6 +606,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let vllm_response_with_metadata = VLLMResponseWithMetadata {
             response: valid_response,

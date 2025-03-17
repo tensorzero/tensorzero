@@ -527,6 +527,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let fireworks_request =
@@ -640,6 +641,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let fireworks_response_with_metadata = FireworksResponseWithMetadata {
             response: valid_response,

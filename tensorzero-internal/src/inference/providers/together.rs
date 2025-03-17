@@ -576,7 +576,10 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
             let (clean_text, extracted_reasoning) =
                 process_think_blocks(&raw_text, parse_think_blocks)?;
             if let Some(reasoning) = extracted_reasoning {
-                content.push(ContentBlockOutput::Thought(Thought { text: reasoning }));
+                content.push(ContentBlockOutput::Thought(Thought {
+                    text: reasoning,
+                    signature: None,
+                }));
             }
             if !clean_text.is_empty() {
                 content.push(ContentBlockOutput::Text(Text { text: clean_text }));
@@ -911,6 +914,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let together_request =
@@ -1011,6 +1015,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let together_response_with_metadata = TogetherResponseWithMetadata {
             response: valid_response,
@@ -1078,7 +1083,8 @@ mod tests {
         assert_eq!(
             inference_response.output[0],
             ContentBlockOutput::Thought(Thought {
-                text: "hmmm".to_string()
+                text: "hmmm".to_string(),
+                signature: None,
             })
         );
         assert_eq!(
@@ -1122,7 +1128,8 @@ mod tests {
         assert_eq!(
             inference_response.output[0],
             ContentBlockOutput::Thought(Thought {
-                text: "hmmm".to_string()
+                text: "hmmm".to_string(),
+                signature: None,
             })
         );
         assert_eq!(

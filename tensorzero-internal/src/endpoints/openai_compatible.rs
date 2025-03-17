@@ -55,15 +55,37 @@ pub async fn inference_handler(
     headers: HeaderMap,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
-    let params = (headers, openai_compatible_params).try_into()?;
+    let params: Params = (headers, openai_compatible_params).try_into()?;
+
+    // The prefix for the response's `model` field depends on the inference target
+    // (We run this disambiguation deep in the `inference` call below but we don't get the decision out, so we duplicate it here)
+    let response_model_prefix = match (&params.function_name, &params.model_name) {
+        (Some(function_name), None) => Ok::<String, Error>(format!(
+            "tensorzero::function_name::{}::variant_name::",
+            function_name,
+        )),
+        (None, Some(_model_name)) => Ok("tensorzero::model_name::".to_string()),
+        (Some(_), Some(_)) => Err(ErrorDetails::InvalidInferenceTarget {
+            message: "Only one of `function_name` or `model_name` can be provided".to_string(),
+        }
+        .into()),
+        (None, None) => Err(ErrorDetails::InvalidInferenceTarget {
+            message: "Either `function_name` or `model_name` must be provided".to_string(),
+        }
+        .into()),
+    }?;
+
     let response = inference(config, &http_client, clickhouse_connection_info, params).await?;
+
     match response {
         InferenceOutput::NonStreaming(response) => {
-            let openai_compatible_response = OpenAICompatibleResponse::from(response);
+            let openai_compatible_response =
+                OpenAICompatibleResponse::from((response, response_model_prefix));
             Ok(Json(openai_compatible_response).into_response())
         }
         InferenceOutput::Streaming(stream) => {
-            let openai_compatible_stream = prepare_serialized_openai_compatible_events(stream);
+            let openai_compatible_stream =
+                prepare_serialized_openai_compatible_events(stream, response_model_prefix);
             Ok(Sse::new(openai_compatible_stream)
                 .keep_alive(axum::response::sse::KeepAlive::new())
                 .into_response())
@@ -321,7 +343,8 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
                     })
                     .and_then(|s| {
                         Uuid::parse_str(s).map_err(|_| {
-                            Error::new(ErrorDetails::InvalidEpisodeId {
+                            Error::new(ErrorDetails::InvalidTensorzeroUuid {
+                                kind: "Episode".to_string(),
                                 message: "episode_id header is not a valid UUID".to_string(),
                             })
                         })
@@ -434,45 +457,36 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
     fn try_from(
         openai_compatible_messages: Vec<OpenAICompatibleMessage>,
     ) -> Result<Self, Self::Error> {
-        let mut system = None;
+        let mut system_messages = Vec::new();
         let mut messages = Vec::new();
         let mut tool_call_id_to_name = HashMap::new();
-        for (index, message) in openai_compatible_messages.into_iter().enumerate() {
+        let first_system = matches!(
+            openai_compatible_messages.first(),
+            Some(OpenAICompatibleMessage::System(_))
+        );
+        for message in openai_compatible_messages {
             match message {
                 OpenAICompatibleMessage::System(msg) => {
-                    if system.is_some() {
-                        return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                            message: "At most one system message is allowed".to_string(),
-                        }
-                        .into());
-                    }
-                    if index != 0 {
-                        return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                            message: "System message must be the first message".to_string(),
-                        }
-                        .into());
-                    }
-                    let mut system_content = convert_openai_message_content(msg.content.clone())?;
-                    if system_content.len() != 1 {
-                        return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                            message: "System message must be a single content block".to_string(),
-                        }
-                        .into());
-                    }
-                    system = Some(match system_content.remove(0) {
-                        InputMessageContent::Text(TextKind::LegacyValue { value }) => value,
-                        InputMessageContent::Text(TextKind::Text { text }) => Value::String(text),
-                        InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                            Value::Object(arguments)
-                        }
-                        InputMessageContent::RawText { value } => Value::String(value),
-                        _ => {
-                            return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                                message: "System message must be a text content block".to_string(),
+                    let system_content = convert_openai_message_content(msg.content.clone())?;
+                    for content in system_content {
+                        system_messages.push(match content {
+                            InputMessageContent::Text(TextKind::LegacyValue { value }) => value,
+                            InputMessageContent::Text(TextKind::Text { text }) => {
+                                Value::String(text)
                             }
-                            .into())
-                        }
-                    });
+                            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
+                                Value::Object(arguments)
+                            }
+                            InputMessageContent::RawText { value } => Value::String(value),
+                            _ => {
+                                return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                    message: "System message must be a text content block"
+                                        .to_string(),
+                                }
+                                .into())
+                            }
+                        });
+                    }
                 }
                 OpenAICompatibleMessage::User(msg) => {
                     messages.push(InputMessage {
@@ -517,7 +531,37 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                 }
             }
         }
-        Ok(Input { system, messages })
+
+        if system_messages.len() <= 1 {
+            if system_messages.len() == 1 && !first_system {
+                tracing::warn!("Moving system message to the start of the conversation");
+            }
+            Ok(Input {
+                system: system_messages.pop(),
+                messages,
+            })
+        } else {
+            let mut output = String::new();
+            for (i, system_message) in system_messages.iter().enumerate() {
+                if let Value::String(msg) = system_message {
+                    if i > 0 {
+                        output.push('\n');
+                    }
+                    output.push_str(msg);
+                } else {
+                    return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                        message: "Multiple system messages provided, but not all were strings"
+                            .to_string(),
+                    }
+                    .into());
+                }
+            }
+            tracing::warn!("Multiple system messages provided - they will be concatenated and moved to the start of the conversation");
+            Ok(Input {
+                system: Some(Value::String(output)),
+                messages,
+            })
+        }
     }
 }
 
@@ -654,11 +698,12 @@ impl From<OpenAICompatibleToolCall> for ToolCall {
     }
 }
 
-impl From<InferenceResponse> for OpenAICompatibleResponse {
-    fn from(inference_response: InferenceResponse) -> Self {
+impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
+    fn from((inference_response, response_model_prefix): (InferenceResponse, String)) -> Self {
         match inference_response {
             InferenceResponse::Chat(response) => {
                 let (content, tool_calls) = process_chat_content(response.content);
+
                 OpenAICompatibleResponse {
                     id: response.inference_id.to_string(),
                     choices: vec![OpenAICompatibleChoice {
@@ -671,7 +716,7 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
                         },
                     }],
                     created: current_timestamp() as u32,
-                    model: response.variant_name,
+                    model: format!("{response_model_prefix}{}", response.variant_name),
                     system_fingerprint: "".to_string(),
                     object: "chat.completion".to_string(),
                     usage: response.usage.into(),
@@ -690,7 +735,7 @@ impl From<InferenceResponse> for OpenAICompatibleResponse {
                     },
                 }],
                 created: current_timestamp() as u32,
-                model: response.variant_name,
+                model: format!("{response_model_prefix}{}", response.variant_name),
                 system_fingerprint: "".to_string(),
                 object: "chat.completion".to_string(),
                 usage: OpenAICompatibleUsage {
@@ -723,6 +768,9 @@ fn process_chat_content(
             ContentBlockChatOutput::Thought(_thought) => {
                 // OpenAI compatible endpoint does not support thought blocks
                 // Users of this endpoint will need to check observability to see them
+                tracing::warn!(
+                    "Ignoring 'thought' content block when constructing OpenAI-compatible response"
+                );
             }
             ContentBlockChatOutput::Unknown {
                 data: _,
@@ -789,6 +837,7 @@ struct OpenAICompatibleDelta {
 fn convert_inference_response_chunk_to_openai_compatible(
     chunk: InferenceResponseChunk,
     tool_id_to_index: &mut HashMap<String, usize>,
+    response_model_prefix: &str,
 ) -> Vec<OpenAICompatibleResponseChunk> {
     let response_chunk = match chunk {
         InferenceResponseChunk::Chat(c) => {
@@ -805,7 +854,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
                     },
                 }],
                 created: current_timestamp() as u32,
-                model: c.variant_name,
+                model: format!("{response_model_prefix}{}", c.variant_name),
                 system_fingerprint: "".to_string(),
                 object: "chat.completion.chunk".to_string(),
                 usage: c.usage.map(|usage| usage.into()),
@@ -823,7 +872,7 @@ fn convert_inference_response_chunk_to_openai_compatible(
                 },
             }],
             created: current_timestamp() as u32,
-            model: c.variant_name,
+            model: format!("{response_model_prefix}{}", c.variant_name),
             system_fingerprint: "".to_string(),
             object: "chat.completion.chunk".to_string(),
             usage: c.usage.map(|usage| usage.into()),
@@ -862,6 +911,9 @@ fn process_chat_content_chunk(
             ContentBlockChunk::Thought(_thought) => {
                 // OpenAI compatible endpoint does not support thought blocks
                 // Users of this endpoint will need to check observability to see them
+                tracing::warn!(
+                    "Ignoring 'thought' content block chunk when constructing OpenAI-compatible response"
+                );
             }
         }
     }
@@ -872,6 +924,7 @@ fn process_chat_content_chunk(
 /// When None is passed in, we send "[DONE]" to the client to signal the end of the stream
 fn prepare_serialized_openai_compatible_events(
     mut stream: InferenceStream,
+    response_model_prefix: String,
 ) -> impl Stream<Item = Result<Event, Error>> {
     async_stream::stream! {
         let mut tool_id_to_index = HashMap::new();
@@ -882,7 +935,7 @@ fn prepare_serialized_openai_compatible_events(
             let Ok(chunk) = chunk else {
                 continue;
             };
-            let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index);
+            let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index, &response_model_prefix);
             for chunk in openai_compatible_chunks {
                 let mut chunk_json = serde_json::to_value(chunk).map_err(|e| {
                     Error::new(ErrorDetails::Inference {
@@ -1038,20 +1091,18 @@ mod tests {
         // Try 2 system messages
         let messages = vec![
             OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
-                content: Value::String("You are a helpful assistant".to_string()),
+                content: Value::String("You are a helpful assistant 1.".to_string()),
             }),
             OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
-                content: Value::String("You are a helpful assistant".to_string()),
+                content: Value::String("You are a helpful assistant 2.".to_string()),
             }),
         ];
-        let input: Result<Input, Error> = messages.try_into();
-        let details = input.unwrap_err().get_owned_details();
+        let input: Input = messages.try_into().unwrap();
         assert_eq!(
-            details,
-            ErrorDetails::InvalidOpenAICompatibleRequest {
-                message: "At most one system message is allowed".to_string(),
-            }
+            input.system,
+            Some("You are a helpful assistant 1.\nYou are a helpful assistant 2.".into())
         );
+        assert_eq!(input.messages.len(), 0);
 
         // Try an assistant message with structured content
         let messages = vec![OpenAICompatibleMessage::Assistant(
@@ -1116,7 +1167,7 @@ mod tests {
             "Content does not contain the expected ToolCall."
         );
 
-        let invalid_messages = vec![
+        let out_of_order_messages = vec![
             OpenAICompatibleMessage::Assistant(OpenAICompatibleAssistantMessage {
                 content: Some(Value::String("Assistant message".to_string())),
                 tool_calls: None,
@@ -1125,23 +1176,17 @@ mod tests {
                 content: Value::String("System message".to_string()),
             }),
         ];
-        let result: Result<Input, Error> = invalid_messages.try_into();
-        assert!(
-            result.is_err(),
-            "Conversion should fail when a system message is after an assistant message."
+        let result: Input = out_of_order_messages.try_into().unwrap();
+        assert_eq!(result.system, Some("System message".into()));
+        assert_eq!(
+            result.messages,
+            vec![InputMessage {
+                role: Role::Assistant,
+                content: vec![InputMessageContent::Text(TextKind::Text {
+                    text: "Assistant message".to_string(),
+                })],
+            }]
         );
-        if let Err(err) = result {
-            let details = err.get_owned_details();
-            match details {
-                ErrorDetails::InvalidOpenAICompatibleRequest { message } => {
-                    assert_eq!(
-                        message, "System message must be the first message",
-                        "Unexpected error message."
-                    );
-                }
-                _ => panic!("Unexpected error type."),
-            }
-        }
     }
 
     #[test]

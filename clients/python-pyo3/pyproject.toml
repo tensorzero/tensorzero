@@ -27,6 +27,7 @@ dev = [
     "pytest-asyncio",
     "pytest-xdist",
     "pytest",
+    "openai",
 ]
 
 [tool.maturin]

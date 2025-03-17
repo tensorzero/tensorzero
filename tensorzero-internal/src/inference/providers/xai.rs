@@ -511,6 +511,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
@@ -556,6 +557,7 @@ mod tests {
             function_type: FunctionType::Json,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
@@ -657,6 +659,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let xai_response_with_metadata = XAIResponseWithMetadata {
             response: valid_response,
