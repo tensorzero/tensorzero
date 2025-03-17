@@ -1010,7 +1010,7 @@ mod tests {
         let messages = vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
             content: Value::String("Hello, world!".to_string()),
         })];
-        let params: Params = (
+        let params = Params::try_from_openai(
             headers,
             OpenAICompatibleParams {
                 messages,
@@ -1027,10 +1027,12 @@ mod tests {
                 tool_choice: None,
                 top_p: Some(0.5),
                 parallel_tool_calls: None,
+                tensorzero_episode_id: None,
+                tensorzero_variant_name: None,
+                tensorzero_dryrun: None,
             },
         )
-            .try_into()
-            .unwrap();
+        .unwrap();
         assert_eq!(params.function_name, Some("test_function".to_string()));
         assert_eq!(params.episode_id, Some(episode_id));
         assert_eq!(params.variant_name, Some("test_variant".to_string()));
