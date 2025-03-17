@@ -459,7 +459,6 @@ export class TensorZeroClient {
     if (!datapointId || typeof datapointId !== "string") {
       throw new Error("Datapoint ID must be a non-empty string");
     }
-    console.log("datapoint", datapoint);
 
     // Validate the datapoint using the Zod schema
     const validationResult = DatapointSchema.safeParse(datapoint);

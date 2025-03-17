@@ -140,6 +140,7 @@ function ToolCallBlock({
       onBlockChange({
         ...block,
         arguments: JSON.parse(e.target.value),
+        raw_arguments: e.target.value,
       });
     }
   };
@@ -187,40 +188,16 @@ function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
     }
   };
 
-  const handleParsedChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (onOutputChange) {
-      try {
-        const parsed = JSON.parse(e.target.value);
-        onOutputChange({
-          ...output,
-          parsed,
-        });
-      } catch (error) {
-        // Handle JSON parsing error
-        console.error("Invalid JSON:", error);
-      }
-    }
-  };
-
   return (
     <div className="space-y-4">
       {output.parsed && (
         <div className="rounded-md bg-muted p-4">
           <Badge className="mb-2">Parsed Output</Badge>
-          {isEditing ? (
-            <textarea
-              className="w-full rounded border border-slate-300 p-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
-              value={JSON.stringify(output.parsed, null, 2)}
-              onChange={handleParsedChange}
-              rows={5}
-            />
-          ) : (
-            <pre className="overflow-x-auto whitespace-pre-wrap break-words">
-              <code className="text-sm">
-                {JSON.stringify(output.parsed, null, 2)}
-              </code>
-            </pre>
-          )}
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words">
+            <code className="text-sm">
+              {JSON.stringify(output.parsed, null, 2)}
+            </code>
+          </pre>
         </div>
       )}
       <div className="rounded-md bg-muted p-4">

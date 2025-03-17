@@ -99,7 +99,6 @@ export async function action({ request }: ActionFunctionArgs) {
   const action = formData.get("action");
   const parsedFormData: ParsedDatasetRow =
     ParsedDatasetRowSchema.parse(cleanedData);
-  console.log("parsedFormData", parsedFormData);
   if (action === "delete") {
     await deleteDatapointServer(parsedFormData);
     const datasetCounts = await getDatasetCounts();
@@ -184,6 +183,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
+  const [output, setOutput] = useState<typeof datapoint.output>(
+    datapoint.output,
+  );
   const config = useConfig();
   const [isEditing, setIsEditing] = useState(false);
   const toggleEditing = () => setIsEditing(!isEditing);
@@ -196,14 +198,18 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setInput({ ...input, messages });
   };
 
+  const handleOutputChange = (newOutput: typeof datapoint.output) => {
+    setOutput(newOutput);
+  };
+
   const fetcher = useFetcher();
   const saveError = fetcher.data?.success === false ? fetcher.data.error : null;
 
   const submitDatapointAction = (action: string) => {
     const formData = new FormData();
 
-    // Create a copy of datapoint with updated input if we're saving
-    const dataToSubmit = { ...datapoint, input };
+    // Create a copy of datapoint with updated input and output if we're saving
+    const dataToSubmit = { ...datapoint, input, output };
 
     Object.entries(dataToSubmit).forEach(([key, value]) => {
       if (value === undefined) return;
@@ -294,10 +300,14 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             />
           </SectionLayout>
 
-          {datapoint.output && (
+          {output && (
             <SectionLayout>
               <SectionHeader heading="Output" />
-              <Output output={datapoint.output} />
+              <Output
+                output={output}
+                isEditing={isEditing}
+                onOutputChange={handleOutputChange}
+              />
             </SectionLayout>
           )}
         </SectionsGroup>
