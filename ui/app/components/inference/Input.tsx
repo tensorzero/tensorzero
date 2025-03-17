@@ -6,6 +6,7 @@ import type {
 } from "~/utils/clickhouse/common";
 import { SkeletonImage } from "./SkeletonImage";
 import { SystemContent } from "./SystemContent";
+import { useState } from "react";
 
 // Base interface with just the common required properties
 interface BaseInputProps {
@@ -196,27 +197,55 @@ interface TextBlockProps {
 }
 
 function TextBlock({ block, isEditing, onContentChange }: TextBlockProps) {
+  const [isObject, setIsObject] = useState(typeof block.value === "object");
+  const [displayValue, setDisplayValue] = useState(
+    isObject ? JSON.stringify(block.value, null, 2) : block.value,
+  );
+  const [jsonError, setJsonError] = useState<string | null>(null);
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (onContentChange) {
-      onContentChange({
-        type: "text",
-        value: e.target.value,
-      });
+      const newValue = e.target.value;
+      setDisplayValue(newValue);
+
+      if (isObject) {
+        try {
+          const parsedValue = JSON.parse(newValue);
+          setIsObject(typeof parsedValue === "object");
+          setJsonError(null);
+          onContentChange({
+            type: "text",
+            value: parsedValue,
+          });
+        } catch {
+          setJsonError("Invalid JSON format");
+        }
+      } else {
+        onContentChange({
+          type: "text",
+          value: newValue,
+        });
+      }
     }
   };
 
   if (isEditing) {
     return (
-      <textarea
-        className="w-full rounded border border-slate-300 p-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
-        value={
-          typeof block.value === "object"
-            ? JSON.stringify(block.value, null, 2)
-            : block.value
-        }
-        onChange={handleChange}
-        rows={3}
-      />
+      <div className="w-full">
+        <textarea
+          className={`w-full rounded border p-2 font-mono text-sm dark:bg-slate-800 ${
+            jsonError
+              ? "border-red-500 dark:border-red-500"
+              : "border-slate-300 dark:border-slate-700"
+          }`}
+          value={displayValue}
+          onChange={handleChange}
+          rows={3}
+        />
+        {jsonError && (
+          <div className="mt-1 text-sm text-red-500">{jsonError}</div>
+        )}
+      </div>
     );
   }
 
