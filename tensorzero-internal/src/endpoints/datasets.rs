@@ -501,6 +501,13 @@ impl Datapoint {
             Datapoint::JsonInference(datapoint) => Some(&datapoint.output_schema),
         }
     }
+
+    pub fn id(&self) -> Uuid {
+        match self {
+            Datapoint::ChatInference(datapoint) => datapoint.id,
+            Datapoint::JsonInference(datapoint) => datapoint.id,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]

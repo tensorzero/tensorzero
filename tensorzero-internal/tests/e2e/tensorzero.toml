@@ -2285,6 +2285,11 @@ model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/extract_entities/initial_prompt/system_template.minijinja"
 json_mode = "strict"
 
+[functions.extract_entities.variants.dummy_error]
+type = "chat_completion"
+model = "dummy::error"
+system_template = "../../fixtures/config/functions/extract_entities/initial_prompt/system_template.minijinja"
+
 [functions.mixture_of_n_json_repeated]
 type = "json"
 system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
@@ -2478,6 +2483,7 @@ active = true
 system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
+
 [evals.entity_extraction]
 function_name = "extract_entities"
 dataset_name = "extract_entities_0.8"
@@ -2500,7 +2506,19 @@ model = "openai::gpt-4o-mini-2024-07-18"
 active = true
 system_instructions = "../../fixtures/config/evals/entity_extraction/count_sports/system_instructions.txt"
 json_mode = "strict"
-temperature=0.1
+temperature = 0.1
+
+[evals.entity_extraction.evaluators.error]
+type = "llm_judge"
+output_type = "float"
+optimize = "max"
+
+[evals.entity_extraction.evaluators.error.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::error"
+active = true
+system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
 
 [evals.haiku_with_outputs]
 function_name = "write_haiku"
