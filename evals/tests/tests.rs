@@ -248,7 +248,6 @@ async fn run_llm_judge_eval_chat() {
     let mut parsed_output = Vec::new();
     let mut total_topic_fs = 0;
     for line in output_str.lines() {
-        println!("line: {}", line);
         let parsed: EvalUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
         let parsed = match parsed {
