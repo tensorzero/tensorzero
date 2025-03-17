@@ -16,6 +16,7 @@ type FunctionSelectorProps<T extends Record<string, unknown>> = {
   name: Path<T>;
   inferenceCount: number | null;
   config: Config;
+  hide_default_function?: boolean;
 };
 
 export function FunctionSelector<T extends Record<string, unknown>>({
@@ -23,6 +24,7 @@ export function FunctionSelector<T extends Record<string, unknown>>({
   name,
   inferenceCount,
   config,
+  hide_default_function = false,
 }: FunctionSelectorProps<T>) {
   return (
     <FormField
@@ -43,6 +45,9 @@ export function FunctionSelector<T extends Record<string, unknown>>({
               </SelectTrigger>
               <SelectContent>
                 {Object.entries(config.functions).map(([name, fn]) => {
+                  if (hide_default_function && name === "tensorzero::default") {
+                    return null;
+                  }
                   return (
                     <SelectItem key={name} value={name}>
                       <div className="flex w-full items-center justify-between">
