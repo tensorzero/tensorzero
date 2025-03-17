@@ -43,7 +43,9 @@ export default function BasicInfo({
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-xl">Basic Information</CardTitle>
         <div className="flex gap-2">
-          <TryWithVariantButton {...tryWithVariantProps} />
+          {datapoint.function_name !== "tensorzero::default" && (
+            <TryWithVariantButton {...tryWithVariantProps} />
+          )}
           {isEditing ? (
             <>
               <SaveButton onClick={onSave} />

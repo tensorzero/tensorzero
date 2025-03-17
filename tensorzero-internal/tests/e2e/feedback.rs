@@ -3,7 +3,10 @@ use std::path::PathBuf;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_internal::{
-    clickhouse::{test_helpers::clickhouse_flush_async_insert, ClickHouseConnectionInfo},
+    clickhouse::{
+        test_helpers::{clickhouse_flush_async_insert, select_feedback_clickhouse},
+        ClickHouseConnectionInfo,
+    },
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
 use tokio::time::{sleep, Duration};
@@ -921,26 +924,6 @@ async fn e2e_test_boolean_feedback() {
     assert!(retrieved_value);
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "goal_achieved");
-}
-
-async fn select_feedback_clickhouse(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    table_name: &str,
-    feedback_id: Uuid,
-) -> Option<Value> {
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
-
-    let query = format!(
-        "SELECT * FROM {} WHERE id = '{}' FORMAT JSONEachRow",
-        table_name, feedback_id
-    );
-
-    let text = clickhouse_connection_info
-        .run_query(query, None)
-        .await
-        .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
-    Some(json)
 }
 
 async fn select_feedback_tags_clickhouse(

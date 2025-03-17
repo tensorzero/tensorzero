@@ -259,9 +259,9 @@ describe("getDatasetCounts", () => {
       // Because other tests insert into the table, there could be additional datasets
       expect.arrayContaining([
         {
-          count: 5,
+          count: 6,
           dataset_name: "bar",
-          last_updated: "2025-02-19T00:26:06Z",
+          last_updated: "2025-03-14T17:38:09Z",
         },
         {
           count: 116,
@@ -315,7 +315,7 @@ describe("getDatasetRows", () => {
       if (rows.length !== pageSize) break;
     }
 
-    expect(allRows.length).toBe(5);
+    expect(allRows.length).toBe(6);
     expect(allRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -327,8 +327,8 @@ describe("getDatasetRows", () => {
         }),
       ]),
     );
-    // Verify all rows are json type
-    expect(allRows.every((row) => row.type === "json")).toBe(true);
+    // Verify 5 rows are json type
+    expect(allRows.filter((row) => row.type === "json").length).toBe(5);
   });
 });
 

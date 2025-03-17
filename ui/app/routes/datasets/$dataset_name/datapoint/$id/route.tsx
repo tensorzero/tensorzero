@@ -25,17 +25,21 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
-import type { InputMessage } from "~/utils/clickhouse/common";
+import type {
+  Input as ClickHouseInput,
+  InputMessage,
+  InputMessageContent,
+} from "~/utils/clickhouse/common";
 
 /**
  * Transforms input from clickhouse format to TensorZero client format
  */
-function transformInputForTensorZero(input: any) {
+function transformInputForTensorZero(input: ClickHouseInput) {
   return {
     system: input.system,
-    messages: input.messages.map((msg: any) => ({
+    messages: input.messages.map((msg: InputMessage) => ({
       role: msg.role as "system" | "user" | "assistant" | "tool",
-      content: msg.content.map((c: any) => {
+      content: msg.content.map((c: InputMessageContent) => {
         if (c.type === "text") {
           return { type: "text" as const, value: c.value };
         } else if (c.type === "tool_call") {
@@ -90,10 +94,9 @@ export async function action({ request }: ActionFunctionArgs) {
     updated_at: formData.get("updated_at"),
   };
   const cleanedData = Object.fromEntries(
-    Object.entries(rawData).filter(([_, value]) => value !== undefined),
+    Object.entries(rawData).filter(([, value]) => value !== undefined),
   );
   const action = formData.get("action");
-  console.log("rawData", rawData);
   const parsedFormData: ParsedDatasetRow =
     ParsedDatasetRowSchema.parse(cleanedData);
   if (action === "delete") {
@@ -112,11 +115,6 @@ export async function action({ request }: ActionFunctionArgs) {
     const transformedInput = transformInputForTensorZero(parsedFormData.input);
     const transformedOutput = transformOutputForTensorZero(
       parsedFormData.output,
-    );
-    console.log("transformedInput", JSON.stringify(transformedInput, null, 2));
-    console.log(
-      "transformedOutput",
-      JSON.stringify(transformedOutput, null, 2),
     );
     await tensorZeroClient.updateDatapoint(
       parsedFormData.dataset_name,
@@ -309,9 +307,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   }
 }
 
-function transformOutputForTensorZero(output: any) {
-  if ("raw" in output) {
-    return JSON.parse(output.raw);
+function transformOutputForTensorZero(output: ParsedDatasetRow["output"]) {
+  if (output === null) {
+    return null;
+  } else if (typeof output === "object") {
+    return JSON.parse(JSON.stringify(output));
+  } else {
+    return output;
   }
-  return output;
 }
