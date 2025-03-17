@@ -476,8 +476,9 @@ export class TensorZeroClient {
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
       throw new Error(
-        `Update datapoint request failed with status ${response.status}`,
+        `Update datapoint request failed with status ${response.status}: ${errorText}`,
       );
     }
 

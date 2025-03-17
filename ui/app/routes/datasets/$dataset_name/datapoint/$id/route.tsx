@@ -117,30 +117,41 @@ export async function action({ request }: ActionFunctionArgs) {
     const transformedOutput = transformOutputForTensorZero(
       parsedFormData.output,
     );
-    await tensorZeroClient.updateDatapoint(
-      parsedFormData.dataset_name,
-      parsedFormData.id,
-      {
-        function_name: parsedFormData.function_name,
-        input: transformedInput,
-        output: transformedOutput,
-        tags: parsedFormData.tags || {},
-        auxiliary: parsedFormData.auxiliary,
-        ...("output_schema" in parsedFormData
-          ? {
-              output_schema:
-                parsedFormData["output_schema" as keyof typeof parsedFormData],
-            }
-          : {}),
-        ...("tool_params" in parsedFormData
-          ? {
-              tool_params:
-                parsedFormData["tool_params" as keyof typeof parsedFormData],
-            }
-          : {}),
-      },
-    );
-    return;
+
+    try {
+      await tensorZeroClient.updateDatapoint(
+        parsedFormData.dataset_name,
+        parsedFormData.id,
+        {
+          function_name: parsedFormData.function_name,
+          input: transformedInput,
+          output: transformedOutput,
+          tags: parsedFormData.tags || {},
+          auxiliary: parsedFormData.auxiliary,
+          ...("output_schema" in parsedFormData
+            ? {
+                output_schema:
+                  parsedFormData[
+                    "output_schema" as keyof typeof parsedFormData
+                  ],
+              }
+            : {}),
+          ...("tool_params" in parsedFormData
+            ? {
+                tool_params:
+                  parsedFormData["tool_params" as keyof typeof parsedFormData],
+              }
+            : {}),
+        },
+      );
+      return { success: true };
+    } catch (error) {
+      console.error("Error updating datapoint:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 }
 
@@ -186,6 +197,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   const fetcher = useFetcher();
+  const saveError = fetcher.data?.success === false ? fetcher.data.error : null;
 
   const submitDatapointAction = (action: string) => {
     const formData = new FormData();
@@ -203,6 +215,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         formData.append(key, String(value));
       }
     });
+
     formData.append("action", action);
 
     // Submit to the local action by targeting the current route (".")
@@ -212,7 +225,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const handleDelete = () => submitDatapointAction("delete");
   const handleSave = () => {
     submitDatapointAction("save");
-    setIsEditing(false);
+    if (!saveError) {
+      setIsEditing(false);
+    }
   };
 
   const variants = Object.keys(
@@ -244,6 +259,12 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
               {datapoint.dataset_name}
             </Link>
           </div>
+          {saveError && (
+            <div className="mt-2 rounded-md bg-red-100 px-4 py-3 text-red-800">
+              <p className="font-medium">Error saving datapoint</p>
+              <p>{saveError}</p>
+            </div>
+          )}
         </div>
 
         <SectionsGroup>
@@ -256,7 +277,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
                 isLoading: variantInferenceIsLoading,
               }}
               onDelete={handleDelete}
-              isDeleting={fetcher.state === "submitting"}
+              isDeleting={fetcher.state === "submitting" && !saveError}
               toggleEditing={toggleEditing}
               isEditing={isEditing}
               onSave={handleSave}
