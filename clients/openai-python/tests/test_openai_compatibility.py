@@ -807,3 +807,78 @@ async def test_async_multi_block_image_base64(async_client):
         model="tensorzero::model_name::openai::gpt-4o-mini",
     )
     assert "crab" in result.choices[0].message.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_async_multi_turn_parallel_tool_use(async_client):
+    episode_id = str(uuid7())
+
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Dr. Mehta"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "What is the weather like in Tokyo? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.",
+                }
+            ],
+        },
+    ]
+
+    response = await async_client.chat.completions.create(
+        extra_headers={
+            "episode_id": episode_id,
+            "variant_name": "openai",
+        },
+        messages=messages,
+        model="tensorzero::function_name::weather_helper_parallel",
+        parallel_tool_calls=True,
+    )
+
+    assistant_message = response.choices[0].message
+    messages.append(assistant_message)
+
+    assert len(assistant_message.tool_calls) == 2
+
+    for tool_call in assistant_message.tool_calls:
+        if tool_call.function.name == "get_temperature":
+            messages.append(
+                {
+                    "role": "tool",
+                    "content": "70",
+                    "tool_call_id": tool_call.id,
+                }
+            )
+        elif tool_call.function.name == "get_humidity":
+            messages.append(
+                {
+                    "role": "tool",
+                    "content": "30",
+                    "tool_call_id": tool_call.id,
+                }
+            )
+        else:
+            raise Exception(f"Unknown tool call: {tool_call.function.name}")
+
+    response = await async_client.chat.completions.create(
+        extra_headers={
+            "episode_id": episode_id,
+            "variant_name": "openai",
+        },
+        model="tensorzero::function_name::weather_helper_parallel",
+        messages=messages,
+    )
+
+    assistant_message = response.choices[0].message
+
+    assert "70" in assistant_message.content
+    assert "30" in assistant_message.content

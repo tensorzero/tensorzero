@@ -14,7 +14,7 @@ use crate::cache::ModelProviderRequest;
 use crate::inference::types::{
     FinishReason, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, Role,
+    ProviderInferenceResponseArgs,
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::ToolChoice;
@@ -32,8 +32,7 @@ use crate::{
 use super::helpers::inject_extra_body;
 use super::{
     openai::{
-        get_chat_url, handle_openai_error, prepare_openai_tools,
-        tensorzero_to_openai_assistant_messages, tensorzero_to_openai_user_messages,
+        get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
         OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
         OpenAIToolType, OpenAIUsage,
     },
@@ -381,12 +380,7 @@ pub(super) fn prepare_together_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        match message.role {
-            Role::User => messages.extend(tensorzero_to_openai_user_messages(&message.content)?),
-            Role::Assistant => {
-                messages.extend(tensorzero_to_openai_assistant_messages(&message.content)?)
-            }
-        }
+        messages.extend(tensorzero_to_openai_messages(message)?);
     }
 
     if let Some(system_msg) = tensorzero_to_together_system_message(request.system.as_deref()) {

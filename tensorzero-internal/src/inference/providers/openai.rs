@@ -31,7 +31,8 @@ use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-    ProviderInferenceResponse, ProviderInferenceResponseChunk, Role, Text, TextChunk, Usage,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
+    TextChunk, Usage,
 };
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
@@ -970,12 +971,7 @@ pub(super) fn prepare_openai_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        match message.role {
-            Role::User => messages.extend(tensorzero_to_openai_user_messages(&message.content)?),
-            Role::Assistant => {
-                messages.extend(tensorzero_to_openai_assistant_messages(&message.content)?)
-            }
-        }
+        messages.extend(tensorzero_to_openai_messages(message)?);
     }
     if let Some(system_msg) = tensorzero_to_openai_system_message(
         request.system.as_deref(),
@@ -1065,105 +1061,16 @@ pub(super) fn tensorzero_to_openai_system_message<'a>(
     }
 }
 
-// // This function returns a `Result` because of the `image.data()` - if
-// // we incorrectly pass in a deserialized `Base64Image` (which will
-// // have no image data), we'll produce an error.
-// pub(super) fn tensorzero_to_openai_messages(
-//     message: &RequestMessage,
-// ) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
-//     match message.role {
-//         Role::User => tensorzero_to_openai_user_messages(message),
-//         Role::Assistant => tensorzero_to_openai_assistant_messages(message),
-//     };
-// }
-//     ///
-//     let mut tool_results = Vec::new();
+pub(super) fn tensorzero_to_openai_messages(
+    message: &RequestMessage,
+) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
+    match message.role {
+        Role::User => tensorzero_to_openai_user_messages(&message.content),
+        Role::Assistant => tensorzero_to_openai_assistant_messages(&message.content),
+    }
+}
 
-//     let tool_results = Vec::new();
-
-//     let mut messages = Vec::new();
-
-//     for block in message.content.iter() {
-//         match block {
-//             ContentBlock::Text(Text { text }) => match message.role {
-//                 Role::User => {
-//                     messages.push(OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-//                         content: vec![OpenAIUserContent::Text {
-//                             text: Cow::Borrowed(text),
-//                         }],
-//                     }));
-//                 }
-//                 Role::Assistant => {
-//                     messages.push(OpenAIRequestMessage::Assistant(
-//                         OpenAIAssistantRequestMessage {
-//                             content: Some(Cow::Borrowed(text)),
-//                             tool_calls: None,
-//                         },
-//                     ));
-//                 }
-//             },
-//             ContentBlock::ToolCall(tool_call) => {
-//                 let tool_call = OpenAIRequestToolCall {
-//                     id: &tool_call.id,
-//                     r#type: OpenAIToolType::Function,
-//                     function: OpenAIRequestFunctionCall {
-//                         name: &tool_call.name,
-//                         arguments: &tool_call.arguments,
-//                     },
-//                 };
-
-//                 messages.push(OpenAIRequestMessage::Assistant(
-//                     OpenAIAssistantRequestMessage {
-//                         content: None,
-//                         tool_calls: Some(vec![tool_call]),
-//                     },
-//                 ));
-//             }
-//             ContentBlock::ToolResult(tool_result) => {
-//                 let message = OpenAIRequestMessage::Tool(OpenAIToolRequestMessage {
-//                     content: &tool_result.result,
-//                     tool_call_id: &tool_result.id,
-//                 });
-//                 messages.push(message);
-//             }
-//             ContentBlock::Image(ImageWithPath {
-//                 image,
-//                 storage_path: _,
-//             }) => {
-//                 messages.push(OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-//                     content: vec![OpenAIUserContent::ImageUrl {
-//                         image_url: OpenAIImageUrl {
-//                             // This will only produce an error if we pass in a bad
-//                             // `Base64Image` (with missing image data)
-//                             url: format!("data:{};base64,{}", image.mime_type, image.data()?),
-//                         },
-//                     }],
-//                 }));
-//             }
-//             ContentBlock::Thought(_thought) => {
-//                 // We don't support thought blocks being passed in from a request.
-//                 // These are only possible to be passed in in the scenario where the
-//                 // output of a chat completion is used as an input to another model inference,
-//                 // i.e. a judge or something.
-//                 // We don't think the thoughts should be passed in in this case.
-//             }
-//             ContentBlock::Unknown {
-//                 data,
-//                 model_provider_name: _,
-//             } => {
-//                 messages.push(OpenAIRequestMessage::User(OpenAIUserRequestMessage {
-//                     content: vec![OpenAIUserContent::Unknown {
-//                         data: Cow::Borrowed(data),
-//                     }],
-//                 }));
-//             }
-//         }
-//     }
-
-//     Ok(messages)
-// }
-
-pub(super) fn tensorzero_to_openai_user_messages(
+fn tensorzero_to_openai_user_messages(
     content_blocks: &[ContentBlock],
 ) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the user content blocks.
@@ -1207,7 +1114,10 @@ pub(super) fn tensorzero_to_openai_user_messages(
                 // At this point, we can either convert the thought blocks to text or drop them.
                 // We chose to drop them, because it's more consistent with the behavior that OpenAI expects.
 
-                // TODO (#1361): warn when we drop thought blocks
+                // TODO (#1361): test that this warning is logged when we drop thought blocks
+                tracing::warn!(
+                    "Dropping `thought` content block from user message. OpenAI does not support them."
+                );
             }
             ContentBlock::Unknown {
                 data,
@@ -1230,7 +1140,7 @@ pub(super) fn tensorzero_to_openai_user_messages(
     Ok(messages)
 }
 
-pub(super) fn tensorzero_to_openai_assistant_messages(
+fn tensorzero_to_openai_assistant_messages(
     content_blocks: &[ContentBlock],
 ) -> Result<Vec<OpenAIRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the assistant content blocks.
@@ -1279,7 +1189,10 @@ pub(super) fn tensorzero_to_openai_assistant_messages(
                 // At this point, we can either convert the thought blocks to text or drop them.
                 // We chose to drop them, because it's more consistent with the behavior that OpenAI expects.
 
-                // TODO (#1361): warn when we drop thought blocks
+                // TODO (#1361): test that this warning is logged when we drop thought blocks
+                tracing::warn!(
+                    "Dropping `thought` content block from assistant message. OpenAI does not support them."
+                );
             }
             ContentBlock::Unknown {
                 data,

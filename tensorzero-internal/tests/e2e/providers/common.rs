@@ -9279,7 +9279,7 @@ async fn check_short_inference_response(
 pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Together's model is too dumb to figure multi-turn tool + parallel tool calls... It keeps calling the same tool over and over.
+    // Together's model is too dumb to figure out multi-turn tool + parallel tool calls... It keeps calling the same tool over and over.
     if provider.model_provider_name == "together" {
         return;
     }
@@ -9294,7 +9294,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+                    "content": "What is the weather like in Tokyo? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
                 }
             ]},
         "parallel_tool_calls": true,
@@ -9373,7 +9373,6 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
         "content": tool_results,
     });
 
-    // Update the payload with the user message
     payload["input"]["messages"]
         .as_array_mut()
         .unwrap()
@@ -9569,7 +9568,7 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
 pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider(
     provider: E2ETestProvider,
 ) {
-    // Together's model is too dumb to figure multi-turn tool + parallel tool calls... It keeps calling the same tool over and over.
+    // Together's model is too dumb to figure out multi-turn tool + parallel tool calls... It keeps calling the same tool over and over.
     if provider.model_provider_name == "together" {
         return;
     }
@@ -9584,7 +9583,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+                    "content": "What is the weather like in Tokyo? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
                 }
             ]},
         "parallel_tool_calls": true,

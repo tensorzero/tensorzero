@@ -22,16 +22,15 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk,
 };
 use crate::inference::types::{
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk, Role,
+    PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
 };
 use crate::model::{Credential, CredentialLocation, ModelProvider};
 use crate::tool::ToolCallChunk;
 
 use super::helpers::inject_extra_body;
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_tools,
-    tensorzero_to_openai_assistant_messages, tensorzero_to_openai_system_message,
-    tensorzero_to_openai_user_messages, OpenAIAssistantRequestMessage, OpenAIFinishReason,
+    get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
+    tensorzero_to_openai_system_message, OpenAIAssistantRequestMessage, OpenAIFinishReason,
     OpenAIRequestMessage, OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAITool,
     OpenAIToolChoice, OpenAIUsage, OpenAIUserContent, OpenAIUserRequestMessage, StreamOptions,
 };
@@ -606,12 +605,7 @@ pub(super) fn prepare_deepseek_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        match message.role {
-            Role::User => messages.extend(tensorzero_to_openai_user_messages(&message.content)?),
-            Role::Assistant => {
-                messages.extend(tensorzero_to_openai_assistant_messages(&message.content)?)
-            }
-        }
+        messages.extend(tensorzero_to_openai_messages(message)?);
     }
     // If this is an R1 model, prepend the system message as the first user message instead of using it as a system message
     if model_name.to_lowercase().contains("reasoner") {

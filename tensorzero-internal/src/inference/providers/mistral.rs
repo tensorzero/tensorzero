@@ -18,7 +18,7 @@ use crate::{
         ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
         ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
         ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-        ProviderInferenceResponseStreamInner, Role, TextChunk, Usage,
+        ProviderInferenceResponseStreamInner, TextChunk, Usage,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
     tool::{ToolCall, ToolCallChunk, ToolChoice},
@@ -27,9 +27,8 @@ use crate::{
 use super::{
     helpers::inject_extra_body,
     openai::{
-        get_chat_url, tensorzero_to_openai_assistant_messages, tensorzero_to_openai_user_messages,
-        OpenAIFunction, OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool,
-        OpenAIToolType,
+        get_chat_url, tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage,
+        OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
     },
     provider_trait::InferenceProvider,
 };
@@ -351,12 +350,7 @@ pub(super) fn prepare_mistral_messages<'a>(
 ) -> Result<Vec<OpenAIRequestMessage<'a>>, Error> {
     let mut messages = Vec::with_capacity(request.messages.len());
     for message in request.messages.iter() {
-        match message.role {
-            Role::User => messages.extend(tensorzero_to_openai_user_messages(&message.content)?),
-            Role::Assistant => {
-                messages.extend(tensorzero_to_openai_assistant_messages(&message.content)?)
-            }
-        }
+        messages.extend(tensorzero_to_openai_messages(message)?);
     }
     if let Some(system_msg) = tensorzero_to_mistral_system_message(request.system.as_deref()) {
         messages.insert(0, system_msg);
