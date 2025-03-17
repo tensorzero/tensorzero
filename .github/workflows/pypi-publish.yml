@@ -190,7 +190,6 @@ jobs:
           subject-path: "wheels-*/*"
 
       - name: Publish to real PyPI (only on GitHub release)
-        if: ${{ github.event_name == 'release' }}
         run: |
           ./ci/upload-pyo3.sh pypi
 
