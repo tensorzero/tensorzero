@@ -23,6 +23,7 @@ use tensorzero_internal::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0016::Migration0016;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0017::Migration0017;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0018::Migration0018;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0019::Migration0019;
 use tensorzero_internal::clickhouse::migration_manager::{self};
 use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
@@ -124,6 +125,9 @@ async fn test_clickhouse_migration_manager() {
             clickhouse: &clickhouse,
         }),
         Box::new(Migration0018 {
+            clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0019 {
             clickhouse: &clickhouse,
         }),
     ];
