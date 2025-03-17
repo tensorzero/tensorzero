@@ -1,4 +1,4 @@
-name: Batch tests cron job
+name: Batch tests
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -27,6 +27,7 @@ env:
 
 on:
   workflow_dispatch:
+  merge_group:
   schedule:
     - cron: '0 0 * * *'  # Runs at 00:00 UTC every day
 
