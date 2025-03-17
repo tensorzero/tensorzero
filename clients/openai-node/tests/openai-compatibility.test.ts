@@ -1098,3 +1098,197 @@ it("should reject string input for function with input schema", async () => {
     )
   ).rejects.toThrow(/400 "JSON Schema validation failed fo/);
 });
+
+it("should handle multi-turn parallel tool calls", async () => {
+  const messages: ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: [
+        {
+          type: "text",
+          // @ts-expect-error - custom TensorZero property
+          "tensorzero::arguments": { assistant_name: "Dr. Mehta" },
+        },
+      ],
+    },
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "What is the weather like in Tokyo? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.",
+        },
+      ],
+    },
+  ];
+
+  const episodeId = uuidv7();
+  const response = await client.chat.completions.create(
+    {
+      messages,
+      model: "tensorzero::function_name::weather_helper_parallel",
+      parallel_tool_calls: true,
+    },
+    {
+      headers: {
+        episode_id: episodeId,
+        variant_name: "openai",
+      },
+    }
+  );
+
+  const assistantMessage = response.choices[0].message;
+  messages.push(assistantMessage);
+
+  expect(assistantMessage.tool_calls?.length).toBe(2);
+
+  for (const toolCall of assistantMessage.tool_calls || []) {
+    if (toolCall.function.name === "get_temperature") {
+      messages.push({
+        role: "tool",
+        content: "70",
+        tool_call_id: toolCall.id,
+      });
+    } else if (toolCall.function.name === "get_humidity") {
+      messages.push({
+        role: "tool",
+        content: "30",
+        tool_call_id: toolCall.id,
+      });
+    } else {
+      throw new Error(`Unknown tool call: ${toolCall.function.name}`);
+    }
+  }
+
+  const finalResponse = await client.chat.completions.create(
+    {
+      messages,
+      model: "tensorzero::function_name::weather_helper_parallel",
+    },
+    {
+      headers: {
+        episode_id: episodeId,
+        variant_name: "openai",
+      },
+    }
+  );
+
+  const finalAssistantMessage = finalResponse.choices[0].message;
+
+  expect(finalAssistantMessage.content).toContain("70");
+  expect(finalAssistantMessage.content).toContain("30");
+});
+
+it("should handle multi-turn parallel tool calls using TensorZero gateway directly", async () => {
+  // Define types similar to OpenAI's ChatCompletionMessageParam but simpler for direct API use
+  type MessageContent = {
+    type: string;
+    text?: string;
+    "tensorzero::arguments"?: Record<string, string>;
+  };
+
+  type Message = {
+    role: string;
+    content: MessageContent[];
+    tool_call_id?: string;
+  };
+
+  const messages: Message[] = [
+    {
+      role: "system",
+      content: [
+        {
+          type: "text",
+          "tensorzero::arguments": { assistant_name: "Dr. Mehta" },
+        },
+      ],
+    },
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.",
+        },
+      ],
+    },
+  ];
+
+  const episodeId = uuidv7();
+
+  // First request to get tool calls
+  const firstResponse = await fetch(
+    "http://127.0.0.1:3000/openai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer donotuse",
+        episode_id: episodeId,
+        variant_name: "openai",
+      },
+      body: JSON.stringify({
+        messages,
+        model: "tensorzero::function_name::weather_helper_parallel",
+        parallel_tool_calls: true,
+      }),
+    }
+  );
+
+  if (!firstResponse.ok) {
+    throw new Error(`HTTP error! status: ${firstResponse.status}`);
+  }
+
+  const firstResponseData = await firstResponse.json();
+  const assistantMessage = firstResponseData.choices[0].message;
+  messages.push(assistantMessage as Message);
+
+  expect(assistantMessage.tool_calls.length).toBe(2);
+
+  // Add tool responses
+  for (const toolCall of assistantMessage.tool_calls) {
+    if (toolCall.function.name === "get_temperature") {
+      messages.push({
+        role: "tool",
+        content: [{ type: "text", text: "70" }],
+        tool_call_id: toolCall.id,
+      });
+    } else if (toolCall.function.name === "get_humidity") {
+      messages.push({
+        role: "tool",
+        content: [{ type: "text", text: "30" }],
+        tool_call_id: toolCall.id,
+      });
+    } else {
+      throw new Error(`Unknown tool call: ${toolCall.function.name}`);
+    }
+  }
+
+  // Second request with tool responses
+  const secondResponse = await fetch(
+    "http://127.0.0.1:3000/openai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer donotuse",
+        episode_id: episodeId,
+        variant_name: "openai",
+      },
+      body: JSON.stringify({
+        messages,
+        model: "tensorzero::function_name::weather_helper_parallel",
+      }),
+    }
+  );
+
+  if (!secondResponse.ok) {
+    throw new Error(`HTTP error! status: ${secondResponse.status}`);
+  }
+
+  const secondResponseData = await secondResponse.json();
+  const finalAssistantMessage = secondResponseData.choices[0].message;
+
+  expect(finalAssistantMessage.content).toContain("70");
+  expect(finalAssistantMessage.content).toContain("30");
+});
