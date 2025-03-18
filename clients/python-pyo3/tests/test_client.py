@@ -252,6 +252,7 @@ async def test_async_client_build_http_sync():
         assert usage.output_tokens == 10
         assert result.finish_reason == FinishReason.STOP
 
+
 @pytest.mark.asyncio
 async def test_async_client_build_embedded_sync():
     async with AsyncTensorZeroGateway.build_embedded(
