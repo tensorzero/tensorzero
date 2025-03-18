@@ -469,7 +469,6 @@ describe("getDatapoint", () => {
         },
       ],
       tags: {},
-      tool_params: {},
       updated_at: "2025-02-19T00:25:04Z",
     });
   });
