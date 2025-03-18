@@ -157,7 +157,7 @@ function MessageContent({
             );
           case "tool_call":
             return (
-              <ToolCallBlock
+              <InputToolCallBlock
                 key={index}
                 block={block}
                 isEditing={isEditing ?? false}
@@ -233,7 +233,7 @@ function TextBlock({ block, isEditing, onContentChange }: TextBlockProps) {
     return (
       <div className="w-full">
         <textarea
-          className={`w-full rounded border p-2 font-mono text-sm dark:bg-slate-800 ${
+          className={`w-full rounded border bg-white p-2 font-mono text-sm dark:bg-slate-800 ${
             jsonError
               ? "border-red-500 dark:border-red-500"
               : "border-slate-300 dark:border-slate-700"
@@ -260,8 +260,7 @@ function TextBlock({ block, isEditing, onContentChange }: TextBlockProps) {
   );
 }
 
-// ToolCallBlock Component
-interface ToolCallBlockProps {
+interface InputToolCallBlockProps {
   block: Extract<InputMessageContent, { type: "tool_call" }>;
   isEditing?: boolean;
   onContentChange?: (
@@ -269,11 +268,11 @@ interface ToolCallBlockProps {
   ) => void;
 }
 
-function ToolCallBlock({
+function InputToolCallBlock({
   block,
   isEditing,
   onContentChange,
-}: ToolCallBlockProps) {
+}: InputToolCallBlockProps) {
   const [displayValue, setDisplayValue] = useState(block.arguments);
   const [jsonError, setJsonError] = useState<string | null>(null);
 
@@ -307,7 +306,7 @@ function ToolCallBlock({
       <div className="rounded bg-slate-100 p-2 dark:bg-slate-800">
         <div className="font-medium">Tool: {block.name}</div>
         <textarea
-          className={`mt-1 w-full rounded border p-2 font-mono text-sm ${
+          className={`mt-1 w-full rounded border bg-white p-2 font-mono text-sm ${
             jsonError
               ? "border-red-500 dark:border-red-500"
               : "border-slate-300 dark:border-slate-700"
@@ -361,7 +360,7 @@ function ToolResultBlock({
       <div className="rounded bg-slate-100 p-2 dark:bg-slate-800">
         <div className="font-medium">Result from: {block.name}</div>
         <textarea
-          className="mt-1 w-full rounded border border-slate-300 p-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
+          className="mt-1 w-full rounded border border-slate-300 bg-white p-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
           value={block.result}
           onChange={handleChange}
           rows={3}

@@ -188,7 +188,15 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   );
   const config = useConfig();
   const [isEditing, setIsEditing] = useState(false);
+  const [resetKey, setResetKey] = useState(0);
+
   const toggleEditing = () => setIsEditing(!isEditing);
+
+  const handleReset = () => {
+    setInput(datapoint.input);
+    setOutput(datapoint.output);
+    setResetKey((prev) => prev + 1);
+  };
 
   const handleSystemChange = (system: string | object) => {
     setInput({ ...input, system });
@@ -287,12 +295,14 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
               toggleEditing={toggleEditing}
               isEditing={isEditing}
               onSave={handleSave}
+              onReset={handleReset}
             />
           </SectionLayout>
 
           <SectionLayout>
             <SectionHeader heading="Input" />
             <Input
+              key={`input-${resetKey}`}
               input={input}
               isEditing={isEditing}
               onSystemChange={handleSystemChange}
@@ -304,6 +314,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             <SectionLayout>
               <SectionHeader heading="Output" />
               <Output
+                key={`output-${resetKey}`}
                 output={output}
                 isEditing={isEditing}
                 onOutputChange={handleOutputChange}

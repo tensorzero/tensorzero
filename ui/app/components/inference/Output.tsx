@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Card, CardContent } from "~/components/ui/card";
 import type {
@@ -66,7 +67,7 @@ function renderContentBlock({
       );
     case "tool_call":
       return (
-        <ToolCallBlock
+        <OutputToolCallBlock
           key={index}
           block={block}
           isEditing={isEditing ?? false}
@@ -102,7 +103,7 @@ function TextBlock({ block, isEditing, onBlockChange }: TextBlockProps) {
       <div className="rounded-md bg-muted p-4">
         <Badge className="mb-2">Text</Badge>
         <textarea
-          className="w-full rounded border border-slate-300 p-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
+          className="w-full rounded border border-slate-300 bg-white p-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
           value={block.text}
           onChange={handleChange}
           rows={3}
@@ -122,26 +123,44 @@ function TextBlock({ block, isEditing, onBlockChange }: TextBlockProps) {
 }
 
 // ToolCallBlock component
-interface ToolCallBlockProps {
+interface OutputToolCallBlockProps {
   block: Extract<ContentBlockOutput, { type: "tool_call" }>;
   isEditing?: boolean;
   onBlockChange?: (
     updatedBlock: Extract<ContentBlockOutput, { type: "tool_call" }>,
   ) => void;
 }
-
-function ToolCallBlock({
+function OutputToolCallBlock({
   block,
   isEditing,
   onBlockChange,
-}: ToolCallBlockProps) {
+}: OutputToolCallBlockProps) {
+  const [displayValue, setDisplayValue] = useState(
+    JSON.stringify(block.arguments, null, 2),
+  );
+  const [jsonError, setJsonError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Update display value when block.arguments changes externally
+    setDisplayValue(JSON.stringify(block.arguments, null, 2));
+  }, [block.arguments]);
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (onBlockChange) {
-      onBlockChange({
-        ...block,
-        arguments: JSON.parse(e.target.value),
-        raw_arguments: e.target.value,
-      });
+      const newValue = e.target.value;
+      setDisplayValue(newValue);
+
+      try {
+        const parsedValue = JSON.parse(newValue);
+        setJsonError(null);
+        onBlockChange({
+          ...block,
+          arguments: parsedValue,
+          raw_arguments: newValue,
+        });
+      } catch {
+        setJsonError("Invalid JSON format");
+      }
     }
   };
 
@@ -150,17 +169,21 @@ function ToolCallBlock({
       <div className="rounded-md bg-muted p-4">
         <Badge className="mb-2">Tool: {block.name}</Badge>
         <textarea
-          className="w-full rounded border border-slate-300 p-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
-          value={JSON.stringify(block.arguments, null, 2)}
+          className={`w-full rounded border bg-white p-2 font-mono text-sm ${
+            jsonError
+              ? "border-red-500 dark:border-red-500"
+              : "border-slate-300 dark:border-slate-700"
+          } dark:bg-slate-800`}
+          value={displayValue}
           onChange={handleChange}
           rows={3}
         />
+        {jsonError && (
+          <div className="mt-1 text-sm text-red-500">{jsonError}</div>
+        )}
       </div>
     );
   }
-  // TODO (Viraj): unify this with the other ToolCallBlock in Input.tsx
-  // handle JSON validation here and in the JSON output component
-  throw new Error("Not implemented");
 
   return (
     <div className="rounded-md bg-muted p-4">
@@ -182,12 +205,35 @@ interface JsonOutputProps {
 }
 
 function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
+  const [displayValue, setDisplayValue] = useState(output.raw);
+  const [jsonError, setJsonError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Update display value when output.raw changes externally
+    setDisplayValue(output.raw);
+  }, [output.raw]);
+
   const handleRawChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (onOutputChange) {
-      onOutputChange({
-        ...output,
-        raw: e.target.value,
-      });
+      const newValue = e.target.value;
+      setDisplayValue(newValue);
+
+      try {
+        // Attempt to parse the JSON to validate it
+        JSON.parse(newValue);
+        setJsonError(null);
+        onOutputChange({
+          ...output,
+          raw: newValue,
+        });
+      } catch {
+        setJsonError("Invalid JSON format");
+        // Still update the raw value even if JSON is invalid
+        onOutputChange({
+          ...output,
+          raw: newValue,
+        });
+      }
     }
   };
 
@@ -206,12 +252,21 @@ function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
       <div className="rounded-md bg-muted p-4">
         <Badge className="mb-2">Raw Output</Badge>
         {isEditing ? (
-          <textarea
-            className="w-full rounded border border-slate-300 p-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
-            value={output.raw}
-            onChange={handleRawChange}
-            rows={5}
-          />
+          <div>
+            <textarea
+              className={`w-full rounded border bg-white p-2 font-mono text-sm ${
+                jsonError
+                  ? "border-red-500 dark:border-red-500"
+                  : "border-slate-300 dark:border-slate-700"
+              } dark:bg-slate-800`}
+              value={displayValue}
+              onChange={handleRawChange}
+              rows={5}
+            />
+            {jsonError && (
+              <div className="mt-1 text-sm text-red-500">{jsonError}</div>
+            )}
+          </div>
         ) : (
           <pre className="overflow-x-auto whitespace-pre-wrap break-words">
             <code className="text-sm">{output.raw}</code>

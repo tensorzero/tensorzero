@@ -21,6 +21,7 @@ interface BasicInfoProps {
   toggleEditing: () => void;
   onSave: () => void;
   isEditing: boolean;
+  onReset: () => void;
 }
 
 export default function BasicInfo({
@@ -31,6 +32,7 @@ export default function BasicInfo({
   toggleEditing,
   onSave,
   isEditing,
+  onReset,
 }: BasicInfoProps) {
   const config = useConfig();
   const function_config = config.functions[datapoint.function_name];
@@ -38,6 +40,10 @@ export default function BasicInfo({
   if (!type) {
     throw new Error(`Function ${datapoint.function_name} not found`);
   }
+  const handleCancel = () => {
+    onReset();
+    toggleEditing();
+  };
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -49,7 +55,7 @@ export default function BasicInfo({
           {isEditing ? (
             <>
               <SaveButton onClick={onSave} />
-              <CancelButton onClick={toggleEditing} />
+              <CancelButton onClick={handleCancel} />
             </>
           ) : (
             <EditButton onClick={toggleEditing} />
