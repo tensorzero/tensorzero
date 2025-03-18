@@ -1,10 +1,5 @@
 import { AlertTriangleIcon } from "lucide-react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "~/components/ui/accordion";
+import { FirstExample } from "./FirstExample";
 import { type SFTJobStatus } from "~/utils/supervised_fine_tuning/common";
 
 interface Message {
@@ -60,29 +55,7 @@ export function SFTAnalysis({ status }: Props) {
       <h3 className="text-lg font-medium">Dataset Analysis</h3>
 
       {analysisData.firstExample && (
-        <Accordion
-          type="single"
-          collapsible
-          className="w-full rounded-md border"
-        >
-          <AccordionItem value="first-example" className="border-none">
-            <AccordionTrigger className="px-4">First Example</AccordionTrigger>
-            <AccordionContent className="space-y-4 px-4">
-              <div className="space-y-2">
-                {analysisData.firstExample.map((message, index) => (
-                  <div key={index} className="space-y-1">
-                    <div className="text-sm text-muted-foreground">
-                      {message.role}:
-                    </div>
-                    <code className="block whitespace-pre-wrap rounded-lg bg-muted p-3 text-sm">
-                      {message.content}
-                    </code>
-                  </div>
-                ))}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+        <FirstExample messages={analysisData.firstExample} />
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
