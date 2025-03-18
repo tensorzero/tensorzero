@@ -657,7 +657,7 @@ impl AsyncTensorZeroGateway {
             // 'build_gateway' inside the future so that any exception is thrown by the future
             Ok(
                 pyo3_async_runtimes::tokio::future_into_py(cls.py(), async move {
-                    Python::with_gil(|py| build_gateway(py))
+                    Python::with_gil(build_gateway)
                 })?
                 .unbind(),
             )
