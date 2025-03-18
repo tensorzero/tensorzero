@@ -24,7 +24,7 @@ futures = { workspace = true }
 indicatif = "0.17.11"
 
 [dev-dependencies]
-tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
+tensorzero = { path = "../clients/rust" }
 
 [lints.rust]
 unsafe_code = "forbid"
