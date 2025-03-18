@@ -498,7 +498,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     assistant_schema: None,
                     tools: vec![],
                     tool_choice: ToolChoice::None,
-                    parallel_tool_calls: false,
+                    parallel_tool_calls: None,
                 })),
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))

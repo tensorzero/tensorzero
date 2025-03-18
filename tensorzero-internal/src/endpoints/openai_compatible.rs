@@ -55,7 +55,7 @@ pub async fn inference_handler(
     headers: HeaderMap,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
-    let params: Params = (headers, openai_compatible_params).try_into()?;
+    let params = Params::try_from_openai(headers, openai_compatible_params)?;
 
     // The prefix for the response's `model` field depends on the inference target
     // (We run this disambiguation deep in the `inference` call below but we don't get the decision out, so we duplicate it here)
@@ -223,6 +223,12 @@ pub struct OpenAICompatibleParams {
     tool_choice: Option<ChatCompletionToolChoiceOption>,
     top_p: Option<f32>,
     parallel_tool_calls: Option<bool>,
+    #[serde(rename = "tensorzero::variant_name")]
+    tensorzero_variant_name: Option<String>,
+    #[serde(rename = "tensorzero::dryrun")]
+    tensorzero_dryrun: Option<bool>,
+    #[serde(rename = "tensorzero::episode_id")]
+    tensorzero_episode_id: Option<Uuid>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -283,11 +289,11 @@ struct OpenAICompatibleResponse {
 const TENSORZERO_FUNCTION_NAME_PREFIX: &str = "tensorzero::function_name::";
 const TENSORZERO_MODEL_NAME_PREFIX: &str = "tensorzero::model_name::";
 
-impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
-    type Error = Error;
-    fn try_from(
-        (headers, openai_compatible_params): (HeaderMap, OpenAICompatibleParams),
-    ) -> Result<Self, Self::Error> {
+impl Params {
+    fn try_from_openai(
+        headers: HeaderMap,
+        openai_compatible_params: OpenAICompatibleParams,
+    ) -> Result<Self, Error> {
         let (function_name, model_name) = if let Some(function_name) = openai_compatible_params
             .model
             .strip_prefix(TENSORZERO_FUNCTION_NAME_PREFIX)
@@ -332,9 +338,10 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
             }
         }
 
-        let episode_id = headers
+        let header_episode_id = headers
             .get("episode_id")
             .map(|h| {
+                tracing::warn!("Deprecation warning: Please use the `tensorzero::episode_id` field instead of the `episode_id` header. The header will be removed in a future release.");
                 h.to_str()
                     .map_err(|_| {
                         Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
@@ -385,9 +392,10 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
         let inference_params = InferenceParams {
             chat_completion: chat_completion_inference_params,
         };
-        let variant_name = headers
+        let header_variant_name = headers
             .get("variant_name")
             .map(|h| {
+                tracing::warn!("Deprecation warning: Please use the `tensorzero::variant_name` field instead of the `variant_name` header. The header will be removed in a future release.");
                 h.to_str()
                     .map_err(|_| {
                         Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
@@ -397,9 +405,10 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
                     .map(|s| s.to_string())
             })
             .transpose()?;
-        let dryrun = headers
+        let header_dryrun = headers
             .get("dryrun")
             .map(|h| {
+                tracing::warn!("Deprecation warning: Please use the `tensorzero::dryrun` field instead of the `dryrun` header. The header will be removed in a future release.");
                 h.to_str()
                     .map_err(|_| {
                         Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
@@ -432,12 +441,16 @@ impl TryFrom<(HeaderMap, OpenAICompatibleParams)> for Params {
         Ok(Params {
             function_name,
             model_name,
-            episode_id,
+            episode_id: openai_compatible_params
+                .tensorzero_episode_id
+                .or(header_episode_id),
             input,
             stream: openai_compatible_params.stream,
             params: inference_params,
-            variant_name,
-            dryrun,
+            variant_name: openai_compatible_params
+                .tensorzero_variant_name
+                .or(header_variant_name),
+            dryrun: openai_compatible_params.tensorzero_dryrun.or(header_dryrun),
             dynamic_tool_params,
             output_schema,
             // OpenAI compatible endpoint does not support dynamic credentials
@@ -997,7 +1010,7 @@ mod tests {
         let messages = vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
             content: Value::String("Hello, world!".to_string()),
         })];
-        let params: Params = (
+        let params = Params::try_from_openai(
             headers,
             OpenAICompatibleParams {
                 messages,
@@ -1014,10 +1027,12 @@ mod tests {
                 tool_choice: None,
                 top_p: Some(0.5),
                 parallel_tool_calls: None,
+                tensorzero_episode_id: None,
+                tensorzero_variant_name: None,
+                tensorzero_dryrun: None,
             },
         )
-            .try_into()
-            .unwrap();
+        .unwrap();
         assert_eq!(params.function_name, Some("test_function".to_string()));
         assert_eq!(params.episode_id, Some(episode_id));
         assert_eq!(params.variant_name, Some("test_variant".to_string()));

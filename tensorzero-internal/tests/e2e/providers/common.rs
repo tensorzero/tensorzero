@@ -1804,14 +1804,14 @@ pub async fn check_simple_image_inference_response(
     assert_eq!(model_provider_name, provider.model_provider_name);
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
-    assert!(raw_request.to_lowercase().contains("japan"));
+    assert!(raw_request.to_lowercase().contains("animal"));
     assert!(
         serde_json::from_str::<Value>(raw_request).is_ok(),
         "raw_request is not a valid JSON"
     );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
-    assert!(raw_response.to_lowercase().contains("tokyo"));
+    assert!(raw_response.to_lowercase().contains("crab"));
     assert!(serde_json::from_str::<Value>(raw_response).is_ok());
 
     let input_tokens = result.get("input_tokens").unwrap();
@@ -2799,7 +2799,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
@@ -3122,7 +3122,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
@@ -3392,7 +3392,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
@@ -3685,7 +3685,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
@@ -3965,7 +3965,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "required");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
@@ -4283,7 +4283,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "required");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
@@ -4547,7 +4547,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "none");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
@@ -4827,7 +4827,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "none");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
@@ -5139,7 +5139,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
         tool_params["tool_choice"],
         json!({"specific": "self_destruct"})
     );
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 2);
@@ -5523,7 +5523,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         tool_params["tool_choice"],
         json!({"specific": "self_destruct"})
     );
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 2);
@@ -5834,7 +5834,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "required");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
@@ -6138,7 +6138,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "required");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
@@ -6422,7 +6422,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
@@ -6745,7 +6745,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
     let inference_params: Value = serde_json::from_str(inference_params).unwrap();
@@ -7053,7 +7053,7 @@ pub async fn check_dynamic_tool_use_inference_response(
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
@@ -7381,7 +7381,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(tool_params["parallel_tool_calls"], Value::Null);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
     assert_eq!(tools_available.len(), 1);
@@ -7544,8 +7544,14 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
-    check_parallel_tool_use_inference_response(response_json, &provider, Some(episode_id), false)
-        .await;
+    check_parallel_tool_use_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+        false,
+        Value::Bool(true),
+    )
+    .await;
 }
 
 pub async fn check_parallel_tool_use_inference_response(
@@ -7553,6 +7559,7 @@ pub async fn check_parallel_tool_use_inference_response(
     provider: &E2ETestProvider,
     episode_id: Option<Uuid>,
     is_batch: bool,
+    parallel_param: Value,
 ) {
     let hardcoded_function_name = "weather_helper_parallel";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
@@ -7696,7 +7703,7 @@ pub async fn check_parallel_tool_use_inference_response(
     let tool_params: Value =
         serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
     assert_eq!(tool_params["tool_choice"], "auto");
-    assert_eq!(tool_params["parallel_tool_calls"], true);
+    assert_eq!(tool_params["parallel_tool_calls"], parallel_param);
 
     let tools_available = tool_params["tools_available"].as_array().unwrap();
 

@@ -63,12 +63,16 @@ export function VariantResponseModal({
       setVariantResponse(null);
       setShowRawResponse(false);
       setError(null);
-      const request = {
-        function_name: inference.function_name,
-        input: inference.input,
-        variant_name: selectedVariant,
-        dryrun: true,
-      };
+      const request =
+        inference.function_name === "tensorzero::default"
+          ? prepareDefaultFunctionRequest(inference, selectedVariant)
+          : {
+              function_name: inference.function_name,
+              input: inference.input,
+              variant_name: selectedVariant,
+              dryrun: true,
+            };
+
       variantInferenceFetcher.submit(
         { data: JSON.stringify(request) },
         {
@@ -240,4 +244,33 @@ export function VariantResponseModal({
       </DialogContent>
     </Dialog>
   );
+}
+
+function prepareDefaultFunctionRequest(
+  inference: ParsedInferenceRow,
+  selectedVariant: string,
+) {
+  if (inference.function_type === "chat") {
+    const tool_choice = inference.tool_params?.tool_choice;
+    const parallel_tool_calls = inference.tool_params?.parallel_tool_calls;
+    const tools_available = inference.tool_params?.tools_available;
+    return {
+      model_name: selectedVariant,
+      input: inference.input,
+      dryrun: true,
+      tool_choice: tool_choice,
+      parallel_tool_calls: parallel_tool_calls,
+      // We need to add all tools as additional for the default function
+      additional_tools: tools_available,
+    };
+  } else if (inference.function_type === "json") {
+    // This should never happen, just in case and for type safety
+    const output_schema = inference.output_schema;
+    return {
+      model_name: selectedVariant,
+      input: inference.input,
+      dryrun: true,
+      output_schema: output_schema,
+    };
+  }
 }
