@@ -48,7 +48,7 @@ pub struct FunctionConfigChat {
     pub assistant_schema: Option<JSONSchemaFromPath>,
     pub tools: Vec<String>, // tool names
     pub tool_choice: ToolChoice,
-    pub parallel_tool_calls: bool,
+    pub parallel_tool_calls: Option<bool>,
 }
 
 #[derive(Debug, Default)]

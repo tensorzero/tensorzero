@@ -68,6 +68,7 @@ async fn resolved_input_message_content_to_input_message_content(
         ResolvedInputMessageContent::RawText { value } => {
             Ok(InputMessageContent::RawText { value })
         }
+        ResolvedInputMessageContent::Thought(thought) => Ok(InputMessageContent::Thought(thought)),
         ResolvedInputMessageContent::Image(_image) => {
             // TODO: Implement image support for evals
             // This will involve grabbing the image from object storage using the object storage client included in `tensorzero-internal`
@@ -105,7 +106,7 @@ pub async fn get_tool_params_args(
                 allowed_tools: Some(allowed_tools),
                 additional_tools: Some(additional_tools),
                 tool_choice: Some(tool_params.tool_choice.clone()),
-                parallel_tool_calls: Some(tool_params.parallel_tool_calls),
+                parallel_tool_calls: tool_params.parallel_tool_calls,
             }
         }
         // This branch is actually unreachable
@@ -150,7 +151,7 @@ mod tests {
         // Dynamic tool params with tool_choice set to "tool_1"
         let tool_database_insert = ToolCallConfigDatabaseInsert {
             tool_choice: ToolChoice::Specific("tool_1".to_string()),
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
             tools_available: vec![Tool {
                 name: "tool_1".to_string(),
                 description: "Tool 1".to_string(),
@@ -165,14 +166,14 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Specific("tool_1".to_string()),
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
         let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config).await;
         assert_eq!(
             tool_params_args,
             DynamicToolParams {
                 tool_choice: Some(ToolChoice::Specific("tool_1".to_string())),
-                parallel_tool_calls: Some(false),
+                parallel_tool_calls: None,
                 allowed_tools: Some(Vec::new()),
                 additional_tools: Some(vec![Tool {
                     name: "tool_1".to_string(),
@@ -186,7 +187,7 @@ mod tests {
         // Static tool params with a tool choice set to required
         let tool_database_insert = ToolCallConfigDatabaseInsert {
             tool_choice: ToolChoice::Required,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
             tools_available: vec![Tool {
                 name: "tool_1".to_string(),
                 description: "Tool 1".to_string(),
@@ -201,14 +202,14 @@ mod tests {
             assistant_schema: None,
             tools: vec!["tool_1".to_string()],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
         let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config).await;
         assert_eq!(
             tool_params_args,
             DynamicToolParams {
                 tool_choice: Some(ToolChoice::Required),
-                parallel_tool_calls: Some(false),
+                parallel_tool_calls: None,
                 allowed_tools: Some(vec!["tool_1".to_string()]),
                 additional_tools: Some(vec![]),
             }

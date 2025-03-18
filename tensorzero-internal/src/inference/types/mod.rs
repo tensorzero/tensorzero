@@ -121,6 +121,7 @@ impl InputMessageContent {
             InputMessageContent::RawText { value } => {
                 ResolvedInputMessageContent::RawText { value }
             }
+            InputMessageContent::Thought(thought) => ResolvedInputMessageContent::Thought(thought),
             InputMessageContent::Text(TextKind::LegacyValue { value }) => {
                 tracing::warn!(
                     r#"Deprecation warning: `{{"type": "text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` or `{{"type": "text", "arguments": {{..}}}} ` instead."#
@@ -175,6 +176,7 @@ pub enum InputMessageContent {
     RawText {
         value: String,
     },
+    Thought(Thought),
     Image(Image),
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's "redacted_thinking") in and out
@@ -256,6 +258,10 @@ pub struct Text {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Thought {
     pub text: String,
+    /// An optional signature - currently, this is only used with Anthropic,
+    /// and is ignored by other providers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
 }
 
 /// Core representation of the types of content that could go into a model provider
@@ -1354,7 +1360,13 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                 thought.text,
                                 &mut ttft,
                                 chunk.latency,
-                                |text| ContentBlockOutput::Thought(Thought { text }),
+                                // TODO - handle streaming thinking signatures (https://github.com/tensorzero/tensorzero/issues/1370)
+                                |text| {
+                                    ContentBlockOutput::Thought(Thought {
+                                        text,
+                                        signature: None,
+                                    })
+                                },
                                 |block, text| {
                                     if let ContentBlockOutput::Thought(thought) = block {
                                         thought.text.push_str(text);
@@ -1421,7 +1433,10 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                         _ => {
                             thought_blocks.insert(
                                 String::new(),
-                                ContentBlockOutput::Thought(Thought { text: thought }),
+                                ContentBlockOutput::Thought(Thought {
+                                    text: thought,
+                                    signature: None,
+                                }),
                             );
                         }
                     }
@@ -2012,7 +2027,7 @@ mod tests {
                 strict: true,
             })],
             tool_choice: ToolChoice::None,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
 
         // Test valid arguments for additional tool
@@ -2136,7 +2151,7 @@ mod tests {
                 strict: true,
             })],
             tool_choice: ToolChoice::None,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
 
         // Test allowed tool call
@@ -2589,7 +2604,8 @@ mod tests {
                 chat_response.content,
                 vec![
                     ContentBlockChatOutput::Thought(Thought {
-                        text: "Thought 2".to_string()
+                        text: "Thought 2".to_string(),
+                        signature: None,
                     }),
                     ContentBlockChatOutput::Text(Text {
                         text: "{\"name\":\"John\",\"age\":30}".to_string()
@@ -3139,7 +3155,12 @@ mod tests {
             "Thinking...".to_string(),
             &mut ttft,
             chunk_latency,
-            |text| ContentBlockOutput::Thought(Thought { text }),
+            |text| {
+                ContentBlockOutput::Thought(Thought {
+                    text,
+                    signature: None,
+                })
+            },
             |block, text| {
                 if let ContentBlockOutput::Thought(thought) = block {
                     thought.text.push_str(text);
@@ -3149,7 +3170,9 @@ mod tests {
 
         assert_eq!(blocks.len(), 2);
         match blocks.get("3").unwrap() {
-            ContentBlockOutput::Thought(Thought { text }) => assert_eq!(text, "Thinking..."),
+            ContentBlockOutput::Thought(Thought { text, signature: _ }) => {
+                assert_eq!(text, "Thinking...")
+            }
             _ => panic!("Expected thought block"),
         }
     }

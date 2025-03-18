@@ -1013,7 +1013,7 @@ pub(super) fn prepare_openai_tools<'a>(
                     .collect(),
             );
             let tool_choice = Some((&tool_config.tool_choice).into());
-            let parallel_tool_calls = Some(tool_config.parallel_tool_calls);
+            let parallel_tool_calls = tool_config.parallel_tool_calls;
             (tools, tool_choice, parallel_tool_calls)
         }
     }
@@ -2831,7 +2831,7 @@ mod tests {
         let tool_config = ToolCallConfig {
             tools_available: vec![],
             tool_choice: ToolChoice::Required,
-            parallel_tool_calls: true,
+            parallel_tool_calls: Some(true),
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None

@@ -392,6 +392,7 @@ requires-dist = [
 dev = [
     { name = "maturin" },
     { name = "mypy" },
+    { name = "openai" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },

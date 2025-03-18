@@ -100,7 +100,7 @@ lazy_static! {
             parameters: EVALUATOR_OUTPUT_SCHEMA.clone(),
         })],
         tool_choice: ToolChoice::Specific("respond".to_string()),
-        parallel_tool_calls: false,
+        parallel_tool_calls: None,
     };
 }
 

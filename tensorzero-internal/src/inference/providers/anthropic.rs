@@ -26,7 +26,7 @@ use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ImageKind, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Usage,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, Usage,
 };
 use crate::model::{
     build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
@@ -147,6 +147,7 @@ impl InferenceProvider for AnthropicProvider {
                 },
             )?;
         inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let res = http_client
@@ -409,7 +410,7 @@ impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
     type Error = Error;
 
     fn try_from(tool_call_config: &'a ToolCallConfig) -> Result<Self, Error> {
-        let disable_parallel_tool_use = Some(!tool_call_config.parallel_tool_calls);
+        let disable_parallel_tool_use = Some(tool_call_config.parallel_tool_calls == Some(false));
         let tool_choice = &tool_call_config.tool_choice;
 
         match tool_choice {
@@ -463,6 +464,10 @@ enum AnthropicMessageContent<'a> {
     ToolResult {
         tool_use_id: &'a str,
         content: Vec<AnthropicMessageContent<'a>>,
+    },
+    Thinking {
+        thinking: &'a str,
+        signature: Option<&'a str>,
     },
     ToolUse {
         id: &'a str,
@@ -543,12 +548,12 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessag
                     },
                 },
             ))),
-            // We don't support thought blocks being passed in from a request.
-            // These are only possible to be passed in in the scenario where the
-            // output of a chat completion is used as an input to another model inference,
-            // i.e. a judge or something.
-            // We don't think the thoughts should be passed in in this case.
-            ContentBlock::Thought(_thought) => Ok(None),
+            ContentBlock::Thought(thought) => Ok(Some(FlattenUnknown::Normal(
+                AnthropicMessageContent::Thinking {
+                    thinking: &thought.text,
+                    signature: thought.signature.as_deref(),
+                },
+            ))),
             ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
@@ -784,6 +789,10 @@ pub enum AnthropicContentBlock {
     Text {
         text: String,
     },
+    Thinking {
+        thinking: String,
+        signature: String,
+    },
     ToolUse {
         id: String,
         name: String,
@@ -812,6 +821,13 @@ fn convert_to_output(
                 })?,
             }))
         }
+        FlattenUnknown::Normal(AnthropicContentBlock::Thinking {
+            thinking,
+            signature,
+        }) => Ok(ContentBlockOutput::Thought(Thought {
+            text: thinking,
+            signature: Some(signature),
+        })),
         FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown {
             data: data.into_owned(),
             model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
@@ -1198,7 +1214,7 @@ mod tests {
         // Need to cover all 4 cases
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: Some(false),
             tools_available: vec![],
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
@@ -1211,7 +1227,7 @@ mod tests {
 
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: true,
+            parallel_tool_calls: Some(true),
             tools_available: vec![],
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
@@ -1225,7 +1241,7 @@ mod tests {
 
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Required,
-            parallel_tool_calls: true,
+            parallel_tool_calls: Some(true),
             tools_available: vec![],
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
@@ -1239,7 +1255,7 @@ mod tests {
 
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Specific("test".to_string()),
-            parallel_tool_calls: false,
+            parallel_tool_calls: Some(false),
             tools_available: vec![],
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
