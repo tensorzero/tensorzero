@@ -632,27 +632,38 @@ impl AsyncTensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (*, gateway_url, timeout=None, verbose_errors=false))]
+    #[pyo3(signature = (*, gateway_url, timeout=None, verbose_errors=false, use_async=true))]
     /// Initialize the TensorZero client, using the HTTP gateway.
     /// :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
     /// :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
+    /// :param use_async: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
     /// :return: An `AsyncTensorZeroGateway` instance configured to use the HTTP gateway.
     fn build_http<'a>(
         cls: &Bound<'a, PyType>,
         gateway_url: &str,
         timeout: Option<f64>,
         verbose_errors: bool,
-    ) -> PyResult<Bound<'a, PyAny>> {
+        use_async: bool,
+    ) -> PyResult<Py<PyAny>> {
         let gateway_url = gateway_url.to_string();
-        pyo3_async_runtimes::tokio::future_into_py(cls.py(), async move {
-            Python::with_gil(|py| {
-                let client = BaseTensorZeroGateway::new(py, &gateway_url, timeout, verbose_errors)?;
-                let instance =
-                    PyClassInitializer::from(client).add_subclass(AsyncTensorZeroGateway {});
-                Py::new(py, instance)
-            })
-        })
+        let build_gateway = move |py: Python<'_>| {
+            let client = BaseTensorZeroGateway::new(py, &gateway_url, timeout, verbose_errors)?;
+            let instance = PyClassInitializer::from(client).add_subclass(AsyncTensorZeroGateway {});
+            Ok(Py::new(py, instance)?.into_any())
+        };
+        if use_async {
+            // This doesn't actually do anything async at the moment, but we run
+            // 'build_gateway' inside the future so that any exception is thrown by the future
+            Ok(
+                pyo3_async_runtimes::tokio::future_into_py(cls.py(), async move {
+                    Python::with_gil(|py| build_gateway(py))
+                })?
+                .unbind(),
+            )
+        } else {
+            build_gateway(cls.py())
+        }
     }
 
     /// **Deprecated** (use `build_http` or `build_embedded` instead)

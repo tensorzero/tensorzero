@@ -172,12 +172,14 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         gateway_url: str,
         timeout: Optional[float] = None,
         verbose_errors: bool = False,
+        use_async: bool = True,
     ) -> "AsyncTensorZeroGateway":
         """
         Initialize the TensorZero client, using the HTTP gateway.
         :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
         :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
         :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
+        :param use_async (Optional): If True, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and return an `AsyncTensorZeroGateway` directly.
         :return: An `AsyncTensorZeroGateway` instance configured to use the HTTP gateway.
         """
 
