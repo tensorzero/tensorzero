@@ -66,7 +66,7 @@ export const ParsedChatInferenceDatapointRowSchema =
   }).extend({
     input: inputSchema,
     output: z.array(contentBlockOutputSchema).optional(),
-    tool_params: z.record(z.string(), z.unknown()),
+    tool_params: z.record(z.string(), z.unknown()).optional(),
     tags: z.record(z.string(), z.string()),
   });
 export type ParsedChatInferenceDatapointRow = z.infer<

@@ -30,6 +30,7 @@ import type {
   InputMessage,
   InputMessageContent,
 } from "~/utils/clickhouse/common";
+import { getConfig } from "~/utils/config/index.server";
 
 /**
  * Transforms input from clickhouse format to TensorZero client format
@@ -99,6 +100,9 @@ export async function action({ request }: ActionFunctionArgs) {
   const action = formData.get("action");
   const parsedFormData: ParsedDatasetRow =
     ParsedDatasetRowSchema.parse(cleanedData);
+  const config = await getConfig();
+  const functionConfig = config.functions[parsedFormData.function_name];
+  const functionType = functionConfig?.type;
   if (action === "delete") {
     await deleteDatapointServer(parsedFormData);
     const datasetCounts = await getDatasetCounts();
@@ -127,7 +131,7 @@ export async function action({ request }: ActionFunctionArgs) {
           output: transformedOutput,
           tags: parsedFormData.tags || {},
           auxiliary: parsedFormData.auxiliary,
-          ...("output_schema" in parsedFormData
+          ...(functionType === "json"
             ? {
                 output_schema:
                   parsedFormData[
@@ -135,7 +139,7 @@ export async function action({ request }: ActionFunctionArgs) {
                   ],
               }
             : {}),
-          ...("tool_params" in parsedFormData
+          ...(functionType === "chat" && "tool_params" in parsedFormData
             ? {
                 tool_params:
                   parsedFormData["tool_params" as keyof typeof parsedFormData],

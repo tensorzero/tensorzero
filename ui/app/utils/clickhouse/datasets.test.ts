@@ -605,7 +605,7 @@ describe("datapoint operations", () => {
     expect(retrievedDatapoint?.output).toEqual(jsonDatapoint.output);
 
     // Check if it's a JSON inference row before accessing output_schema
-    if (retrievedDatapoint && !("tool_params" in retrievedDatapoint)) {
+    if (retrievedDatapoint && "output_schema" in retrievedDatapoint) {
       expect(JSON.stringify(retrievedDatapoint.output_schema)).toBe(
         JSON.stringify(jsonDatapoint.output_schema),
       );
