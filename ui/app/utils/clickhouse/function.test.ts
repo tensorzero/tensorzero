@@ -510,6 +510,11 @@ describe("getVariantCounts", () => {
     });
     expect(result).toMatchObject([
       {
+        count: 131,
+        last_used: "2025-03-18T20:58:09.000Z",
+        variant_name: "gpt4o_initial_prompt",
+      },
+      {
         count: 110,
         last_used: "2025-01-05T13:19:59.000Z",
         variant_name: "llama_8b_initial_prompt",
@@ -520,9 +525,9 @@ describe("getVariantCounts", () => {
         variant_name: "gpt4o_mini_initial_prompt",
       },
       {
-        count: 90,
-        last_used: "2024-12-19T20:06:29.000Z",
-        variant_name: "gpt4o_initial_prompt",
+        count: 66,
+        last_used: "2025-03-18T20:57:09.000Z",
+        variant_name: "baseline",
       },
       {
         count: 40,
@@ -533,11 +538,6 @@ describe("getVariantCounts", () => {
         count: 35,
         last_used: "2024-12-06T03:49:59.000Z",
         variant_name: "turbo",
-      },
-      {
-        count: 25,
-        last_used: "2024-12-04T08:03:47.000Z",
-        variant_name: "baseline",
       },
     ]);
   });
@@ -553,9 +553,14 @@ describe("getVariantCounts", () => {
     });
     expect(result).toMatchObject([
       {
-        count: 494,
-        last_used: "2025-01-20T18:46:37.000Z",
+        count: 569,
+        last_used: "2025-03-18T20:55:36.000Z",
         variant_name: "initial_prompt_gpt4o_mini",
+      },
+      {
+        count: 75,
+        last_used: "2025-03-18T20:54:57.000Z",
+        variant_name: "initial_prompt_haiku_3_5",
       },
     ]);
   });

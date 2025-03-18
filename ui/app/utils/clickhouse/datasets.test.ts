@@ -24,7 +24,7 @@ describe("countRowsForDataset", () => {
       output_source: "none",
     });
     const rows = await countRowsForDataset(dataset_params);
-    expect(rows).toBe(494);
+    expect(rows).toBe(644);
   });
 
   test("returns the correct number of rows for a specific variant", async () => {

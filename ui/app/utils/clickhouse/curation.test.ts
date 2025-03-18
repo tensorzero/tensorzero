@@ -193,7 +193,7 @@ test("getCuratedInferences retrieves correct data", async () => {
     0,
     undefined,
   );
-  expect(allResults.length).toBe(400);
+  expect(allResults.length).toBe(482);
 });
 
 // Test countFeedbacksForMetric
