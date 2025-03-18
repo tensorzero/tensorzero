@@ -677,7 +677,7 @@ fn get_possibly_default_function(
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::None,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         })))
     } else {
         config.get_function(function_name).cloned()
