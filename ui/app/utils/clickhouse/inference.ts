@@ -680,7 +680,7 @@ LEFT JOIN JsonInference j
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
-    query_params: { id: id },
+    query_params: { id },
   });
   const rows = await resultSet.json<InferenceRow>();
   const firstRow = rows[0];
