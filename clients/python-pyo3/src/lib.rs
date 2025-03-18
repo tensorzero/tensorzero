@@ -639,8 +639,8 @@ impl AsyncTensorZeroGateway {
     /// :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
     /// :param use_async: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
     /// :return: An `AsyncTensorZeroGateway` instance configured to use the HTTP gateway.
-    fn build_http<'a>(
-        cls: &Bound<'a, PyType>,
+    fn build_http(
+        cls: &Bound<'_, PyType>,
         gateway_url: &str,
         timeout: Option<f64>,
         verbose_errors: bool,
