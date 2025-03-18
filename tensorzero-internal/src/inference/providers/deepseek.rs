@@ -515,7 +515,8 @@ fn deepseek_to_tensorzero_chunk(
         }
         if let Some(reasoning) = choice.delta.reasoning_content {
             content.push(ContentBlockChunk::Thought(ThoughtChunk {
-                text: reasoning,
+                text: Some(reasoning),
+                signature: None,
                 id: "0".to_string(),
             }));
         }

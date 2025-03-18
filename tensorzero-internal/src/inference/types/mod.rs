@@ -569,7 +569,8 @@ pub struct TextChunk {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ThoughtChunk {
     pub id: String,
-    pub text: String,
+    pub text: Option<String>,
+    pub signature: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1240,7 +1241,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
                 }
                 ContentBlockChunk::Text(text_chunk) => raw = Some(text_chunk.text.to_owned()),
                 ContentBlockChunk::Thought(thought_chunk) => {
-                    thought = Some(thought_chunk.text.to_owned())
+                    thought = thought_chunk.text;
                 }
             }
         }
@@ -1354,25 +1355,53 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                             );
                         }
                         ContentBlockChunk::Thought(thought) => {
-                            handle_textual_content_block(
-                                &mut thought_blocks,
-                                thought.id,
-                                thought.text,
-                                &mut ttft,
-                                chunk.latency,
-                                // TODO - handle streaming thinking signatures (https://github.com/tensorzero/tensorzero/issues/1370)
-                                |text| {
-                                    ContentBlockOutput::Thought(Thought {
-                                        text,
-                                        signature: None,
-                                    })
-                                },
-                                |block, text| {
-                                    if let ContentBlockOutput::Thought(thought) = block {
-                                        thought.text.push_str(text);
-                                    }
-                                },
-                            );
+                            if let Some(text) = thought.text {
+                                handle_textual_content_block(
+                                    &mut thought_blocks,
+                                    thought.id.clone(),
+                                    text,
+                                    &mut ttft,
+                                    chunk.latency,
+                                    // TODO - handle streaming thinking signatures (https://github.com/tensorzero/tensorzero/issues/1370)
+                                    |text| {
+                                        ContentBlockOutput::Thought(Thought {
+                                            text,
+                                            signature: None,
+                                        })
+                                    },
+                                    |block, text| {
+                                        if let ContentBlockOutput::Thought(thought) = block {
+                                            thought.text.push_str(text);
+                                        }
+                                    },
+                                );
+                            }
+                            if let Some(signature) = thought.signature {
+                                handle_textual_content_block(
+                                    &mut thought_blocks,
+                                    thought.id,
+                                    signature,
+                                    &mut ttft,
+                                    chunk.latency,
+                                    // TODO - handle streaming thinking signatures (https://github.com/tensorzero/tensorzero/issues/1370)
+                                    |signature| {
+                                        ContentBlockOutput::Thought(Thought {
+                                            text: String::new(),
+                                            signature: Some(signature),
+                                        })
+                                    },
+                                    |block, signature| {
+                                        if let ContentBlockOutput::Thought(thought) = block {
+                                            match &mut thought.signature {
+                                                Some(existing) => existing.push_str(signature),
+                                                None => {
+                                                    thought.signature = Some(signature.to_string());
+                                                }
+                                            }
+                                        }
+                                    },
+                                );
+                            }
                         }
                         ContentBlockChunk::ToolCall(tool_call) => {
                             match tool_call_blocks.get_mut(&tool_call.id) {
@@ -3016,7 +3045,8 @@ mod tests {
         let thought_chunk = ProviderInferenceResponseChunk {
             content: vec![ContentBlockChunk::Thought(ThoughtChunk {
                 id: "123".to_string(),
-                text: "thinking...".to_string(),
+                text: Some("thinking...".to_string()),
+                signature: None,
             })],
             created: 1234567890,
             usage: None,
@@ -3043,7 +3073,8 @@ mod tests {
                 }),
                 ContentBlockChunk::Thought(ThoughtChunk {
                     id: "789".to_string(),
-                    text: "final thought".to_string(),
+                    text: Some("final thought".to_string()),
+                    signature: None,
                 }),
             ],
             created: 1234567890,

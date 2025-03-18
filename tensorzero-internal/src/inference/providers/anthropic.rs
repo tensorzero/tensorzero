@@ -26,7 +26,7 @@ use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ImageKind, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, Usage,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk, Usage,
 };
 use crate::model::{
     build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
@@ -989,6 +989,10 @@ enum AnthropicMessageBlock {
     Text {
         text: String,
     },
+    Thinking {
+        thinking: String,
+        signature: String,
+    },
     TextDelta {
         text: String,
     },
@@ -999,6 +1003,12 @@ enum AnthropicMessageBlock {
     },
     InputJsonDelta {
         partial_json: String,
+    },
+    SignatureDelta {
+        signature: String,
+    },
+    ThinkingDelta {
+        thinking: String,
     },
 }
 
@@ -1096,6 +1106,32 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
+            AnthropicMessageBlock::ThinkingDelta { thinking } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: Some(thinking),
+                        signature: None,
+                        id: index.to_string(),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            AnthropicMessageBlock::SignatureDelta { signature } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        signature: Some(signature),
+                        id: index.to_string(),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
             _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockDelta".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
@@ -1138,6 +1174,20 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
+            AnthropicMessageBlock::Thinking {
+                thinking,
+                signature,
+            } => Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Thought(ThoughtChunk {
+                    text: Some(thinking),
+                    signature: Some(signature),
+                    id: index.to_string(),
+                })],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            ))),
             _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),

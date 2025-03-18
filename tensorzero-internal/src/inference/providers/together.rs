@@ -758,7 +758,8 @@ fn together_to_tensorzero_chunk(
                         }
                         ThinkingState::Thinking => {
                             content.push(ContentBlockChunk::Thought(ThoughtChunk {
-                                text,
+                                text: Some(text),
+                                signature: None,
                                 id: thinking_state.get_id(),
                             }));
                         }
@@ -1477,7 +1478,8 @@ mod tests {
         assert_eq!(
             message.content,
             vec![ContentBlockChunk::Thought(ThoughtChunk {
-                text: "some thinking content".to_string(),
+                text: Some("some thinking content".to_string()),
+                signature: None,
                 id: "1".to_string(),
             })]
         );
