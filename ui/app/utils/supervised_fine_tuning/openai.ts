@@ -93,13 +93,22 @@ export class OpenAISFTJob extends SFTJob {
     }
     const templateEnv = await get_template_env(currentVariant);
 
-    const job = await start_sft_openai(
-      data.model.name,
-      curatedInferences,
-      data.validationSplitPercent,
-      templateEnv,
-      data,
-    );
+    let job;
+    try {
+      job = await start_sft_openai(
+        data.model.name,
+        curatedInferences,
+        data.validationSplitPercent,
+        templateEnv,
+        data,
+      );
+    } catch (error) {
+      throw new Error(
+        `Failed to start OpenAI SFT job: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
 
     return job;
   }
