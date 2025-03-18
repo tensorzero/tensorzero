@@ -220,19 +220,16 @@ function JsonOutput({ output, isEditing, onOutputChange }: JsonOutputProps) {
 
       try {
         // Attempt to parse the JSON to validate it
-        JSON.parse(newValue);
+        const parsedValue = JSON.parse(newValue);
         setJsonError(null);
         onOutputChange({
           ...output,
           raw: newValue,
+          parsed: parsedValue,
         });
       } catch {
         setJsonError("Invalid JSON format");
-        // Still update the raw value even if JSON is invalid
-        onOutputChange({
-          ...output,
-          raw: newValue,
-        });
+        // We won't even attempt to update the raw value if it's invalid
       }
     }
   };
