@@ -210,12 +210,51 @@ pub struct BatchDynamicToolParams {
 pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize);
 
 /// A ToolCall is a request by a model to call a Tool
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ToolCall {
     pub name: String,
     pub arguments: String,
     pub id: String,
+}
+
+impl<'de> Deserialize<'de> for ToolCall {
+    fn deserialize<D>(deserializer: D) -> Result<ToolCall, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Debug, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct ToolCallHelper {
+            name: Option<String>,
+            arguments: Option<Value>,
+            id: String,
+            raw_arguments: Option<String>,
+            raw_name: Option<String>,
+        }
+
+        let helper = ToolCallHelper::deserialize(deserializer)?;
+
+        let name = helper.name.or(helper.raw_name).ok_or_else(|| {
+            serde::de::Error::custom("ToolCall must have `name` or `raw_name` set")
+        })?;
+
+        let arguments = if let Some(args) = helper.arguments {
+            serde_json::to_string(&args).map_err(|e| {
+                serde::de::Error::custom(format!("Failed to serialize arguments: {}", e))
+            })?
+        } else if let Some(args) = helper.raw_arguments {
+            args
+        } else {
+            return Err(serde::de::Error::custom(
+                "ToolCall must have `arguments` or `raw_arguments` set",
+            ));
+        };
+        Ok(ToolCall {
+            name,
+            arguments,
+            id: helper.id,
+        })
+    }
 }
 
 /// A ToolCallOutput is a request by a model to call a Tool
