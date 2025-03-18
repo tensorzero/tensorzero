@@ -65,7 +65,9 @@ export function getModelTokenLimit(model: string): number {
 }
 
 /**
- * Gets encoding for a given model, falling back to o200k_base for unknown models
+ * Gets encoding for a given model.
+ * Following OpenAI's implementation, we use o200k_base encoding as a fallback for unknown models.
+ * https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#6-counting-tokens-for-chat-completions-api-calls
  * @param model Model name
  * @returns Tiktoken encoding
  */

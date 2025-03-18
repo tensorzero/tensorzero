@@ -1,3 +1,15 @@
+/**
+ * OpenAI Supervised Fine-Tuning Validation Module
+ *
+ * This module provides validation utilities for OpenAI's supervised fine-tuning datasets.
+ * It includes functions to validate message formats, token lengths, and role requirements
+ * according to OpenAI's specifications.
+ *
+ * Public interface:
+ * - validateMessage: Comprehensive validation of messages against all rules
+ * - analyzeDataset: Provides statistical analysis of a dataset
+ * - validateDataset: Validates an entire dataset against all rules
+ */
 import type { OpenAIMessage, Distribution } from "./types";
 import {
   getModelTokenLimit,
@@ -26,11 +38,14 @@ export type FormatErrorType =
   | "insufficient_examples";
 
 /**
- * Validates the total length of messages using tiktoken
+ * Validates the total length of messages using tiktoken for OpenAI models
  * @param messages Array of messages to validate
- * @param model Model name to use for token counting
+ * @param model OpenAI model name to use for token counting
  * @param maxTokens Maximum allowed tokens for all messages (default: uses model-specific limit)
  * @returns Object containing validation result and token count
+ *
+ * Note: This validation is specific to OpenAI models and uses OpenAI's token counting logic.
+ * It relies on the model-specific token limits defined in constants.ts.
  */
 export function validateMessageLength(
   messages: OpenAIMessage[],

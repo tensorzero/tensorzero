@@ -283,6 +283,12 @@ export function content_block_to_openai_message(
  * @param templateEnv Template environment
  * @param type Type of examples (training or validation)
  * @returns Array of validated messages
+ * @throws Error when validation fails with detailed error message including:
+ *   - Token count exceeding maximum allowed limit
+ *   - Missing required roles (e.g., assistant)
+ *   - Format errors such as missing assistant message, insufficient examples,
+ *     missing messages list, message missing required key,
+ *     message with unrecognized key/role, missing content, invalid data type
  */
 function validateAndConvertMessages(
   inferences: ParsedInferenceExample[],
@@ -290,8 +296,6 @@ function validateAndConvertMessages(
   templateEnv: JsExposedEnv,
   type: "training" | "validation",
 ): OpenAIMessage[][] {
-  console.log(`Validating ${inferences.length} ${type} examples...`);
-
   const messages = inferences.map((inference) => {
     const messages = tensorzero_inference_to_openai_messages(
       inference,
@@ -349,7 +353,6 @@ function validateAndConvertMessages(
     return messages;
   });
 
-  console.log(`Validated ${inferences.length} ${type} examples`);
   return messages;
 }
 
