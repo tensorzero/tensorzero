@@ -617,57 +617,6 @@ function parseInferenceRow(row: InferenceRow): ParsedInferenceRow {
   }
 }
 
-/**
- * Converts an unsigned integer to a UUID by swapping byte order
- * to match the behavior of ClickHouse's uint_to_uuid function
- *
- * @param x - The unsigned integer to convert to UUID
- * @returns A UUID string in the format xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
- */
-export function uint_to_uuid(x: bigint | number): string {
-  // Convert to BigInt if not already
-  const bigIntValue = BigInt(x);
-
-  // Convert to a Buffer with 16 bytes (size of UUID)
-  const buffer = Buffer.alloc(16);
-
-  // Write the bigint to the buffer (in big-endian format)
-  for (let i = 0; i < 16; i++) {
-    buffer[15 - i] = Number((bigIntValue >> BigInt(i * 8)) & BigInt(0xff));
-  }
-
-  // Format as UUID string (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-  const hex = buffer.toString("hex");
-  return [
-    hex.substring(0, 8),
-    hex.substring(8, 12),
-    hex.substring(12, 16),
-    hex.substring(16, 20),
-    hex.substring(20, 32),
-  ].join("-");
-}
-
-/**
- * Converts a UUID string to an unsigned integer by reading the hex bytes
- * in big-endian order, the inverse of uint_to_uuid.
- *
- * @param uuid - A UUID string in the format xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
- * @returns The corresponding unsigned integer as a bigint
- */
-export function uuid_to_uint(uuid: string): bigint {
-  // Remove dashes from the UUID string
-  const hex = uuid.replace(/-/g, "");
-  // Convert the hex string into a 16-byte buffer
-  const buffer = Buffer.from(hex, "hex");
-
-  // Convert the buffer to a bigint (interpreting as big-endian)
-  let bigIntValue = BigInt(0);
-  for (let i = 0; i < buffer.length; i++) {
-    bigIntValue = (bigIntValue << BigInt(8)) | BigInt(buffer[i]);
-  }
-  return bigIntValue;
-}
-
 export async function queryInferenceById(
   id: string,
 ): Promise<ParsedInferenceRow | null> {
@@ -680,7 +629,7 @@ export async function queryInferenceById(
         episode_id,
         function_type
     FROM InferenceById
-    WHERE id_uint = toUInt128({id_uint:String})
+    WHERE id_uint = toUInt128({id:UUID})
 )
 SELECT
     uint_to_uuid(i.id_uint) AS id,
@@ -728,13 +677,10 @@ LEFT JOIN JsonInference j
     AND uint_to_uuid(i.id_uint) = j.id;
   `;
 
-  const uint_id = uuid_to_uint(id);
-  const string_id = uint_id.toString();
-
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
-    query_params: { id_uint: string_id },
+    query_params: { id: id },
   });
   const rows = await resultSet.json<InferenceRow>();
   const firstRow = rows[0];

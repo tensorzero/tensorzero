@@ -14,8 +14,6 @@ import {
   queryInferenceTableByFunctionName,
   queryInferenceTableBoundsByFunctionName,
   queryInferenceTableBoundsByVariantName,
-  uint_to_uuid,
-  uuid_to_uint,
 } from "./inference";
 import { countInferencesForFunction } from "./inference";
 import type {
@@ -23,8 +21,6 @@ import type {
   JsonInferenceOutput,
   TextContent,
 } from "./common";
-import { clickhouseClient } from "./client.server";
-import { v7 as uuid } from "uuid";
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {
@@ -663,32 +659,4 @@ test("countInferencesByFunction", async () => {
       count: 50,
     },
   ]);
-});
-
-async function getClickHouseUInt128(id: string): Promise<bigint> {
-  const resultSet = await clickhouseClient.query({
-    query: "SELECT toUInt128({id:UUID}) as bigint",
-    format: "JSONEachRow",
-    query_params: {
-      id: id,
-    },
-  });
-  const rows = await resultSet.json<{ bigint: bigint }>();
-  return rows[0].bigint;
-}
-
-// Test uintToUuid TypeScript implementation against ClickHouse
-test("uintToUuid", async () => {
-  // generate a UUIDv7
-  const id = uuid();
-  const uint128 = await getClickHouseUInt128(id);
-  const new_id = uint_to_uuid(uint128);
-  expect(new_id).toBe(id);
-});
-
-test("uuidToUint", async () => {
-  const id = uuid();
-  const uint128 = uuid_to_uint(id);
-  const new_id = uint_to_uuid(uint128);
-  expect(new_id).toBe(id);
 });
