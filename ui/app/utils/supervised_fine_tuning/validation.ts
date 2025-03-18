@@ -27,7 +27,7 @@ import {
 /**
  * Format error types based on Python implementation
  */
-export type FormatErrorType =
+type FormatErrorType =
   | "data_type"
   | "missing_messages_list"
   | "message_missing_key"
