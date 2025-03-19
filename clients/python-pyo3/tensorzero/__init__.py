@@ -1,6 +1,7 @@
 import typing as t
 
 import httpx
+from importlib.metadata import version
 
 from .client import AsyncTensorZeroGateway, BaseTensorZeroGateway, TensorZeroGateway
 from .tensorzero import _start_http_gateway as _start_http_gateway
@@ -60,6 +61,7 @@ __all__ = [
 
 T = t.TypeVar("T", bound=t.Any)
 
+__version__ = version("tensorzero")
 
 def _attach_fields(client: T, gateway: t.Any) -> T:
     if hasattr(client, "__tensorzero_gateway"):
