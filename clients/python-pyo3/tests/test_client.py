@@ -221,6 +221,77 @@ async def test_async_basic_inference(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_client_build_http_sync():
+    async with AsyncTensorZeroGateway.build_http(
+        gateway_url="http://localhost:3000",
+        use_async=False,
+    ) as client:
+        input = {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [
+                {"role": "user", "content": [Text(type="text", text="Hello")]}
+            ],
+        }
+        input_copy = deepcopy(input)
+        result = await client.inference(
+            function_name="basic_test",
+            input=input,
+            episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+            # because the gateway validates some of the properties needed
+        )
+        assert input == input_copy, "Input should not be modified by the client"
+        assert result.variant_name == "test"
+        assert isinstance(result, ChatInferenceResponse)
+        content = result.content
+        assert len(content) == 1
+        assert content[0].type == "text"
+        assert (
+            content[0].text
+            == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+        )
+        usage = result.usage
+        assert usage.input_tokens == 10
+        assert usage.output_tokens == 10
+        assert result.finish_reason == FinishReason.STOP
+
+
+@pytest.mark.asyncio
+async def test_async_client_build_embedded_sync():
+    async with AsyncTensorZeroGateway.build_embedded(
+        config_file=TEST_CONFIG_FILE,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
+        use_async=False,
+    ) as client:
+        input = {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [
+                {"role": "user", "content": [Text(type="text", text="Hello")]}
+            ],
+        }
+        input_copy = deepcopy(input)
+        result = await client.inference(
+            function_name="basic_test",
+            input=input,
+            episode_id=uuid7(),  # This would not typically be done but this partially verifies that uuid7 is using a correct implementation
+            # because the gateway validates some of the properties needed
+        )
+        assert input == input_copy, "Input should not be modified by the client"
+        assert result.variant_name == "test"
+        assert isinstance(result, ChatInferenceResponse)
+        content = result.content
+        assert len(content) == 1
+        assert content[0].type == "text"
+        assert (
+            content[0].text
+            == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+        )
+        usage = result.usage
+        assert usage.input_tokens == 10
+        assert usage.output_tokens == 10
+        assert result.finish_reason == FinishReason.STOP
+
+
+@pytest.mark.asyncio
 async def test_async_reasoning_inference(async_client):
     result = await async_client.inference(
         function_name="basic_test",

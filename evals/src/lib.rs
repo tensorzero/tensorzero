@@ -293,10 +293,16 @@ async fn infer_datapoint(
         function_name: Some(function_name.to_string()),
         variant_name: Some(variant_name.to_string()),
         input,
-        tags: HashMap::from([(
-            "tensorzero::eval_run_id".to_string(),
-            eval_run_id.to_string(),
-        )]),
+        tags: HashMap::from([
+            (
+                "tensorzero::eval_run_id".to_string(),
+                eval_run_id.to_string(),
+            ),
+            (
+                "tensorzero::datapoint_id".to_string(),
+                datapoint.id().to_string(),
+            ),
+        ]),
         dynamic_tool_params,
         output_schema: output_schema.cloned(),
         credentials: HashMap::new(),
