@@ -1,13 +1,13 @@
 import { clickhouseClient } from "./client.server";
 import type { EvaluationRunInfo } from "./evaluations";
 
-export async function getRunIds(
+export async function getEvalRunIds(
   eval_name: string,
   limit: number = 100,
   offset: number = 0,
 ): Promise<EvaluationRunInfo[]> {
   const query = `
-    SELECT DISTINCT run_tag.value as eval_run_id, run_tag.variant_name
+    SELECT DISTINCT run_tag.value as eval_run_id, run_tag.variant_name as variant_name
     FROM TagInference AS name_tag
     INNER JOIN TagInference AS run_tag
       ON name_tag.inference_id = run_tag.inference_id

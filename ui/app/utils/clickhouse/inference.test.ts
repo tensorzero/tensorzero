@@ -317,13 +317,13 @@ test("queryInferenceTableByEpisodeId pages through all results correctly using a
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0195ab0d-9978-7f41-9526-1ef0209ed390");
+  expect(bounds.last_id).toBe("0195aef8-3fe8-7002-aa0b-c54d1d40665a");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0195ab0d-9978-7f41-9526-1ef0209ed390");
+  expect(bounds.last_id).toBe("0195aef8-3fe8-7002-aa0b-c54d1d40665a");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -376,7 +376,7 @@ test("queryInferenceTableBoundsByFunctionName", async () => {
     function_name: "extract_entities",
   });
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0195ab0c-ae9f-70a0-bd6a-c5e7aa975b12");
+  expect(bounds.last_id).toBe("0195aef8-37ca-7092-94ee-e09c82115d26");
 });
 
 test("queryInferenceTableByVariantName", async () => {
@@ -417,7 +417,7 @@ test("queryInferenceTableBoundsByVariantName", async () => {
     variant_name: "gpt4o_initial_prompt",
   });
   expect(bounds.first_id).toBe("01939adf-0f50-79d0-8d55-7a009fcc5e32");
-  expect(bounds.last_id).toBe("0195ab0c-ae9f-70a0-bd6a-c5e7aa975b12");
+  expect(bounds.last_id).toBe("0195aef7-edb9-7e13-897e-1d08865e8b8c");
 });
 
 test("queryEpisodeTable", async () => {
@@ -626,22 +626,22 @@ test("countInferencesByFunction", async () => {
     {
       count: 82,
       function_name: "tensorzero::llm_judge::entity_extraction::count_sports",
-      max_timestamp: "2025-03-18T20:59:10Z",
+      max_timestamp: "2025-03-19T15:14:19Z",
     },
     {
       count: 482,
       function_name: "extract_entities",
-      max_timestamp: "2025-03-18T20:58:09Z",
+      max_timestamp: "2025-03-19T15:14:17Z",
     },
     {
       count: 150,
       function_name: "tensorzero::llm_judge::haiku::topic_starts_with_f",
-      max_timestamp: "2025-03-18T20:56:38Z",
+      max_timestamp: "2025-03-19T15:13:41Z",
     },
     {
       count: 644,
       function_name: "write_haiku",
-      max_timestamp: "2025-03-18T20:55:36Z",
+      max_timestamp: "2025-03-19T15:13:38Z",
     },
     {
       count: 1,
