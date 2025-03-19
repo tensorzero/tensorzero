@@ -98,6 +98,10 @@ async fn run_evals_json() {
             clickhouse_inference["tags"]["tensorzero::eval_run_id"],
             eval_run_id.to_string()
         );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
 
         // Check boolean feedback was recorded
         let feedback = select_feedback_by_target_id_clickhouse(
@@ -207,7 +211,10 @@ async fn run_exact_match_eval_chat() {
             clickhouse_inference["tags"]["tensorzero::eval_run_id"],
             eval_run_id.to_string()
         );
-
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
         let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
             &clickhouse,
             "BooleanMetricFeedback",
@@ -230,6 +237,10 @@ async fn run_exact_match_eval_chat() {
         assert_eq!(
             clickhouse_feedback["tags"]["tensorzero::eval_run_id"],
             eval_run_id.to_string()
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
         );
         parsed_output.push(parsed);
     }
@@ -295,6 +306,10 @@ async fn run_llm_judge_eval_chat() {
             clickhouse_inference["tags"]["tensorzero::eval_run_id"],
             eval_run_id.to_string()
         );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
 
         // There should be no Float feedback for this eval
         assert!(select_feedback_by_target_id_clickhouse(
@@ -331,6 +346,10 @@ async fn run_llm_judge_eval_chat() {
         assert_eq!(
             clickhouse_feedback["tags"]["tensorzero::eval_run_id"],
             eval_run_id.to_string()
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
         );
         parsed_output.push(parsed);
     }
