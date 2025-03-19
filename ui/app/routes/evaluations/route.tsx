@@ -1,4 +1,4 @@
-import { getEvalRunIds } from "~/utils/clickhouse/evaluation.server";
+import { getEvalRunIds } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/route";
 import { getConfig } from "~/utils/config/index.server";
 

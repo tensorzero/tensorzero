@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { getEvalRunIds } from "./evaluation.server";
+import { getEvalRunIds } from "./evaluations.server";
 
 describe("getEvalRunIds", () => {
   test("should return correct run ids for entity_extraction eval", async () => {
