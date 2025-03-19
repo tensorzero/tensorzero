@@ -689,10 +689,10 @@ pub async fn test_image_inference_with_provider_amazon_s3(provider: E2ETestProvi
 
     let client = aws_sdk_s3::Client::new(&config);
 
-    use rand::distributions::Alphanumeric;
-    use rand::distributions::DistString;
+    use rand::distr::Alphanumeric;
+    use rand::distr::SampleString;
 
-    let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
+    let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
 
     let (tensorzero_client, expected_key, storage_path) =
@@ -1862,7 +1862,7 @@ pub async fn test_simple_streaming_inference_request_with_provider(provider: E2E
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
     // Generate random u32
-    let seed = rand::thread_rng().gen_range(0..u32::MAX);
+    let seed = rand::rng().random_range(0..u32::MAX);
 
     let original_content = test_simple_streaming_inference_request_with_provider_cache(
         &provider, episode_id, seed, &tag_value, false,

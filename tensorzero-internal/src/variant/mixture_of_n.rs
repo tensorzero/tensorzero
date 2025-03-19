@@ -310,7 +310,7 @@ impl MixtureOfNConfig {
         {
             Ok(inf_result) => inf_result,
             Err(_) => {
-                let random_index = rand::thread_rng().gen_range(0..candidates.len());
+                let random_index = rand::rng().random_range(0..candidates.len());
                 if random_index >= candidates.len() {
                     return Err(Error::new(ErrorDetails::Inference {
                         message: "Failed to get random candidate (should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
