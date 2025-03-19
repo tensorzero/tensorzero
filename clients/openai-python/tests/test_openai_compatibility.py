@@ -459,44 +459,38 @@ async def test_async_json_streaming(async_client):
 
 
 @pytest.mark.asyncio
-async def test_reject_developer_and_system(async_client):
+async def test_allow_developer_and_system(async_client):
     messages = [
         {
             "role": "developer",
-            "content": [
-                {
-                    "type": "text",
-                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
-                }
-            ],
+            "content": [{"type": "text", "text": "Developer message."}],
         },
         {
             "role": "system",
             "content": [
                 {
                     "type": "text",
-                    "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
+                    "text": "System message.",
                 }
             ],
         },
         {
             "role": "user",
-            "content": [
-                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
-            ],
+            "content": [{"type": "text", "text": "User message."}],
         },
     ]
     episode_id = str(uuid7())
 
-    with pytest.raises(BadRequestError) as exc_info:
-        await async_client.chat.completions.create(
-            extra_headers={"episode_id": episode_id},
-            messages=messages,
-            model="tensorzero::function_name::json_success",
-        )
+    result = await async_client.chat.completions.create(
+        extra_headers={"episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::model_name::dummy::echo_request_messages",
+    )
+    assert result.model == "tensorzero::model_name::dummy::echo_request_messages"
+    assert result.episode_id == episode_id
     assert (
-        "Invalid request to OpenAI-compatible endpoint: At most one system message is allowed"
-        in str(exc_info.value)
+        result.choices[0].message.content
+        == '{"system":"Developer message.\\nSystem message.","messages":[{"role":"user","content":[{"type":"text","text":"User message."}]}]}'
     )
 
 
@@ -711,6 +705,49 @@ async def test_dynamic_tool_use_inference_openai(async_client):
 
 
 @pytest.mark.asyncio
+async def test_dynamic_json_mode_inference_body_param_openai(async_client):
+    header_episode_id = str(uuid7())
+    body_episode_id = str(uuid7())
+    output_schema = {
+        "type": "object",
+        "properties": {"response": {"type": "string"}},
+        "required": ["response"],
+        "additionalProperties": False,
+    }
+    serialized_output_schema = json.dumps(output_schema)
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema}
+            ],
+        },
+        {"role": "user", "content": [{"country": "Japan"}]},
+    ]
+    result = await async_client.chat.completions.create(
+        extra_headers={
+            "episode_id": header_episode_id,
+            "variant_name": "openai",
+        },
+        messages=messages,
+        model="tensorzero::function_name::dynamic_json",
+        response_format={"type": "json_schema", "json_schema": output_schema},
+        extra_body={
+            "tensorzero::episode_id": body_episode_id,
+        },
+    )
+    assert (
+        result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
+    )
+    assert result.episode_id == body_episode_id
+    json_content = json.loads(result.choices[0].message.content)
+    assert "tokyo" in json_content["response"].lower()
+    assert result.choices[0].message.tool_calls is None
+    assert result.usage.prompt_tokens > 50
+    assert result.usage.completion_tokens > 0
+
+
+@pytest.mark.asyncio
 async def test_dynamic_json_mode_inference_openai(async_client):
     episode_id = str(uuid7())
     output_schema = {
@@ -747,6 +784,53 @@ async def test_dynamic_json_mode_inference_openai(async_client):
     assert result.choices[0].message.tool_calls is None
     assert result.usage.prompt_tokens > 50
     assert result.usage.completion_tokens > 0
+
+
+@pytest.mark.asyncio
+async def test_async_multi_system_prompt(async_client):
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "My first system input.",
+                },
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "My text input",
+                },
+            ],
+        },
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "My second system input.",
+                },
+                {
+                    "type": "text",
+                    "text": "My third system input.",
+                },
+            ],
+        },
+    ]
+    episode_id = str(uuid7())
+    result = await async_client.chat.completions.create(
+        extra_headers={"episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::model_name::dummy::echo_request_messages",
+    )
+    assert (
+        result.choices[0].message.content
+        == '{"system":"My first system input.\\nMy second system input.\\nMy third system input.","messages":[{"role":"user","content":[{"type":"text","text":"My text input"}]}]}'
+    )
 
 
 @pytest.mark.asyncio
@@ -807,3 +891,78 @@ async def test_async_multi_block_image_base64(async_client):
         model="tensorzero::model_name::openai::gpt-4o-mini",
     )
     assert "crab" in result.choices[0].message.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_async_multi_turn_parallel_tool_use(async_client):
+    episode_id = str(uuid7())
+
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "tensorzero::arguments": {"assistant_name": "Dr. Mehta"},
+                }
+            ],
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions.",
+                }
+            ],
+        },
+    ]
+
+    response = await async_client.chat.completions.create(
+        messages=messages,
+        model="tensorzero::function_name::weather_helper_parallel",
+        parallel_tool_calls=True,
+        extra_body={
+            "tensorzero::episode_id": episode_id,
+            "tensorzero::variant_name": "openai",
+        },
+    )
+
+    assistant_message = response.choices[0].message
+    messages.append(assistant_message)
+
+    assert len(assistant_message.tool_calls) == 2
+
+    for tool_call in assistant_message.tool_calls:
+        if tool_call.function.name == "get_temperature":
+            messages.append(
+                {
+                    "role": "tool",
+                    "content": "70",
+                    "tool_call_id": tool_call.id,
+                }
+            )
+        elif tool_call.function.name == "get_humidity":
+            messages.append(
+                {
+                    "role": "tool",
+                    "content": "30",
+                    "tool_call_id": tool_call.id,
+                }
+            )
+        else:
+            raise Exception(f"Unknown tool call: {tool_call.function.name}")
+
+    response = await async_client.chat.completions.create(
+        extra_headers={
+            "episode_id": episode_id,
+            "variant_name": "openai",
+        },
+        model="tensorzero::function_name::weather_helper_parallel",
+        messages=messages,
+    )
+
+    assistant_message = response.choices[0].message
+
+    assert "70" in assistant_message.content
+    assert "30" in assistant_message.content

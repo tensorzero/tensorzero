@@ -1192,7 +1192,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::None,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
 
         let result = mixture_of_n_variant

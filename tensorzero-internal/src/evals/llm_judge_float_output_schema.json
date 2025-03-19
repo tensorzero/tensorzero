@@ -10,7 +10,7 @@
     },
     "score": {
       "type": "number",
-      "description": "The score assigned as a float between 0 and 1"
+      "description": "The score assigned as a number"
     }
   }
 }

@@ -25,7 +25,7 @@ lazy_static! {
     pub static ref WEATHER_TOOL_CONFIG: ToolCallConfig = ToolCallConfig {
         tools_available: vec![ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone())],
         tool_choice: ToolChoice::Specific("get_temperature".to_string()),
-        parallel_tool_calls: false,
+        parallel_tool_calls: None,
     };
     pub static ref QUERY_TOOL_CONFIG_STATIC: Arc<StaticToolConfig> = Arc::new(StaticToolConfig {
         name: "query_articles".to_string(),
@@ -48,7 +48,7 @@ lazy_static! {
             ToolConfig::Static(QUERY_TOOL_CONFIG_STATIC.clone())
         ],
         tool_choice: ToolChoice::Required,
-        parallel_tool_calls: true,
+        parallel_tool_calls: Some(true),
     };
 }
 
@@ -58,6 +58,6 @@ pub fn get_temperature_tool_config() -> ToolCallConfig {
     ToolCallConfig {
         tools_available: vec![weather_tool],
         tool_choice: ToolChoice::Specific("get_temperature".to_string()),
-        parallel_tool_calls: false,
+        parallel_tool_calls: Some(false),
     }
 }

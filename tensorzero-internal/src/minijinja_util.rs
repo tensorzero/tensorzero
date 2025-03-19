@@ -1,6 +1,6 @@
 use minijinja::{Environment, UndefinedBehavior};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use crate::error::{Error, ErrorDetails};
 
@@ -18,7 +18,12 @@ impl TemplateConfig<'_> {
 
     /// Initializes the TemplateConfig with the given templates, given as a map from template names
     /// to template paths.
-    pub fn initialize(&mut self, template_paths: HashMap<String, String>) -> Result<(), Error> {
+    /// If `filesystem_path` is provided, we'll register a minijinja filesystem loader with the specified path
+    pub fn initialize(
+        &mut self,
+        template_paths: HashMap<String, String>,
+        filesystem_path: Option<PathBuf>,
+    ) -> Result<(), Error> {
         self.env.set_undefined_behavior(UndefinedBehavior::Strict);
 
         for (template_name, template_content) in template_paths {
@@ -32,7 +37,32 @@ impl TemplateConfig<'_> {
                 })?;
         }
         self.add_hardcoded_templates()?;
+        if let Some(path) = filesystem_path {
+            self.env.set_loader(minijinja::path_loader(path));
+        } else {
+            self.env.set_loader(|name| {
+                Err(minijinja::Error::new(
+                    minijinja::ErrorKind::InvalidOperation,
+                    format!("Could not load template '{name}' - if this a dynamic template included from the filesystem, please set [gateway.enable_template_filesystem_access] to `true`")
+                ))
+            });
+        }
         Ok(())
+    }
+
+    pub fn add_template(
+        &mut self,
+        template_name: &str,
+        template_content: &str,
+    ) -> Result<(), Error> {
+        self.env
+            .add_template_owned(template_name.to_string(), template_content.to_string())
+            .map_err(|e| {
+                Error::new(ErrorDetails::MiniJinjaTemplate {
+                    template_name: template_name.to_string(),
+                    message: format!("Failed to add template: {}", e),
+                })
+            })
     }
 
     // Templates a message with a MiniJinja template.
@@ -226,7 +256,7 @@ pub(crate) mod tests {
             "malformed_template".to_string(),
             malformed_template.to_string(),
         )]);
-        let result = template_config.initialize(template_paths);
+        let result = template_config.initialize(template_paths, None);
         assert!(result
             .unwrap_err()
             .to_string()
@@ -307,14 +337,14 @@ pub(crate) mod tests {
 
         // Initialize templates
         let mut template_config = TemplateConfig::new();
-        let _ = template_config.initialize(templates);
+        let _ = template_config.initialize(templates, None);
         template_config
     }
 
     #[test]
     fn test_hardcoded_best_of_n_evaluator_system() {
         let mut config = TemplateConfig::new();
-        config.initialize(HashMap::new()).unwrap();
+        config.initialize(HashMap::new(), None).unwrap();
 
         // 1. Test with inner_system_message and max_index = 3
         let context_with_message = json!({
@@ -378,7 +408,7 @@ In the "answer_choice" block: you should output the index of the best response."
     #[test]
     fn test_hardcoded_best_of_n_evaluator_candidates() {
         let mut config = TemplateConfig::new();
-        config.initialize(HashMap::new()).unwrap();
+        config.initialize(HashMap::new(), None).unwrap();
 
         // Provide a list of candidates.
         let context = json!({
@@ -417,7 +447,7 @@ Please evaluate these candidates and provide the index of the best one."#;
     #[test]
     fn test_hardcoded_mixture_of_n_fuser_system() {
         let mut config = TemplateConfig::new();
-        config.initialize(HashMap::new()).unwrap();
+        config.initialize(HashMap::new(), None).unwrap();
 
         // 1. With inner_system_message
         let context_with_message = json!({ "inner_system_message": "some system message" });
@@ -455,7 +485,7 @@ Your task is to synthesize these responses into a single, high-quality response.
     #[test]
     fn test_hardcoded_mixture_of_n_fuser_candidates() {
         let mut config = TemplateConfig::new();
-        config.initialize(HashMap::new()).unwrap();
+        config.initialize(HashMap::new(), None).unwrap();
 
         let context = json!({
             "candidates": [

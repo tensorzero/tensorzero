@@ -1000,7 +1000,7 @@ async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
                 "tool_choice": {
                     "type": "tool",
                     "name": "respond",
-                    "disable_parallel_tool_use": true
+                    "disable_parallel_tool_use": false,
                 },
                 "tools": [
                     {
