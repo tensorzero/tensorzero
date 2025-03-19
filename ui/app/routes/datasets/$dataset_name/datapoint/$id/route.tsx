@@ -1,6 +1,6 @@
-import { useFetcher, Link } from "react-router";
+import { useFetcher } from "react-router";
 import { data, isRouteErrorResponse, redirect } from "react-router";
-import BasicInfo from "./BasicInfo";
+import DatapointBasicInfo from "./DatapointBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
 import { useState } from "react";
@@ -24,6 +24,7 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
+import { DatapointActions } from "./DatapointActions";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -126,30 +127,23 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   return (
     <div className="container mx-auto px-4 pb-8">
       <PageLayout>
-        <div className="flex flex-col gap-3">
-          <PageHeader heading="Datapoint" name={datapoint.id} />
-          <div className="text-sm text-foreground">
-            Dataset{" "}
-            <Link
-              to={`/datasets/${datapoint.dataset_name}`}
-              className="rounded bg-bg-tertiary px-1.5 py-1 font-mono font-semibold"
-            >
-              {datapoint.dataset_name}
-            </Link>
-          </div>
-        </div>
+        <PageHeader heading="Datapoint" name={datapoint.id} />
 
         <SectionsGroup>
           <SectionLayout>
-            <BasicInfo
-              datapoint={datapoint}
-              tryWithVariantProps={{
-                variants,
-                onVariantSelect,
-                isLoading: variantInferenceIsLoading,
-              }}
+            <DatapointBasicInfo datapoint={datapoint} />
+          </SectionLayout>
+
+          <SectionLayout>
+            <DatapointActions
+              variants={variants}
+              onVariantSelect={onVariantSelect}
+              variantInferenceIsLoading={variantInferenceIsLoading}
               onDelete={handleDelete}
               isDeleting={deleteFetcher.state === "submitting"}
+              showTryWithVariant={
+                datapoint.function_name !== "tensorzero::default"
+              }
             />
           </SectionLayout>
 

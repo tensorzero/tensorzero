@@ -68,7 +68,7 @@ export function AddToDatasetButton({
     <>
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="w-full justify-between">
+          <Button variant="outline" className="justify-between">
             {selectedDataset ? (
               <div className="flex items-center">
                 {sortedDatasets.find(
