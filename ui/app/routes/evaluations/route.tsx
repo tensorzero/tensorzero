@@ -1,8 +1,13 @@
+import { getEvalRunIds } from "~/utils/clickhouse/evaluation.server";
 import type { Route } from "./+types/route";
 
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ request, params }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
-  const run_ids = searchParams.get("run_ids");
-  const run_ids_array = run_ids ? run_ids.split(",") : [];
+  const selected_eval_run_ids = searchParams.get("eval_run_ids");
+  const selected_eval_run_ids_array = selected_eval_run_ids
+    ? selected_eval_run_ids.split(",")
+    : [];
+
+  const available_eval_run_ids = await getEvalRunIds(params.eval_name);
 }
