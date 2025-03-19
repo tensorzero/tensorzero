@@ -54,7 +54,7 @@ interface BasicInfoProps {
   inferenceUsage?: InferenceUsage;
 }
 
-export default function BasicInfo({
+export default function InferenceBasicInfo({
   inference,
   inferenceUsage,
 }: BasicInfoProps) {

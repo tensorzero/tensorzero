@@ -17,6 +17,7 @@ import {
 import { Badge } from "~/components/ui/badge";
 import { Plus, Check } from "lucide-react";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
+import { AddToDataset } from "~/components/icons/Icons";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -68,7 +69,7 @@ export function AddToDatasetButton({
     <>
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="justify-between">
+          <Button variant="outline" size="sm">
             {selectedDataset ? (
               <div className="flex items-center">
                 {sortedDatasets.find(
@@ -97,9 +98,12 @@ export function AddToDatasetButton({
                 )}
               </div>
             ) : (
-              "Add to dataset..."
+              <>
+                <AddToDataset className="h-4 w-4 text-fg-tertiary" />
+                Add to dataset
+              </>
             )}
-            <ChevronDown className="ml-2 h-4 w-4" />
+            <ChevronDown className="h-4 w-4 text-fg-tertiary" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-80 p-0">

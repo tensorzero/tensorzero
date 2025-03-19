@@ -31,8 +31,8 @@ export function DatapointActions({
           isLoading={variantInferenceIsLoading}
         />
       )}
-      <EditButton onClick={() => (window.location.href = "#")} />
       <DeleteButton onClick={onDelete} isLoading={isDeleting} />
+      <EditButton onClick={() => (window.location.href = "#")} />
     </ActionBar>
   );
 }
