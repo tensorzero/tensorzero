@@ -10,13 +10,15 @@ on:
 
 jobs:
   build:
-    name: Push Docker image to Docker Hub
-    runs-on: ubuntu-latest
+    name: Build and push Docker image to Docker Hub
+    runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
         platform:
-          - linux/amd64
-          - linux/arm64    
+          - runner: ubuntu-24.04
+            target: linux/amd64
+          - runner: ubuntu-24.04-arm
+            target: linux/arm64
     permissions:
       packages: write
       contents: read
@@ -28,7 +30,7 @@ jobs:
 
       - name: Prepare
         run: |
-          platform=${{ matrix.platform }}
+          platform=${{ matrix.platform.target }}
           echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
 
       # - name: Login to DockerHub
@@ -51,7 +53,7 @@ jobs:
         id: push-ui
         uses: docker/build-push-action@v6
         with:
-          platforms: ${{ matrix.platform }}
+          platforms: ${{ matrix.platform.target }}
           context: ./ui
           file: ./ui/Dockerfile
           push: true
@@ -64,7 +66,7 @@ jobs:
         id: push-gateway
         uses: docker/build-push-action@v6
         with:
-          platforms: ${{ matrix.platform }}
+          platforms: ${{ matrix.platform.target }}
           context: .
           file: ./gateway/Dockerfile
           push: true
