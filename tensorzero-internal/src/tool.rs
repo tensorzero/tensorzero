@@ -210,12 +210,63 @@ pub struct BatchDynamicToolParams {
 pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize);
 
 /// A ToolCall is a request by a model to call a Tool
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ToolCall {
     pub name: String,
     pub arguments: String,
     pub id: String,
+}
+
+impl<'de> Deserialize<'de> for ToolCall {
+    fn deserialize<D>(deserializer: D) -> Result<ToolCall, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Debug, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct ToolCallHelper {
+            name: Option<String>,
+            arguments: Option<Value>,
+            id: String,
+            raw_arguments: Option<String>,
+            raw_name: Option<String>,
+        }
+
+        let helper = ToolCallHelper::deserialize(deserializer)?;
+
+        let name = helper.name.or(helper.raw_name).ok_or_else(|| {
+            serde::de::Error::custom("ToolCall must have `name` or `raw_name` set")
+        })?;
+
+        let arguments = if let Some(arguments) = helper.arguments {
+            match arguments {
+                Value::String(s) => {
+                    tracing::warn!("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object. Please pass in a JSON object instead. Support for strings will be removed in a future release: https://github.com/tensorzero/tensorzero/issues/1410");
+                    s
+                }
+                Value::Object(obj) => {
+                    serde_json::to_string(&obj).map_err(serde::de::Error::custom)?
+                }
+                _ => {
+                    return Err(serde::de::Error::custom(
+                        "ToolCall arguments must be a string or an object",
+                    ))
+                }
+            }
+        } else if let Some(raw_arguments) = helper.raw_arguments {
+            raw_arguments
+        } else {
+            return Err(serde::de::Error::custom(
+                "ToolCall must have `arguments` or `raw_arguments` set",
+            ));
+        };
+
+        Ok(ToolCall {
+            name,
+            arguments,
+            id: helper.id,
+        })
+    }
 }
 
 /// A ToolCallOutput is a request by a model to call a Tool
@@ -879,6 +930,90 @@ mod tests {
         assert_eq!(
             tool_call_output.arguments,
             Some(json!({"location": "Lucky Dog"}))
+        );
+    }
+
+    #[test]
+    fn test_tool_call_deserialize_plain_raw() {
+        let tool_call = serde_json::json!({
+            "name": "get_temperature",
+            "raw_name": "should have ignored raw name",
+            "arguments": "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}",
+            "raw_arguments": "should have ignored raw arguments",
+            "id": "123"
+        });
+        let tool_call: ToolCall = serde_json::from_value(tool_call).unwrap();
+        assert_eq!(tool_call.name, "get_temperature");
+        assert_eq!(
+            tool_call.arguments,
+            "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}"
+        );
+        assert_eq!(tool_call.id, "123");
+    }
+
+    #[test]
+    fn test_tool_call_deserialize_raw_only() {
+        let tool_call = serde_json::json!({
+            "raw_name": "get_temperature",
+            "raw_arguments": "my raw arguments",
+            "id": "123"
+        });
+        let tool_call: ToolCall = serde_json::from_value(tool_call).unwrap();
+        assert_eq!(tool_call.name, "get_temperature");
+        assert_eq!(tool_call.arguments, "my raw arguments");
+        assert_eq!(tool_call.id, "123");
+    }
+
+    #[test]
+    fn test_tool_call_deserialize_arguments_object() {
+        let tool_call = serde_json::json!({
+            "name": "get_temperature",
+            "arguments": {"my": "arguments"},
+            "id": "123"
+        });
+        let tool_call: ToolCall = serde_json::from_value(tool_call).unwrap();
+        assert_eq!(tool_call.name, "get_temperature");
+        assert_eq!(tool_call.arguments, "{\"my\":\"arguments\"}");
+        assert_eq!(tool_call.id, "123");
+    }
+
+    #[test]
+    fn test_tool_call_deserialize_arguments_string() {
+        let tool_call = serde_json::json!({
+            "name": "get_temperature",
+            "arguments": "{\"my\": \"arguments\"}",
+            "id": "123"
+        });
+        let tool_call: ToolCall = serde_json::from_value(tool_call).unwrap();
+        assert_eq!(tool_call.name, "get_temperature");
+        assert_eq!(tool_call.arguments, "{\"my\": \"arguments\"}");
+        assert_eq!(tool_call.id, "123");
+    }
+
+    #[test]
+    fn test_tool_call_deserialize_missing_name() {
+        let tool_call = serde_json::json!({
+            "arguments": "{\"my\": \"arguments\"}",
+            "id": "123"
+        });
+        let err_msg = serde_json::from_value::<ToolCall>(tool_call)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(err_msg, "ToolCall must have `name` or `raw_name` set");
+    }
+
+    #[test]
+    fn test_tool_call_deserialize_missing_arguments() {
+        let tool_call = serde_json::json!({
+            "name": "get_temperature",
+            "id": "123"
+        });
+        let err_msg = serde_json::from_value::<ToolCall>(tool_call)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            err_msg,
+            "ToolCall must have `arguments` or `raw_arguments` set"
         );
     }
 }
