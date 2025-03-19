@@ -26,7 +26,6 @@ use tensorzero_internal::clickhouse::test_helpers::{
 
 #[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);
-#[cfg(feature = "batch_tests")]
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
@@ -140,7 +139,6 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: image_providers.clone(),
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
-        #[cfg(feature = "batch_tests")]
         supports_batch_inference: true,
     }
 }
@@ -576,7 +574,6 @@ async fn test_chat_function_json_override_with_mode_implicit_tool() {
     );
 }
 
-#[cfg_attr(feature = "batch_tests", allow(unused))]
 async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceRequestJsonMode) {
     let client = Client::new();
     let episode_id = Uuid::now_v7();

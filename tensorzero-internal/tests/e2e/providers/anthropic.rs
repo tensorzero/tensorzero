@@ -15,7 +15,6 @@ use tensorzero_internal::clickhouse::test_helpers::{
 
 #[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);
-#[cfg(feature = "batch_tests")]
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
@@ -95,7 +94,6 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: image_providers,
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
-        #[cfg(feature = "batch_tests")]
         supports_batch_inference: false,
     }
 }

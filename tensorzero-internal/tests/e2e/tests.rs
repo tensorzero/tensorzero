@@ -1,4 +1,4 @@
-#![cfg(test)]
+mod batch;
 mod best_of_n;
 mod cache;
 mod clickhouse;
