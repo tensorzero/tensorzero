@@ -2891,7 +2891,7 @@ mod tests {
             InputMessageContent::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "123");
                 assert_eq!(tool_call.name, "test_tool");
-                assert_eq!(tool_call.arguments, "\"{}\"");
+                assert_eq!(tool_call.arguments, "{}");
             }
             _ => panic!("Expected ToolCall content"),
         }
