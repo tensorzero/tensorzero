@@ -102,7 +102,10 @@ async fn run_evals_json() {
             clickhouse_inference["tags"]["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
-
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::eval_name"],
+            "entity_extraction"
+        );
         // Check boolean feedback was recorded
         let feedback = select_feedback_by_target_id_clickhouse(
             &clickhouse,
@@ -123,6 +126,14 @@ async fn run_evals_json() {
                 .unwrap()
                 .as_bool()
                 .unwrap()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::eval_run_id"],
+            eval_run_id.to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
         );
 
         // Check float feedback was recorded
@@ -146,6 +157,15 @@ async fn run_evals_json() {
                 .as_f64()
                 .unwrap()
         );
+        assert_eq!(
+            feedback["tags"]["tensorzero::eval_run_id"],
+            eval_run_id.to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+
         total_the += feedback["value"].as_f64().unwrap() as u32;
         parsed_output.push(parsed);
     }
@@ -214,6 +234,10 @@ async fn run_exact_match_eval_chat() {
         assert_eq!(
             clickhouse_inference["tags"]["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::eval_name"],
+            "haiku_with_outputs"
         );
         let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
             &clickhouse,
@@ -309,6 +333,10 @@ async fn run_llm_judge_eval_chat() {
         assert_eq!(
             clickhouse_inference["tags"]["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::eval_name"],
+            "haiku_without_outputs"
         );
 
         // There should be no Float feedback for this eval
