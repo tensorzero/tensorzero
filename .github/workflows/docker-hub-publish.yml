@@ -44,6 +44,7 @@ jobs:
         id: push-ui
         uses: docker/build-push-action@v6
         with:
+          context: ./ui
           file: ./ui/Dockerfile
           push: true
           provenance: mode=max
