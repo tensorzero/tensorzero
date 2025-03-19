@@ -70,7 +70,7 @@ jobs:
           push: true
           provenance: mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: tags: ttl.sh/tensorzero-gateway
+          tags: ttl.sh/tensorzero-gateway
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Export digest
