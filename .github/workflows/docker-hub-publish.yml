@@ -59,7 +59,6 @@ jobs:
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
 
       - name: Build and push gateway Docker image
         id: push-gateway
@@ -73,7 +72,6 @@ jobs:
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
 
       - name: Export digest
         run: |
