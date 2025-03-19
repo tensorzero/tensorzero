@@ -56,7 +56,7 @@ jobs:
         id: push-gateway
         uses: docker/build-push-action@v6
         with:
-          context: ./gateway
+          context: .
           file: ./gateway/Dockerfile
           push: true
           provenance: mode=max
