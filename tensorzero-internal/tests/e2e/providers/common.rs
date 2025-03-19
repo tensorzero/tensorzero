@@ -9413,7 +9413,6 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
     .await;
 }
 
-#[cfg(feature = "e2e_tests")]
 pub async fn check_multi_turn_parallel_tool_use_inference_response(
     response_json: Value,
     provider: &E2ETestProvider,
