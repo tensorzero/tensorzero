@@ -76,23 +76,23 @@ pub struct DynamicImplicitToolConfig {
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
     pub tool_choice: ToolChoice,
-    pub parallel_tool_calls: bool,
+    pub parallel_tool_calls: Option<bool>,
 }
 
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
 /// It is used to insert the ToolCallConfig into the database.
-#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ToolCallConfigDatabaseInsert {
     pub tools_available: Vec<Tool>,
     pub tool_choice: ToolChoice,
-    pub parallel_tool_calls: bool,
+    pub parallel_tool_calls: Option<bool>,
 }
 
 impl ToolCallConfig {
     pub fn new(
         function_tools: &[String],
         function_tool_choice: &ToolChoice,
-        function_parallel_tool_calls: bool,
+        function_parallel_tool_calls: Option<bool>,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
         dynamic_tool_params: DynamicToolParams,
     ) -> Result<Option<Self>, Error> {
@@ -158,7 +158,7 @@ impl ToolCallConfig {
 
         let parallel_tool_calls = dynamic_tool_params
             .parallel_tool_calls
-            .unwrap_or(function_parallel_tool_calls);
+            .or(function_parallel_tool_calls);
 
         let tool_call_config_option = match tools_available.is_empty() {
             true => None,
@@ -271,7 +271,7 @@ impl ToolCallConfig {
         Self {
             tools_available: vec![implicit_tool_config],
             tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         }
     }
 }
@@ -391,7 +391,7 @@ pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
     ToolCallConfig {
         tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
-        parallel_tool_calls: false,
+        parallel_tool_calls: None,
     }
 }
 
@@ -526,7 +526,7 @@ pub fn create_implicit_tool_call_config(schema: JSONSchemaFromPath) -> ToolCallC
     ToolCallConfig {
         tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
-        parallel_tool_calls: false,
+        parallel_tool_calls: None,
     }
 }
 
@@ -594,7 +594,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             DynamicToolParams::default(),
         )
@@ -606,7 +606,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             DynamicToolParams::default(),
         )
@@ -614,7 +614,7 @@ mod tests {
         .unwrap();
         assert_eq!(tool_call_config.tools_available.len(), 2);
         assert_eq!(tool_call_config.tool_choice, ToolChoice::Auto);
-        assert!(tool_call_config.parallel_tool_calls);
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
         assert!(tool_call_config.tools_available[0].strict());
         assert!(!tool_call_config.tools_available[1].strict());
 
@@ -626,7 +626,7 @@ mod tests {
         let err = ToolCallConfig::new(
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &EMPTY_TOOLS,
             dynamic_tool_params,
         )
@@ -647,7 +647,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             dynamic_tool_params,
         )
@@ -658,7 +658,7 @@ mod tests {
             tool_call_config.tool_choice,
             ToolChoice::Specific("get_temperature".to_string())
         );
-        assert!(tool_call_config.parallel_tool_calls);
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
 
         // Dynamic tool config specifies a particular tool to call and it's not in the function tools list
         let dynamic_tool_params = DynamicToolParams {
@@ -668,7 +668,7 @@ mod tests {
         let err = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             dynamic_tool_params,
         )
@@ -696,7 +696,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             dynamic_tool_params,
         )
@@ -723,7 +723,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             dynamic_tool_params,
         )
@@ -740,7 +740,7 @@ mod tests {
             tool_call_config.tools_available[1].name(),
             "establish_campground"
         );
-        assert!(!tool_call_config.parallel_tool_calls);
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(false));
 
         // We pass a list of no allowed tools and then configure a new tool
         // This should remove all configured tools and add the new tool
@@ -758,7 +758,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             dynamic_tool_params,
         )
@@ -769,7 +769,7 @@ mod tests {
             tool_call_config.tools_available[0].name(),
             "establish_campground"
         );
-        assert!(tool_call_config.parallel_tool_calls);
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
         assert_eq!(
             tool_call_config.tool_choice,
             ToolChoice::Specific("establish_campground".to_string())
@@ -787,7 +787,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             DynamicToolParams::default(),
         )
@@ -846,7 +846,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             DynamicToolParams {
                 additional_tools: Some(vec![Tool {

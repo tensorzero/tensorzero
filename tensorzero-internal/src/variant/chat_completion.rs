@@ -145,6 +145,9 @@ impl ChatCompletionConfig {
                 ResolvedInputMessageContent::Image(image) => {
                     content.push(ContentBlock::Image(image.clone()));
                 }
+                ResolvedInputMessageContent::Thought(thought) => {
+                    content.push(ContentBlock::Thought(thought.clone()));
+                }
                 ResolvedInputMessageContent::Unknown {
                     data,
                     model_provider_name,
@@ -845,7 +848,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -1620,7 +1623,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         })));
         let system_template_name = "system";
         let user_template_name = "greeting_with_age";
@@ -1847,7 +1850,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
@@ -1951,7 +1954,7 @@ mod tests {
             implicit_tool_call_config: ToolCallConfig {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: false,
+                parallel_tool_calls: None,
             },
         });
         let inference_config = InferenceConfig {

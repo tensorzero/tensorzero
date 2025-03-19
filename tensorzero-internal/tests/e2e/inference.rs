@@ -645,11 +645,10 @@ async fn e2e_test_tool_call() {
             == "get_temperature"
     );
     assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
-    assert!(!tool_params
-        .get("parallel_tool_calls")
-        .unwrap()
-        .as_bool()
-        .unwrap());
+    assert_eq!(
+        tool_params.get("parallel_tool_calls").unwrap(),
+        &Value::Null
+    );
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -842,11 +841,10 @@ async fn e2e_test_tool_call_malformed() {
             == "get_temperature"
     );
     assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
-    assert!(!tool_params
-        .get("parallel_tool_calls")
-        .unwrap()
-        .as_bool()
-        .unwrap());
+    assert_eq!(
+        tool_params.get("parallel_tool_calls").unwrap(),
+        &Value::Null
+    );
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -1736,6 +1734,53 @@ async fn e2e_test_inference_original_response_stream() {
 }
 
 #[tokio::test]
+async fn test_gateway_template_no_fs_access() {
+    // We use an embedded client so that we can control the number of
+    // requests to the flaky judge.
+    let gateway = make_embedded_gateway_with_config(&format!(
+        r#"
+[functions.my_test]
+type = "chat"
+system_schema = "{root}/fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.my_test.variants.my_variant]
+type = "chat_completion"
+system_template = "{root}/fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+model = "dummy::good"
+    "#,
+        root = env!("CARGO_MANIFEST_DIR")
+    ))
+    .await;
+
+    let params = ClientInferenceParams {
+        function_name: Some("my_test".to_string()),
+        input: Input {
+            system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+            messages: vec![InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::Text(TextKind::Text {
+                    text: "Please write me a sentence about Megumin making an explosion."
+                        .to_string(),
+                })],
+            }],
+        },
+        include_original_response: true,
+        ..Default::default()
+    };
+
+    // Request should fail due to template trying to include from fs
+    let err = gateway
+        .inference(params.clone())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("Could not load template 'extra_templates/foo.minijinja' - if this a dynamic template included from the filesystem, please set [gateway.enable_template_filesystem_access] to `true`"),
+        "Unexpected error: {err}"
+    );
+}
+
+#[tokio::test]
 async fn test_original_response_best_of_n_flaky_judge() {
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
@@ -2045,11 +2090,10 @@ async fn e2e_test_tool_call_streaming() {
             == "get_temperature"
     );
     assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
-    assert!(!tool_params
-        .get("parallel_tool_calls")
-        .unwrap()
-        .as_bool()
-        .unwrap());
+    assert_eq!(
+        tool_params.get("parallel_tool_calls").unwrap(),
+        &Value::Null
+    );
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await

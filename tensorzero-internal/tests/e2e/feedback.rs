@@ -3,7 +3,10 @@ use std::path::PathBuf;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_internal::{
-    clickhouse::{test_helpers::clickhouse_flush_async_insert, ClickHouseConnectionInfo},
+    clickhouse::{
+        test_helpers::{clickhouse_flush_async_insert, select_feedback_clickhouse},
+        ClickHouseConnectionInfo,
+    },
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
 use tokio::time::{sleep, Duration};
@@ -407,6 +410,145 @@ async fn e2e_test_demonstration_feedback_json() {
 }
 
 #[tokio::test]
+async fn e2e_test_demonstration_feedback_dynamic_json() {
+    let client = Client::new();
+    // Running without valid inference_id. Should fail.
+    let inference_id = Uuid::now_v7();
+    let payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "demonstration",
+        "value": {"answer": "Tokyo"}
+    });
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    // Run inference (standard, no dryrun) to get an inference_id
+    let new_output_schema = json!({
+        "type": "object",
+        "properties": {
+            "answer": {
+                "type": "string"
+            },
+            "comment": {
+                "type": "string",
+            }
+        },
+        "required": ["answer"],
+        "additionalProperties": false
+    });
+    let inference_payload = serde_json::json!({
+        "function_name": "json_success",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": {"country": "Japan"}}]
+        },
+        "stream": false,
+        "output_schema": new_output_schema,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // No sleeping, we should throttle in the gateway
+    // Test demonstration feedback on an inference that requires the dynamic output schema
+    let payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "demonstration",
+        "value": {"answer": "Tokyo", "comment": "This is a comment"}
+    });
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let feedback_id = response_json.get("feedback_id").unwrap();
+    assert!(feedback_id.is_string());
+    let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
+    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
+    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
+    assert_eq!(retrieved_inference_id_uuid, inference_id);
+    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
+    let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
+    let expected_value = JsonInferenceOutput {
+        parsed: Some(json!({"answer": "Tokyo", "comment": "This is a comment"})),
+        raw: "{\"answer\":\"Tokyo\",\"comment\":\"This is a comment\"}".to_string(),
+    };
+    assert_eq!(retrieved_value, expected_value);
+
+    // Try it for an episode (should 400)
+    let episode_id = Uuid::now_v7();
+    let payload =
+        json!({"episode_id": episode_id, "metric_name": "demonstration", "value": "do this!"});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_json = response.json::<Value>().await.unwrap();
+    let message = response_json.get("error").unwrap().as_str().unwrap();
+    assert_eq!(
+        message,
+        "Correct ID was not provided for feedback level \"inference\"."
+    );
+
+    // Try a tool call demonstration
+    // This should fail because the inference was made for a function that doesn't support tool calls
+    let tool_call = json!({"type": "tool_call", "name": "tool_name", "arguments": "tool_input"});
+    let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_json = response.json::<Value>().await.unwrap();
+    let error_message = response_json.get("error").unwrap().as_str().unwrap();
+    assert!(error_message.starts_with("Demonstration does not fit function output schema:"));
+
+    // Try a demonstration with a value that doesn't match the output schema
+    let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": {"bad_key": "Tokyo"}});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_json = response.json::<Value>().await.unwrap();
+    let error_message = response_json.get("error").unwrap().as_str().unwrap();
+    assert!(error_message.starts_with("Demonstration does not fit function output schema:"));
+}
+
+#[tokio::test]
 async fn e2e_test_demonstration_feedback_tool() {
     // Running without valid inference_id. Should fail.
     let client = Client::new();
@@ -561,6 +703,166 @@ async fn e2e_test_demonstration_feedback_tool() {
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     let retrieved_value = serde_json::from_str::<Value>(retrieved_value).unwrap();
     let expected_value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"location": "Tokyo", "units": "celsius"}, "raw_name": "get_temperature", "raw_arguments": "{\"location\":\"Tokyo\",\"units\":\"celsius\"}", "id": "" }]);
+    assert_eq!(retrieved_value, expected_value);
+}
+
+#[tokio::test]
+async fn e2e_test_demonstration_feedback_dynamic_tool() {
+    let client = Client::new();
+
+    // Run inference (standard, no dryrun) to get an inference_id
+    let inference_payload = serde_json::json!({
+        "function_name": "weather_helper",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "What is the weather in Tokyo?"}]
+        },
+        "stream": false,
+        "additional_tools": [
+            {
+                "name": "get_humidity",
+                "description": "Get the current humidity in a given location",
+                "parameters": json!({
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "location": {"type": "string"}
+                    },
+                    "required": ["location"],
+                    "additionalProperties": false
+                })
+            }
+        ]
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // No sleeping, we should throttle in the gateway
+    // Test demonstration feedback on Inference (string shortcut)
+    let payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "demonstration",
+        "value": "sunny",
+    });
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let feedback_id = response_json.get("feedback_id").unwrap();
+    assert!(feedback_id.is_string());
+    let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
+    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
+    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
+    assert_eq!(retrieved_inference_id_uuid, inference_id);
+    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
+    let expected_value =
+        serde_json::to_string(&json!([{"type": "text", "text": "sunny" }])).unwrap();
+    assert_eq!(retrieved_value, expected_value);
+
+    // Try it for an episode (should 400)
+    let episode_id = Uuid::now_v7();
+    let payload =
+        json!({"episode_id": episode_id, "metric_name": "demonstration", "value": "do this!"});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_json = response.json::<Value>().await.unwrap();
+    let message = response_json.get("error").unwrap().as_str().unwrap();
+    assert_eq!(
+        message,
+        "Correct ID was not provided for feedback level \"inference\"."
+    );
+
+    // Try a tool call demonstration
+    // This should fail because the name is incorrect
+    let tool_call = json!({"type": "tool_call", "name": "tool_name", "arguments": "tool_input"});
+    let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_json = response.json::<Value>().await.unwrap();
+    let error_message = response_json.get("error").unwrap().as_str().unwrap();
+    assert_eq!(error_message, "Demonstration contains invalid tool name");
+
+    // Try a tool call demonstration with the dynamic tool name and incorrect args
+    let tool_call = json!({"type": "tool_call", "name": "get_humidity", "arguments": "tool_input"});
+    let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response_json = response.json::<Value>().await.unwrap();
+    let error_message = response_json.get("error").unwrap().as_str().unwrap();
+    assert_eq!(
+        error_message,
+        "Demonstration contains invalid tool call arguments"
+    );
+
+    // Try a tool call demonstration with the dynamic tool name and correct args
+    let tool_call =
+        json!({"type": "tool_call", "name": "get_humidity", "arguments": {"location": "Tokyo"}});
+    let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    let response_json = response.json::<Value>().await.unwrap();
+    let feedback_id = response_json.get("feedback_id").unwrap();
+    assert!(feedback_id.is_string());
+    let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
+    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
+    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
+    assert_eq!(retrieved_inference_id_uuid, inference_id);
+    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
+    let retrieved_value = serde_json::from_str::<Value>(retrieved_value).unwrap();
+    let expected_value = json!([{"type": "tool_call", "name": "get_humidity", "arguments": {"location": "Tokyo"}, "raw_name": "get_humidity", "raw_arguments": "{\"location\":\"Tokyo\"}", "id": "" }]);
     assert_eq!(retrieved_value, expected_value);
 }
 
@@ -921,26 +1223,6 @@ async fn e2e_test_boolean_feedback() {
     assert!(retrieved_value);
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "goal_achieved");
-}
-
-async fn select_feedback_clickhouse(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    table_name: &str,
-    feedback_id: Uuid,
-) -> Option<Value> {
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
-
-    let query = format!(
-        "SELECT * FROM {} WHERE id = '{}' FORMAT JSONEachRow",
-        table_name, feedback_id
-    );
-
-    let text = clickhouse_connection_info
-        .run_query(query, None)
-        .await
-        .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
-    Some(json)
 }
 
 async fn select_feedback_tags_clickhouse(

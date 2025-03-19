@@ -6,7 +6,8 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use tensorzero_internal::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
+    get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
+    select_model_inference_clickhouse,
 };
 
 #[cfg(feature = "e2e_tests")]
@@ -49,6 +50,7 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
         .send()
         .await
         .unwrap();
+
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
@@ -63,6 +65,11 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
     assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
     let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "stop");
+    let response_model = response_json.get("model").unwrap().as_str().unwrap();
+    assert_eq!(
+        response_model,
+        "tensorzero::function_name::basic_test_no_system_schema::variant_name::test"
+    );
 
     let inference_id: Uuid = response_json
         .get("id")
@@ -146,6 +153,72 @@ async fn test_openai_compatible_route_with_function_name_asmodel(model: &str) {
     assert_eq!(finish_reason, "stop");
 }
 
+#[tokio::test]
+async fn test_openai_compatible_dryrun() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "model": "tensorzero::model_name::json",
+        "messages": [
+            {
+                "role": "system",
+                "content": "TensorBot"
+            },
+            {
+                "role": "user",
+                "content": "What is the capital of Japan?"
+            }
+        ],
+        "stream": false,
+        "tensorzero::episode_id": episode_id.to_string(),
+        "tensorzero::dryrun": true
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("response_json: {:?}", response_json);
+    let choices = response_json.get("choices").unwrap().as_array().unwrap();
+    assert!(choices.len() == 1);
+    let choice = choices.first().unwrap();
+    assert_eq!(choice.get("index").unwrap().as_u64().unwrap(), 0);
+    let message = choice.get("message").unwrap();
+    assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
+    let content = message.get("content").unwrap().as_str().unwrap();
+    assert_eq!(content, "{\"answer\":\"Hello\"}");
+    let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
+    assert_eq!(finish_reason, "stop");
+    let response_model = response_json.get("model").unwrap().as_str().unwrap();
+    assert_eq!(response_model, "tensorzero::model_name::json");
+
+    let inference_id: Uuid = response_json
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+
+    let chat_result = select_chat_inference_clickhouse(&clickhouse, inference_id).await;
+    let json_result = select_json_inference_clickhouse(&clickhouse, inference_id).await;
+    // No inference should be written to ClickHouse when dryrun is true
+    assert!(chat_result.is_none());
+    assert!(json_result.is_none());
+}
+
 #[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_openai_compatible_route_model_name_shorthand() {
@@ -205,6 +278,8 @@ async fn test_openai_compatible_route_with_default_function(
     assert_eq!(content, expected_content);
     let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "stop");
+    let response_model = response_json.get("model").unwrap().as_str().unwrap();
+    assert_eq!(response_model, prefixed_model_name);
 
     let inference_id: Uuid = response_json
         .get("id")
@@ -365,6 +440,11 @@ async fn test_openai_compatible_route_with_json_mode_on() {
     assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
     let content = message.get("content").unwrap().as_str().unwrap();
     assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
+    let response_model = response_json.get("model").unwrap().as_str().unwrap();
+    assert_eq!(
+        response_model,
+        "tensorzero::function_name::basic_test_no_system_schema::variant_name::test"
+    );
 
     let inference_id: Uuid = response_json
         .get("id")
@@ -498,6 +578,11 @@ async fn test_openai_compatible_route_with_json_schema() {
     assert_eq!(content, "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.");
     let finish_reason = choice.get("finish_reason").unwrap().as_str().unwrap();
     assert_eq!(finish_reason, "stop");
+    let response_model = response_json.get("model").unwrap().as_str().unwrap();
+    assert_eq!(
+        response_model,
+        "tensorzero::function_name::basic_test_no_system_schema::variant_name::test"
+    );
 
     let inference_id: Uuid = response_json
         .get("id")
@@ -702,5 +787,7 @@ async fn test_openai_compatible_streaming_tool_call() {
             assert!(usage["prompt_tokens"].as_i64().unwrap() > 0);
             assert!(usage["completion_tokens"].as_i64().unwrap() > 0);
         }
+        let response_model = parsed_chunk.get("model").unwrap().as_str().unwrap();
+        assert_eq!(response_model, "tensorzero::model_name::openai::gpt-4o");
     }
 }
