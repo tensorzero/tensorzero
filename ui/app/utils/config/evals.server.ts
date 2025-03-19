@@ -11,6 +11,7 @@ import {
   type EvaluatorConfig,
 } from "./evals";
 import type { MetricConfig } from "./metric";
+import type { RawFunctionConfig } from "./function.server";
 
 // User template for LLM judge
 // This is problematic because we would ideally want an automated way
@@ -360,7 +361,7 @@ export const RawEvalConfigSchema = UninitializedEvalConfigSchema.transform(
       load: async function (
         configPath: string,
         evalName: string,
-        functions: Record<string, FunctionConfig>,
+        functions: Record<string, RawFunctionConfig>,
       ): Promise<{
         evalConfig: EvalConfig;
         functionConfigs: Record<string, FunctionConfig>;
