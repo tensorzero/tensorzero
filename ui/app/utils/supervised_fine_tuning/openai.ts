@@ -4,6 +4,7 @@ import * as path from "path";
 import { createReadStream } from "fs";
 import OpenAI from "openai";
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
+import type { AnalysisData } from "~/routes/optimization/supervised-fine-tuning/SFTAnalysis";
 import {
   type ContentBlockOutput,
   type InputMessageContent,
@@ -18,6 +19,9 @@ import type { JsExposedEnv } from "../minijinja/pkg/minijinja_bindings";
 import { splitValidationData, type SFTJobStatus } from "./common";
 import { render_message } from "./rendering";
 import { SFTJob } from "./common";
+import { validateMessage, analyzeDataset } from "./validation";
+import { getModelTokenLimit } from "./openAITokenCounter";
+import type { OpenAIMessage, OpenAIRole } from "./types";
 
 export const client = process.env.OPENAI_API_KEY
   ? new OpenAI({
@@ -45,6 +49,7 @@ interface OpenAISFTJobParams {
   fineTunedModel?: string;
   job: JobInfo;
   formData: SFTFormValues;
+  analysisData?: AnalysisData;
 }
 
 export class OpenAISFTJob extends SFTJob {
@@ -53,6 +58,8 @@ export class OpenAISFTJob extends SFTJob {
   public fineTunedModel?: string;
   public job: JobInfo;
   public formData: SFTFormValues;
+  public analysisData?: AnalysisData;
+
   constructor(params: OpenAISFTJobParams) {
     super();
     this.jobId = params.jobId;
@@ -60,6 +67,7 @@ export class OpenAISFTJob extends SFTJob {
     this.fineTunedModel = params.fineTunedModel;
     this.job = params.job;
     this.formData = params.formData;
+    this.analysisData = params.analysisData;
   }
 
   static async from_form_data(data: SFTFormValues): Promise<OpenAISFTJob> {
@@ -84,6 +92,7 @@ export class OpenAISFTJob extends SFTJob {
       throw new Error("No curated inferences found");
     }
     const templateEnv = await get_template_env(currentVariant);
+
     let job;
     try {
       job = await start_sft_openai(
@@ -100,6 +109,7 @@ export class OpenAISFTJob extends SFTJob {
         }`,
       );
     }
+
     return job;
   }
   private get jobUrl(): string {
@@ -130,6 +140,7 @@ export class OpenAISFTJob extends SFTJob {
         jobUrl: this.jobUrl,
         rawData: this.job,
         result: this.fineTunedModel,
+        analysisData: this.analysisData,
       };
     }
     const estimatedCompletionTime =
@@ -143,6 +154,7 @@ export class OpenAISFTJob extends SFTJob {
       estimatedCompletionTime: estimatedCompletionTime
         ? new Date(estimatedCompletionTime * 1000)
         : undefined,
+      analysisData: this.analysisData,
     };
   }
 
@@ -166,6 +178,7 @@ export class OpenAISFTJob extends SFTJob {
           info: jobInfo,
         },
         formData: this.formData,
+        analysisData: this.analysisData,
       });
     } catch (error) {
       return new OpenAISFTJob({
@@ -178,48 +191,10 @@ export class OpenAISFTJob extends SFTJob {
           message: error instanceof Error ? error.message : String(error),
         },
         formData: this.formData,
+        analysisData: this.analysisData,
       });
     }
   }
-}
-
-export async function start_sft_openai(
-  modelName: string,
-  inferences: ParsedInferenceExample[],
-  validationSplitPercent: number,
-  templateEnv: JsExposedEnv,
-  formData: SFTFormValues,
-) {
-  const { trainInferences, valInferences } = splitValidationData(
-    inferences,
-    validationSplitPercent,
-  );
-  const trainMessages = trainInferences.map((inference) =>
-    tensorzero_inference_to_openai_messages(inference, templateEnv),
-  );
-  const valMessages = valInferences.map((inference) =>
-    tensorzero_inference_to_openai_messages(inference, templateEnv),
-  );
-  const [file_id, val_file_id] = await Promise.all([
-    upload_examples_to_openai(trainMessages),
-    upload_examples_to_openai(valMessages),
-  ]);
-  const job = await create_openai_fine_tuning_job(
-    modelName,
-    file_id,
-    val_file_id ?? undefined,
-  );
-  const jobId = job.id;
-  return new OpenAISFTJob({
-    jobId: jobId,
-    status: "created",
-    fineTunedModel: undefined,
-    job: {
-      status: "ok",
-      info: job,
-    },
-    formData,
-  });
 }
 
 export function tensorzero_inference_to_openai_messages(
@@ -310,18 +285,169 @@ export function content_block_to_openai_message(
   }
 }
 
-type OpenAIRole = "system" | "user" | "assistant" | "tool";
+/**
+ * Validates and converts inferences to messages
+ * @param inferences Array of inference examples
+ * @param modelName Model name for validation
+ * @param templateEnv Template environment
+ * @param type Type of examples (training or validation)
+ * @returns Array of validated messages
+ * @throws Error when validation fails with detailed error message including:
+ *   - Token count exceeding maximum allowed limit
+ *   - Missing required roles (e.g., assistant)
+ *   - Format errors such as missing assistant message, insufficient examples,
+ *     missing messages list, message missing required key,
+ *     message with unrecognized key/role, missing content, invalid data type
+ */
+function validateAndConvertMessages(
+  inferences: ParsedInferenceExample[],
+  modelName: string,
+  templateEnv: JsExposedEnv,
+  type: "training" | "validation",
+): OpenAIMessage[][] {
+  const messages = inferences.map((inference) => {
+    const messages = tensorzero_inference_to_openai_messages(
+      inference,
+      templateEnv,
+    );
+    const validation = validateMessage(messages, modelName);
 
-type OpenAIMessage = {
-  role: OpenAIRole;
-  content?: string;
-  tool_calls?: {
-    id: string;
-    type: string;
-    function: { name: string; arguments: string };
-  }[];
-  tool_call_id?: string;
-};
+    if (!validation.isValid) {
+      const errors = [];
+      if (!validation.lengthValidation.isValid) {
+        errors.push(
+          `Token count (${validation.lengthValidation.tokenCount}) exceeds maximum allowed`,
+        );
+      }
+      if (!validation.rolesValidation.isValid) {
+        errors.push(
+          `Missing required roles: ${validation.rolesValidation.missingRoles.join(", ")}`,
+        );
+      }
+      if (!validation.formatValidation.isValid) {
+        const formatErrors = Object.entries(validation.formatValidation.errors)
+          .filter(([, count]) => count > 0)
+          .map(([errorType, count]) => {
+            switch (errorType) {
+              case "example_missing_assistant_message":
+                return "Missing assistant message";
+              case "example_missing_user_message":
+                return "Missing user message (recommended)";
+              case "example_missing_system_message":
+                return "Missing system message (recommended)";
+              case "insufficient_examples":
+                return "Dataset must have at least 10 examples";
+              case "missing_messages_list":
+                return "Missing messages list";
+              case "message_missing_key":
+                return "Message missing required key";
+              case "message_unrecognized_key":
+                return "Message contains unrecognized key";
+              case "unrecognized_role":
+                return "Message contains unrecognized role";
+              case "missing_content":
+                return "Message missing content";
+              case "data_type":
+                return "Invalid data type";
+              default:
+                return `Unknown error (${errorType}): ${count}`;
+            }
+          });
+        if (formatErrors.length > 0) {
+          errors.push(`Format errors: ${formatErrors.join(", ")}`);
+        }
+      }
+      throw new Error(`Invalid ${type} messages: ${errors.join("; ")}`);
+    }
+    return messages;
+  });
+
+  return messages;
+}
+
+export async function start_sft_openai(
+  modelName: string,
+  inferences: ParsedInferenceExample[],
+  validationSplitPercent: number,
+  templateEnv: JsExposedEnv,
+  formData: SFTFormValues,
+) {
+  const { trainInferences, valInferences } = splitValidationData(
+    inferences,
+    validationSplitPercent,
+  );
+
+  if (inferences.length < 10) {
+    throw new Error("Training dataset must have at least 10 examples");
+  }
+
+  // Convert inferences to messages for analysis
+  const trainMessagesForAnalysis = trainInferences.map((inference) => {
+    const messages = tensorzero_inference_to_openai_messages(
+      inference,
+      templateEnv,
+    );
+    return { messages };
+  });
+
+  // Analyze dataset for model improvement insights
+  const analysis = analyzeDataset(trainMessagesForAnalysis, modelName);
+  const tokenLimit = getModelTokenLimit(modelName);
+
+  const analysisData: AnalysisData = {
+    firstExample: trainMessagesForAnalysis[0]?.messages.map((msg) => ({
+      role: msg.role,
+      content: msg.content || "",
+    })),
+    numExamples: trainInferences.length,
+    missingSystemCount: analysis.missingSystemCount,
+    missingUserCount: analysis.missingUserCount,
+    messageCounts: analysis.messageCounts,
+    tokenCounts: analysis.tokenCounts,
+    assistantTokenCounts: analysis.assistantTokenCounts,
+    tooLongCount: analysis.tooLongCount,
+    tokenLimit: tokenLimit,
+  };
+
+  // Validate and convert messages
+  const trainMessages = validateAndConvertMessages(
+    trainInferences,
+    modelName,
+    templateEnv,
+    "training",
+  );
+  const valMessages = validateAndConvertMessages(
+    valInferences,
+    modelName,
+    templateEnv,
+    "validation",
+  );
+
+  // Proceed with OpenAI API calls
+  const [file_id, val_file_id] = await Promise.all([
+    upload_examples_to_openai(trainMessages),
+    upload_examples_to_openai(valMessages),
+  ]);
+
+  const job = await create_openai_fine_tuning_job(
+    modelName,
+    file_id,
+    val_file_id ?? undefined,
+  );
+
+  const jobId = job.id;
+  return new OpenAISFTJob({
+    jobId: jobId,
+    status: "created",
+    fineTunedModel: undefined,
+    job: {
+      status: "ok",
+      info: job,
+    },
+    formData,
+    analysisData,
+  });
+}
 
 async function upload_examples_to_openai(samples: OpenAIMessage[][]) {
   // Convert samples to JSONL format
