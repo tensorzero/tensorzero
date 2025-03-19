@@ -35,6 +35,7 @@ use crate::model::{
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::helpers::inject_extra_body;
+use super::openai::convert_stream_error;
 
 const PROVIDER_NAME: &str = "GCP Vertex Gemini";
 const PROVIDER_TYPE: &str = "gcp_vertex_gemini";
@@ -429,13 +430,7 @@ fn stream_gcp_vertex_gemini(
                     if matches!(e, reqwest_eventsource::Error::StreamEnded) {
                         break;
                     }
-                    yield Err(ErrorDetails::InferenceServer {
-                        message: e.to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: None,
-                    }
-                    .into());
+                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,

@@ -23,8 +23,8 @@ use url::Url;
 
 use super::helpers::inject_extra_body;
 use super::openai::{
-    get_chat_url, prepare_openai_messages, prepare_openai_tools, OpenAIRequestMessage, OpenAITool,
-    OpenAIToolChoice, OpenAIToolType, StreamOptions,
+    convert_stream_error, get_chat_url, prepare_openai_messages, prepare_openai_tools,
+    OpenAIRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType, StreamOptions,
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
@@ -299,12 +299,7 @@ fn stream_tgi(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(ErrorDetails::InferenceServer {
-                        message: e.to_string(),
-                        raw_request: None,
-                        raw_response: None,
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    }.into());
+                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,

@@ -35,6 +35,7 @@ use super::anthropic::{
 };
 use super::gcp_vertex_gemini::{default_api_key_location, GCPVertexCredentials};
 use super::helpers::{inject_extra_body, peek_first_chunk};
+use super::openai::convert_stream_error;
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
@@ -259,12 +260,7 @@ fn stream_anthropic(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(ErrorDetails::InferenceServer {
-                        message: e.to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: None,
-                    }.into());
+                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
