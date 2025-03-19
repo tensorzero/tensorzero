@@ -56,7 +56,8 @@ jobs:
         id: push-gateway
         uses: docker/build-push-action@v6
         with:
-          file: ./Dockerfile
+          context: ./gateway
+          file: ./gateway/Dockerfile
           push: true
           provenance: mode=max
           tags: ${{ steps.meta.outputs.tags }}
