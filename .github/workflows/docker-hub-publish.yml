@@ -41,7 +41,7 @@ jobs:
             ttl.sh/tensorzero
 
       - name: Build and push ui Docker image
-        id: push
+        id: push-ui
         uses: docker/build-push-action@v6
         with:
           file: ./ui/Dockerfile
@@ -52,7 +52,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
 
       - name: Build and push gateway Docker image
-        id: push
+        id: push-gateway
         uses: docker/build-push-action@v6
         with:
           file: ./Dockerfile
