@@ -67,6 +67,7 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
+        inference_params_dynamic_credentials: vec![],
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),

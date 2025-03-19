@@ -48,7 +48,7 @@ pub struct FunctionConfigChat {
     pub assistant_schema: Option<JSONSchemaFromPath>,
     pub tools: Vec<String>, // tool names
     pub tool_choice: ToolChoice,
-    pub parallel_tool_calls: bool,
+    pub parallel_tool_calls: Option<bool>,
 }
 
 #[derive(Debug, Default)]
@@ -418,7 +418,7 @@ pub fn sample_variant<'a>(
     let total_weight = candidate_variant_names
         .iter()
         .filter_map(|name| variants.get(*name))
-        .map(|variant| variant.weight())
+        .map(|variant| variant.weight().unwrap_or(0.0))
         .sum::<f64>();
 
     // If the total weight is non-positive, perform uniform sampling
@@ -472,7 +472,7 @@ pub fn sample_variant<'a>(
                 message: format!("Function `{function_name}` has no variant `{variant_name}`"),
             })
         })?;
-        cumulative_weight += variant.weight();
+        cumulative_weight += variant.weight().unwrap_or(0.0);
         if cumulative_weight > random_threshold {
             sampled_variant_name = candidate_variant_names.swap_remove(i);
             break;
@@ -508,6 +508,7 @@ fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
 #[cfg(test)]
 mod tests {
     use crate::endpoints::inference::InferenceIds;
+    use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
     use crate::inference::types::Latency;
     use crate::jsonschema_util::DynamicJSONSchema;
@@ -1370,7 +1371,7 @@ mod tests {
             sample_size: usize,
             tolerance: f64,
         ) {
-            let total_weight: f64 = variants.values().map(|v| v.weight()).sum();
+            let total_weight: f64 = variants.values().map(|v| v.weight().unwrap_or(0.0)).sum();
             let mut counts: HashMap<String, usize> = HashMap::new();
 
             for _ in 0..sample_size {
@@ -1386,7 +1387,7 @@ mod tests {
             }
 
             for (variant_name, variant) in variants {
-                let expected_prob = variant.weight() / total_weight;
+                let expected_prob = variant.weight().unwrap_or(0.0) / total_weight;
                 let actual_prob =
                     *counts.get(variant_name).unwrap_or(&0) as f64 / sample_size as f64;
                 let diff = (expected_prob - actual_prob).abs();
@@ -1525,6 +1526,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
         };
@@ -1539,6 +1541,7 @@ mod tests {
             variant_name: Some(""),
             templates: &templates,
             dynamic_output_schema: None,
+            extra_cache_key: None,
         };
         let response = function_config
             .prepare_response(
@@ -1561,6 +1564,7 @@ mod tests {
                 assert!(result.output.parsed.is_none());
                 assert_eq!(result.output.raw, "Hello, world!");
                 assert_eq!(result.usage, usage);
+                assert_eq!(result.finish_reason, Some(FinishReason::Stop));
                 assert_eq!(result.model_inference_results, vec![model_response]);
             }
             _ => panic!("Expected a JSON inference result"),
@@ -1587,6 +1591,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
         };
@@ -1637,6 +1642,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::ToolCall),
             latency,
             cached: false,
         };
@@ -1659,6 +1665,7 @@ mod tests {
                 assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": "thirty"}"#);
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
+                assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1686,6 +1693,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::ToolCall),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -1711,6 +1719,7 @@ mod tests {
                 assert_eq!(result.output.raw, "tool_call_arguments");
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
+                assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1738,6 +1747,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::ContentFilter),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -1765,6 +1775,7 @@ mod tests {
                 assert_eq!(result.output.raw, r#"{"name": "Jerry", "age": 30}"#);
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
+                assert_eq!(result.finish_reason, Some(FinishReason::ContentFilter));
             }
             _ => panic!("Expected a JSON inference result"),
         }
@@ -1787,6 +1798,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: None,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -1831,6 +1843,7 @@ mod tests {
             variant_name: Some(""),
             templates: &templates,
             dynamic_output_schema: Some(&dynamic_output_schema),
+            extra_cache_key: None,
         };
         // Test with a correct content block
         let inference_id = Uuid::now_v7();
@@ -1853,6 +1866,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
         };
@@ -1900,6 +1914,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: None,
             latency,
             cached: false,
         };
@@ -1949,6 +1964,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::ToolCall),
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -2001,6 +2017,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: None,
             latency: Latency::NonStreaming {
                 response_time: Duration::from_millis(100),
             },
@@ -2061,6 +2078,7 @@ mod tests {
             usage: usage.clone(),
             model_provider_name: "model_provider_name".into(),
             model_name: "model_name".into(),
+            finish_reason: Some(FinishReason::Stop),
             latency,
             cached: false,
         };
@@ -2083,6 +2101,7 @@ mod tests {
                 assert_eq!(result.output.raw, r#"{"answer": "42"}"#);
                 assert_eq!(result.usage, usage);
                 assert_eq!(result.model_inference_results, vec![model_response]);
+                assert_eq!(result.finish_reason, Some(FinishReason::Stop));
             }
             _ => panic!("Expected a JSON inference result"),
         }

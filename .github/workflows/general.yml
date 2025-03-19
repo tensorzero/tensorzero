@@ -88,7 +88,7 @@ jobs:
           cargo hack clippy --all-targets --each-feature -- -D warnings
 
       - name: Run cargo-deny
-        run: cargo deny check bans
+        run: cargo deny check advisories bans
 
       - name: Test (Rust)
         run: |
@@ -150,6 +150,32 @@ jobs:
           uv pip install pyright==1.1.394
           uv run pyright
 
+      - name: "Node.js: OpenAI Client: Install dependencies"
+        working-directory: clients/openai-node
+        run: |
+          pnpm install
+
+      - name: "Node.js: OpenAI Client: typecheck"
+        working-directory: clients/openai-node
+        run: |
+          pnpm run typecheck
+
+      - name: "Python: Recipes: Install dependencies"
+        working-directory: recipes
+        run: |
+          uv venv
+          uv sync
+
+      - name: "Python: Recipes: pyright"
+        working-directory: recipes
+        run: |
+          uv run pyright
+
+      - name: "Node.js: OpenAI Client: lint"
+        working-directory: clients/openai-node
+        run: |
+          pnpm run lint
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -189,7 +215,7 @@ jobs:
           echo "FIREWORKS_API_KEY=not_used" >> .env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> .env
-          docker compose -f fixtures/docker-compose.yml up -d --build
+          docker compose -f fixtures/docker-compose.yml up -d --build --force-recreate
 
       - name: Run ui tests
         working-directory: ui

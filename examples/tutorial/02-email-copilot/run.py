@@ -7,13 +7,18 @@ with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client
             "messages": [
                 {
                     "role": "user",
-                    "content": {
-                        "recipient_name": "TensorZero Team",
-                        "sender_name": "Mark Zuckerberg",
-                        "email_purpose": "Acquire TensorZero for $100 billion dollars.",
-                    },
+                    "content": [
+                        {
+                            "type": "text",
+                            "arguments": {
+                                "recipient_name": "TensorZero Team",
+                                "sender_name": "Mark Zuckerberg",
+                                "email_purpose": "Acquire TensorZero for $100 billion dollars.",
+                            },
+                        }
+                    ],
                 }
-            ]
+            ],
         },
     )
 

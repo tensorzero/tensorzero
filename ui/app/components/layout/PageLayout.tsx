@@ -30,7 +30,7 @@ const PageHeader = forwardRef<HTMLDivElement, PageHeaderProps>(
             <h4 className="text-2xl font-medium">{heading}</h4>
           )}
           {name !== undefined && (
-            <span className="rounded-lg bg-background-tertiary px-1.5 py-1 font-mono text-2xl font-semibold leading-none">
+            <span className="font-mono text-2xl font-medium leading-none">
               {name}
             </span>
           )}

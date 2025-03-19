@@ -70,7 +70,17 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
         <CardContent>
           <pre className="overflow-x-auto rounded-md bg-muted p-4">
             <code className="text-sm">
-              {JSON.stringify(JSON.parse(inference.raw_request), null, 2)}
+              {(() => {
+                try {
+                  return JSON.stringify(
+                    JSON.parse(inference.raw_request),
+                    null,
+                    2,
+                  );
+                } catch {
+                  return inference.raw_request;
+                }
+              })()}
             </code>
           </pre>
         </CardContent>
@@ -83,7 +93,17 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
         <CardContent>
           <pre className="overflow-x-auto rounded-md bg-muted p-4">
             <code className="text-sm">
-              {JSON.stringify(JSON.parse(inference.raw_response), null, 2)}
+              {(() => {
+                try {
+                  return JSON.stringify(
+                    JSON.parse(inference.raw_response),
+                    null,
+                    2,
+                  );
+                } catch {
+                  return inference.raw_response;
+                }
+              })()}
             </code>
           </pre>
         </CardContent>

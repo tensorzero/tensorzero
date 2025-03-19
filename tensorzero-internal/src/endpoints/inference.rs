@@ -31,15 +31,15 @@ use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
     collect_chunks, Base64Image, ChatInferenceDatabaseInsert, CollectChunksArgs,
-    ContentBlockChatOutput, ContentBlockChunk, FetchContext, InferenceResult, InferenceResultChunk,
-    InferenceResultStream, Input, JsonInferenceDatabaseInsert, JsonInferenceOutput,
-    ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput, ResolvedInputMessageContent,
-    Usage,
+    ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
+    InferenceResultChunk, InferenceResultStream, Input, JsonInferenceDatabaseInsert,
+    JsonInferenceOutput, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
+    ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
-use crate::uuid_util::validate_episode_id;
+use crate::uuid_util::validate_tensorzero_uuid;
 use crate::variant::chat_completion::ChatCompletionConfig;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig};
 
@@ -69,6 +69,9 @@ pub struct Params {
     pub variant_name: Option<String>,
     // if true, the inference will not be stored
     pub dryrun: Option<bool>,
+    // if true, the inference will be internal and validation of tags will be skipped
+    #[serde(default)]
+    pub internal: bool,
     // the tags to add to the inference
     #[serde(default)]
     pub tags: HashMap<String, String>,
@@ -204,10 +207,10 @@ pub async fn inference(
 
     // Retrieve or generate the episode ID
     let episode_id = params.episode_id.unwrap_or(Uuid::now_v7());
-    validate_episode_id(episode_id)?;
+    validate_tensorzero_uuid(episode_id, "Episode")?;
     tracing::Span::current().record("episode_id", episode_id.to_string());
 
-    validate_tags(&params.tags)?;
+    validate_tags(&params.tags, params.internal)?;
     let (function, function_name) = find_function(&params, &config)?;
     // Collect the function variant names as a Vec<&str>
     let mut candidate_variant_names: Vec<&str> =
@@ -237,6 +240,17 @@ pub async fn inference(
             }
             .into());
         }
+    } else {
+        // Remove all zero-weight variants - these can only be used if explicitly pinned above
+        candidate_variant_names.retain(|name| {
+            if let Some(variant) = function.variants().get(*name) {
+                // Retain 'None' and positive-weight variants, discarding zero-weight variants
+                variant.weight().is_none_or(|w| w > 0.0)
+            } else {
+                // Keep missing variants - later code will error if we try to use them
+                true
+            }
+        });
     }
 
     // Should we store the results?
@@ -273,6 +287,7 @@ pub async fn inference(
             inference_id,
             episode_id,
         },
+        extra_cache_key: None,
     };
     let inference_clients = InferenceClients {
         http_client,
@@ -483,7 +498,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     assistant_schema: None,
                     tools: vec![],
                     tool_choice: ToolChoice::None,
-                    parallel_tool_calls: false,
+                    parallel_tool_calls: None,
                 })),
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))
@@ -780,6 +795,8 @@ pub struct ChatInferenceResponse {
     pub usage: Usage,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -791,6 +808,8 @@ pub struct JsonInferenceResponse {
     pub usage: Usage,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub original_response: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
 }
 
 impl InferenceResponse {
@@ -803,6 +822,7 @@ impl InferenceResponse {
                 content: result.content,
                 usage: result.usage,
                 original_response: result.original_response,
+                finish_reason: result.finish_reason,
             }),
             InferenceResult::Json(result) => InferenceResponse::Json(JsonInferenceResponse {
                 inference_id: result.inference_id,
@@ -811,6 +831,7 @@ impl InferenceResponse {
                 output: result.output,
                 usage: result.usage,
                 original_response: result.original_response,
+                finish_reason: result.finish_reason,
             }),
         }
     }
@@ -852,6 +873,8 @@ pub struct ChatInferenceResponseChunk {
     pub content: Vec<ContentBlockChunk>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -862,6 +885,8 @@ pub struct JsonInferenceResponseChunk {
     pub raw: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<FinishReason>,
 }
 
 impl InferenceResponseChunk {
@@ -880,6 +905,7 @@ impl InferenceResponseChunk {
                     variant_name,
                     content: result.content,
                     usage: if cached { None } else { result.usage },
+                    finish_reason: result.finish_reason,
                 })
             }
             InferenceResultChunk::Json(result) => {
@@ -892,6 +918,7 @@ impl InferenceResponseChunk {
                     variant_name,
                     raw: result.raw.unwrap_or_default(),
                     usage: if cached { None } else { result.usage },
+                    finish_reason: result.finish_reason,
                 })
             }
         })
@@ -993,6 +1020,7 @@ mod tests {
             content: content.clone(),
             created: 0,
             usage: None,
+            finish_reason: Some(FinishReason::Stop),
             raw_response: "".to_string(),
             latency: Duration::from_millis(100),
         });
@@ -1029,6 +1057,7 @@ mod tests {
                 assert_eq!(c.variant_name, inference_metadata.variant_name);
                 assert_eq!(c.content, content);
                 assert!(c.usage.is_none());
+                assert_eq!(c.finish_reason, Some(FinishReason::Stop));
             }
             InferenceResponseChunk::Json(_) => {
                 panic!("Expected ChatInferenceResponseChunk, got JsonInferenceResponseChunk");
@@ -1047,6 +1076,7 @@ mod tests {
             usage: None,
             raw_response: "".to_string(),
             latency: Duration::from_millis(100),
+            finish_reason: Some(FinishReason::Stop),
         });
         let inference_metadata = InferenceMetadata {
             function_name: "test_function".to_string(),
@@ -1080,6 +1110,7 @@ mod tests {
                 assert_eq!(c.variant_name, inference_metadata.variant_name);
                 assert_eq!(c.raw, "Test content".to_string());
                 assert!(c.usage.is_none());
+                assert_eq!(c.finish_reason, Some(FinishReason::Stop));
             }
             InferenceResponseChunk::Chat(_) => {
                 panic!("Expected JsonInferenceResponseChunk, got ChatInferenceResponseChunk");

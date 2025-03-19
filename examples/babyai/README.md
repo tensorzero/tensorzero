@@ -1,109 +1,48 @@
-# Example: SFT improves BabyAI performance with experience
+# Example: LLMs Learn to Navigate Mazes from Experience (BabyAI Benchmark)
 
 ## Background: BabyAI
 
-[BabyAI](https://github.com/mila-iqia/babyai) is a grid world environment designed to test the sample efficiency of grounded language acquisition. Each task is described in natural language (e.g., "put the red ball next to the blue ball"). To complete a task, the agent must execute a sequence of actions given partial observations of the environment. The set of actions are "go forward," "turn right," "turn left," "pick up," "drop," and "toggle." An example observation is, "you carry a yellow ball\n a wall 2 steps right\n a red ball 1 step forward".
+[BabyAI](https://github.com/mila-iqia/babyai) is a grid world environment designed to test the sample efficiency of grounded language acquisition.
+Each task is described in natural language (e.g. `put the red ball next to the blue ball`).
+To complete a task, the agent must execute a sequence of actions given partial observations of the environment.
+The set of actions are `go forward`, `turn right`, `turn left`, `pick up`, `drop`, and `toggle`.
+An example observation is `you carry a yellow ball\n a wall 2 steps right\n a red ball 1 step forward`.
 
 <p align="center">
-  <img src=https://github.com/mila-iqia/babyai/blob/master/media/GoTo.png?raw=true alt="BabyAI">
+  <img src=img/babyai.png width="400" height="400" alt="BabyAI">
 </p>
 
 We use the [BALROG agentic LLM benchmark](https://github.com/balrog-ai/BALROG) implementation of the BabyAI environment to demonstrate how you can use TensorZero to develop an LLM application to solve such tasks.
 
-## Setup
-
-### Requirements
-
-This example makes use of the BALROG python package, which requires `cmake` to be installed.
-
-#### Linux
-
-```bash
-sudo apt-get install cmake
-```
-
-#### MacOS
-
-```bash
-brew install cmake
-```
+## Getting Started
 
 ### TensorZero
 
-We've written TensorZero configuration files to accomplish this example and have provided them in the `config` directory.
-See `tensorzero.toml` for the main configuration details.
+We provide a TensorZero configuration file to tackle BALROG's BabyAI benchmark.
+Our setup implements the function `act` with multiple variants (e.g. baseline, reasoning, history).
 
-To get started, create a `.env` file with your OpenAI API key (`OPENAI_API_KEY`) and run the following command.
-Docker Compose will launch the TensorZero Gateway and a test ClickHouse database.
+### Prerequisites
 
-```bash
-docker compose up
-```
+1. Install `cmake` (e.g. `brew install cmake` or `sudo apt-get install cmake`)
+2. Install Docker
+3. Install Python 3.10+
+4. Install the Python dependencies with `pip install -r requirements.txt`
+5. Generate an API key for OpenAI (`OPENAI_API_KEY`)
 
-### Python Environment
+### Setup
 
-#### Using [`uv`](https://github.com/astral-sh/uv) (Recommended)
-
-```bash
-uv venv  # Create a new virtual environment
-uv pip sync requirements.txt  # Install the dependencies
-```
-
-#### Using `pip`
-
-We recommend using Python 3.10+ and a virtual environment.
-
-```bash
-pip install -r requirements.txt
-```
-
-#### Using `conda`
-
-```bash
-conda env create -f environment.yml
-conda activate babyai
-uv pip sync requirements.txt
-```
-
-## Running the Example
-
-You can run the example in the `babyai.ipynb` notebook.
-Make sure to install the dependencies in the `requirements.txt` file and set `TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero` in the shell your notebook will run in.
-It should not require any changes to run and will automatically connect to the TensorZero Gateway you started.
-
-The notebook will evaluate the performance of the default `gpt-4o-mini` variant on the five tasks in the BabyAI environment.
-
-<!-- If you look at the `tensorzero.toml` file, you'll see that we've defined a best-of-n variant type for the `play_chess_board` function. -->
-<!-- This means that we'll run 5 separate inference requests to the LLM, and use another LLM to select the best result.
-These are all instances of the `gpt-4o-mini` variant.
-Without modifying the prompt or the model used, we can trade more tokens for a statistically significant improvement in performance (we saw ~10% relative improvement from 35% to 39% success rate with no prompt changes and further improvement to 41% with small variations to the prompt as in the section below). -->
+1. Set the `OPENAI_API_KEY` environment variable
+2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI, and a development ClickHouse database
+3. Run the `babyai.ipynb` Jupyter notebook
 
 Here are our results showing the success rate, episode return, episode length, and input tokens.
 We find that the history_and_reasoning variant perfoms best and that using our fine-tuning recipe can improve its performance.
 
-<p align="center">
-  <img src="img/gpt-4o-mini_success-rate.png" alt="Success Rate">
-</p>
+## Running the Example
 
-<p align="center">
-  <img src="img/gpt-4o-mini_episode-return.png" alt="Episode Return">
-</p>
+The notebook will evaluate the performance of multiple variants that use the `gpt-4o-mini` model.
+You'll notice that adding history to the prompt improves performance.
 
-<p align="center">
-  <img src="img/gpt-4o-mini_episode-length.png" alt="Episode Length">
-</p>
-
-<p align="center">
-  <img src="img/gpt-4o-mini_input-tokens.png" alt="Input Tokens">
-</p>
-
-<p align="center">
-  <img src="img/gpt-4o-mini_generated-tokens.png" alt="Generated Tokens">
-</p>
-
-## Next Steps
-
-You now have a ClickHouse database with a ton of trajectories of LLMs trying to solve BabyAI tasks.
-Consider our library of [recipes](https://github.com/tensorzero/tensorzero/tree/main/recipes) for ideas on how to use this dataset to improve further!
-
-<!-- Since this data ended up in ClickHouse, we also included a test set at `data/lichess_easy_puzzles_test.csv` (use `dryrun=True` to avoid leaking it) to evaluate variants on held-out data. -->
+Later, you can use the a fine-tuning recipe to improve the performance of the `history_and_reasoning` variant.
+The simplest way to fine-tune a model is to use the TensorZero UI (available at `http://localhost:4000`).
+The fine-tuned variant will achieve materially higher success rate and episode return.

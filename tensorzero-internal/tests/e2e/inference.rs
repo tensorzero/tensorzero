@@ -21,11 +21,13 @@ use tensorzero_internal::{
 };
 use uuid::Uuid;
 
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
+    select_model_inference_clickhouse,
+};
+
 use crate::{
-    common::{
-        get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-        select_json_inference_clickhouse, select_model_inference_clickhouse,
-    },
+    common::get_gateway_endpoint,
     providers::common::{
         make_embedded_gateway, make_embedded_gateway_no_config, make_http_gateway,
     },
@@ -97,6 +99,10 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
             ]
         },
         "stream": false,
+        "internal": true, // This also tests that the internal flag is correctly propagated.
+        "tags": {
+            "tensorzero::tag_key": "tensorzero::tag_value"
+        }
     });
 
     let response = Client::new()
@@ -639,11 +645,10 @@ async fn e2e_test_tool_call() {
             == "get_temperature"
     );
     assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
-    assert!(!tool_params
-        .get("parallel_tool_calls")
-        .unwrap()
-        .as_bool()
-        .unwrap());
+    assert_eq!(
+        tool_params.get("parallel_tool_calls").unwrap(),
+        &Value::Null
+    );
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -836,11 +841,10 @@ async fn e2e_test_tool_call_malformed() {
             == "get_temperature"
     );
     assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
-    assert!(!tool_params
-        .get("parallel_tool_calls")
-        .unwrap()
-        .as_bool()
-        .unwrap());
+    assert_eq!(
+        tool_params.get("parallel_tool_calls").unwrap(),
+        &Value::Null
+    );
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -1319,6 +1323,86 @@ async fn e2e_test_variant_failover() {
     assert_eq!(output, vec!["Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.".to_string().into()]);
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_test_variant_zero_weight_skip_zero() {
+    let client = make_embedded_gateway().await;
+    let error = client
+        .inference(ClientInferenceParams {
+            function_name: Some("variant_failover_zero_weight".to_string()),
+            input: Input {
+                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                        arguments: serde_json::json!({"type": "tacos", "quantity": 13})
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    })],
+                }],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("Error sending request to Dummy provider for model 'error_1'"),
+        "Missing 'error_1' in `{error}`"
+    );
+    assert!(
+        error.contains("Error sending request to Dummy provider for model 'error_2'"),
+        "Missing 'error_2' in `{error}`"
+    );
+    assert!(
+        error.contains("Error sending request to Dummy provider for model 'error_no_weight'"),
+        "Missing 'error_3' in `{error}`"
+    );
+    assert!(
+        !error.contains("error_zero_weight"),
+        "error_zero_weight should not have been called: `{error}`"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_test_variant_zero_weight_pin_zero() {
+    let client = make_embedded_gateway().await;
+    let error = client
+        .inference(ClientInferenceParams {
+            function_name: Some("variant_failover_zero_weight".to_string()),
+            variant_name: Some("zero_weight".to_string()),
+            input: Input {
+                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                        arguments: serde_json::json!({"type": "tacos", "quantity": 13})
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    })],
+                }],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("Error sending request to Dummy provider for model 'error_zero_weight'"),
+        "Missing 'error_zero_weight' in `{error}`"
+    );
+
+    assert!(!error.contains("error_1"), "Found 'error_1' in `{error}`");
+    assert!(!error.contains("error_2"), "Found 'error_2' in `{error}`");
+    assert!(
+        !error.contains("error_no_weight"),
+        "Found 'error_no_weight' in `{error}`"
+    );
+}
+
 /// This test checks that streaming inference works as expected.
 #[tokio::test]
 async fn e2e_test_streaming() {
@@ -1650,6 +1734,53 @@ async fn e2e_test_inference_original_response_stream() {
 }
 
 #[tokio::test]
+async fn test_gateway_template_no_fs_access() {
+    // We use an embedded client so that we can control the number of
+    // requests to the flaky judge.
+    let gateway = make_embedded_gateway_with_config(&format!(
+        r#"
+[functions.my_test]
+type = "chat"
+system_schema = "{root}/fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.my_test.variants.my_variant]
+type = "chat_completion"
+system_template = "{root}/fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+model = "dummy::good"
+    "#,
+        root = env!("CARGO_MANIFEST_DIR")
+    ))
+    .await;
+
+    let params = ClientInferenceParams {
+        function_name: Some("my_test".to_string()),
+        input: Input {
+            system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+            messages: vec![InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::Text(TextKind::Text {
+                    text: "Please write me a sentence about Megumin making an explosion."
+                        .to_string(),
+                })],
+            }],
+        },
+        include_original_response: true,
+        ..Default::default()
+    };
+
+    // Request should fail due to template trying to include from fs
+    let err = gateway
+        .inference(params.clone())
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("Could not load template 'extra_templates/foo.minijinja' - if this a dynamic template included from the filesystem, please set [gateway.enable_template_filesystem_access] to `true`"),
+        "Unexpected error: {err}"
+    );
+}
+
+#[tokio::test]
 async fn test_original_response_best_of_n_flaky_judge() {
     // We use an embedded client so that we can control the number of
     // requests to the flaky judge.
@@ -1959,11 +2090,10 @@ async fn e2e_test_tool_call_streaming() {
             == "get_temperature"
     );
     assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
-    assert!(!tool_params
-        .get("parallel_tool_calls")
-        .unwrap()
-        .as_bool()
-        .unwrap());
+    assert_eq!(
+        tool_params.get("parallel_tool_calls").unwrap(),
+        &Value::Null
+    );
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await

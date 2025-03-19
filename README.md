@@ -90,6 +90,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
         <li><b><a href="https://www.tensorzero.com/docs/gateway/tutorial#experimentation">Experimentation (A/B Testing)</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/configuration-reference">Configuration-as-Code (GitOps)</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/batch-inference">Batch Inference</a></b></li>
+        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/multimodal-inference">Multimodal Inference (VLMs)</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-caching">Inference Caching</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/metrics-feedback">Metrics & Feedback</a></b></li>
         <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/episodes">Multi-Step LLM Workflows (Episodes)</a></b></li>
@@ -109,7 +110,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 <br>
 
 <details open>
-<summary><b>Usage: TensorZero Python Client (Recommended)</b></summary>
+<summary><b>Usage: Python &mdash; TensorZero Client (Recommended)</b></summary>
 
 You can access any provider using the TensorZero Python client.
 
@@ -118,7 +119,7 @@ You can access any provider using the TensorZero Python client.
 3. Run inference:
 
 ```python
-from tensorzero import TensorZeroGateway
+from tensorzero import TensorZeroGateway  # or AsyncTensorZeroGateway
 
 
 with TensorZeroGateway.build_embedded(clickhouse_url="...", config_file="...") as client:
@@ -140,7 +141,7 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 </details>
 
 <details>
-<summary><b>Usage: OpenAI Python Client</b></summary>
+<summary><b>Usage: Python &mdash; OpenAI Client</b></summary>
 
 You can access any provider using the OpenAI Python client with TensorZero.
 
@@ -155,7 +156,7 @@ from openai import OpenAI
 
 with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
     response = client.chat.completions.create(
-        model="tensorzero::function_name::your_function_name",  # defined in configuration (step 2)
+        model="tensorzero::model_name::openai::gpt-4o-mini",
         messages=[
             {
                 "role": "user",
@@ -170,7 +171,39 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 </details>
 
 <details>
-<summary><b>Usage: Other Languages & Platforms (HTTP)</b></summary>
+<summary><b>Usage: JavaScript / TypeScript (Node) &mdash; OpenAI Client</b></summary>
+
+You can access any provider using the OpenAI Node client with TensorZero.
+
+1. Deploy `tensorzero/gateway` using Docker.
+   **[Detailed instructions →](https://www.tensorzero.com/docs/gateway/deployment)**
+2. Set up the TensorZero configuration.
+3. Run inference:
+
+```ts
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "http://localhost:3000/openai/v1",
+});
+
+const response = await client.chat.completions.create({
+  model: "tensorzero::model_name::openai::gpt-4o-mini",
+  messages: [
+    {
+      role: "user",
+      content: "Write a haiku about artificial intelligence.",
+    },
+  ],
+});
+```
+
+See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more information.
+
+</details>
+
+<details>
+<summary><b>Usage: Other Languages & Platforms &mdash; HTTP API</b></summary>
 
 TensorZero supports virtually any programming language or platform via its HTTP API.
 

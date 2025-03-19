@@ -14,7 +14,7 @@ use url::Url;
 
 use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
-    CacheData, ModelProviderRequest, StreamingCacheData,
+    CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
 use crate::endpoints::inference::InferenceClients;
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -122,6 +122,13 @@ impl StreamResponse {
                         },
                         // We didn't make any network calls to the model provider, so the latency is 0
                         latency: Duration::from_secs(0),
+                        // For all chunks but the last one, the finish reason is None
+                        // For the last chunk, the finish reason is the same as the cache lookup
+                        finish_reason: if index == chunks_len - 1 {
+                            cache_lookup.finish_reason.clone()
+                        } else {
+                            None
+                        },
                     })
                 },
             ))) as ProviderInferenceResponseStreamInner)
@@ -211,6 +218,7 @@ impl ModelConfig {
                 model_name,
                 provider_name,
             };
+            let cache_key = model_provider_request.get_cache_key()?;
             // TODO: think about how to best handle errors here
             if clients.cache_options.enabled.read() {
                 let cache_lookup = cache_lookup(
@@ -248,11 +256,14 @@ impl ModelConfig {
                     if clients.cache_options.enabled.write() {
                         let _ = start_cache_write(
                             clients.clickhouse_connection_info,
-                            model_provider_request,
-                            &response.output,
+                            cache_key,
+                            NonStreamingCacheData {
+                                blocks: response.output.clone(),
+                            },
                             &response.raw_request,
                             &response.raw_response,
                             &response.usage,
+                            response.finish_reason.as_ref(),
                         );
                     }
                     // We already checked the cache above (and returned early if it was a hit), so this response was not from the cache
@@ -279,16 +290,16 @@ impl ModelConfig {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         for provider_name in &self.routing {
             let request = self.filter_content_blocks(request, model_name, provider_name);
-            let request = &*request;
+            let model_provider_request = ModelProviderRequest {
+                request: &request,
+                model_name,
+                provider_name,
+            };
             // TODO: think about how to best handle errors here
             if clients.cache_options.enabled.read() {
                 let cache_lookup = cache_lookup_streaming(
                     clients.clickhouse_connection_info,
-                    ModelProviderRequest {
-                        request,
-                        model_name,
-                        provider_name,
-                    },
+                    model_provider_request,
                     clients.cache_options.max_age_s,
                 )
                 .await
@@ -305,7 +316,11 @@ impl ModelConfig {
                 })
             })?;
             let response = provider
-                .infer_stream(request, clients.http_client, clients.credentials)
+                .infer_stream(
+                    model_provider_request,
+                    clients.http_client,
+                    clients.credentials,
+                )
                 .instrument(span!(
                     Level::INFO,
                     "infer_stream",
@@ -321,11 +336,7 @@ impl ModelConfig {
                     let mut stream = if clients.cache_options.enabled.write() {
                         stream_with_cache_write(
                             raw_request.clone(),
-                            ModelProviderRequest {
-                                request,
-                                model_name,
-                                provider_name,
-                            },
+                            model_provider_request,
                             clients,
                             stream,
                         )
@@ -821,7 +832,7 @@ impl ModelProvider {
 
     async fn infer_stream(
         &self,
-        request: &ModelInferenceRequest<'_>,
+        request: ModelProviderRequest<'_>,
         client: &Client,
         api_keys: &InferenceCredentials,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -1440,7 +1451,7 @@ mod tests {
         let tool_config = ToolCallConfig {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
         let api_keys = InferenceCredentials::default();
         let http_client = Client::new();
@@ -1472,6 +1483,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let model_name = "test model";
         let response = model_config
@@ -1511,7 +1523,8 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
-                        message: "Error sending request to Dummy provider.".to_string(),
+                        message: "Error sending request to Dummy provider for model 'error'."
+                            .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
                         raw_request: Some("raw request".to_string()),
@@ -1566,6 +1579,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let model_config = ModelConfig {
@@ -1599,7 +1613,9 @@ mod tests {
             .await
             .unwrap();
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
-        assert!(logs_contain("Error sending request to Dummy provider"));
+        assert!(logs_contain(
+            "Error sending request to Dummy provider for model 'error'."
+        ));
         let content = response.output;
         assert_eq!(
             content,
@@ -1639,6 +1655,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         // Test good model
@@ -1747,7 +1764,8 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
-                        message: "Error sending request to Dummy provider.".to_string(),
+                        message: "Error sending request to Dummy provider for model 'error'."
+                            .to_string(),
                         status_code: None,
                         provider_type: "dummy".to_string(),
                         raw_request: Some("raw request".to_string()),
@@ -1790,6 +1808,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         // Test fallback
@@ -1841,7 +1860,9 @@ mod tests {
         let initial_chunk = stream.next().await.unwrap().unwrap();
         assert_eq!(&*model_provider_name, "good_provider");
         // Ensure that the error for the bad provider was logged, but the request worked nonetheless
-        assert!(logs_contain("Error sending request to Dummy provider"));
+        assert!(logs_contain(
+            "Error sending request to Dummy provider for model 'error'"
+        ));
         assert_eq!(raw_request, "raw request");
 
         assert_eq!(
@@ -1891,7 +1912,7 @@ mod tests {
         let tool_config = ToolCallConfig {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
         let api_keys = InferenceCredentials::default();
         let http_client = Client::new();
@@ -1922,6 +1943,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let model_name = "test model";
         let error = model_config
@@ -1995,7 +2017,7 @@ mod tests {
         let tool_config = ToolCallConfig {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
         let api_keys = InferenceCredentials::default();
         let http_client = Client::new();
@@ -2026,6 +2048,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let error = model_config
             .infer(&request, &clients, model_name)

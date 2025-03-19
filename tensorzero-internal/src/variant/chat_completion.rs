@@ -145,6 +145,9 @@ impl ChatCompletionConfig {
                 ResolvedInputMessageContent::Image(image) => {
                     content.push(ContentBlock::Image(image.clone()));
                 }
+                ResolvedInputMessageContent::Thought(thought) => {
+                    content.push(ContentBlock::Thought(thought.clone()));
+                }
                 ResolvedInputMessageContent::Unknown {
                     data,
                     model_provider_name,
@@ -471,8 +474,8 @@ mod tests {
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,
     };
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
-    use crate::inference::providers::common::get_temperature_tool_config;
     use crate::inference::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
+    use crate::inference::providers::test_helpers::get_temperature_tool_config;
     use crate::inference::types::{
         ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode, Usage,
     };
@@ -845,7 +848,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -927,6 +930,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let models = ModelTable::default();
         let inference_models = InferenceModels {
@@ -979,6 +983,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let result = chat_completion_config
             .infer(
@@ -1028,6 +1033,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let err = chat_completion_config
             .infer(
@@ -1047,7 +1053,8 @@ mod tests {
                 provider_errors: HashMap::from([(
                     "error".to_string(),
                     Error::new(ErrorDetails::InferenceClient {
-                        message: "Error sending request to Dummy provider.".to_string(),
+                        message: "Error sending request to Dummy provider for model 'error'."
+                            .to_string(),
                         status_code: None,
                         raw_request: Some("raw request".to_string()),
                         raw_response: None,
@@ -1104,6 +1111,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let result = chat_completion_config
             .infer(
@@ -1180,6 +1188,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let result = chat_completion_config
             .infer(
@@ -1264,6 +1273,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let inference_params = InferenceParams::default();
         let result = chat_completion_config
@@ -1323,6 +1333,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
@@ -1335,6 +1346,7 @@ mod tests {
                 path: user_template_name.into(),
                 contents: "".to_string(),
             }),
+            extra_body: None,
             ..Default::default()
         };
         let result = chat_completion_config
@@ -1426,6 +1438,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: Some(&output_schema),
+            extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
@@ -1519,6 +1532,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: Some(&output_schema),
+            extra_cache_key: None,
         };
         let chat_completion_config = ChatCompletionConfig {
             model: "json".into(),
@@ -1609,7 +1623,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         })));
         let system_template_name = "system";
         let user_template_name = "greeting_with_age";
@@ -1686,6 +1700,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: Some(""),
+            extra_cache_key: None,
         };
         let result = chat_completion_config
             .infer_stream(
@@ -1748,6 +1763,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            extra_cache_key: None,
         };
         let (mut stream, models_used) = chat_completion_config
             .infer_stream(
@@ -1834,7 +1850,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
@@ -1847,6 +1863,7 @@ mod tests {
             function_name: "",
             variant_name: Some(""),
             dynamic_output_schema: None,
+            extra_cache_key: None,
         };
         let model_request = chat_completion_config
             .prepare_request(
@@ -1937,7 +1954,7 @@ mod tests {
             implicit_tool_call_config: ToolCallConfig {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: false,
+                parallel_tool_calls: None,
             },
         });
         let inference_config = InferenceConfig {
@@ -1950,6 +1967,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: Some(""),
+            extra_cache_key: None,
         };
         let mut inference_params = InferenceParams::default();
         let model_request = chat_completion_config
@@ -2027,6 +2045,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
         let model_request = chat_completion_config
             .prepare_request(

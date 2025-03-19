@@ -15,9 +15,9 @@ use crate::{
     error::{Error, ErrorDetails},
     inference::types::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
-        ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+        ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
         ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
-        ProviderInferenceResponse, ProviderInferenceResponseChunk,
+        ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
         ProviderInferenceResponseStreamInner, TextChunk, Usage,
     },
     model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider},
@@ -206,7 +206,11 @@ impl InferenceProvider for MistralProvider {
 
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -546,11 +550,37 @@ struct MistralResponseMessage {
     tool_calls: Option<Vec<MistralResponseToolCall>>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum MistralFinishReason {
+    Stop,
+    Length,
+    ModelLength,
+    Error,
+    ToolCalls,
+    #[serde(other)]
+    Unknown,
+}
+
+impl From<MistralFinishReason> for FinishReason {
+    fn from(reason: MistralFinishReason) -> Self {
+        match reason {
+            MistralFinishReason::Stop => FinishReason::Stop,
+            MistralFinishReason::Length => FinishReason::Length,
+            MistralFinishReason::ModelLength => FinishReason::Length,
+            MistralFinishReason::Error => FinishReason::Unknown,
+            MistralFinishReason::ToolCalls => FinishReason::ToolCall,
+            MistralFinishReason::Unknown => FinishReason::Unknown,
+        }
+    }
+}
+
 // Leaving out logprobs and finish_reason for now
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 struct MistralResponseChoice {
     index: u8,
     message: MistralResponseMessage,
+    finish_reason: MistralFinishReason,
 }
 
 // Leaving out id, created, model, service_tier, system_fingerprint, object for now
@@ -590,16 +620,19 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
             }));
         }
         let usage = response.usage.into();
-        let message = response
+        let MistralResponseChoice {
+            message,
+            finish_reason,
+            ..
+        } = response
             .choices
             .pop()
             .ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                 message: "Response has no choices (this should never happen). Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(raw_response.clone())
-            }))?
-            .message;
+                raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
+                raw_response: Some(raw_response.clone()),
+            }))?;
         let mut content: Vec<ContentBlockOutput> = Vec::new();
         if let Some(text) = message.content {
             if !text.is_empty() {
@@ -617,15 +650,18 @@ impl<'a> TryFrom<MistralResponseWithMetadata<'a>> for ProviderInferenceResponse 
             })
         })?;
         let system = generic_request.system.clone();
-        let messages = generic_request.messages.clone();
+        let input_messages = generic_request.messages.clone();
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response: raw_response.clone(),
+                usage,
+                latency,
+                finish_reason: Some(finish_reason.into()),
+            },
         ))
     }
 }
@@ -658,6 +694,8 @@ struct MistralDelta {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct MistralChatChunkChoice {
     delta: MistralDelta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    finish_reason: Option<MistralFinishReason>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -688,7 +726,11 @@ fn mistral_to_tensorzero_chunk(
     }
     let usage = chunk.usage.map(|u| u.into());
     let mut content = vec![];
+    let mut finish_reason = None;
     if let Some(choice) = chunk.choices.pop() {
+        if let Some(choice_finish_reason) = choice.finish_reason {
+            finish_reason = Some(choice_finish_reason.into());
+        }
         if let Some(text) = choice.delta.content {
             if !text.is_empty() {
                 content.push(ContentBlockChunk::Text(TextChunk {
@@ -713,6 +755,7 @@ fn mistral_to_tensorzero_chunk(
         usage,
         raw_message,
         latency,
+        finish_reason,
     ))
 }
 
@@ -725,7 +768,7 @@ mod tests {
 
     use super::*;
 
-    use crate::inference::providers::common::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::inference::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
     use crate::inference::types::{FunctionType, RequestMessage, Role};
 
     #[test]
@@ -749,6 +792,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let mistral_request =
@@ -781,6 +825,7 @@ mod tests {
                     content: Some("Hello, world!".to_string()),
                     tool_calls: None,
                 },
+                finish_reason: MistralFinishReason::Stop,
             }],
             usage: MistralUsage {
                 prompt_tokens: 10,
@@ -808,6 +853,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
 
         let request_body = MistralRequest {
@@ -851,6 +897,7 @@ mod tests {
         );
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.raw_response, raw_response);
+        assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(inference_response.system, None);
         assert_eq!(
             inference_response.input_messages,
@@ -874,6 +921,7 @@ mod tests {
                         },
                     }]),
                 },
+                finish_reason: MistralFinishReason::ToolCalls,
             }],
             usage: MistralUsage {
                 prompt_tokens: 15,
@@ -900,6 +948,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let request_body = MistralRequest {
             messages: vec![],
@@ -996,6 +1045,7 @@ mod tests {
                         content: Some("Choice 1".to_string()),
                         tool_calls: None,
                     },
+                    finish_reason: MistralFinishReason::Stop,
                 },
                 MistralResponseChoice {
                     index: 1,
@@ -1003,6 +1053,7 @@ mod tests {
                         content: Some("Choice 2".to_string()),
                         tool_calls: None,
                     },
+                    finish_reason: MistralFinishReason::Stop,
                 },
             ],
             usage: MistralUsage {

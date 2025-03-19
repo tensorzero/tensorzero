@@ -5,18 +5,24 @@ use reqwest::Client;
 use reqwest::StatusCode;
 use serde_json::json;
 use serde_json::Value;
+use tensorzero_internal::cache::CacheEnabledMode;
+use tensorzero_internal::cache::CacheOptions;
+use tensorzero_internal::embeddings::EmbeddingModelConfig;
+#[allow(unused)]
+use tensorzero_internal::embeddings::EmbeddingProvider;
+use tensorzero_internal::endpoints::inference::InferenceClients;
 use tensorzero_internal::{
-    embeddings::{EmbeddingProvider, EmbeddingProviderConfig, EmbeddingRequest},
+    embeddings::{EmbeddingProviderConfig, EmbeddingRequest},
     endpoints::inference::InferenceCredentials,
     inference::types::{Latency, ModelInferenceRequestJsonMode},
 };
 use uuid::Uuid;
 
-use crate::common::{
-    get_clickhouse, get_gateway_endpoint, select_chat_inference_clickhouse,
-    select_model_inference_clickhouse,
-};
+use crate::common::get_gateway_endpoint;
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
+};
 
 #[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);
@@ -59,6 +65,13 @@ async fn get_providers() -> E2ETestProviders {
     ];
 
     let inference_params_providers = vec![E2ETestProvider {
+        variant_name: "openai".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: credentials.clone(),
+    }];
+
+    let inference_params_dynamic_providers = vec![E2ETestProvider {
         variant_name: "openai-dynamic".to_string(),
         model_name: "gpt-4o-mini-2024-07-18-dynamic".into(),
         model_provider_name: "openai".into(),
@@ -118,6 +131,7 @@ async fn get_providers() -> E2ETestProviders {
         extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
         inference_params_inference: inference_params_providers,
+        inference_params_dynamic_credentials: inference_params_dynamic_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
@@ -835,6 +849,7 @@ async fn test_o1_mini_inference() {
 
 #[tokio::test]
 async fn test_embedding_request() {
+    let clickhouse = get_clickhouse().await;
     let provider_config_serialized = r#"
     type = "openai"
     model_name = "text-embedding-3-small"
@@ -846,16 +861,39 @@ async fn test_embedding_request() {
         EmbeddingProviderConfig::OpenAI(_)
     ));
 
-    let client = Client::new();
+    // Inject randomness into the model name to ensure that the first request
+    // is a cache miss
+    let model_name = format!("my-embedding-{}", Uuid::now_v7());
+
+    let model_config = EmbeddingModelConfig {
+        routing: vec![model_name.as_str().into()],
+        providers: [(model_name.as_str().into(), provider_config)]
+            .into_iter()
+            .collect(),
+    };
+
     let request = EmbeddingRequest {
         input: "This is a test input".to_string(),
     };
     let api_keys = InferenceCredentials::default();
-    let response = provider_config
-        .embed(&request, &client, &api_keys)
+    let response = model_config
+        .embed(
+            &request,
+            &model_name,
+            &InferenceClients {
+                http_client: &Default::default(),
+                credentials: &api_keys,
+                clickhouse_connection_info: &clickhouse,
+                cache_options: &CacheOptions {
+                    max_age_s: None,
+                    enabled: CacheEnabledMode::On,
+                },
+            },
+        )
         .await
         .unwrap();
     assert_eq!(response.embedding.len(), 1536);
+    assert!(!response.cached);
     // Calculate the L2 norm of the embedding
     let norm: f32 = response
         .embedding
@@ -900,6 +938,29 @@ async fn test_embedding_request() {
         }
         _ => panic!("Latency should be non-streaming"),
     }
+
+    // Wait for ClickHouse write
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let cached_response = model_config
+        .embed(
+            &request,
+            &model_name,
+            &InferenceClients {
+                http_client: &Default::default(),
+                credentials: &api_keys,
+                clickhouse_connection_info: &clickhouse,
+                cache_options: &CacheOptions {
+                    max_age_s: None,
+                    enabled: CacheEnabledMode::On,
+                },
+            },
+        )
+        .await
+        .unwrap();
+    assert!(cached_response.cached);
+    assert_eq!(response.embedding, cached_response.embedding);
+    assert_eq!(cached_response.usage.input_tokens, 5);
+    assert_eq!(cached_response.usage.output_tokens, 0);
 }
 
 #[cfg(feature = "e2e_tests")]
@@ -1015,6 +1076,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
             region: None,
             prefix: prefix.clone(),
             endpoint: Some(endpoint.clone()),
+            allow_http: None,
         },
         &client,
         &format!(
@@ -1025,7 +1087,12 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     bucket_name = "{test_bucket}"
     prefix = "{prefix}"
 
-    [functions]
+    [functions.image_test]
+    type = "chat"
+
+    [functions.image_test.variants.openai]
+    type = "chat_completion"
+    model = "openai::gpt-4o-mini-2024-07-18"
     "#
         ),
         test_bucket,
@@ -1153,6 +1220,7 @@ async fn test_content_block_text_field() {
 #[tokio::test]
 pub async fn test_image_inference_with_provider_gcp_storage() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
+    use crate::providers::common::IMAGE_FUNCTION_CONFIG;
     use aws_credential_types::Credentials;
     use aws_sdk_s3::config::SharedCredentialsProvider;
     use rand::distributions::Alphanumeric;
@@ -1201,6 +1269,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
             region: None,
             prefix: prefix.clone(),
             endpoint: Some(endpoint.clone()),
+            allow_http: None,
         },
         &client,
         &format!(
@@ -1211,11 +1280,142 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     bucket_name = "{test_bucket}"
     prefix = "{prefix}"
 
-    [functions]
+    {IMAGE_FUNCTION_CONFIG}
     "#
         ),
         test_bucket,
         &prefix,
+    )
+    .await;
+}
+
+// We already test Amazon S3 with all image providers, so let's test minio
+// (which is S3-compatible) with just OpenAI to save time and money.
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+pub async fn test_image_inference_with_provider_docker_minio() {
+    use crate::providers::common::test_image_inference_with_provider_s3_compatible;
+    use aws_credential_types::Credentials;
+    use aws_sdk_s3::config::SharedCredentialsProvider;
+    use rand::distributions::Alphanumeric;
+    use rand::distributions::DistString;
+    use tensorzero_internal::inference::types::storage::StorageKind;
+
+    // These are set in `ci/minio-docker-compose.yml`
+    let minio_access_key_id = "tensorzero-root".to_string();
+    let minio_secret_access_key = "tensorzero-root".to_string();
+
+    let credentials = Credentials::from_keys(&minio_access_key_id, &minio_secret_access_key, None);
+
+    // Our S3-compatible object store checks for these variables, giving them
+    // higher priority than the normal 'AWS_ACCESS_KEY_ID'/'AWS_SECRET_ACCESS_KEY' vars
+    std::env::set_var("S3_ACCESS_KEY_ID", minio_access_key_id);
+    std::env::set_var("S3_SECRET_ACCESS_KEY", minio_secret_access_key);
+
+    let provider = E2ETestProvider {
+        variant_name: "openai".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    };
+
+    let endpoint = "http://127.0.0.1:8000/".to_string();
+
+    let test_bucket = "tensorzero-e2e-tests";
+    let config = aws_config::load_from_env()
+        .await
+        .to_builder()
+        .credentials_provider(SharedCredentialsProvider::new(credentials))
+        .endpoint_url(&endpoint)
+        .build();
+
+    let client = aws_sdk_s3::Client::new(&config);
+
+    let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
+    prefix += "-";
+
+    test_image_inference_with_provider_s3_compatible(
+        provider,
+        &StorageKind::S3Compatible {
+            bucket_name: Some(test_bucket.to_string()),
+            region: None,
+            prefix: prefix.clone(),
+            endpoint: Some(endpoint.clone()),
+            allow_http: Some(true),
+        },
+        &client,
+        &format!(
+            r#"
+    [object_storage]
+    type = "s3_compatible"
+    endpoint = "{endpoint}"
+    bucket_name = "{test_bucket}"
+    prefix = "{prefix}"
+    allow_http = true
+    
+    [functions.image_test]
+    type = "chat"
+
+    [functions.image_test.variants.openai]
+    type = "chat_completion"
+    model = "openai::gpt-4o-mini-2024-07-18"
+    "#
+        ),
+        test_bucket,
+        &prefix,
+    )
+    .await;
+}
+
+#[cfg(feature = "e2e_tests")]
+#[tokio::test]
+pub async fn test_parallel_tool_use_default_true_inference_request() {
+    use crate::providers::common::check_parallel_tool_use_inference_response;
+
+    let episode_id = Uuid::now_v7();
+
+    let provider = E2ETestProvider {
+        variant_name: "openai".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    };
+
+    // We don't specify `parallel_tool_use` in the request, so it shouldn't get passed to OpenAI,
+    // resulting in their default value (`true`)
+    let payload = json!({
+        "function_name": "weather_helper_parallel",
+        "episode_id": episode_id,
+        "input":{
+            "system": {"assistant_name": "Dr. Mehta"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+                }
+            ]},
+        "stream": false,
+        "variant_name": provider.variant_name,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check if the API response is fine
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+    check_parallel_tool_use_inference_response(
+        response_json,
+        &provider,
+        Some(episode_id),
+        false,
+        Value::Null,
     )
     .await;
 }

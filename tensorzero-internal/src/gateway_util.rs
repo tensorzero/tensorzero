@@ -1,13 +1,20 @@
+use std::future::IntoFuture;
+use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 
 use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
+use axum::routing::post;
+use axum::Router;
 use reqwest::{Client, Proxy};
 use serde::de::DeserializeOwned;
+use tokio::sync::oneshot::Sender;
 use tracing::instrument;
 
+use crate::clickhouse::migration_manager;
 use crate::clickhouse::ClickHouseConnectionInfo;
-use crate::clickhouse_migration_manager;
 use crate::config_parser::Config;
+use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 
 /// State for the API
@@ -28,6 +35,13 @@ impl AppStateData {
                     tracing::warn!("Deprecation Warning: The environment variable \"CLICKHOUSE_URL\" has been renamed to \"TENSORZERO_CLICKHOUSE_URL\" and will be removed in a future version. Please update your environment to use \"TENSORZERO_CLICKHOUSE_URL\" instead.");
                 })
             });
+        Self::new_with_clickhouse(config, clickhouse_url).await
+    }
+
+    async fn new_with_clickhouse(
+        config: Arc<Config<'static>>,
+        clickhouse_url: Option<String>,
+    ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let http_client = setup_http_client()?;
 
@@ -77,7 +91,7 @@ pub async fn setup_clickhouse(
 
     // Run ClickHouse migrations (if any) if we have a production ClickHouse connection
     if let ClickHouseConnectionInfo::Production { .. } = &clickhouse_connection_info {
-        clickhouse_migration_manager::run(&clickhouse_connection_info).await?;
+        migration_manager::run(&clickhouse_connection_info).await?;
     }
     Ok(clickhouse_connection_info)
 }
@@ -88,7 +102,6 @@ pub async fn setup_clickhouse(
 /// and instead simply assume that the request body is a JSON object.
 pub struct StructuredJson<T>(pub T);
 
-#[axum::async_trait]
 impl<S, T> FromRequest<S> for StructuredJson<T>
 where
     Json<T>: FromRequest<S, Rejection = JsonRejection>,
@@ -155,6 +168,62 @@ pub fn setup_http_client() -> Result<Client, Error> {
     })
 }
 
+pub struct ShutdownHandle {
+    #[allow(dead_code)]
+    sender: Sender<()>,
+}
+
+/// Starts a new HTTP TensorZero gateway on an unused port, with only the openai-compatible endpoint enabled.
+/// This is used in by `patch_openai_client` in the Python client to allow pointing the OpenAI client
+/// at a local gateway (via `base_url`).
+///
+/// Returns the address the gateway is listening on, and a future resolves (after the gateway starts up)
+/// to a `ShutdownHandle` which shuts down the gateway when dropped.
+pub async fn start_openai_compatible_gateway(
+    config_file: Option<String>,
+    clickhouse_url: Option<String>,
+) -> Result<(SocketAddr, ShutdownHandle), Error> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to bind to a port: {}", e),
+            })
+        })?;
+    let bind_addr = listener.local_addr().map_err(|e| {
+        Error::new(ErrorDetails::InternalError {
+            message: format!("Failed to get local address: {}", e),
+        })
+    })?;
+
+    let config = if let Some(config_file) = config_file {
+        Arc::new(Config::load_and_verify_from_path(Path::new(&config_file)).await?)
+    } else {
+        Arc::new(Config::default())
+    };
+    let app_state = AppStateData::new_with_clickhouse(config, clickhouse_url).await?;
+
+    let router = Router::new()
+        .route(
+            "/openai/v1/chat/completions",
+            post(endpoints::openai_compatible::inference_handler),
+        )
+        .fallback(endpoints::fallback::handle_404)
+        .with_state(app_state);
+
+    let (sender, recv) = tokio::sync::oneshot::channel::<()>();
+    let shutdown_fut = async move {
+        let _ = recv.await;
+    };
+
+    tokio::spawn(
+        axum::serve(listener, router)
+            .with_graceful_shutdown(shutdown_fut)
+            .into_future(),
+    );
+    Ok((bind_addr, ShutdownHandle { sender }))
+}
+
 #[cfg(test)]
 mod tests {
     use tracing_test::traced_test;
@@ -173,6 +242,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
+            enable_template_filesystem_access: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -222,6 +292,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
+            enable_template_filesystem_access: false,
         };
 
         let config = Box::leak(Box::new(Config {
@@ -242,6 +313,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
+            enable_template_filesystem_access: false,
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -264,6 +336,7 @@ mod tests {
             },
             bind_address: None,
             debug: false,
+            enable_template_filesystem_access: false,
         };
         let config = Config {
             gateway: gateway_config,
@@ -271,7 +344,7 @@ mod tests {
         };
         setup_clickhouse(
             &config,
-            Some("https://tensorzero.com:8123".to_string()),
+            Some("https://tensorzero.invalid:8123".to_string()),
             false,
         )
         .await

@@ -141,6 +141,7 @@ export function SFTForm({
                 name="function"
                 inferenceCount={counts.inferenceCount}
                 config={config}
+                hide_default_function={true}
               />
               {errors.function && (
                 <p className="text-xs text-red-500">

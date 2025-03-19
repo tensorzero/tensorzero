@@ -10,6 +10,7 @@ import { formatDate } from "~/utils/date";
 import type { DatasetDetailRow } from "~/utils/clickhouse/datasets";
 import { Badge } from "~/components/ui/badge";
 import { Link } from "react-router";
+import { FunctionLink } from "~/components/function/FunctionLink";
 
 export default function DatasetRowTable({
   rows,
@@ -57,14 +58,11 @@ export default function DatasetRowTable({
                 </Link>
               </TableCell>
               <TableCell>
-                <Link
-                  to={`/observability/functions/${row.function_name}`}
-                  className="block no-underline"
-                >
+                <FunctionLink functionName={row.function_name}>
                   <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                     {row.function_name}
                   </code>
-                </Link>
+                </FunctionLink>
               </TableCell>
               <TableCell>{formatDate(new Date(row.updated_at))}</TableCell>
             </TableRow>

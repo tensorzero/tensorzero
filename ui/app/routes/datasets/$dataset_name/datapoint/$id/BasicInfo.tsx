@@ -9,6 +9,7 @@ import {
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import { EditButton } from "~/components/utils/EditButton";
 import { DeleteButton } from "~/components/utils/DeleteButton";
+import { FunctionInfo } from "~/components/function/FunctionInfo";
 interface BasicInfoProps {
   datapoint: ParsedDatasetRow;
   tryWithVariantProps: TryWithVariantButtonProps;
@@ -33,7 +34,9 @@ export default function BasicInfo({
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-xl">Basic Information</CardTitle>
         <div className="flex gap-2">
-          <TryWithVariantButton {...tryWithVariantProps} />
+          {datapoint.function_name !== "tensorzero::default" && (
+            <TryWithVariantButton {...tryWithVariantProps} />
+          )}
           <EditButton onClick={() => (window.location.href = "#")} />
           <DeleteButton onClick={onDelete} isLoading={isDeleting} />
         </div>
@@ -42,11 +45,10 @@ export default function BasicInfo({
         <dl className="grid grid-cols-2 gap-4">
           <div>
             <dt className="text-lg font-semibold">Function</dt>
-            <dd>
-              <Link to={`/observability/functions/${datapoint.function_name}`}>
-                <Code>{datapoint.function_name}</Code>
-              </Link>
-            </dd>
+            <FunctionInfo
+              functionName={datapoint.function_name}
+              functionType={type}
+            />
           </div>
           <div>
             <dt className="text-lg font-semibold">Episode ID</dt>

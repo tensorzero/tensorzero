@@ -58,7 +58,7 @@ pub enum JsonMode {
 }
 
 /// Configuration that applies to the current inference request.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct InferenceConfig<'a, 'request> {
     pub tool_config: Option<&'request ToolCallConfig>,
     pub templates: &'request TemplateConfig<'a>,
@@ -66,6 +66,11 @@ pub struct InferenceConfig<'a, 'request> {
     pub function_name: &'request str,
     pub variant_name: Option<&'request str>,
     pub ids: InferenceIds,
+    /// Optional arbitrary data, only used when constructing the cache key.
+    /// This is used by best_of_n/mixture_of_n to force different sub-variants
+    /// to have different cache keys.
+    /// This field should only ever be forwarded to `ModelInferenceRequest`
+    pub extra_cache_key: Option<String>,
 }
 
 /// Maps to the subset of Config that applies to the current inference request.
@@ -100,6 +105,7 @@ impl<'a> BatchInferenceConfig<'a> {
                     inference_id: *inference_id,
                     episode_id: *episode_id,
                 },
+                extra_cache_key: None,
             },
         )
         .collect()
@@ -163,12 +169,12 @@ pub trait Variant {
 }
 
 impl VariantConfig {
-    pub fn weight(&self) -> f64 {
+    pub fn weight(&self) -> Option<f64> {
         match self {
-            VariantConfig::ChatCompletion(params) => params.weight.unwrap_or(0.0),
-            VariantConfig::BestOfNSampling(params) => params.weight.unwrap_or(0.0),
-            VariantConfig::Dicl(params) => params.weight.unwrap_or(0.0),
-            VariantConfig::MixtureOfN(params) => params.weight.unwrap_or(0.0),
+            VariantConfig::ChatCompletion(params) => params.weight,
+            VariantConfig::BestOfNSampling(params) => params.weight,
+            VariantConfig::Dicl(params) => params.weight,
+            VariantConfig::MixtureOfN(params) => params.weight,
         }
     }
 }
@@ -429,6 +435,7 @@ where
                 function_type: FunctionType::Chat,
                 output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
                 extra_body,
+                extra_cache_key: inference_config.extra_cache_key.clone(),
             }
         }
         FunctionConfig::Json(json_config) => {
@@ -463,6 +470,7 @@ where
                 function_type: FunctionType::Json,
                 output_schema,
                 extra_body,
+                extra_cache_key: inference_config.extra_cache_key.clone(),
             }
         }
     })
@@ -631,7 +639,7 @@ mod tests {
         let tool_config = ToolCallConfig {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
 
         // Create a sample inference config
@@ -645,6 +653,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
 
         // Define common inference parameters
@@ -681,7 +690,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
         let json_mode = JsonMode::Off;
 
@@ -775,6 +784,7 @@ mod tests {
             function_name: "test_function",
             variant_name: Some("test_variant"),
             dynamic_output_schema: Some(&dynamic_output_schema),
+            extra_cache_key: None,
         };
         let json_mode = JsonMode::ImplicitTool;
 
@@ -864,6 +874,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
 
         // Test case 1: Successful inference with ChatCompletionConfig and FunctionConfigChat
@@ -875,7 +886,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
 
         let request_messages = vec![RequestMessage {
@@ -899,6 +910,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: None,
+            ..Default::default()
         };
 
         // Create a dummy provider config with the desired model name
@@ -976,7 +988,7 @@ mod tests {
             implicit_tool_call_config: crate::tool::ToolCallConfig {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: false,
+                parallel_tool_calls: None,
             },
         });
         let output_schema = json!({
@@ -1003,6 +1015,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Json,
             extra_body: None,
+            ..Default::default()
         };
 
         // Create a dummy provider config with model_name "json" to trigger JSON response
@@ -1128,6 +1141,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_cache_key: None,
         };
 
         let model_name = "dummy_chat_model";
@@ -1139,7 +1153,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
 
         let request_messages = vec![RequestMessage {
@@ -1163,6 +1177,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: None,
+            ..Default::default()
         };
 
         // Create a dummy provider config with the error model name
@@ -1238,7 +1253,7 @@ mod tests {
             _ => panic!("Expected Chat inference result"),
         }
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider."#
+            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 
@@ -1266,7 +1281,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: crate::tool::ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
 
         // Create an input message
@@ -1311,6 +1326,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: None,
+            ..Default::default()
         };
 
         // Initialize inference parameters
@@ -1407,7 +1423,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         })));
 
         let request_messages = vec![RequestMessage {
@@ -1431,6 +1447,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             extra_body: None,
+            ..Default::default()
         };
 
         // Create a dummy provider config with the error model name
@@ -1533,7 +1550,7 @@ mod tests {
         assert_eq!(full_response, expected_response);
 
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider."#
+            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{provider_name="error"}: tensorzero_internal::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 }

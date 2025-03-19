@@ -38,3 +38,6 @@ credentials/
 # Node
 node_modules/
 **/.eslintcache
+
+# Claude Code
+CLAUDE.md

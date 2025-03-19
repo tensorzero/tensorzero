@@ -106,6 +106,7 @@ export const VariantConfigSchema = z.discriminatedUnion("type", [
 ]);
 
 export type VariantConfig = z.infer<typeof VariantConfigSchema>;
+export type VariantType = VariantConfig["type"];
 
 export async function get_template_env(variant: ChatCompletionConfig) {
   const env: {

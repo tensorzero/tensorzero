@@ -28,7 +28,7 @@ repos:
       # Find every pyproject.toml and generate a uv.lock file
       - id: uv-lock
         name: uv lock
-        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Locking $f"; uv lock --project="$f" && git add --intent-to-add "$dir/uv.lock"; done'
+        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Locking $f"; (cd "$dir" && uv lock --project="pyproject.toml" && git add --intent-to-add "uv.lock"); done'
         language: system
         pass_filenames: false
         always_run: true
@@ -36,14 +36,14 @@ repos:
       # Find every pyproject.toml and generate a requirements.txt file
       - id: uv-export
         name: uv export
-        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Exporting $f"; uv export --project="$f" --output-file="$dir/requirements.txt" --quiet && git add --intent-to-add "$dir/requirements.txt"; done'
+        entry: bash -c 'git ls-files "*.toml" "**/pyproject.toml" | grep -E "pyproject\.toml$" | while read f; do dir=$(dirname "$f"); echo "Exporting $f"; (cd "$dir" && uv export --project="pyproject.toml" --output-file="requirements.txt" --quiet && git add --intent-to-add "requirements.txt"); done'
         language: system
         pass_filenames: false
         always_run: true
 
       - id: cargo-deny
         name: cargo deny
-        entry: cargo deny check bans
+        entry: cargo deny check advisories bans
         language: system
         types: [rust]
         pass_filenames: false
@@ -69,8 +69,8 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      - id: prettier
-        name: prettier
+      - id: "prettier: ui"
+        name: "prettier: ui"
         entry: bash -c 'cd ui && pnpm run format'
         language: node
         types_or:
@@ -82,8 +82,21 @@ repos:
         exclude: '.*\.ipynb$'
         pass_filenames: false
 
-      - id: eslint
-        name: eslint
+      - id: "prettier: openai-node"
+        name: "prettier: openai-node"
+        entry: bash -c 'cd clients/openai-node && pnpm run format'
+        language: node
+        types_or:
+          [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
+        additional_dependencies:
+          - prettier
+          - prettier-plugin-tailwindcss
+          - "@prettier/plugin-xml"
+        exclude: '.*\.ipynb$'
+        pass_filenames: false
+
+      - id: "eslint: ui"
+        name: "eslint: ui"
         entry: bash -c 'cd ui && pnpm run lint'
         language: node
         types_or: [javascript, jsx, ts, tsx]
@@ -93,9 +106,29 @@ repos:
           - "@typescript-eslint/eslint-plugin"
         pass_filenames: false
 
-      - id: tsc
-        name: tsc
+      - id: "eslint: openai-node"
+        name: "eslint: openai-node"
+        entry: bash -c 'cd clients/openai-node && pnpm run lint'
+        language: node
+        types_or: [javascript, jsx, ts, tsx]
+        additional_dependencies:
+          - eslint
+          - "@typescript-eslint/parser"
+          - "@typescript-eslint/eslint-plugin"
+        pass_filenames: false
+
+      - id: "tsc: ui"
+        name: "tsc: ui"
         entry: bash -c 'cd ui && pnpm run typecheck'
+        language: node
+        types_or: [ts, tsx]
+        additional_dependencies:
+          - typescript
+        pass_filenames: false
+
+      - id: "tsc: openai-node"
+        name: "tsc: openai-node"
+        entry: bash -c 'cd clients/openai-node && pnpm run typecheck'
         language: node
         types_or: [ts, tsx]
         additional_dependencies:
@@ -142,5 +175,7 @@ repos:
           - clickhouse-connect
           - pandas
           - pandas-stubs
+          - pydantic
           - tensorzero
           - tiktoken
+          - toml

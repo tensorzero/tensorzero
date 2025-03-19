@@ -42,3 +42,4 @@ export const FunctionConfigSchema = z.discriminatedUnion("type", [
 export type FunctionConfigChat = z.infer<typeof FunctionConfigChatSchema>;
 export type FunctionConfigJson = z.infer<typeof FunctionConfigJsonSchema>;
 export type FunctionConfig = z.infer<typeof FunctionConfigSchema>;
+export type FunctionType = FunctionConfig["type"];

@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import {
   Table,
   TableBody,
@@ -11,6 +10,7 @@ import type { FunctionConfig } from "~/utils/config/function";
 import type { FunctionCountInfo } from "~/utils/clickhouse/inference";
 import { formatDate } from "~/utils/date";
 import { Code } from "~/components/ui/code";
+import { FunctionLink } from "~/components/function/FunctionLink";
 
 export default function FunctionsTable({
   functions,
@@ -63,14 +63,11 @@ export default function FunctionsTable({
             ({ function_name, count, max_timestamp, type }) => (
               <TableRow key={function_name} id={function_name}>
                 <TableCell className="max-w-[200px] lg:max-w-none">
-                  <Link
-                    to={`/observability/functions/${function_name}`}
-                    className="block no-underline"
-                  >
+                  <FunctionLink functionName={function_name}>
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                       {function_name}
                     </code>
-                  </Link>
+                  </FunctionLink>
                 </TableCell>
                 <TableCell>
                   <Code>{type}</Code>

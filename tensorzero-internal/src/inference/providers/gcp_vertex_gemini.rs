@@ -18,14 +18,16 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::inference::types::{
-    ContentBlock, ContentBlockChunk, ContentBlockOutput, FlattenUnknown, Latency,
-    ModelInferenceRequestJsonMode, ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
+    ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
+    ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
 };
 use crate::model::{
     build_creds_caching_default_with_fn, Credential, CredentialLocation, ModelProvider,
@@ -346,7 +348,11 @@ impl InferenceProvider for GCPVertexGeminiProvider {
     /// GCP Vertex Gemini streaming API request
     async fn infer_stream<'a>(
         &'a self,
-        request: &'a ModelInferenceRequest<'_>,
+        ModelProviderRequest {
+            request,
+            provider_name: _,
+            model_name: _,
+        }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
@@ -491,12 +497,21 @@ struct GCPVertexGeminiFunctionResponse<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
+struct GCPVertexInlineData<'a> {
+    mime_type: String,
+    data: &'a str,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", untagged)]
 enum GCPVertexGeminiContentPart<'a> {
     Text {
         text: &'a str,
     },
-    // TODO (if needed): InlineData { inline_data: Blob },
+    InlineData {
+        #[serde(rename = "inline_data")]
+        inline_data: GCPVertexInlineData<'a>,
+    },
     // TODO (if needed): FileData { file_data: FileData },
     FunctionCall {
         function_call: GCPVertexGeminiFunctionCall<'a>,
@@ -574,11 +589,17 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
                     },
                 )))
             }
-            ContentBlock::Image(_) => Err(ErrorDetails::UnsupportedContentBlockType {
-                content_block_type: "image".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-            }
-            .into()),
+            ContentBlock::Image(ImageWithPath {
+                image,
+                storage_path: _,
+            }) => Ok(Some(FlattenUnknown::Normal(
+                GCPVertexGeminiContentPart::InlineData {
+                    inline_data: GCPVertexInlineData {
+                        mime_type: image.mime_type.to_string(),
+                        data: image.data()?.as_str(),
+                    },
+                },
+            ))),
             // We don't support thought blocks being passed in from a request.
             // These are only possible to be passed in in the scenario where the
             // output of a chat completion is used as an input to another model inference,
@@ -682,12 +703,9 @@ struct GCPVertexGeminiToolConfig<'a> {
 // Auto is the default mode where a tool could be called but it isn't required.
 // Any is a mode where a tool is required and if allowed_function_names is Some it has to be from that list.
 // See [the documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/function-calling) for details.
-const MODELS_SUPPORTING_ANY_MODE: &[&str] = &[
-    "gemini-1.5-pro-001",
-    "gemini-1.5-flash-001",
-    "gemini-1.5-pro-002",
-    "gemini-1.5-flash-002",
-];
+// If Vertex adds any models that *don't* support Any mode, we'll add them to the list,
+// which will cause us to fall back to Auto
+const MODELS_NOT_SUPPORTING_ANY_MODE: &[&str] = &[];
 
 impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
     fn from(input: (&'a ToolChoice, &'a str)) -> Self {
@@ -706,35 +724,35 @@ impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
                 },
             },
             ToolChoice::Required => {
-                if MODELS_SUPPORTING_ANY_MODE.contains(&model_name) {
+                if MODELS_NOT_SUPPORTING_ANY_MODE.contains(&model_name) {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                            mode: GCPVertexGeminiFunctionCallingMode::Any,
+                            mode: GCPVertexGeminiFunctionCallingMode::Auto,
                             allowed_function_names: None,
                         },
                     }
                 } else {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                            mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                            mode: GCPVertexGeminiFunctionCallingMode::Any,
                             allowed_function_names: None,
                         },
                     }
                 }
             }
             ToolChoice::Specific(tool_name) => {
-                if MODELS_SUPPORTING_ANY_MODE.contains(&model_name) {
+                if MODELS_NOT_SUPPORTING_ANY_MODE.contains(&model_name) {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                            mode: GCPVertexGeminiFunctionCallingMode::Any,
-                            allowed_function_names: Some(vec![tool_name]),
+                            mode: GCPVertexGeminiFunctionCallingMode::Auto,
+                            allowed_function_names: None,
                         },
                     }
                 } else {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                            mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                            allowed_function_names: None,
+                            mode: GCPVertexGeminiFunctionCallingMode::Any,
+                            allowed_function_names: Some(vec![tool_name]),
                         },
                     }
                 }
@@ -803,21 +821,10 @@ impl<'a> GCPVertexGeminiRequest<'a> {
         let (response_mime_type, response_schema) = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 match request.output_schema {
-                    Some(output_schema) => {
-                        // According to these [docs](https://ai.google.dev/gemini-api/docs/json-mode?lang=web),
-                        // JSON mode is only supported for Gemini Pro models not Flash.
-                        let strict_json_models = ["gemini-1.5-pro-001"];
-                        let response_schema = if strict_json_models.contains(&model_name) {
-                            Some(process_output_schema(output_schema)?)
-                        } else {
-                            None
-                        };
-
-                        (
-                            Some(GCPVertexGeminiResponseMimeType::ApplicationJson),
-                            response_schema,
-                        )
-                    }
+                    Some(output_schema) => (
+                        Some(GCPVertexGeminiResponseMimeType::ApplicationJson),
+                        Some(process_output_schema(output_schema)?),
+                    ),
                     None => (Some(GCPVertexGeminiResponseMimeType::ApplicationJson), None),
                 }
             }
@@ -961,9 +968,48 @@ struct GCPVertexGeminiResponseContent {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum GCPVertexGeminiFinishReason {
+    FinishReasonUnspecified,
+    Stop,
+    MaxTokens,
+    Safety,
+    Recitation,
+    Other,
+    Blocklist,
+    ProhibitedContent,
+    #[serde(rename = "SPII")]
+    Spii,
+    MalformedFunctionCall,
+    #[serde(other)]
+    Unknown,
+}
+
+impl From<GCPVertexGeminiFinishReason> for FinishReason {
+    fn from(finish_reason: GCPVertexGeminiFinishReason) -> Self {
+        match finish_reason {
+            GCPVertexGeminiFinishReason::Stop => FinishReason::Stop,
+            GCPVertexGeminiFinishReason::MaxTokens => FinishReason::Length,
+            GCPVertexGeminiFinishReason::Safety => FinishReason::ContentFilter,
+            GCPVertexGeminiFinishReason::Recitation => FinishReason::ToolCall,
+            GCPVertexGeminiFinishReason::Other => FinishReason::Unknown,
+            GCPVertexGeminiFinishReason::Blocklist => FinishReason::ContentFilter,
+            GCPVertexGeminiFinishReason::ProhibitedContent => FinishReason::ContentFilter,
+            GCPVertexGeminiFinishReason::Spii => FinishReason::ContentFilter,
+            GCPVertexGeminiFinishReason::MalformedFunctionCall => FinishReason::ToolCall,
+            GCPVertexGeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown,
+            GCPVertexGeminiFinishReason::Unknown => FinishReason::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiResponseCandidate {
     #[serde(skip_serializing_if = "Option::is_none")]
     content: Option<GCPVertexGeminiResponseContent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    finish_reason: Option<GCPVertexGeminiFinishReason>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1053,13 +1099,18 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
         let input_messages = generic_request.messages.clone();
 
         Ok(ProviderInferenceResponse::new(
-            content,
-            system,
-            input_messages,
-            raw_request,
-            raw_response,
-            usage,
-            latency,
+            ProviderInferenceResponseArgs {
+                output: content,
+                system,
+                input_messages,
+                raw_request,
+                raw_response,
+                usage,
+                latency,
+                finish_reason: first_candidate
+                    .finish_reason
+                    .map(|finish_reason| finish_reason.into()),
+            },
         ))
     }
 }
@@ -1109,6 +1160,9 @@ impl TryFrom<GCPVertexGeminiStreamResponseWithMetadata> for ProviderInferenceRes
                 .map(|usage_metadata| usage_metadata.into()),
             raw,
             latency,
+            first_candidate
+                .finish_reason
+                .map(|finish_reason| finish_reason.into()),
         ))
     }
 }
@@ -1146,7 +1200,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::inference::providers::common::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
+    use crate::inference::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::tool::{ToolCallConfig, ToolResult};
 
@@ -1258,32 +1312,7 @@ mod tests {
     fn test_from_tool_choice() {
         let tool_choice = ToolChoice::Auto;
         let supports_any_model_name = "gemini-1.5-pro-001";
-        let no_any_model_name = "gemini-2.0-flash-lite";
         let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
-        assert_eq!(
-            tool_config,
-            GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                    allowed_function_names: None,
-                }
-            }
-        );
-        let tool_choice = ToolChoice::Auto;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, no_any_model_name));
-        assert_eq!(
-            tool_config,
-            GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                    allowed_function_names: None,
-                }
-            }
-        );
-
-        // Flash is still Auto mode since it doesn't support Any mode
-        let tool_choice = ToolChoice::Required;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, no_any_model_name));
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -1307,18 +1336,6 @@ mod tests {
             }
         );
 
-        let tool_choice = ToolChoice::Specific("get_temperature".to_string());
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, no_any_model_name));
-        assert_eq!(
-            tool_config,
-            GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                    allowed_function_names: None,
-                }
-            }
-        );
-
         // The Pro model supports Any mode with allowed function names
         let tool_choice = ToolChoice::Specific("get_temperature".to_string());
         let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
@@ -1328,19 +1345,6 @@ mod tests {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                     mode: GCPVertexGeminiFunctionCallingMode::Any,
                     allowed_function_names: Some(vec!["get_temperature"]),
-                }
-            }
-        );
-
-        // Both Flash and Pro support None mode
-        let tool_choice = ToolChoice::None;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, no_any_model_name));
-        assert_eq!(
-            tool_config,
-            GCPVertexGeminiToolConfig {
-                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
-                    mode: GCPVertexGeminiFunctionCallingMode::None,
-                    allowed_function_names: None,
                 }
             }
         );
@@ -1364,7 +1368,7 @@ mod tests {
         let tool_config = ToolCallConfig {
             tools_available: vec![],
             tool_choice: ToolChoice::None,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -1382,6 +1386,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
         let details = result.unwrap_err().get_owned_details();
@@ -1419,6 +1424,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
         let request = result.unwrap();
@@ -1469,6 +1475,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
             extra_body: None,
+            ..Default::default()
         };
         // JSON schema should be supported for Gemini Pro models
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-1.5-pro-001");
@@ -1536,6 +1543,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
             extra_body: None,
+            ..Default::default()
         };
         // JSON mode should be supported for Gemini Flash models but without a schema
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-flash");
@@ -1597,7 +1605,7 @@ mod tests {
         );
         assert_eq!(
             request.generation_config.as_ref().unwrap().response_schema,
-            None
+            Some(serde_json::Value::Object(Default::default()))
         );
     }
 
@@ -1607,6 +1615,7 @@ mod tests {
         let content = GCPVertexGeminiResponseContent { parts: vec![part] };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
+            finish_reason: Some(GCPVertexGeminiFinishReason::Stop),
         };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
@@ -1634,6 +1643,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let request_body = GCPVertexGeminiRequest {
             contents: vec![],
@@ -1668,6 +1678,10 @@ mod tests {
         assert_eq!(model_inference_response.raw_request, raw_request);
         assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(
+            model_inference_response.finish_reason,
+            Some(FinishReason::Stop)
+        );
+        assert_eq!(
             model_inference_response.system,
             Some("test_system".to_string())
         );
@@ -1684,6 +1698,7 @@ mod tests {
         };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
+            finish_reason: Some(GCPVertexGeminiFinishReason::Stop),
         };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
@@ -1714,6 +1729,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let request_body = GCPVertexGeminiRequest {
             contents: vec![],
@@ -1754,6 +1770,10 @@ mod tests {
             }
         );
         assert_eq!(model_inference_response.latency, latency);
+        assert_eq!(
+            model_inference_response.finish_reason,
+            Some(FinishReason::Stop)
+        );
         assert_eq!(model_inference_response.raw_request, raw_request);
         assert_eq!(model_inference_response.raw_response, raw_response);
         assert_eq!(model_inference_response.system, None);
@@ -1790,6 +1810,7 @@ mod tests {
         };
         let candidate = GCPVertexGeminiResponseCandidate {
             content: Some(content),
+            finish_reason: Some(GCPVertexGeminiFinishReason::Stop),
         };
         let response = GCPVertexGeminiResponse {
             candidates: vec![candidate],
@@ -1883,6 +1904,7 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-1.5-pro-001");
         let tools = tools.unwrap();
@@ -1926,14 +1948,14 @@ mod tests {
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: None,
+            ..Default::default()
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-2.0-flash-lite");
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
-        // Some models like this do not support function calling mode Any
         assert_eq!(
             tool_config.function_calling_config.mode,
-            GCPVertexGeminiFunctionCallingMode::Auto,
+            GCPVertexGeminiFunctionCallingMode::Any,
         );
         assert_eq!(tools.len(), 1);
         match &tools[0] {

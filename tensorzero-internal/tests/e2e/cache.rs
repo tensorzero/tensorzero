@@ -12,8 +12,12 @@ use std::time::Duration;
 use tensorzero::ContentBlockChunk;
 use tensorzero_internal::cache::cache_lookup_streaming;
 use tensorzero_internal::cache::start_cache_write_streaming;
+use tensorzero_internal::cache::NonStreamingCacheData;
 use tensorzero_internal::inference::types::ContentBlock;
+use tensorzero_internal::inference::types::ContentBlockOutput;
+use tensorzero_internal::inference::types::FinishReason;
 use tensorzero_internal::inference::types::ProviderInferenceResponseChunk;
+use tensorzero_internal::inference::types::Text;
 use tensorzero_internal::inference::types::TextChunk;
 use uuid::Uuid;
 
@@ -28,10 +32,10 @@ use tensorzero_internal::inference::types::{
     FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode,
 };
 
-use crate::common::get_clickhouse;
 use crate::common::get_gateway_endpoint;
-use crate::common::select_chat_inference_clickhouse;
-use crate::common::select_model_inference_clickhouse;
+use tensorzero_internal::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
+};
 
 /// This test does a cache read then write then read again to ensure that
 /// the cache is working as expected.
@@ -62,6 +66,7 @@ async fn test_cache_write_and_read() {
         function_type: FunctionType::Chat,
         output_schema: None,
         extra_body: None,
+        ..Default::default()
     };
     let model_provider_request = ModelProviderRequest {
         request: &model_inference_request,
@@ -82,14 +87,19 @@ async fn test_cache_write_and_read() {
     // Write
     start_cache_write(
         &clickhouse_connection_info,
-        model_provider_request,
-        &["test content".to_string().into()],
+        model_provider_request.get_cache_key().unwrap(),
+        NonStreamingCacheData {
+            blocks: vec![ContentBlockOutput::Text(Text {
+                text: "my test content".to_string(),
+            })],
+        },
         "raw request",
         "raw response",
         &Usage {
             input_tokens: 10,
             output_tokens: 16,
         },
+        Some(&FinishReason::Stop),
     )
     .unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -104,8 +114,12 @@ async fn test_cache_write_and_read() {
     .unwrap();
     assert!(result.is_some());
     let result = result.unwrap();
-
-    assert_eq!(result.output, vec!["test content".to_string().into()]);
+    assert_eq!(
+        result.output,
+        [ContentBlockOutput::Text(Text {
+            text: "my test content".to_string(),
+        })]
+    );
     assert_eq!(result.raw_request, "raw request");
     assert_eq!(result.raw_response, "raw response");
     assert_eq!(
@@ -176,6 +190,7 @@ async fn test_cache_stream_write_and_read() {
         function_type: FunctionType::Chat,
         output_schema: None,
         extra_body: None,
+        ..Default::default()
     };
     let model_provider_request = ModelProviderRequest {
         request: &model_inference_request,
@@ -205,6 +220,7 @@ async fn test_cache_stream_write_and_read() {
         }),
         raw_response: "raw response".to_string(),
         latency: Duration::from_secs(999),
+        finish_reason: Some(FinishReason::Stop),
     }];
 
     // Write
@@ -239,6 +255,7 @@ async fn test_cache_stream_write_and_read() {
         usage,
         raw_response,
         latency,
+        finish_reason,
     } = &chunks[0];
     assert_eq!(content, &initial_chunks[0].content);
     // 'created' should be different (current timestamp is different)
@@ -252,7 +269,7 @@ async fn test_cache_stream_write_and_read() {
     );
     assert_eq!(raw_response, &initial_chunks[0].raw_response);
     assert_eq!(latency, &Duration::from_secs(0));
-
+    assert_eq!(finish_reason, &Some(FinishReason::Stop));
     // Read (should be None)
     tokio::time::sleep(Duration::from_secs(2)).await;
     let result =
