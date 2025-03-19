@@ -32,3 +32,11 @@ export async function getEvalRunIds(
   const rows = await result.json<EvaluationRunInfo>();
   return rows;
 }
+
+export async function getEvalResults(eval_run_ids: string[]) {
+  const query = `
+    SELECT * FROM TagInference
+    WHERE key = 'tensorzero::eval_run_id'
+    AND value IN {eval_run_ids:Array(String)}
+  `;
+}
