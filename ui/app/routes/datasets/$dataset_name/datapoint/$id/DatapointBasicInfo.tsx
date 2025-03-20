@@ -7,34 +7,13 @@ import {
   BasicInfoItemContent,
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
-import {
-  TypeChat,
-  TypeJson,
-  Calendar,
-  Dataset,
-} from "~/components/icons/Icons";
+import { Calendar, Dataset } from "~/components/icons/Icons";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
+import { getFunctionTypeIcon } from "~/utils/icon";
 
 interface BasicInfoProps {
   datapoint: ParsedDatasetRow;
 }
-
-// Helper function to get the appropriate icon and background based on function type
-const getFunctionIcon = (functionType: string) => {
-  switch (functionType?.toLowerCase()) {
-    default:
-      return {
-        icon: <TypeJson className="text-fg-type-json" />,
-        iconBg: "bg-bg-type-json",
-      };
-    case "chat":
-    case "conversation":
-      return {
-        icon: <TypeChat className="text-fg-type-chat" />,
-        iconBg: "bg-bg-type-chat",
-      };
-  }
-};
 
 // Create timestamp tooltip component
 const createTimestampTooltip = (timestamp: string | number | Date) => {
@@ -50,7 +29,7 @@ const createTimestampTooltip = (timestamp: string | number | Date) => {
   );
 };
 
-export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
+export default function BasicInfo({ datapoint }: BasicInfoProps) {
   const config = useConfig();
   const function_config = config.functions[datapoint.function_name];
   const type = function_config?.type;
@@ -62,7 +41,7 @@ export default function DatapointBasicInfo({ datapoint }: BasicInfoProps) {
   const timestampTooltip = createTimestampTooltip(datapoint.updated_at);
 
   // Get function icon and background
-  const functionIconConfig = getFunctionIcon(type);
+  const functionIconConfig = getFunctionTypeIcon(type);
 
   return (
     <BasicInfoLayout>

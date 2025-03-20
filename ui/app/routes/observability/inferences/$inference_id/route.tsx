@@ -17,7 +17,7 @@ import {
   useNavigate,
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
-import InferenceBasicInfo from "./InferenceBasicInfo";
+import BasicInfo from "./InferenceBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
@@ -212,7 +212,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionsGroup>
           <SectionLayout>
-            <InferenceBasicInfo
+            <BasicInfo
               inference={inference}
               inferenceUsage={getTotalInferenceUsage(model_inferences)}
             />

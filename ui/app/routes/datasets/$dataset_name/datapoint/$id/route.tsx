@@ -1,6 +1,6 @@
 import { useFetcher } from "react-router";
 import { data, isRouteErrorResponse, redirect } from "react-router";
-import DatapointBasicInfo from "./DatapointBasicInfo";
+import BasicInfo from "./DatapointBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
 import { useState } from "react";
@@ -131,7 +131,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
         <SectionsGroup>
           <SectionLayout>
-            <DatapointBasicInfo datapoint={datapoint} />
+            <BasicInfo datapoint={datapoint} />
           </SectionLayout>
 
           <SectionLayout>

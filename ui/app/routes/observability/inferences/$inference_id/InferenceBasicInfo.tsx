@@ -8,32 +8,9 @@ import {
   BasicInfoItemContent,
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
-import {
-  TypeChat,
-  TypeJson,
-  Timer,
-  Calendar,
-  Input,
-  Output,
-} from "~/components/icons/Icons";
+import { Timer, Calendar, Input, Output } from "~/components/icons/Icons";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
-
-// Helper function to get the appropriate icon and background based on function type
-const getFunctionIcon = (functionType: string) => {
-  switch (functionType?.toLowerCase()) {
-    default:
-      return {
-        icon: <TypeJson className="text-fg-type-json" />,
-        iconBg: "bg-bg-type-json",
-      };
-    case "chat":
-    case "conversation":
-      return {
-        icon: <TypeChat className="text-fg-type-chat" />,
-        iconBg: "bg-bg-type-chat",
-      };
-  }
-};
+import { getFunctionTypeIcon } from "~/utils/icon";
 
 // Create timestamp tooltip component
 const createTimestampTooltip = (timestamp: string | number | Date) => {
@@ -54,7 +31,7 @@ interface BasicInfoProps {
   inferenceUsage?: InferenceUsage;
 }
 
-export default function InferenceBasicInfo({
+export default function BasicInfo({
   inference,
   inferenceUsage,
 }: BasicInfoProps) {
@@ -67,7 +44,7 @@ export default function InferenceBasicInfo({
   const timestampTooltip = createTimestampTooltip(inference.timestamp);
 
   // Get function icon and background
-  const functionIconConfig = getFunctionIcon(inference.function_type);
+  const functionIconConfig = getFunctionTypeIcon(inference.function_type);
 
   return (
     <BasicInfoLayout>
