@@ -661,16 +661,22 @@ impl From<ClickHouseDatapoint> for Datapoint {
     }
 }
 
+/// If the input is None then we should return None
+/// If the input is Value::Null we should return None
+/// If the input is some other Value::* we should return it.
 fn deserialize_optional_json_value<'de, D>(
     deserializer: D,
 ) -> Result<Option<serde_json::Value>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let value = serde_json::Value::deserialize(deserializer)?;
-    match value {
-        serde_json::Value::Null => Ok(None),
-        _ => Ok(Some(value)),
+    let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
+    match opt {
+        None => Ok(None),
+        Some(value) => match value {
+            serde_json::Value::Null => Ok(None),
+            _ => Ok(Some(value)),
+        },
     }
 }
 
@@ -679,6 +685,7 @@ where
 pub struct SyntheticChatInferenceDatapoint {
     pub function_name: String,
     pub input: Input,
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_json_value")]
     pub output: Option<serde_json::Value>,
     #[serde(default)]
@@ -694,6 +701,7 @@ pub struct SyntheticChatInferenceDatapoint {
 pub struct SyntheticJsonInferenceDatapoint {
     pub function_name: String,
     pub input: Input,
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_json_value")]
     pub output: Option<serde_json::Value>,
     pub output_schema: serde_json::Value,
@@ -719,5 +727,118 @@ fn get_possibly_default_function(
         })))
     } else {
         config.get_function(function_name).cloned()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use serde_json::json;
+
+    #[test]
+    fn test_synthetic_chat_datapoint_with_none_output() {
+        let json_str = r#"{
+            "function_name": "test_function",
+            "input": {"system": {"assistant_name": "Test"}, "messages": []},
+            "output": null,
+            "tool_params": null,
+            "tags": null,
+            "auxiliary": ""
+        }"#;
+
+        let datapoint: SyntheticChatInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        assert_eq!(datapoint.function_name, "test_function");
+        assert_eq!(datapoint.output, None);
+        assert_eq!(datapoint.tool_params, None);
+        assert_eq!(datapoint.tags, None);
+        assert_eq!(datapoint.auxiliary, "");
+    }
+
+    #[test]
+    fn test_synthetic_chat_datapoint_with_some_output() {
+        let json_str = r#"{
+            "function_name": "test_function",
+            "input": {"system": {"assistant_name": "Test"}, "messages": []},
+            "output": [{"type": "text", "value": "Hello"}],
+            "tool_params": {"tools_available": [], "tool_choice": "auto", "parallel_tool_calls": false},
+            "tags": {"source": "test"},
+            "auxiliary": "extra data"
+        }"#;
+
+        let datapoint: SyntheticChatInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        assert_eq!(datapoint.function_name, "test_function");
+        assert!(datapoint.output.is_some());
+        assert!(datapoint.tool_params.is_some());
+        assert_eq!(
+            datapoint.tags,
+            Some(HashMap::from([("source".to_string(), "test".to_string())]))
+        );
+        assert_eq!(datapoint.auxiliary, "extra data");
+    }
+
+    #[test]
+    fn test_synthetic_json_datapoint_with_none_output() {
+        let json_str = r#"{
+            "function_name": "test_json_function",
+            "input": {"system": {"assistant_name": "Test"}, "messages": []},
+            "output": null,
+            "output_schema": {},
+            "tags": null,
+            "auxiliary": ""
+        }"#;
+
+        let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        assert_eq!(datapoint.function_name, "test_json_function");
+        assert_eq!(datapoint.output, None);
+        assert_eq!(datapoint.output_schema, json!({}));
+        assert_eq!(datapoint.tags, None);
+        assert_eq!(datapoint.auxiliary, "");
+    }
+
+    #[test]
+    fn test_synthetic_json_datapoint_with_some_output() {
+        let json_str = r#"{
+            "function_name": "test_json_function",
+            "input": {"system": {"assistant_name": "Test"}, "messages": []},
+            "output": {"answer": "Hello"},
+            "output_schema": {"type": "object", "properties": {"answer": {"type": "string"}}},
+            "tags": {"source": "test"},
+            "auxiliary": "extra data"
+        }"#;
+
+        let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        assert_eq!(datapoint.function_name, "test_json_function");
+        assert!(datapoint.output.is_some());
+        assert_eq!(datapoint.output.as_ref().unwrap()["answer"], "Hello");
+        assert_eq!(
+            datapoint.tags,
+            Some(HashMap::from([("source".to_string(), "test".to_string())]))
+        );
+        assert_eq!(datapoint.auxiliary, "extra data");
+    }
+
+    #[test]
+    fn test_synthetic_json_datapoint_with_missing_output() {
+        let json_str = r#"{
+            "function_name": "test_json_function",
+            "input": {"system": {"assistant_name": "Test"}, "messages": []},
+            "output_schema": {"type": "object", "properties": {"answer": {"type": "string"}}},
+            "tags": {"source": "test"},
+            "auxiliary": "extra data"
+        }"#;
+
+        let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        assert_eq!(datapoint.function_name, "test_json_function");
+        assert_eq!(datapoint.output, None);
+        assert_eq!(
+            datapoint.output_schema,
+            json!({"type": "object", "properties": {"answer": {"type": "string"}}})
+        );
+        assert_eq!(
+            datapoint.tags,
+            Some(HashMap::from([("source".to_string(), "test".to_string())]))
+        );
+        assert_eq!(datapoint.auxiliary, "extra data");
     }
 }
