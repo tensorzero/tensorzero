@@ -48,6 +48,9 @@ jobs:
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
 
+      - name: Print Rust version
+        run: rustc --version
+
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/0.6.4/install.sh | sh
 
