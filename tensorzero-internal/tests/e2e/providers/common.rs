@@ -1069,7 +1069,12 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
             {
                 "variant_name": provider.variant_name,
                 "pointer": "/temperature",
-                "value": "42"
+                "value": 0.5
+            },
+            {
+                "variant_name": "my_wrong_variant",
+                "pointer": "/temperature",
+                "value": 0.6
             }
         ])
     } else {
@@ -1193,7 +1198,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
         temp.expect("Missing temperature")
             .as_f64()
             .expect("Temperature is not a number"),
-        42.0
+        0.5
     );
 }
 
