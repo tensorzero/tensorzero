@@ -336,7 +336,8 @@ export async function insertRowsForDataset(
       tags,
       auxiliary,
       false as is_deleted,
-      now64() as updated_at
+      now64() as updated_at,
+      null as staled_at
     FROM (
       ${sourceQuery}
     ) AS t

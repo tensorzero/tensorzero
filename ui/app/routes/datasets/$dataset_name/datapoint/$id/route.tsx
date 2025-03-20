@@ -129,7 +129,6 @@ export async function action({ request }: ActionFunctionArgs) {
     const transformedOutput = transformOutputForTensorZero(
       parsedFormData.output,
     );
-    console.log("transformedOutput", transformedOutput);
 
     try {
       const { id } = await tensorZeroClient.updateDatapoint(
