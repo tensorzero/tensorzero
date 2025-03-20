@@ -1868,13 +1868,14 @@ pub async fn check_simple_image_inference_response(
 
 #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
 pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
-    // A temperature of -100 should produce errors on all providers
+    // A top_p of -100 and temperature of -100 should produce errors on all providers
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
         "params": {
             "chat_completion": {
-                "temperature": -100
+                "temperature": -100,
+                "top_p": -100
             }
         },
         "input":
@@ -1905,8 +1906,11 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         };
         assert_eq!(code, StatusCode::BAD_GATEWAY);
         let resp: Value = resp.json().await.unwrap();
+        let err_msg = resp.get("error").unwrap().as_str().unwrap();
         assert!(
-            resp["error"].as_str().unwrap().contains("temperature"),
+            err_msg.contains("top_p")
+                || err_msg.contains("topP")
+                || err_msg.contains("temperature"),
             "Unexpected error message: {resp}"
         );
     }
