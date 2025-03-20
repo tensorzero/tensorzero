@@ -54,19 +54,19 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: tensorzero-${{ matrix.platform.container.name }}
+          images: tensorzero-${{ matrix.container.name }}
 
       - name: Build and push Docker image
         id: push
         uses: docker/build-push-action@v6
         with:
           platforms: ${{ matrix.platform.target }}
-          context: ${{ matrix.platform.container.context }}
-          file: ./${{ matrix.platform.container.name }}/Dockerfile
+          context: ${{ matrix.container.context }}
+          file: ./${{ matrix.container.name }}/Dockerfile
           push: true
           provenance: mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: ${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.platform.container.name }}
+          tags: ${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.container.name }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Export digest
@@ -78,7 +78,7 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ matrix.platform.container.name }}-${{ env.PLATFORM_PAIR }}
+          name: digests-${{ matrix.container.name }}-${{ env.PLATFORM_PAIR }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -99,7 +99,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/digests
-          pattern: digests-${{ matrix.platform.container.name }}-*
+          pattern: digests-${{ matrix.container.name }}-*
           merge-multiple: true
 
       - name: Login to Docker Hub
@@ -115,7 +115,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.platform.container.name }}
+          images: ${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.container.name }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -126,8 +126,8 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.platform.container.name }}@sha256:%s ' *)
+            $(printf '${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.container.name }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.platform.container.name }}:${{ steps.meta-gateway.outputs.version }}
+          docker buildx imagetools inspect ${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.container.name }}:${{ steps.meta-gateway.outputs.version }}
