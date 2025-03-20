@@ -13,7 +13,8 @@ import {
 import PageButtons from "~/components/utils/PageButtons";
 import { getConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
-import BasicInfo from "./BasicInfo";
+import BasicInfo from "./FunctionBasicInfo";
+import FunctionSchema from "./FunctionSchema";
 import { useConfig } from "~/context/config";
 import {
   getVariantCounts,
@@ -194,6 +195,11 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         <SectionsGroup>
           <SectionLayout>
             <BasicInfo functionConfig={function_config} />
+          </SectionLayout>
+
+          <SectionLayout>
+            <SectionHeader heading="Schema" />
+            <FunctionSchema functionConfig={function_config} />
           </SectionLayout>
 
           <SectionLayout>

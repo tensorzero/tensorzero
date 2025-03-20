@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent } from "~/components/ui/card";
 import type { FunctionConfig, JSONSchema } from "~/utils/config/function";
 import {
   Collapsible,
@@ -6,9 +6,8 @@ import {
   CollapsibleTrigger,
 } from "~/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
-import { Code } from "~/components/ui/code";
 
-interface BasicFunctionInfoProps {
+interface FunctionSchemaProps {
   functionConfig: FunctionConfig;
 }
 
@@ -51,53 +50,13 @@ function SchemaField({ title, content }: SchemaFieldProps) {
   );
 }
 
-export default function BasicFunctionInfo({
+export default function FunctionSchema({
   functionConfig,
-}: BasicFunctionInfoProps) {
+}: FunctionSchemaProps) {
   return (
     <Card className="mb-4">
-      <CardHeader>
-        <CardTitle className="text-xl">Basic Information</CardTitle>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="p-6">
         <dl className="grid grid-cols-2 gap-4">
-          {/* Type */}
-          <div>
-            <dt className="text-lg font-semibold">Type</dt>
-            <dd>
-              <Code>{functionConfig.type}</Code>
-            </dd>
-          </div>
-
-          {/* Fields specific to chat type */}
-          {functionConfig.type === "chat" && (
-            <>
-              <div>
-                <dt className="text-lg font-semibold">Tools</dt>
-                <dd>
-                  {functionConfig.tools?.length
-                    ? functionConfig.tools.join(", ")
-                    : "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-lg font-semibold">Tool Choice</dt>
-                <dd>
-                  <Code>{functionConfig.tool_choice}</Code>
-                </dd>
-              </div>
-              <div>
-                <dt className="text-lg font-semibold">Parallel Tool Calls</dt>
-                <dd>
-                  <Code>
-                    {functionConfig.parallel_tool_calls ? "true" : "false"}
-                  </Code>
-                </dd>
-              </div>
-            </>
-          )}
-
-          {/* Optional schemas */}
           <SchemaField
             title="System Schema"
             content={functionConfig.system_schema?.content}

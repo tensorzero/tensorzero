@@ -565,7 +565,6 @@ describe("getUsedVariants", () => {
   test("getUsedVariants for extract_entities", async () => {
     const function_name = "extract_entities";
     const result = await getUsedVariants(function_name);
-    console.log(result);
     expect(result).toEqual(
       expect.arrayContaining([
         "baseline",

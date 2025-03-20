@@ -1,16 +1,6 @@
 import { Trash2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "~/components/ui/alert-dialog";
+import { useState } from "react";
 
 interface DeleteButtonProps {
   onClick: () => void;
@@ -23,32 +13,55 @@ export function DeleteButton({
   className,
   isLoading,
 }: DeleteButtonProps) {
-  return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const handleConfirm = () => {
+    onClick();
+    setConfirmDelete(false);
+  };
+
+  const handleCancel = () => {
+    setConfirmDelete(false);
+  };
+
+  const handleInitialClick = () => {
+    setConfirmDelete(true);
+  };
+
+  if (confirmDelete) {
+    return (
+      <div className="flex gap-2">
         <Button
-          variant="ghost"
-          size="icon"
-          className={className}
+          variant="secondary"
+          size="sm"
+          className="bg-bg-muted"
           disabled={isLoading}
+          onClick={handleCancel}
         >
-          <Trash2 className="h-4 w-4" />
+          No, keep it
         </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This action cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onClick} disabled={isLoading}>
-            {isLoading ? "Deleting..." : "Delete"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        <Button
+          variant="destructive"
+          size="sm"
+          className="group bg-red-600 text-white hover:bg-red-700"
+          disabled={isLoading}
+          onClick={handleConfirm}
+        >
+          {isLoading ? "Deleting..." : "Yes, delete permanently"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <Button
+      variant="outline"
+      size="iconSm"
+      className={className}
+      disabled={isLoading}
+      onClick={handleInitialClick}
+    >
+      <Trash2 className="h-4 w-4" />
+    </Button>
   );
 }

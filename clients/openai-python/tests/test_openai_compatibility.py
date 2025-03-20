@@ -41,7 +41,7 @@ async def async_client():
 
 
 @pytest.mark.asyncio
-async def test_async_basic_inference_old_model_format(async_client):
+async def test_async_basic_inference_old_model_format_and_headers(async_client):
     messages = [
         {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
         {"role": "user", "content": "Hello"},
@@ -75,7 +75,7 @@ async def test_async_basic_inference(async_client):
     ]
 
     result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": str(uuid7())},
+        extra_body={"tensorzero::episode_id": str(uuid7())},
         messages=messages,
         model="tensorzero::function_name::basic_test",
         temperature=0.4,
@@ -107,7 +107,7 @@ async def test_async_basic_inference_json_schema(async_client):
 
     with pytest.raises(ValidationError) as exc_info:
         await async_client.beta.chat.completions.parse(
-            extra_headers={"episode_id": str(uuid7())},
+            extra_body={"tensorzero::episode_id": str(uuid7())},
             messages=messages,
             model="tensorzero::function_name::basic_test",
             temperature=0.4,
@@ -125,7 +125,7 @@ async def test_async_inference_streaming(async_client):
         {"role": "user", "content": "Hello"},
     ]
     stream = await async_client.chat.completions.create(
-        extra_headers={"episode_id": str(uuid7())},
+        extra_body={"tensorzero::episode_id": str(uuid7())},
         messages=messages,
         model="tensorzero::function_name::basic_test",
         stream=True,
@@ -191,8 +191,8 @@ async def test_async_inference_streaming_nonexistent_function(async_client):
         ]
 
         await async_client.chat.completions.create(
-            extra_headers={
-                "episode_id": str(uuid7()),
+            extra_body={
+                "tensorzero::episode_id": str(uuid7()),
             },
             messages=messages,
             model="tensorzero::function_name::does_not_exist",
@@ -213,8 +213,8 @@ async def test_async_inference_streaming_missing_function(async_client):
         ]
 
         await async_client.chat.completions.create(
-            extra_headers={
-                "episode_id": str(uuid7()),
+            extra_body={
+                "tensorzero::episode_id": str(uuid7()),
             },
             messages=messages,
             model="tensorzero::function_name::",
@@ -235,8 +235,8 @@ async def test_async_inference_streaming_malformed_function(async_client):
         ]
 
         await async_client.chat.completions.create(
-            extra_headers={
-                "episode_id": str(uuid7()),
+            extra_body={
+                "tensorzero::episode_id": str(uuid7()),
             },
             messages=messages,
             model="chatgpt",
@@ -273,7 +273,7 @@ async def test_async_inference_streaming_malformed_input(async_client):
             {"role": "user", "content": "Hello"},
         ]
         await async_client.chat.completions.create(
-            extra_headers={"episode_id": str(uuid7())},
+            extra_body={"tensorzero::episode_id": str(uuid7())},
             messages=messages,
             model="tensorzero::function_name::basic_test",
             stream=True,
@@ -295,7 +295,7 @@ async def test_async_tool_call_inference(async_client):
         },
     ]
     result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": str(uuid7())},
+        extra_body={"tensorzero::episode_id": str(uuid7())},
         messages=messages,
         model="tensorzero::function_name::weather_helper",
         top_p=0.5,
@@ -328,9 +328,9 @@ async def test_async_malformed_tool_call_inference(async_client):
         },
     ]
     result = await async_client.chat.completions.create(
-        extra_headers={
-            "episode_id": str(uuid7()),
-            "variant_name": "bad_tool",
+        extra_body={
+            "tensorzero::episode_id": str(uuid7()),
+            "tensorzero::variant_name": "bad_tool",
         },
         messages=messages,
         model="tensorzero::function_name::weather_helper",
@@ -363,7 +363,7 @@ async def test_async_tool_call_streaming(async_client):
         },
     ]
     stream = await async_client.chat.completions.create(
-        extra_headers={"episode_id": str(uuid7())},
+        extra_body={"tensorzero::episode_id": str(uuid7())},
         messages=messages,
         model="tensorzero::function_name::weather_helper",
         stream=True,
@@ -414,7 +414,7 @@ async def test_async_json_streaming(async_client):
         {"role": "user", "content": [{"country": "Japan"}]},
     ]
     stream = await async_client.chat.completions.create(
-        extra_headers={"episode_id": str(uuid7())},
+        extra_body={"tensorzero::episode_id": str(uuid7())},
         messages=messages,
         model="tensorzero::function_name::json_success",
         stream=True,
@@ -482,7 +482,7 @@ async def test_allow_developer_and_system(async_client):
     episode_id = str(uuid7())
 
     result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": episode_id},
+        extra_body={"tensorzero::episode_id": episode_id},
         messages=messages,
         model="tensorzero::model_name::dummy::echo_request_messages",
     )
@@ -515,7 +515,7 @@ async def test_async_json_success_developer(async_client):
     ]
     episode_id = str(uuid7())
     result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": episode_id},
+        extra_body={"tensorzero::episode_id": episode_id},
         messages=messages,
         model="tensorzero::function_name::json_success",
     )
@@ -548,7 +548,7 @@ async def test_async_json_success_non_deprecated(async_client):
     ]
     episode_id = str(uuid7())
     result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": episode_id},
+        extra_body={"tensorzero::episode_id": episode_id},
         messages=messages,
         model="tensorzero::function_name::json_success",
     )
@@ -568,7 +568,7 @@ async def test_async_json_success(async_client):
     ]
     episode_id = str(uuid7())
     result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": episode_id},
+        extra_body={"tensorzero::episode_id": episode_id},
         messages=messages,
         model="tensorzero::function_name::json_success",
     )
@@ -592,7 +592,7 @@ async def test_async_json_success_override(async_client):
     episode_id = str(uuid7())
     with pytest.raises(BadRequestError) as exc_info:
         await async_client.chat.completions.create(
-            extra_headers={"episode_id": episode_id},
+            extra_body={"tensorzero::episode_id": episode_id},
             messages=messages,
             model="tensorzero::function_name::json_success",
         )
@@ -616,7 +616,7 @@ async def test_async_json_invalid_system(async_client):
     episode_id = str(uuid7())
     with pytest.raises(BadRequestError) as exc_info:
         await async_client.chat.completions.create(
-            extra_headers={"episode_id": episode_id},
+            extra_body={"tensorzero::episode_id": episode_id},
             messages=messages,
             model="tensorzero::function_name::json_success",
         )
@@ -633,7 +633,7 @@ async def test_async_json_failure(async_client):
         {"role": "user", "content": "Hello, world!"},
     ]
     result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": str(uuid7())},
+        extra_body={"tensorzero::episode_id": str(uuid7())},
         messages=messages,
         model="tensorzero::function_name::json_fail",
     )
@@ -684,9 +684,9 @@ async def test_dynamic_tool_use_inference_openai(async_client):
         }
     ]
     result = await async_client.chat.completions.create(
-        extra_headers={
-            "episode_id": episode_id,
-            "variant_name": "openai",
+        extra_body={
+            "tensorzero::episode_id": episode_id,
+            "tensorzero::variant_name": "openai",
         },
         messages=messages,
         model="tensorzero::function_name::basic_test",
@@ -727,14 +727,14 @@ async def test_dynamic_json_mode_inference_body_param_openai(async_client):
     result = await async_client.chat.completions.create(
         extra_headers={
             "episode_id": header_episode_id,
-            "variant_name": "openai",
+        },
+        extra_body={
+            "tensorzero::episode_id": body_episode_id,
+            "tensorzero::variant_name": "openai",
         },
         messages=messages,
         model="tensorzero::function_name::dynamic_json",
         response_format={"type": "json_schema", "json_schema": output_schema},
-        extra_body={
-            "tensorzero::episode_id": body_episode_id,
-        },
     )
     assert (
         result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
@@ -767,9 +767,9 @@ async def test_dynamic_json_mode_inference_openai(async_client):
         {"role": "user", "content": [{"country": "Japan"}]},
     ]
     result = await async_client.chat.completions.create(
-        extra_headers={
-            "episode_id": episode_id,
-            "variant_name": "openai",
+        extra_body={
+            "tensorzero::episode_id": episode_id,
+            "tensorzero::variant_name": "openai",
         },
         messages=messages,
         model="tensorzero::function_name::dynamic_json",
@@ -823,7 +823,7 @@ async def test_async_multi_system_prompt(async_client):
     ]
     episode_id = str(uuid7())
     result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": episode_id},
+        extra_body={"tensorzero::episode_id": episode_id},
         messages=messages,
         model="tensorzero::model_name::dummy::echo_request_messages",
     )
@@ -854,7 +854,7 @@ async def test_async_multi_block_image_url(async_client):
     ]
     episode_id = str(uuid7())
     result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": episode_id},
+        extra_body={"tensorzero::episode_id": episode_id},
         messages=messages,
         model="tensorzero::model_name::openai::gpt-4o-mini",
     )
@@ -886,7 +886,7 @@ async def test_async_multi_block_image_base64(async_client):
     ]
     episode_id = str(uuid7())
     result = await async_client.chat.completions.create(
-        extra_headers={"episode_id": episode_id},
+        extra_body={"tensorzero::episode_id": episode_id},
         messages=messages,
         model="tensorzero::model_name::openai::gpt-4o-mini",
     )
@@ -954,9 +954,9 @@ async def test_async_multi_turn_parallel_tool_use(async_client):
             raise Exception(f"Unknown tool call: {tool_call.function.name}")
 
     response = await async_client.chat.completions.create(
-        extra_headers={
-            "episode_id": episode_id,
-            "variant_name": "openai",
+        extra_body={
+            "tensorzero::episode_id": episode_id,
+            "tensorzero::variant_name": "openai",
         },
         model="tensorzero::function_name::weather_helper_parallel",
         messages=messages,
