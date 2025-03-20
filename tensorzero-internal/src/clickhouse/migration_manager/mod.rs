@@ -72,11 +72,17 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     run_migration(&Migration0016 { clickhouse }).await?;
     run_migration(&Migration0017 { clickhouse }).await?;
     run_migration(&Migration0018 { clickhouse }).await?;
-    run_migration(&Migration0019 {
-        clickhouse,
-        clean_start,
-    })
-    .await?;
+    if std::env::var("TENSORZERO_FF_DANGEROUS_MIGRATION_0019")
+        .ok()
+        .as_deref()
+        == Some("1")
+    {
+        run_migration(&Migration0019 {
+            clickhouse,
+            clean_start,
+        })
+        .await?;
+    }
     // NOTE:
     // When we add more migrations, we need to add a test that applies them in a cumulative (N^2) way.
     //

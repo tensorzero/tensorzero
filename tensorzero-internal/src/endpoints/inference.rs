@@ -167,7 +167,7 @@ impl std::fmt::Debug for InferenceOutput {
     }
 }
 
-const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
+pub const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 
 #[derive(Copy, Clone, Debug)]
 pub struct InferenceIds {

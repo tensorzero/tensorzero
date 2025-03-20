@@ -646,7 +646,7 @@ test("countInferencesByFunction", async () => {
     {
       count: 1,
       function_name: "tensorzero::default",
-      max_timestamp: "2025-02-26T21:41:49Z",
+      max_timestamp: "2025-03-14T17:34:57Z",
     },
     {
       count: 1,

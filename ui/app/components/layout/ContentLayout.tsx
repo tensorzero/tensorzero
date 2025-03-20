@@ -13,9 +13,9 @@ export function ContentLayout({
   ...props
 }: LayoutProviderProps) {
   return (
-    <div className="flex-1 bg-background-tertiary py-2 pl-0 pr-2">
+    <div className="flex-1 bg-bg-tertiary py-2 pl-0 pr-2 max-md:p-0">
       <div className={cn("h-[calc(100vh-16px)] w-full", className)} {...props}>
-        <ScrollArea className="h-full rounded-md border border-border bg-background-secondary">
+        <ScrollArea className="h-full rounded-md border border-border bg-bg-secondary max-md:rounded-none max-md:border-none">
           <PageSubNav />
           <div className="px-4">{children}</div>
         </ScrollArea>

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use super::check_table_exists;
+use super::{check_column_exists, check_table_exists, get_default_expression};
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
@@ -14,6 +14,13 @@ use crate::error::{Error, ErrorDetails};
 /// We also add materialized views TagChatInferenceView and TagJsonInferenceView,
 /// These views will insert data into the TagInference table
 /// when data is inserted into the original tables.
+///
+/// Additionally, this migration adds a `staled_at` column to the ChatInferenceDatapoint
+/// and JsonInferenceDatapoint tables. This allows us to express that a datapoint is `stale`
+/// and has been edited or deleted.
+///
+/// Additionally, we fixed the default for the updated_at column of ChatInferenceDatapoint
+/// and JsonInferenceDatapoint to now64() from now() since now() is only second resolution (bad!).
 pub struct Migration0019<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
     pub clean_start: bool,
@@ -26,11 +33,21 @@ impl Migration for Migration0019<'_> {
             check_table_exists(self.clickhouse, "ChatInference", "0019").await?;
         let json_inference_table_exists =
             check_table_exists(self.clickhouse, "JsonInference", "0019").await?;
+        let chat_inference_datapoint_table_exists =
+            check_table_exists(self.clickhouse, "ChatInferenceDatapoint", "0019").await?;
+        let json_inference_datapoint_table_exists =
+            check_table_exists(self.clickhouse, "JsonInferenceDatapoint", "0019").await?;
 
         if !chat_inference_table_exists || !json_inference_table_exists {
             return Err(Error::new(ErrorDetails::ClickHouseMigration {
                 id: "0019".to_string(),
                 message: "One or more of the inference tables do not exist".to_string(),
+            }));
+        }
+        if !chat_inference_datapoint_table_exists || !json_inference_datapoint_table_exists {
+            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                id: "0019".to_string(),
+                message: "One or more of the inference datapoint tables do not exist".to_string(),
             }));
         }
 
@@ -44,9 +61,43 @@ impl Migration for Migration0019<'_> {
             check_table_exists(self.clickhouse, "TagChatInferenceView", "0019").await?;
         let tag_json_inference_view_exists =
             check_table_exists(self.clickhouse, "TagJsonInferenceView", "0019").await?;
+        let chat_inference_datapoint_staled_at_column_exists = check_column_exists(
+            self.clickhouse,
+            "ChatInferenceDatapoint",
+            "staled_at",
+            "0019",
+        )
+        .await?;
+        let json_inference_datapoint_staled_at_column_exists = check_column_exists(
+            self.clickhouse,
+            "JsonInferenceDatapoint",
+            "staled_at",
+            "0019",
+        )
+        .await?;
+        let chat_default_updated_at = get_default_expression(
+            self.clickhouse,
+            "ChatInferenceDatapoint",
+            "updated_at",
+            "0019",
+        )
+        .await?;
+        let chat_default_updated_at_correct = chat_default_updated_at == "now64()";
+        let json_default_updated_at = get_default_expression(
+            self.clickhouse,
+            "JsonInferenceDatapoint",
+            "updated_at",
+            "0019",
+        )
+        .await?;
+        let json_default_updated_at_correct = json_default_updated_at == "now64()";
         Ok(!tag_inference_table_exists
             || !tag_chat_inference_view_exists
-            || !tag_json_inference_view_exists)
+            || !tag_json_inference_view_exists
+            || !chat_inference_datapoint_staled_at_column_exists
+            || !json_inference_datapoint_staled_at_column_exists
+            || !chat_default_updated_at_correct
+            || !json_default_updated_at_correct)
     }
 
     async fn apply(&self) -> Result<(), Error> {
@@ -74,9 +125,31 @@ impl Migration for Migration0019<'_> {
                     inference_id UUID,
                     function_type Enum8('chat' = 1, 'json' = 2),
                     is_deleted Bool DEFAULT false,
-                    updated_at DateTime64(6, 'UTC') DEFAULT now()
+                    updated_at DateTime64(6, 'UTC') DEFAULT now64()
                 ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
                 ORDER BY (key, value, inference_id)"#;
+        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+
+        // Add the staled_at column to both datapoint tables
+        let query = r#"
+            ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
+        "#;
+        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+
+        let query = r#"
+            ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
+        "#;
+        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+
+        // Update the defaults of updated_at for the Datapoint tables to be now64
+        let query = r#"
+            ALTER TABLE ChatInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
+        "#;
+        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+
+        let query = r#"
+            ALTER TABLE JsonInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
+        "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
@@ -188,6 +261,12 @@ impl Migration for Migration0019<'_> {
         \n
         -- Drop the `TagInference` table\n\
         DROP TABLE IF EXISTS TagInference;
+        -- Drop the `staled_at` column in the datapoint tables\n\
+        ALTER TABLE ChatInferenceDatapoint DROP COLUMN staled_at;
+        ALTER TABLE JsonInferenceDatapoint DROP COLUMN staled_at;
+        -- Revert the change to the default of `updated_at` in the datapoint tables\n\
+        ALTER TABLE ChatInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now();
+        ALTER TABLE JsonInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now();
     "
         .to_string()
     }

@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Code } from "~/components/ui/code";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
-import ModelInput from "./ModelInput";
+import ModelInput from "~/components/model/ModelInput";
 
 interface ModelInferenceItemProps {
   inference: ParsedModelInferenceRow;

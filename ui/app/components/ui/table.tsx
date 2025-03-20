@@ -9,10 +9,7 @@ const Table = React.forwardRef<
   <div className="relative w-full overflow-auto rounded-md border border-border">
     <table
       ref={ref}
-      className={cn(
-        "w-full caption-bottom bg-background-primary text-sm",
-        className,
-      )}
+      className={cn("w-full caption-bottom bg-bg-primary text-sm", className)}
       {...props}
     />
   </div>
@@ -46,7 +43,7 @@ const TableFooter = React.forwardRef<
   <tfoot
     ref={ref}
     className={cn(
-      "border-t bg-background-secondary font-medium text-foreground-tertiary [&>tr]:last:border-b-0",
+      "border-t bg-bg-secondary font-medium text-fg-secondary [&>tr]:last:border-b-0",
       className,
     )}
     {...props}
@@ -76,7 +73,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      "h-10 bg-background-secondary px-3 text-left align-middle font-medium text-foreground-tertiary [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+      "h-10 bg-bg-secondary px-3 text-left align-middle font-medium text-fg-tertiary [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
       className,
     )}
     {...props}

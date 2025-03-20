@@ -3,7 +3,6 @@ import {
   type DatasetDetailRow,
   type ParsedJsonInferenceDatapointRow,
   type ParsedChatInferenceDatapointRow,
-  inferenceRowToDatasetRow,
 } from "./datasets";
 import {
   countRowsForDataset,
@@ -11,10 +10,10 @@ import {
   getDatasetCounts,
   getDatasetRows,
   insertDatapoint,
-  deleteDatapoint,
+  staleDatapoint,
 } from "./datasets.server";
 import { expect, test, describe } from "vitest";
-import type { ParsedInferenceRow } from "./inference";
+import { v7 as uuid } from "uuid";
 
 describe("countRowsForDataset", () => {
   test("returns the correct number of rows for a specific function", async () => {
@@ -261,9 +260,9 @@ describe("getDatasetCounts", () => {
       // Because other tests insert into the table, there could be additional datasets
       expect.arrayContaining([
         {
-          count: 5,
+          count: 6,
           dataset_name: "bar",
-          last_updated: "2025-02-19T00:26:06Z",
+          last_updated: "2025-03-14T17:38:09Z",
         },
         {
           count: 116,
@@ -317,7 +316,7 @@ describe("getDatasetRows", () => {
       if (rows.length !== pageSize) break;
     }
 
-    expect(allRows.length).toBe(5);
+    expect(allRows.length).toBe(6);
     expect(allRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -329,8 +328,8 @@ describe("getDatasetRows", () => {
         }),
       ]),
     );
-    // Verify all rows are json type
-    expect(allRows.every((row) => row.type === "json")).toBe(true);
+    // Verify 5 rows are json type
+    expect(allRows.filter((row) => row.type === "json").length).toBe(5);
   });
 });
 
@@ -433,6 +432,7 @@ describe("getDatapoint", () => {
         type: "object",
       },
       tags: {},
+      staled_at: null,
       updated_at: "2025-02-19T00:26:06Z",
     });
   });
@@ -464,6 +464,7 @@ describe("getDatapoint", () => {
         ],
       },
       is_deleted: false,
+      staled_at: null,
       output: [
         {
           text: 'Alright, the theme of "upward" immediately brings to mind things that ascend or rise. This can be movements, emotions, or natural events.\n\nLet\'s craft a haiku:\n\nMountains touch the sky,  \nClouds race past the soaring peaks,  \nWorld beneath grows small.',
@@ -471,7 +472,6 @@ describe("getDatapoint", () => {
         },
       ],
       tags: {},
-      tool_params: {},
       updated_at: "2025-02-19T00:25:04Z",
     });
   });
@@ -487,10 +487,11 @@ describe("getDatapoint", () => {
 
 describe("datapoint operations", () => {
   test("chat datapoint lifecycle - insert, get, delete", async () => {
+    const datapoint_id = uuid();
     const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
-      id: "01934fc5-ea98-71f0-8191-9fd88f34c28b",
+      id: datapoint_id,
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff9",
       input: {
         messages: [
@@ -511,6 +512,7 @@ describe("datapoint operations", () => {
       auxiliary: "",
       updated_at: new Date().toISOString(),
       is_deleted: false,
+      staled_at: null,
     };
 
     // Test insertion
@@ -519,7 +521,7 @@ describe("datapoint operations", () => {
     // Test retrieval
     const retrievedDatapoint = await getDatapoint(
       "test_chat_dataset",
-      "01934fc5-ea98-71f0-8191-9fd88f34c28b",
+      datapoint_id,
     );
     expect(retrievedDatapoint).toBeTruthy();
     expect(retrievedDatapoint?.id).toBe(chatDatapoint.id);
@@ -539,20 +541,35 @@ describe("datapoint operations", () => {
       throw new Error("Expected chat inference row but got JSON inference row");
     }
 
-    // Test deletion
-    await deleteDatapoint(chatDatapoint);
-    const deletedDatapoint = await getDatapoint(
+    // Test staling
+    await staleDatapoint(chatDatapoint.dataset_name, chatDatapoint.id, "chat");
+    // Sleep 100ms
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Try and get the datapoint
+    const staled_getter_result = await getDatapoint(
       "test_chat_dataset",
-      "01934fc5-ea98-71f0-8191-9fd88f34c28b",
+      datapoint_id,
     );
-    expect(deletedDatapoint).toBeNull();
+    // Test that the datapoint was properly staled
+    expect(staled_getter_result).toBeNull();
+
+    // Also check that if we force it to allow stale then it is retrieved
+    const staledDatapoint = await getDatapoint(
+      "test_chat_dataset",
+      datapoint_id,
+      true,
+    );
+    expect(staledDatapoint).toBeDefined();
+    expect(staledDatapoint?.id).toEqual(datapoint_id);
+    expect(staledDatapoint?.staled_at).toBeDefined();
   });
 
   test("json datapoint lifecycle - insert, get, delete", async () => {
+    const datapoint_id = uuid();
     const jsonDatapoint: ParsedJsonInferenceDatapointRow = {
       dataset_name: "test_json_dataset",
       function_name: "extract_entities",
-      id: "01934fc5-ea98-71f0-8191-9fd88f34c29c",
+      id: datapoint_id,
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff8",
       input: {
         messages: [
@@ -589,6 +606,7 @@ describe("datapoint operations", () => {
       auxiliary: "",
       updated_at: new Date().toISOString(),
       is_deleted: false,
+      staled_at: null,
     };
 
     // Test insertion
@@ -597,7 +615,7 @@ describe("datapoint operations", () => {
     // Test retrieval
     const retrievedDatapoint = await getDatapoint(
       "test_json_dataset",
-      "01934fc5-ea98-71f0-8191-9fd88f34c29c",
+      datapoint_id,
     );
     expect(retrievedDatapoint).toBeTruthy();
     expect(retrievedDatapoint?.id).toBe(jsonDatapoint.id);
@@ -607,7 +625,7 @@ describe("datapoint operations", () => {
     expect(retrievedDatapoint?.output).toEqual(jsonDatapoint.output);
 
     // Check if it's a JSON inference row before accessing output_schema
-    if (retrievedDatapoint && !("tool_params" in retrievedDatapoint)) {
+    if (retrievedDatapoint && "output_schema" in retrievedDatapoint) {
       expect(JSON.stringify(retrievedDatapoint.output_schema)).toBe(
         JSON.stringify(jsonDatapoint.output_schema),
       );
@@ -616,12 +634,24 @@ describe("datapoint operations", () => {
     }
 
     // Test deletion
-    await deleteDatapoint(jsonDatapoint);
+    await staleDatapoint("test_json_dataset", datapoint_id, "json");
+    // Sleep 100ms
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     const deletedDatapoint = await getDatapoint(
       "test_json_dataset",
-      "01934fc5-ea98-71f0-8191-9fd88f34c29c",
+      datapoint_id,
     );
     expect(deletedDatapoint).toBeNull();
+
+    // Also check that if we force it to allow stale then it is retrieved
+    const staledDatapoint = await getDatapoint(
+      "test_json_dataset",
+      datapoint_id,
+      true,
+    );
+    expect(staledDatapoint).toBeDefined();
+    expect(staledDatapoint?.id).toEqual(datapoint_id);
+    expect(staledDatapoint?.staled_at).toBeDefined();
   });
 
   test("handles non-existent datapoint retrieval", async () => {
@@ -659,6 +689,7 @@ describe("datapoint operations", () => {
       auxiliary: "",
       updated_at: new Date().toISOString(),
       is_deleted: false,
+      staled_at: null,
     };
 
     // First insertion
@@ -668,80 +699,19 @@ describe("datapoint operations", () => {
     await insertDatapoint(chatDatapoint);
 
     // Cleanup
-    await deleteDatapoint(chatDatapoint);
+    await staleDatapoint(chatDatapoint.dataset_name, chatDatapoint.id, "chat");
+    // Sleep 100ms
+    // Sleep 100ms
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const deletedDatapoint = await getDatapoint(
+      "test_json_dataset",
+      chatDatapoint.id,
+    );
+    expect(deletedDatapoint).toBeNull();
   });
 
-  test("handles deletion of non-existent datapoint", async () => {
-    const nonExistentDatapoint: ParsedChatInferenceDatapointRow = {
-      dataset_name: "non_existent_dataset",
-      function_name: "non_existent_function",
-      id: "01934fc5-ea98-71f0-8191-9fd88f34c32f",
-      episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff6",
-      input: {
-        messages: [
-          {
-            role: "user" as const,
-            content: [{ type: "text", value: "test" }],
-          },
-        ],
-      },
-      output: [{ type: "text", text: "test" }],
-      tool_params: {},
-      tags: {},
-      auxiliary: "",
-      updated_at: new Date().toISOString(),
-      is_deleted: false,
-    };
-
+  test("handles staling of non-existent datapoint", async () => {
     // Should not throw
-    await expect(deleteDatapoint(nonExistentDatapoint)).resolves.not.toThrow();
-  });
-});
-
-describe("inferenceRowToDatasetRow", () => {
-  test("generates a fresh UUID for each datapoint", () => {
-    // Create a sample inference row to convert
-    const sampleChatInference: ParsedInferenceRow = {
-      id: "01934fc5-ea98-71f0-8191-9fd88f34c28b",
-      function_type: "chat",
-      episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff9",
-      function_name: "write_haiku",
-      variant_name: "baseline",
-      input: {
-        messages: [
-          {
-            content: [{ type: "text", value: "Write a haiku about testing" }],
-            role: "user" as const,
-          },
-        ],
-      },
-      output: [
-        {
-          type: "text",
-          text: "Code flows like water\nTests catch bugs in their net now\nPeace in the program",
-        },
-      ],
-      tool_params: {},
-      inference_params: {},
-      tags: {},
-      processing_time_ms: 1000,
-      timestamp: new Date().toISOString(),
-    };
-
-    // Convert the inference to a dataset row
-    const datasetRow1 = inferenceRowToDatasetRow(
-      sampleChatInference,
-      "test_dataset",
-    );
-
-    // Verify that the generated ID is different from the original inference ID
-    expect(datasetRow1.id).not.toBe(sampleChatInference.id);
-
-    // Verify that each call generates a unique ID
-    const datasetRow2 = inferenceRowToDatasetRow(
-      sampleChatInference,
-      "test_dataset",
-    );
-    expect(datasetRow2.id).not.toBe(datasetRow1.id);
+    await expect(staleDatapoint("fake", uuid(), "chat")).resolves.not.toThrow();
   });
 });

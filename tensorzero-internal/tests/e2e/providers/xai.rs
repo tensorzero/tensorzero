@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 
-#[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);
-#[cfg(feature = "batch_tests")]
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
@@ -54,7 +52,6 @@ async fn get_providers() -> E2ETestProviders {
         credentials,
     }];
 
-    #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "xai-shorthand".to_string(),
         model_name: "xai::grok-2-1212".into(),
@@ -74,9 +71,8 @@ async fn get_providers() -> E2ETestProviders {
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers,
         image_inference: vec![],
-        #[cfg(feature = "e2e_tests")]
+
         shorthand_inference: shorthand_providers.clone(),
-        #[cfg(feature = "batch_tests")]
         supports_batch_inference: false,
     }
 }

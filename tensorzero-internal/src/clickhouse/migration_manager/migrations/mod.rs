@@ -107,6 +107,28 @@ async fn get_column_type(
     }
 }
 
+async fn get_default_expression(
+    clickhouse: &ClickHouseConnectionInfo,
+    table: &str,
+    column: &str,
+    migration_id: &str,
+) -> Result<String, Error> {
+    let query = format!(
+        "SELECT default_expression FROM system.columns WHERE database='{}' AND table='{}' AND name='{}'",
+        clickhouse.database(),
+        table,
+        column
+    );
+    match clickhouse.run_query(query, None).await {
+        Err(e) => Err(ErrorDetails::ClickHouseMigration {
+            id: migration_id.to_string(),
+            message: e.to_string(),
+        }
+        .into()),
+        Ok(response) => Ok(response.trim().to_string()),
+    }
+}
+
 async fn table_is_nonempty(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,

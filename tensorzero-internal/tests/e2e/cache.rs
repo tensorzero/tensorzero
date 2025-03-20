@@ -283,7 +283,7 @@ async fn test_cache_stream_write_and_read() {
 pub async fn test_streaming_cache_with_err() {
     let episode_id = Uuid::now_v7();
     // Generate random u32
-    let seed = rand::thread_rng().gen_range(0..u32::MAX);
+    let seed = rand::rng().random_range(0..u32::MAX);
 
     // When the stream includes an error, we should not cache the response (we pass `expect_cached = false`
     // for both calls)
@@ -297,7 +297,7 @@ pub async fn test_streaming_cache_with_err() {
 pub async fn test_streaming_cache_without_err() {
     let episode_id = Uuid::now_v7();
     // Generate random u32
-    let seed = rand::thread_rng().gen_range(0..u32::MAX);
+    let seed = rand::rng().random_range(0..u32::MAX);
 
     // When the stream does not include an error, we should cache the response (we pass `expect_cached = true`
     // for the second call)

@@ -5,7 +5,7 @@ import {
   jsonInferenceOutputSchema,
 } from "./common";
 import type { ParsedInferenceRow } from "./inference";
-import { v7 as uuidv7 } from "uuid";
+import { v7 as uuid } from "uuid";
 
 /**
  * Schema representing a fully-qualified row in the Chat Inference dataset.
@@ -15,7 +15,7 @@ export const ChatInferenceDatapointRowSchema = z
     dataset_name: z.string(),
     function_name: z.string(),
     id: z.string().uuid(),
-    episode_id: z.string().uuid(),
+    episode_id: z.string().uuid().nullable(),
     input: z.string(),
     output: z.string().nullable(),
     tool_params: z.string(),
@@ -23,6 +23,7 @@ export const ChatInferenceDatapointRowSchema = z
     auxiliary: z.string(),
     is_deleted: z.boolean().default(false),
     updated_at: z.string().datetime().default(new Date().toISOString()),
+    staled_at: z.string().datetime().nullable(),
   })
   .strict();
 export type ChatInferenceDatapointRow = z.infer<
@@ -37,7 +38,7 @@ export const JsonInferenceDatapointRowSchema = z
     dataset_name: z.string(),
     function_name: z.string(),
     id: z.string().uuid(),
-    episode_id: z.string().uuid(),
+    episode_id: z.string().uuid().nullable(),
     input: z.string(),
     output: z.string().nullable(),
     output_schema: z.string(),
@@ -45,6 +46,7 @@ export const JsonInferenceDatapointRowSchema = z
     auxiliary: z.string(),
     is_deleted: z.boolean().default(false),
     updated_at: z.string().datetime(),
+    staled_at: z.string().datetime().nullable(),
   })
   .strict();
 export type JsonInferenceDatapointRow = z.infer<
@@ -68,7 +70,7 @@ export const ParsedChatInferenceDatapointRowSchema =
   }).extend({
     input: inputSchema,
     output: z.array(contentBlockOutputSchema).optional(),
-    tool_params: z.record(z.string(), z.unknown()),
+    tool_params: z.record(z.string(), z.unknown()).optional(),
     tags: z.record(z.string(), z.string()),
   });
 export type ParsedChatInferenceDatapointRow = z.infer<
@@ -171,7 +173,7 @@ export const DatasetDetailRowSchema = z.object({
   id: z.string().uuid(),
   type: z.enum(["chat", "json"]),
   function_name: z.string(),
-  episode_id: z.string().uuid(),
+  episode_id: z.string().uuid().nullable(),
   updated_at: z.string().datetime(),
 });
 
@@ -190,13 +192,14 @@ export function inferenceRowToDatasetRow(
   const baseFields = {
     dataset_name,
     function_name: inference.function_name,
-    id: uuidv7(), // Generate a fresh UUIDv7 instead of using the inference ID
+    id: uuid(), // Generate a fresh UUIDv7 instead of using the inference ID
     episode_id: inference.episode_id,
     input: inference.input,
     tags: inference.tags,
     auxiliary: JSON.stringify({}),
     is_deleted: false,
     updated_at: new Date().toISOString(),
+    staled_at: null,
   };
 
   if (inference.function_type === "chat") {

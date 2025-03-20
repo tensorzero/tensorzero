@@ -1,7 +1,4 @@
 #![allow(clippy::print_stdout)]
-#![cfg(test)]
-mod common;
-mod providers;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
