@@ -217,7 +217,7 @@ macro_rules! generate_batch_inference_tests {
         }
 
         #[tokio::test]
-        async fn test_start_multi_turn_parallel_tool_use_inference_request() {
+        async fn test_start_multi_turn_parallel_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.parallel_tool_use_inference;
             if all_providers.supports_batch_inference {
@@ -228,7 +228,7 @@ macro_rules! generate_batch_inference_tests {
         }
 
         #[tokio::test]
-        async fn test_poll_existing_multi_turn_parallel_tool_use_inference_request() {
+        async fn test_poll_existing_multi_turn_parallel_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.parallel_tool_use_inference;
             if all_providers.supports_batch_inference {
@@ -239,7 +239,7 @@ macro_rules! generate_batch_inference_tests {
         }
 
         #[tokio::test]
-        async fn test_poll_completed_multi_turn_parallel_tool_use_inference_request() {
+        async fn test_poll_completed_multi_turn_parallel_tool_use_batch_inference_request() {
             let all_providers = $func().await;
             let providers = all_providers.parallel_tool_use_inference;
             if all_providers.supports_batch_inference {

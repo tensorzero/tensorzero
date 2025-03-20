@@ -17,7 +17,7 @@ import {
   useNavigate,
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
-import BasicInfo from "./BasicInfo";
+import BasicInfo from "./InferenceBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
@@ -35,6 +35,7 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
+import { InferenceActions } from "./InferenceActions";
 import {
   getDatasetCounts,
   insertDatapoint,
@@ -214,11 +215,14 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
             <BasicInfo
               inference={inference}
               inferenceUsage={getTotalInferenceUsage(model_inferences)}
-              tryWithVariantProps={{
-                variants,
-                onVariantSelect,
-                isLoading: variantInferenceIsLoading,
-              }}
+            />
+          </SectionLayout>
+
+          <SectionLayout>
+            <InferenceActions
+              variants={variants}
+              onVariantSelect={onVariantSelect}
+              variantInferenceIsLoading={variantInferenceIsLoading}
               dataset_counts={dataset_counts}
               onDatasetSelect={handleAddToDataset}
               hasDemonstration={hasDemonstration}

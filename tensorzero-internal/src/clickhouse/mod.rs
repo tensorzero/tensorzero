@@ -8,7 +8,7 @@ use tokio::sync::RwLockWriteGuard;
 use url::Url;
 
 pub mod migration_manager;
-#[cfg(any(test, feature = "e2e_tests", feature = "batch_tests"))]
+#[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
 
 use crate::error::{Error, ErrorDetails};
@@ -49,7 +49,7 @@ impl ClickHouseConnectionInfo {
         let database = validate_clickhouse_url_get_db_name(&database_url)?
             .unwrap_or_else(|| "default".to_string());
 
-        #[cfg(any(feature = "e2e_tests", feature = "batch_tests"))]
+        #[cfg(feature = "e2e_tests")]
         let database = "tensorzero_e2e_tests".to_string();
 
         // Although we take the database name from the URL path,

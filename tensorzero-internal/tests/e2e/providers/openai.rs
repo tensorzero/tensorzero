@@ -26,7 +26,6 @@ use tensorzero_internal::clickhouse::test_helpers::{
 
 #[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);
-#[cfg(feature = "batch_tests")]
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
@@ -140,7 +139,6 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: image_providers.clone(),
         #[cfg(feature = "e2e_tests")]
         shorthand_inference: shorthand_providers.clone(),
-        #[cfg(feature = "batch_tests")]
         supports_batch_inference: true,
     }
 }
@@ -576,7 +574,6 @@ async fn test_chat_function_json_override_with_mode_implicit_tool() {
     );
 }
 
-#[cfg_attr(feature = "batch_tests", allow(unused))]
 async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceRequestJsonMode) {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
@@ -1031,8 +1028,8 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
     use aws_credential_types::Credentials;
     use aws_sdk_s3::config::SharedCredentialsProvider;
-    use rand::distributions::Alphanumeric;
-    use rand::distributions::DistString;
+    use rand::distr::Alphanumeric;
+    use rand::distr::SampleString;
     use tensorzero_internal::inference::types::storage::StorageKind;
 
     // We expect CI to provide our credentials in 'R2_' variables
@@ -1066,7 +1063,7 @@ pub async fn test_image_inference_with_provider_cloudflare_r2() {
 
     let client = aws_sdk_s3::Client::new(&config);
 
-    let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
+    let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
 
     test_image_inference_with_provider_s3_compatible(
@@ -1223,8 +1220,8 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
     use crate::providers::common::IMAGE_FUNCTION_CONFIG;
     use aws_credential_types::Credentials;
     use aws_sdk_s3::config::SharedCredentialsProvider;
-    use rand::distributions::Alphanumeric;
-    use rand::distributions::DistString;
+    use rand::distr::Alphanumeric;
+    use rand::distr::SampleString;
     use tensorzero_internal::inference::types::storage::StorageKind;
 
     // We expect CI to provide our credentials in 'GCP_STORAGE_' variables
@@ -1259,7 +1256,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
 
     let client = aws_sdk_s3::Client::new(&config);
 
-    let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
+    let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
 
     test_image_inference_with_provider_s3_compatible(
@@ -1297,8 +1294,8 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
     use aws_credential_types::Credentials;
     use aws_sdk_s3::config::SharedCredentialsProvider;
-    use rand::distributions::Alphanumeric;
-    use rand::distributions::DistString;
+    use rand::distr::Alphanumeric;
+    use rand::distr::SampleString;
     use tensorzero_internal::inference::types::storage::StorageKind;
 
     // These are set in `ci/minio-docker-compose.yml`
@@ -1331,7 +1328,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
 
     let client = aws_sdk_s3::Client::new(&config);
 
-    let mut prefix = Alphanumeric.sample_string(&mut rand::thread_rng(), 6);
+    let mut prefix = Alphanumeric.sample_string(&mut rand::rng(), 6);
     prefix += "-";
 
     test_image_inference_with_provider_s3_compatible(

@@ -334,10 +334,10 @@ impl BestOfNSamplingConfig {
         .await
         {
             Ok((idx_opt, inf_result)) => (
-                idx_opt.unwrap_or_else(|| rand::thread_rng().gen_range(0..candidates.len())),
+                idx_opt.unwrap_or_else(|| rand::rng().random_range(0..candidates.len())),
                 inf_result,
             ),
-            Err(_) => (rand::thread_rng().gen_range(0..candidates.len()), None),
+            Err(_) => (rand::rng().random_range(0..candidates.len()), None),
         };
 
         // Safely remove the selected candidate without panicking

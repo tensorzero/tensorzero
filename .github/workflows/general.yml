@@ -58,6 +58,9 @@ jobs:
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
 
+      - name: Print Rust version
+        run: rustc --version
+
       - name: Install pnpm
         uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
         with:
@@ -208,6 +211,33 @@ jobs:
         working-directory: ui
         run: pnpm run typecheck
 
+  ui-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.9.0"
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build minijinja WASM bindings
+        working-directory: ui/app/utils/minijinja
+        run: wasm-pack build --features console_error_panic_hook
+
+      - name: Install dependencies
+        working-directory: ui
+        run: pnpm install --frozen-lockfile
+
       - name: Start services for ui tests
         working-directory: ui
         run: |
@@ -215,7 +245,7 @@ jobs:
           echo "FIREWORKS_API_KEY=not_used" >> .env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> .env
-          docker compose -f fixtures/docker-compose.yml up -d --build --force-recreate
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up -d --build --force-recreate
 
       - name: Run ui tests
         working-directory: ui

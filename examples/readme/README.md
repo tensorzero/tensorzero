@@ -17,9 +17,10 @@ docker compose up
 pip install -r requirements.txt
 ```
 
-3. Run the example:
+3. Run the examples:
 
 ```bash
-python sync_client_example.py
-python async_client_example.py
+python tensorzero_sync_client.py
+python tensorzero_async_client.py
+python openai_client.py
 ```
