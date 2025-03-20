@@ -2694,7 +2694,7 @@ async fn test_inference_invalid_default_function_arg() {
 }
 
 #[tokio::test]
-#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+
 async fn test_image_inference_without_object_store() {
     let client = make_embedded_gateway_no_config().await;
     let err_msg = client

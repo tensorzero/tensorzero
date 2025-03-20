@@ -13,7 +13,6 @@ use tensorzero_internal::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
-#[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
@@ -72,7 +71,6 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
-    #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "anthropic-shorthand".to_string(),
         model_name: "anthropic::claude-3-haiku-20240307".into(),
@@ -92,13 +90,12 @@ async fn get_providers() -> E2ETestProviders {
         parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
         image_inference: image_providers,
-        #[cfg(feature = "e2e_tests")]
+
         shorthand_inference: shorthand_providers.clone(),
         supports_batch_inference: false,
     }
 }
 
-#[cfg_attr(not(feature = "e2e_tests"), ignore)]
 #[tokio::test]
 async fn test_thinking_signature() {
     let client = Client::new();
@@ -304,7 +301,6 @@ async fn test_thinking_signature() {
     );
 }
 
-#[cfg_attr(not(feature = "e2e_tests"), ignore)]
 #[tokio::test]
 async fn test_redacted_thinking() {
     let client = Client::new();
