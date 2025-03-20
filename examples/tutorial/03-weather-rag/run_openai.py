@@ -34,7 +34,7 @@ with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
     report_result = client.chat.completions.create(
         model="tensorzero::function_name::generate_weather_report",
         # This is the second inference request in an episode so we need to provide the episode_id
-        extra_body={"episode_id": str(query_result.episode_id)},
+        extra_body={"tensorzero::episode_id": str(query_result.episode_id)},
         messages=[
             {
                 "role": "user",
