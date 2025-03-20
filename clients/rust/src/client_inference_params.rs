@@ -6,7 +6,7 @@ use serde_json::Value;
 use tensorzero_internal::{
     cache::CacheParamsOptions,
     endpoints::inference::{InferenceParams, Params},
-    inference::types::Input,
+    inference::types::{extra_body::UnfilteredInferenceExtraBody, Input},
     tool::DynamicToolParams,
 };
 use uuid::Uuid;
@@ -61,6 +61,8 @@ pub struct ClientInferenceParams {
     /// if the fuser/judge model failed
     #[serde(default)]
     pub include_original_response: bool,
+    #[serde(default)]
+    pub extra_body: UnfilteredInferenceExtraBody,
 }
 
 impl From<ClientInferenceParams> for Params {
@@ -86,6 +88,7 @@ impl From<ClientInferenceParams> for Params {
                 .collect(),
             cache_options: this.cache_options,
             include_original_response: this.include_original_response,
+            extra_body: this.extra_body,
         }
     }
 }
@@ -111,6 +114,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         credentials,
         cache_options,
         include_original_response,
+        extra_body,
     } = client_params;
     let _ = Params {
         function_name,
@@ -128,6 +132,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         credentials: credentials.into_iter().map(|(k, v)| (k, v.0)).collect(),
         cache_options,
         include_original_response,
+        extra_body,
     };
 }
 
