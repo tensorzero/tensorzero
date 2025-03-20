@@ -1,6 +1,6 @@
-import { useFetcher, Link } from "react-router";
+import { useFetcher } from "react-router";
 import { data, isRouteErrorResponse, redirect } from "react-router";
-import BasicInfo from "./BasicInfo";
+import BasicInfo from "./DatapointBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
 import { useState } from "react";
@@ -25,6 +25,7 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
+import { DatapointActions } from "./DatapointActions";
 import type {
   Input as ClickHouseInput,
   InputMessage,
@@ -266,40 +267,33 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   return (
     <div className="container mx-auto px-4 pb-8">
       <PageLayout>
-        <div className="flex flex-col gap-3">
-          <PageHeader heading="Datapoint" name={datapoint.id} />
-          <div className="text-sm text-foreground">
-            Dataset{" "}
-            <Link
-              to={`/datasets/${datapoint.dataset_name}`}
-              className="rounded bg-background-tertiary px-1.5 py-1 font-mono font-semibold"
-            >
-              {datapoint.dataset_name}
-            </Link>
+        <PageHeader heading="Datapoint" name={datapoint.id} />
+        {saveError && (
+          <div className="mt-2 rounded-md bg-red-100 px-4 py-3 text-red-800">
+            <p className="font-medium">Error saving datapoint</p>
+            <p>{saveError}</p>
           </div>
-          {saveError && (
-            <div className="mt-2 rounded-md bg-red-100 px-4 py-3 text-red-800">
-              <p className="font-medium">Error saving datapoint</p>
-              <p>{saveError}</p>
-            </div>
-          )}
-        </div>
+        )}
 
         <SectionsGroup>
           <SectionLayout>
-            <BasicInfo
-              datapoint={datapoint}
-              tryWithVariantProps={{
-                variants,
-                onVariantSelect,
-                isLoading: variantInferenceIsLoading,
-              }}
+            <BasicInfo datapoint={datapoint} />
+          </SectionLayout>
+
+          <SectionLayout>
+            <DatapointActions
+              variants={variants}
+              onVariantSelect={onVariantSelect}
+              variantInferenceIsLoading={variantInferenceIsLoading}
               onDelete={handleDelete}
               isDeleting={fetcher.state === "submitting" && !saveError}
               toggleEditing={toggleEditing}
               isEditing={isEditing}
               onSave={handleSave}
               onReset={handleReset}
+              showTryWithVariant={
+                datapoint.function_name !== "tensorzero::default"
+              }
             />
           </SectionLayout>
 

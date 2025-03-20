@@ -23,7 +23,7 @@ const PageHeader = forwardRef<HTMLDivElement, PageHeaderProps>(
     return (
       <div ref={ref} className={`${className || ""}`}>
         {label !== undefined && (
-          <p className="text-sm font-normal text-foreground-muted">{label}</p>
+          <p className="text-sm font-normal text-fg-muted">{label}</p>
         )}
         <div className="flex items-baseline gap-2">
           {heading !== undefined && (
@@ -35,12 +35,10 @@ const PageHeader = forwardRef<HTMLDivElement, PageHeaderProps>(
             </span>
           )}
           {lateral !== undefined && (
-            <p className="text-sm font-normal text-foreground-muted">
-              {lateral}
-            </p>
+            <p className="text-sm font-normal text-fg-muted">{lateral}</p>
           )}
           {count !== undefined && (
-            <h4 className="text-2xl font-medium text-foreground-muted">
+            <h4 className="text-2xl font-medium text-fg-muted">
               {count.toLocaleString()}
             </h4>
           )}
@@ -72,7 +70,7 @@ const SectionHeader = forwardRef<HTMLHeadingElement, SectionHeaderProps>(
         {heading}
 
         {count !== undefined && (
-          <span className="text-xl font-medium text-foreground-muted">
+          <span className="text-xl font-medium text-fg-muted">
             {count.toLocaleString()}
           </span>
         )}

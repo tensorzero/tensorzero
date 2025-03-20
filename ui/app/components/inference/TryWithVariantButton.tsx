@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { ChevronDown } from "lucide-react";
+import { Compare } from "~/components/icons/Icons";
 
 export interface TryWithVariantButtonProps {
   variants: string[];
@@ -24,8 +25,10 @@ export function TryWithVariantButton({
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" disabled={isLoading}>
-          Try with variant... <ChevronDown className="ml-2 h-4 w-4" />
+        <Button variant="outline" size="sm" disabled={isLoading}>
+          <Compare className="h-4 w-4 text-fg-tertiary" />
+          Try with variant
+          <ChevronDown className="h-4 w-4 text-fg-tertiary" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>

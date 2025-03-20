@@ -47,13 +47,14 @@ body {
 
   :root {
     --background-primary: 0 0% 100%;
-    --background-secondary: 0 0% 98.5%;
+    --background-secondary: 0 0% 99%;
     --background-tertiary: 0 0% 96%;
     --background-muted: 0 0% 91%;
+    --background-hover: 0 0% 95%;
     --foreground-primary: 0 0% 0%;
-    --foreground-secondary: 0 0% 30%;
-    --foreground-tertiary: 0 0% 45%;
-    --foreground-muted: 0 0% 55%;
+    --foreground-secondary: 0 0% 32%;
+    --foreground-tertiary: 0 0% 48%;
+    --foreground-muted: 0 0% 60%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
@@ -85,12 +86,36 @@ body {
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Colors */
+    --emerald-50: 150 32% 93%;
+    --emerald-100: 150 33% 90%;
+    --emerald-200: 150 34% 87%;
+    --emerald-300: 150 36% 80%;
+    --emerald-400: 150 38% 68%;
+    --emerald-500: 150 40% 56%;
+    --emerald-600: 150 50% 32%;
+    --emerald-700: 150 72% 16%;
+    --emerald-800: 150 80% 12%;
+    --emerald-900: 150 86% 8%;
+
+    --blue-50: 208 32% 93%;
+    --blue-100: 208 33% 90%;
+    --blue-200: 208 34% 87%;
+    --blue-300: 208 36% 80%;
+    --blue-400: 208 38% 68%;
+    --blue-500: 208 40% 56%;
+    --blue-600: 208 50% 32%;
+    --blue-700: 208 72% 16%;
+    --blue-800: 208 80% 12%;
+    --blue-900: 208 86% 8%;
   }
 
   .dark {
-    --background-primary: 222.2 84% 4.9%;
-    --background-secondary: 215 28% 17%;
+    --bg-primary: 222.2 84% 4.9%;
+    --bg-secondary: 215 28% 17%;
     --background-tertiary: 217.2 32.6% 17.5%;
+    --background-hover: 217.2 32.6% 18%;
     --foreground-primary: 0 0% 100%;
     --foreground-secondary: 0 0% 70%;
     --foreground-tertiary: 0 0% 45%;

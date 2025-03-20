@@ -51,7 +51,7 @@ futures-core = "0.3.30"
 hex = "0.4.3"
 image = { version = "0.25.5", default-features = false }
 itertools = "0.13.0"
-jsonschema = "0.18.0"
+jsonschema = "0.29.0"
 jsonwebtoken = "9.3.0"
 lazy_static = { version = "1.5.0" }
 metrics = "0.23.0"
@@ -65,8 +65,8 @@ minijinja = { version = "2.1.0", features = [
     "loop_controls",
     "builtins",
 ] }
-object_store = { version = "0.11.2", features = ["serde", "aws"] }
-rand = "0.8.5"
+object_store = { version = "0.12.0", features = ["serde", "aws"] }
+rand = "0.9.0"
 reqwest = { workspace = true }
 reqwest-eventsource = { workspace = true }
 secrecy = { workspace = true }

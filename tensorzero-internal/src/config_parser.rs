@@ -171,14 +171,7 @@ impl ObjectStoreInfo {
 // improved warning messages.
 // We are attempting to find this error: `https://github.com/seanmonstar/reqwest/blob/c4a9fb060fb518f0053b98f78c7583071a760cf4/src/error.rs#L340`
 fn contains_bad_scheme_err(e: &impl StdError) -> bool {
-    let mut source: Option<&dyn StdError> = Some(e);
-    while let Some(err) = source {
-        if format!("{err:?}") == "BadScheme" {
-            return true;
-        }
-        source = err.source();
-    }
-    false
+    format!("{e:?}").contains("BadScheme")
 }
 
 /// Note: This struct and the impl below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag

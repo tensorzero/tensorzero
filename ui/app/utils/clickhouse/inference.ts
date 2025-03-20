@@ -621,45 +621,62 @@ export async function queryInferenceById(
   id: string,
 ): Promise<ParsedInferenceRow | null> {
   const query = `
+  WITH inference AS (
     SELECT
-  uint_to_uuid(i.id_uint) AS id,
+        id_uint,
+        function_name,
+        variant_name,
+        episode_id,
+        function_type
+    FROM InferenceById
+    WHERE id_uint = toUInt128({id:UUID})
+)
+SELECT
+    uint_to_uuid(i.id_uint) AS id,
 
-  -- Common columns (pick via IF)
-  IF(i.function_type = 'chat', c.function_name, j.function_name) AS function_name,
-  IF(i.function_type = 'chat', c.variant_name,   j.variant_name)   AS variant_name,
-  IF(i.function_type = 'chat', c.episode_id,     j.episode_id)     AS episode_id,
-  IF(i.function_type = 'chat', c.input,          j.input)          AS input,
-  IF(i.function_type = 'chat', c.output,         j.output)         AS output,
+    -- Common columns (picked via IF)
+    IF(i.function_type = 'chat', c.function_name, j.function_name) AS function_name,
+    IF(i.function_type = 'chat', c.variant_name,   j.variant_name)   AS variant_name,
+    IF(i.function_type = 'chat', c.episode_id,     j.episode_id)     AS episode_id,
+    IF(i.function_type = 'chat', c.input,          j.input)          AS input,
+    IF(i.function_type = 'chat', c.output,         j.output)         AS output,
 
-  -- Chat-specific columns
-  IF(i.function_type = 'chat', c.tool_params, '') AS tool_params,
+    -- Chat-specific columns
+    IF(i.function_type = 'chat', c.tool_params, '') AS tool_params,
 
-  -- Inference params (common name in the union)
-  IF(i.function_type = 'chat', c.inference_params, j.inference_params) AS inference_params,
+    -- Inference params (common name in the union)
+    IF(i.function_type = 'chat', c.inference_params, j.inference_params) AS inference_params,
 
-  -- Processing time
-  IF(i.function_type = 'chat', c.processing_time_ms, j.processing_time_ms) AS processing_time_ms,
+    -- Processing time
+    IF(i.function_type = 'chat', c.processing_time_ms, j.processing_time_ms) AS processing_time_ms,
 
-  -- JSON-specific column
-  IF(i.function_type = 'json', j.output_schema, '') AS output_schema,
+    -- JSON-specific column
+    IF(i.function_type = 'json', j.output_schema, '') AS output_schema,
 
-  -- Timestamps & tags
-  IF(i.function_type = 'chat',
-   formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ'),
-   formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ')
-) AS timestamp,
-  IF(i.function_type = 'chat', c.tags,      j.tags)      AS tags,
+    -- Timestamps & tags
+    IF(i.function_type = 'chat',
+       formatDateTime(c.timestamp, '%Y-%m-%dT%H:%i:%SZ'),
+       formatDateTime(j.timestamp, '%Y-%m-%dT%H:%i:%SZ')
+    ) AS timestamp,
+    IF(i.function_type = 'chat', c.tags, j.tags) AS tags,
 
-  -- Discriminator itself
-  i.function_type
-
-FROM InferenceById i
+    -- Discriminator itself
+    i.function_type
+FROM inference i
 LEFT JOIN ChatInference c
-  ON i.id_uint = toUInt128(c.id)
+    ON i.function_type = 'chat'
+    AND i.function_name = c.function_name
+    AND i.variant_name = c.variant_name
+    AND i.episode_id = c.episode_id
+    AND uint_to_uuid(i.id_uint) = c.id
 LEFT JOIN JsonInference j
-  ON i.id_uint = toUInt128(j.id)
-WHERE uint_to_uuid(i.id_uint) = {id:String};
+    ON i.function_type = 'json'
+    AND i.function_name = j.function_name
+    AND i.variant_name = j.variant_name
+    AND i.episode_id = j.episode_id
+    AND uint_to_uuid(i.id_uint) = j.id;
   `;
+
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
