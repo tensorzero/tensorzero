@@ -7,7 +7,8 @@ import {
   useSearchParams,
 } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
-import BasicInfo from "./BasicInfo";
+import BasicInfo from "./VariantBasicInfo";
+import VariantTemplate from "./VariantTemplate";
 import { useConfig } from "~/context/config";
 import PageButtons from "~/components/utils/PageButtons";
 import VariantInferenceTable from "./VariantInferenceTable";
@@ -209,6 +210,11 @@ export default function VariantDetails() {
               function_name={function_name}
               function_type={function_type}
             />
+          </SectionLayout>
+
+          <SectionLayout>
+            <SectionHeader heading="Template" />
+            <VariantTemplate variantConfig={variant_config} />
           </SectionLayout>
 
           <SectionLayout>
