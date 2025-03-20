@@ -53,7 +53,7 @@ pub struct E2ETestProvider {
     pub variant_name: String,
     pub model_name: String,
     pub model_provider_name: String,
-    
+
     pub credentials: HashMap<String, String>,
 }
 
@@ -66,20 +66,20 @@ pub struct E2ETestProvider {
 /// then the provider should return an empty vector for the corresponding test.
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
-    
+
     pub extra_body_inference: Vec<E2ETestProvider>,
-    
+
     pub reasoning_inference: Vec<E2ETestProvider>,
-    
+
     pub inference_params_dynamic_credentials: Vec<E2ETestProvider>,
-    
+
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
     pub tool_multi_turn_inference: Vec<E2ETestProvider>,
     pub dynamic_tool_use_inference: Vec<E2ETestProvider>,
     pub parallel_tool_use_inference: Vec<E2ETestProvider>,
     pub json_mode_inference: Vec<E2ETestProvider>,
-    
+
     pub image_inference: Vec<E2ETestProvider>,
 
     pub shorthand_inference: Vec<E2ETestProvider>,
@@ -529,7 +529,6 @@ macro_rules! generate_provider_tests {
     };
 }
 
-
 pub static FERRIS_PNG: &[u8] = include_bytes!("./ferris.png");
 
 pub const IMAGE_FUNCTION_CONFIG: &str = r#"
@@ -561,7 +560,6 @@ model_id = "gemini-1.5-pro-001"
 location = "us-central1"
 project_id = "tensorzero-public"
 "#;
-
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
     let temp_dir = tempfile::tempdir().unwrap();
@@ -798,7 +796,6 @@ async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<(
     (real_addr, send)
 }
 
-
 pub async fn test_url_image_inference_with_provider_and_store(
     provider: E2ETestProvider,
     kind: StorageKind,
@@ -856,7 +853,6 @@ pub async fn test_url_image_inference_with_provider_and_store(
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 }
-
 
 pub async fn test_base64_image_inference_with_provider_and_store(
     provider: E2ETestProvider,
@@ -920,12 +916,10 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     (client, storage_path.unwrap())
 }
 
-
 pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
     test_extra_body_with_provider_and_stream(&provider, false).await;
     test_extra_body_with_provider_and_stream(&provider, true).await;
 }
-
 
 pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider, stream: bool) {
     let episode_id = Uuid::now_v7();
@@ -1122,7 +1116,6 @@ pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvid
     check_simple_inference_response(response_json, Some(episode_id), &provider, false, true).await;
 }
 
-
 pub async fn check_base64_image_response(
     response: InferenceResponse,
     episode_id: Option<Uuid>,
@@ -1278,7 +1271,6 @@ pub async fn check_base64_image_response(
     );
     expected_storage_path
 }
-
 
 pub async fn check_url_image_response(
     response: InferenceResponse,

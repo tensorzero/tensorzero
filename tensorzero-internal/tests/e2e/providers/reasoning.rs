@@ -16,7 +16,6 @@ use tensorzero_internal::clickhouse::test_helpers::{
 use tensorzero_internal::inference::types::{ContentBlock, RequestMessage};
 use uuid::Uuid;
 
-
 pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -245,7 +244,6 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
 }
-
 
 pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     provider: E2ETestProvider,
@@ -525,7 +523,6 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
     assert_eq!(id, inference_id);
 }
 
-
 pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -722,7 +719,6 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
     let output: Vec<ContentBlock> = serde_json::from_str(output).unwrap();
     assert_eq!(output.len(), 2);
 }
-
 
 pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
     provider: E2ETestProvider,
