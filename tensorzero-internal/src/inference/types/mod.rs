@@ -1355,6 +1355,11 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                             );
                         }
                         ContentBlockChunk::Thought(thought) => {
+                            // We check for both 'text' and 'signature', in case a provider produces
+                            // both in the same chunk.
+                            // These two cases update different fields ('text' vs 'signature') on the
+                            // thought with id 'thought.id' - this is how providers attach a signature
+                            // to a thought.
                             if let Some(text) = thought.text {
                                 handle_textual_content_block(
                                     &mut thought_blocks,
@@ -1362,7 +1367,6 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                     text,
                                     &mut ttft,
                                     chunk.latency,
-                                    // TODO - handle streaming thinking signatures (https://github.com/tensorzero/tensorzero/issues/1370)
                                     |text| {
                                         ContentBlockOutput::Thought(Thought {
                                             text,
@@ -1383,7 +1387,6 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
                                     signature,
                                     &mut ttft,
                                     chunk.latency,
-                                    // TODO - handle streaming thinking signatures (https://github.com/tensorzero/tensorzero/issues/1370)
                                     |signature| {
                                         ContentBlockOutput::Thought(Thought {
                                             text: String::new(),
