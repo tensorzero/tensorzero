@@ -224,7 +224,7 @@ impl InferenceProvider for TGIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let mut request_body = serde_json::to_value(TGIRequest::new(&PROVIDER_NAME, request)?)
+        let mut request_body = serde_json::to_value(TGIRequest::new(PROVIDER_NAME, request)?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!("Error serializing TGI request: {e}"),

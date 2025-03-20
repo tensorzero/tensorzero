@@ -40,7 +40,7 @@ pub fn inject_extra_body(
         }
     }
 
-    let expected_provider_name = fully_qualified_name(model_name, &*model_provider.provider_name);
+    let expected_provider_name = fully_qualified_name(model_name, &model_provider.provider_name);
 
     for extra_body in config.as_ref().iter().flat_map(|c| &c.inference_extra_body) {
         match extra_body {

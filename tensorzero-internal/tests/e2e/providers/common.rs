@@ -1063,8 +1063,45 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     stream: bool,
 ) {
     let episode_id = Uuid::now_v7();
+    println!("Provider name: {}", provider.model_provider_name);
 
-    let extra_body = if provider.model_provider_name == "openai" {
+    let extra_body = if provider.model_provider_name == "aws-bedrock" {
+        json!([
+            {
+                "variant_name": provider.variant_name,
+                "pointer": "/inferenceConfig/temperature",
+                "value": 0.5
+            },
+            {
+                "variant_name": "my_wrong_variant",
+                "pointer": "/inferenceConfig/temperature",
+                "value": 0.6
+            },
+            {
+                "model_provider_name": format!("tensorzero::model_name::{model_name}::provider_name::{model_provider_name}", model_name=provider.model_name, model_provider_name=provider.model_provider_name),
+                "pointer": "/inferenceConfig/top_p",
+                "value": 0.8
+            }
+        ])
+    } else if provider.model_provider_name == "google_ai_studio_gemini" || provider.model_provider_name == "gcp_vertex_gemini" {
+        json!([
+            {
+                "variant_name": provider.variant_name,
+                "pointer": "/generationConfig/temperature",
+                "value": 0.5
+            },
+            {
+                "variant_name": "my_wrong_variant",
+                "pointer": "/generationConfig/temperature",
+                "value": 0.6
+            },
+            {
+                "model_provider_name": format!("tensorzero::model_name::{model_name}::provider_name::{model_provider_name}", model_name=provider.model_name, model_provider_name=provider.model_provider_name),
+                "pointer": "/generationConfig/top_p",
+                "value": 0.8
+            }
+        ])
+    } else {
         json!([
             {
                 "variant_name": provider.variant_name,
@@ -1075,10 +1112,13 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "variant_name": "my_wrong_variant",
                 "pointer": "/temperature",
                 "value": 0.6
+            },
+            {
+                "model_provider_name": format!("tensorzero::model_name::{model_name}::provider_name::{model_provider_name}", model_name=provider.model_name, model_provider_name=provider.model_provider_name),
+                "pointer": "/top_p",
+                "value": 0.8
             }
         ])
-    } else {
-        unimplemented!()
     };
 
     let payload = json!({
@@ -1200,6 +1240,15 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
             .expect("Temperature is not a number"),
         0.5
     );
+
+    let top_p = if provider.model_provider_name == "aws-bedrock" {
+        raw_request_val.get("inferenceConfig").unwrap().get("top_p")
+    }  else if provider.model_provider_name == "google_ai_studio_gemini" || provider.model_provider_name == "gcp_vertex_gemini" {
+        raw_request_val.get("generationConfig").unwrap().get("top_p")
+    } else {
+        raw_request_val.get("top_p")
+    };
+    assert_eq!(top_p.unwrap().as_f64().expect("Top P is not a number"), 0.8);
 }
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {

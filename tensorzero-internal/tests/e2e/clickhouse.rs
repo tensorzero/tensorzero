@@ -207,7 +207,7 @@ async fn test_clickhouse_migration_manager() {
         // for each element in the array.
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
     );
-    run_all(&migrations).await;
+    run_all(migrations).await;
 
     let database = clickhouse.database();
     tracing::info!("Attempting to drop test database: {database}");

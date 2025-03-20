@@ -326,8 +326,8 @@ pub async fn inference(
         inference_config.variant_name = Some(variant_name);
         inference_config.extra_body = unfiltered_inference_extra_body
             .iter()
-            .cloned()
             .filter(|config| config.should_apply_variant(variant_name))
+            .cloned()
             .collect();
         if stream {
             let result = variant
