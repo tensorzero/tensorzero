@@ -383,6 +383,9 @@ async fn test_datapoint_insert_synthetic_json() {
         "Error should mention the missing required property: {err_msg}"
     );
 
+    // Sleep to ensure that we get a different `updated_at` timestamp
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+
     // Now try with the correct schema
     let new_resp = client
     .put(get_gateway_endpoint(&format!(
