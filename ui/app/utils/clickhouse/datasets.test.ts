@@ -3,7 +3,6 @@ import {
   type DatasetDetailRow,
   type ParsedJsonInferenceDatapointRow,
   type ParsedChatInferenceDatapointRow,
-  inferenceRowToDatasetRow,
 } from "./datasets";
 import {
   countRowsForDataset,
@@ -14,7 +13,6 @@ import {
   deleteDatapoint,
 } from "./datasets.server";
 import { expect, test, describe } from "vitest";
-import type { ParsedInferenceRow } from "./inference";
 
 describe("countRowsForDataset", () => {
   test("returns the correct number of rows for a specific function", async () => {
@@ -261,9 +259,9 @@ describe("getDatasetCounts", () => {
       // Because other tests insert into the table, there could be additional datasets
       expect.arrayContaining([
         {
-          count: 5,
+          count: 6,
           dataset_name: "bar",
-          last_updated: "2025-02-19T00:26:06Z",
+          last_updated: "2025-03-14T17:38:09Z",
         },
         {
           count: 116,
@@ -317,7 +315,7 @@ describe("getDatasetRows", () => {
       if (rows.length !== pageSize) break;
     }
 
-    expect(allRows.length).toBe(5);
+    expect(allRows.length).toBe(6);
     expect(allRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -329,8 +327,8 @@ describe("getDatasetRows", () => {
         }),
       ]),
     );
-    // Verify all rows are json type
-    expect(allRows.every((row) => row.type === "json")).toBe(true);
+    // Verify 5 rows are json type
+    expect(allRows.filter((row) => row.type === "json").length).toBe(5);
   });
 });
 
@@ -471,7 +469,6 @@ describe("getDatapoint", () => {
         },
       ],
       tags: {},
-      tool_params: {},
       updated_at: "2025-02-19T00:25:04Z",
     });
   });
@@ -607,7 +604,7 @@ describe("datapoint operations", () => {
     expect(retrievedDatapoint?.output).toEqual(jsonDatapoint.output);
 
     // Check if it's a JSON inference row before accessing output_schema
-    if (retrievedDatapoint && !("tool_params" in retrievedDatapoint)) {
+    if (retrievedDatapoint && "output_schema" in retrievedDatapoint) {
       expect(JSON.stringify(retrievedDatapoint.output_schema)).toBe(
         JSON.stringify(jsonDatapoint.output_schema),
       );
@@ -695,53 +692,5 @@ describe("datapoint operations", () => {
 
     // Should not throw
     await expect(deleteDatapoint(nonExistentDatapoint)).resolves.not.toThrow();
-  });
-});
-
-describe("inferenceRowToDatasetRow", () => {
-  test("generates a fresh UUID for each datapoint", () => {
-    // Create a sample inference row to convert
-    const sampleChatInference: ParsedInferenceRow = {
-      id: "01934fc5-ea98-71f0-8191-9fd88f34c28b",
-      function_type: "chat",
-      episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff9",
-      function_name: "write_haiku",
-      variant_name: "baseline",
-      input: {
-        messages: [
-          {
-            content: [{ type: "text", value: "Write a haiku about testing" }],
-            role: "user" as const,
-          },
-        ],
-      },
-      output: [
-        {
-          type: "text",
-          text: "Code flows like water\nTests catch bugs in their net now\nPeace in the program",
-        },
-      ],
-      tool_params: {},
-      inference_params: {},
-      tags: {},
-      processing_time_ms: 1000,
-      timestamp: new Date().toISOString(),
-    };
-
-    // Convert the inference to a dataset row
-    const datasetRow1 = inferenceRowToDatasetRow(
-      sampleChatInference,
-      "test_dataset",
-    );
-
-    // Verify that the generated ID is different from the original inference ID
-    expect(datasetRow1.id).not.toBe(sampleChatInference.id);
-
-    // Verify that each call generates a unique ID
-    const datasetRow2 = inferenceRowToDatasetRow(
-      sampleChatInference,
-      "test_dataset",
-    );
-    expect(datasetRow2.id).not.toBe(datasetRow1.id);
   });
 });

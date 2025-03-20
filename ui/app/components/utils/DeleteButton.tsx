@@ -32,15 +32,6 @@ export function DeleteButton({
     return (
       <div className="flex gap-2">
         <Button
-          variant="destructive"
-          size="sm"
-          className="group bg-red-600 text-white hover:bg-red-700"
-          disabled={isLoading}
-          onClick={handleConfirm}
-        >
-          {isLoading ? "Deleting..." : "Yes, delete permanently"}
-        </Button>
-        <Button
           variant="secondary"
           size="sm"
           className="bg-bg-muted"
@@ -48,6 +39,15 @@ export function DeleteButton({
           onClick={handleCancel}
         >
           No, keep it
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          className="group bg-red-600 text-white hover:bg-red-700"
+          disabled={isLoading}
+          onClick={handleConfirm}
+        >
+          {isLoading ? "Deleting..." : "Yes, delete permanently"}
         </Button>
       </div>
     );

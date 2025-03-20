@@ -24,7 +24,6 @@ use tensorzero_internal::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
-#[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
@@ -117,7 +116,6 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
-    #[cfg(feature = "e2e_tests")]
     let shorthand_providers = vec![E2ETestProvider {
         variant_name: "openai-shorthand".to_string(),
         model_name: "openai::gpt-4o-mini-2024-07-18".into(),
@@ -137,13 +135,12 @@ async fn get_providers() -> E2ETestProviders {
         parallel_tool_use_inference: standard_without_o1.clone(),
         json_mode_inference: json_providers.clone(),
         image_inference: image_providers.clone(),
-        #[cfg(feature = "e2e_tests")]
+
         shorthand_inference: shorthand_providers.clone(),
         supports_batch_inference: true,
     }
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 pub async fn test_provider_config_extra_body() {
     let episode_id = Uuid::now_v7();
@@ -242,7 +239,7 @@ pub async fn test_provider_config_extra_body() {
 }
 
 // Tests using 'model_name' with a shorthand model
-#[cfg(feature = "e2e_tests")]
+
 #[tokio::test]
 async fn test_default_function_model_name_shorthand() {
     let client = Client::new();
@@ -356,7 +353,7 @@ async fn test_default_function_model_name_shorthand() {
 }
 
 // Tests using 'model_name' with a non-shorthand model
-#[cfg(feature = "e2e_tests")]
+
 #[tokio::test]
 async fn test_default_function_model_name_non_shorthand() {
     let client = Client::new();
@@ -470,7 +467,7 @@ async fn test_default_function_model_name_non_shorthand() {
 }
 
 // Tests using 'model_name' with a non-shorthand model
-#[cfg(feature = "e2e_tests")]
+
 #[tokio::test]
 async fn test_default_function_invalid_model_name() {
     use reqwest::StatusCode;
@@ -507,25 +504,21 @@ async fn test_default_function_invalid_model_name() {
     assert_eq!(status, StatusCode::BAD_GATEWAY);
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_chat_function_json_override_with_mode_on() {
     test_chat_function_json_override_with_mode(ModelInferenceRequestJsonMode::On).await;
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_chat_function_json_override_with_mode_off() {
     test_chat_function_json_override_with_mode(ModelInferenceRequestJsonMode::Off).await;
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_chat_function_json_override_with_mode_strict() {
     test_chat_function_json_override_with_mode(ModelInferenceRequestJsonMode::Strict).await;
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_chat_function_json_override_with_mode_implicit_tool() {
     let client = Client::new();
@@ -730,7 +723,6 @@ async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceReq
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_o1_mini_inference() {
     let client = Client::new();
@@ -960,7 +952,6 @@ async fn test_embedding_request() {
     assert_eq!(cached_response.usage.output_tokens, 0);
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_embedding_sanity_check() {
     let provider_config_serialized = r#"
@@ -1012,7 +1003,6 @@ async fn test_embedding_sanity_check() {
     );
 }
 
-#[cfg(feature = "e2e_tests")]
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
     let magnitude_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -1022,7 +1012,7 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 
 // We already test Amazon S3 with all image providers, so let's test Cloudflare R2
 // (which is S3-compatible) with just OpenAI to save time and money.
-#[cfg(feature = "e2e_tests")]
+
 #[tokio::test]
 pub async fn test_image_inference_with_provider_cloudflare_r2() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
@@ -1213,7 +1203,7 @@ async fn test_content_block_text_field() {
 
 // We already test Amazon S3 with all image providers, so let's test Google Cloud Storage
 // (which is S3-compatible) with just OpenAI to save time and money.
-#[cfg(feature = "e2e_tests")]
+
 #[tokio::test]
 pub async fn test_image_inference_with_provider_gcp_storage() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
@@ -1288,7 +1278,7 @@ pub async fn test_image_inference_with_provider_gcp_storage() {
 
 // We already test Amazon S3 with all image providers, so let's test minio
 // (which is S3-compatible) with just OpenAI to save time and money.
-#[cfg(feature = "e2e_tests")]
+
 #[tokio::test]
 pub async fn test_image_inference_with_provider_docker_minio() {
     use crate::providers::common::test_image_inference_with_provider_s3_compatible;
@@ -1349,7 +1339,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     bucket_name = "{test_bucket}"
     prefix = "{prefix}"
     allow_http = true
-    
+
     [functions.image_test]
     type = "chat"
 
@@ -1364,7 +1354,6 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     .await;
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 pub async fn test_parallel_tool_use_default_true_inference_request() {
     use crate::providers::common::check_parallel_tool_use_inference_response;
@@ -1418,7 +1407,6 @@ pub async fn test_parallel_tool_use_default_true_inference_request() {
 }
 
 #[tokio::test]
-#[cfg(feature = "e2e_tests")]
 #[tracing_test::traced_test]
 async fn test_log_dropped_thought() {
     use tensorzero::{ClientInferenceParams, Input, InputMessage, InputMessageContent, Role};
