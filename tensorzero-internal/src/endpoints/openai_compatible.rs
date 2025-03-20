@@ -461,6 +461,8 @@ impl Params {
             tags: HashMap::new(),
             // OpenAI compatible endpoint does not support 'include_original_response'
             include_original_response: false,
+            // OpenAI compatible endpoint does not support 'extra_body'
+            extra_body: vec![],
         })
     }
 }

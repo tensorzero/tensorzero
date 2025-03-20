@@ -5,9 +5,8 @@ use serde_json::{map::Entry, Map, Value};
 
 use crate::{
     error::{Error, ErrorDetails},
-    inference::types::{FullExtraBodyConfig, ProviderInferenceResponseChunk},
+    inference::types::{FullExtraBodyConfig, InferenceExtraBody, ProviderInferenceResponseChunk},
     model::{fully_qualified_name, ModelProviderRequestInfo},
-    variant::InferenceExtraBody,
 };
 
 pub fn inject_extra_body(

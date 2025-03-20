@@ -1,6 +1,5 @@
 use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::batch::deserialize_optional_json_string;
-use crate::variant::InferenceExtraBody;
 use derive_builder::Builder;
 use futures::stream::Peekable;
 use futures::Stream;
@@ -79,6 +78,32 @@ impl Input {
             system: self.system,
             messages,
         })
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum InferenceExtraBody {
+    Provider {
+        model_provider_name: String,
+        pointer: String,
+        value: serde_json::Value,
+    },
+    Variant {
+        variant_name: String,
+        pointer: String,
+        value: serde_json::Value,
+    },
+}
+
+impl InferenceExtraBody {
+    pub fn should_apply_variant(&self, variant_name: &str) -> bool {
+        match self {
+            InferenceExtraBody::Provider { .. } => true,
+            InferenceExtraBody::Variant {
+                variant_name: v, ..
+            } => v == variant_name,
+        }
     }
 }
 

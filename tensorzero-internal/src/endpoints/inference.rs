@@ -31,17 +31,17 @@ use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
     collect_chunks, Base64Image, ChatInferenceDatabaseInsert, CollectChunksArgs,
-    ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
-    InferenceResultChunk, InferenceResultStream, Input, JsonInferenceDatabaseInsert,
-    JsonInferenceOutput, ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput,
-    ResolvedInputMessageContent, Usage,
+    ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceExtraBody,
+    InferenceResult, InferenceResultChunk, InferenceResultStream, Input,
+    JsonInferenceDatabaseInsert, JsonInferenceOutput, ModelInferenceResponseWithMetadata,
+    RequestMessage, ResolvedInput, ResolvedInputMessageContent, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::uuid_util::validate_tensorzero_uuid;
 use crate::variant::chat_completion::ChatCompletionConfig;
-use crate::variant::{InferenceConfig, InferenceExtraBody, JsonMode, Variant, VariantConfig};
+use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig};
 
 use super::validate_tags;
 
@@ -99,6 +99,8 @@ pub struct Params {
     /// if the fuser/judge model failed
     #[serde(default)]
     pub include_original_response: bool,
+    #[serde(default)]
+    pub extra_body: Vec<InferenceExtraBody>,
 }
 
 #[derive(Clone, Debug)]
@@ -275,7 +277,7 @@ pub async fn inference(
     // Keep track of which variants failed
     let mut variant_errors = std::collections::HashMap::new();
 
-    let unfiltered_inference_extra_body: &[InferenceExtraBody] = &[];
+    let unfiltered_inference_extra_body: &[InferenceExtraBody] = &params.extra_body;
 
     // Set up inference config
     let output_schema = params.output_schema.map(DynamicJSONSchema::new);

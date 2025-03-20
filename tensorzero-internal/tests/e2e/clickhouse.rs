@@ -82,7 +82,7 @@ async fn test_clickhouse_migration_manager() {
 
     // When creating a new migration, add it to the end of this array,
     // and adjust the call to `invoke_all!` to include the new array index.
-    let migrations: [Box<dyn Migration + '_>; 14] = [
+    let migrations: &[Box<dyn Migration + '_>] = &[
         Box::new(Migration0000 {
             clickhouse: &clickhouse,
         }),
