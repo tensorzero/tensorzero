@@ -5,6 +5,7 @@ import {
   type EvaluationResult,
   type EvaluationRunInfo,
 } from "./evaluations";
+import { getStaledWindowQuery, uuidv7ToTimestamp } from "./helpers";
 
 export async function getEvalRunIds(
   eval_name: string,
@@ -51,8 +52,10 @@ export async function getEvalResults(
     function_type === "chat"
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
+  const eval_run_timestamps = eval_run_ids.map((id) => uuidv7ToTimestamp(id));
   const inference_table_name =
     function_type === "chat" ? "ChatInference" : "JsonInference";
+  const staled_window_query = getStaledWindowQuery(eval_run_timestamps);
   const query = `
     SELECT
       dp.input as input,
@@ -67,6 +70,9 @@ export async function getEvalResults(
       FROM {datapoint_table_name:Identifier}
       WHERE dataset_name = {dataset_name:String}
       AND function_name = {function_name:String}
+      AND (
+        ${staled_window_query}
+      )
       ORDER BY id
       LIMIT {limit:UInt32}
       OFFSET {offset:UInt32}

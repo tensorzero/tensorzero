@@ -63,3 +63,26 @@ export function uuidv7ToTimestamp(uuid: string): Date {
 
   return new Date(timestamp);
 }
+
+/**
+ * Programmatically generates a clause for a ClickHouse query that filters
+ * datapoints based on whether they would have been used in one of the evaluation runs.
+ *
+ * For a datapoint to have been used in an evaluation run, the datapoint must have been created
+ * before the evaluation run happened AND either be non-stale or have been staled after the evaluation run occurred.
+ * So the clause generated is of the form:
+ * UUIDv7ToTimestamp(id) < {run_timestamp} AND (staled_at IS NULL OR staled_at > {run_timestamp})
+ *
+ * This function generates each of these clauses (one per run_timestamp) and combines them with ORs.
+ */
+export function getStaledWindowQuery(run_timestamps: Date[]): string {
+  if (run_timestamps.length === 0) return "";
+
+  const clauses = run_timestamps.map((ts) => {
+    // Format the Date to ISO string (adjust formatting as needed for ClickHouse)
+    const formattedTimestamp = ts.toISOString();
+    return `(UUIDv7ToTimestamp(id) < '${formattedTimestamp}' AND (staled_at IS NULL OR staled_at > '${formattedTimestamp}'))`;
+  });
+
+  return clauses.join(" OR ");
+}
