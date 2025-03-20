@@ -23,6 +23,7 @@ export const ChatInferenceDatapointRowSchema = z
     auxiliary: z.string(),
     is_deleted: z.boolean().default(false),
     updated_at: z.string().datetime().default(new Date().toISOString()),
+    staled_at: z.string().datetime().nullable(),
   })
   .strict();
 export type ChatInferenceDatapointRow = z.infer<
@@ -45,6 +46,7 @@ export const JsonInferenceDatapointRowSchema = z
     auxiliary: z.string(),
     is_deleted: z.boolean().default(false),
     updated_at: z.string().datetime(),
+    staled_at: z.string().datetime().nullable(),
   })
   .strict();
 export type JsonInferenceDatapointRow = z.infer<
@@ -197,6 +199,7 @@ export function inferenceRowToDatasetRow(
     auxiliary: JSON.stringify({}),
     is_deleted: false,
     updated_at: new Date().toISOString(),
+    staled_at: null,
   };
 
   if (inference.function_type === "chat") {

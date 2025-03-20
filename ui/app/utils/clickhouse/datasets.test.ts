@@ -11,9 +11,10 @@ import {
   getDatasetCounts,
   getDatasetRows,
   insertDatapoint,
-  deleteDatapoint,
+  staleDatapoint,
 } from "./datasets.server";
 import { expect, test, describe } from "vitest";
+import { v7 as uuid } from "uuid";
 import type { ParsedInferenceRow } from "./inference";
 
 describe("countRowsForDataset", () => {
@@ -433,6 +434,7 @@ describe("getDatapoint", () => {
         type: "object",
       },
       tags: {},
+      staled_at: null,
       updated_at: "2025-02-19T00:26:06Z",
     });
   });
@@ -464,6 +466,7 @@ describe("getDatapoint", () => {
         ],
       },
       is_deleted: false,
+      staled_at: null,
       output: [
         {
           text: 'Alright, the theme of "upward" immediately brings to mind things that ascend or rise. This can be movements, emotions, or natural events.\n\nLet\'s craft a haiku:\n\nMountains touch the sky,  \nClouds race past the soaring peaks,  \nWorld beneath grows small.',
@@ -487,10 +490,11 @@ describe("getDatapoint", () => {
 
 describe("datapoint operations", () => {
   test("chat datapoint lifecycle - insert, get, delete", async () => {
+    const datapoint_id = uuid();
     const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
-      id: "01934fc5-ea98-71f0-8191-9fd88f34c28b",
+      id: datapoint_id,
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff9",
       input: {
         messages: [
@@ -511,6 +515,7 @@ describe("datapoint operations", () => {
       auxiliary: "",
       updated_at: new Date().toISOString(),
       is_deleted: false,
+      staled_at: null,
     };
 
     // Test insertion
@@ -519,7 +524,7 @@ describe("datapoint operations", () => {
     // Test retrieval
     const retrievedDatapoint = await getDatapoint(
       "test_chat_dataset",
-      "01934fc5-ea98-71f0-8191-9fd88f34c28b",
+      datapoint_id,
     );
     expect(retrievedDatapoint).toBeTruthy();
     expect(retrievedDatapoint?.id).toBe(chatDatapoint.id);
@@ -539,20 +544,25 @@ describe("datapoint operations", () => {
       throw new Error("Expected chat inference row but got JSON inference row");
     }
 
-    // Test deletion
-    await deleteDatapoint(chatDatapoint);
-    const deletedDatapoint = await getDatapoint(
+    // Test staling
+    await staleDatapoint(chatDatapoint.dataset_name, chatDatapoint.id, "chat");
+    // Sleep 100ms
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Try and get the datapoint
+    const staled_getter_result = await getDatapoint(
       "test_chat_dataset",
-      "01934fc5-ea98-71f0-8191-9fd88f34c28b",
+      datapoint_id,
     );
-    expect(deletedDatapoint).toBeNull();
+    // Test that the datapoint was properly staled
+    expect(staled_getter_result).toBeNull();
   });
 
   test("json datapoint lifecycle - insert, get, delete", async () => {
+    const datapoint_id = uuid();
     const jsonDatapoint: ParsedJsonInferenceDatapointRow = {
       dataset_name: "test_json_dataset",
       function_name: "extract_entities",
-      id: "01934fc5-ea98-71f0-8191-9fd88f34c29c",
+      id: datapoint_id,
       episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff8",
       input: {
         messages: [
@@ -589,6 +599,7 @@ describe("datapoint operations", () => {
       auxiliary: "",
       updated_at: new Date().toISOString(),
       is_deleted: false,
+      staled_at: null,
     };
 
     // Test insertion
@@ -597,7 +608,7 @@ describe("datapoint operations", () => {
     // Test retrieval
     const retrievedDatapoint = await getDatapoint(
       "test_json_dataset",
-      "01934fc5-ea98-71f0-8191-9fd88f34c29c",
+      datapoint_id,
     );
     expect(retrievedDatapoint).toBeTruthy();
     expect(retrievedDatapoint?.id).toBe(jsonDatapoint.id);
@@ -616,10 +627,12 @@ describe("datapoint operations", () => {
     }
 
     // Test deletion
-    await deleteDatapoint(jsonDatapoint);
+    await staleDatapoint("test_json_dataset", datapoint_id, "json");
+    // Sleep 100ms
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     const deletedDatapoint = await getDatapoint(
       "test_json_dataset",
-      "01934fc5-ea98-71f0-8191-9fd88f34c29c",
+      datapoint_id,
     );
     expect(deletedDatapoint).toBeNull();
   });
@@ -659,6 +672,7 @@ describe("datapoint operations", () => {
       auxiliary: "",
       updated_at: new Date().toISOString(),
       is_deleted: false,
+      staled_at: null,
     };
 
     // First insertion
@@ -668,33 +682,20 @@ describe("datapoint operations", () => {
     await insertDatapoint(chatDatapoint);
 
     // Cleanup
-    await deleteDatapoint(chatDatapoint);
+    await staleDatapoint(chatDatapoint.dataset_name, chatDatapoint.id, "chat");
+    // Sleep 100ms
+    // Sleep 100ms
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const deletedDatapoint = await getDatapoint(
+      "test_json_dataset",
+      chatDatapoint.id,
+    );
+    expect(deletedDatapoint).toBeNull();
   });
 
-  test("handles deletion of non-existent datapoint", async () => {
-    const nonExistentDatapoint: ParsedChatInferenceDatapointRow = {
-      dataset_name: "non_existent_dataset",
-      function_name: "non_existent_function",
-      id: "01934fc5-ea98-71f0-8191-9fd88f34c32f",
-      episode_id: "0193fb9d-73ad-7ad2-807d-a2ef10088ff6",
-      input: {
-        messages: [
-          {
-            role: "user" as const,
-            content: [{ type: "text", value: "test" }],
-          },
-        ],
-      },
-      output: [{ type: "text", text: "test" }],
-      tool_params: {},
-      tags: {},
-      auxiliary: "",
-      updated_at: new Date().toISOString(),
-      is_deleted: false,
-    };
-
+  test("handles staling of non-existent datapoint", async () => {
     // Should not throw
-    await expect(deleteDatapoint(nonExistentDatapoint)).resolves.not.toThrow();
+    await expect(staleDatapoint("fake", uuid(), "chat")).resolves.not.toThrow();
   });
 });
 

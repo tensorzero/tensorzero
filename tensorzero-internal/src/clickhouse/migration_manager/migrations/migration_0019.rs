@@ -18,6 +18,9 @@ use crate::error::{Error, ErrorDetails};
 /// Additionally, this migration adds a `staled_at` column to the ChatInferenceDatapoint
 /// and JsonInferenceDatapoint tables. This allows us to express that a datapoint is `stale`
 /// and has been edited or deleted.
+///
+/// Additionally, we fixed the default for the updated_at column of ChatInferenceDatapoint
+/// and JsonInferenceDatapoint to now64() from now() since now() is only second resolution (bad!).
 pub struct Migration0019<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
     pub clean_start: bool,
@@ -104,18 +107,30 @@ impl Migration for Migration0019<'_> {
                     inference_id UUID,
                     function_type Enum8('chat' = 1, 'json' = 2),
                     is_deleted Bool DEFAULT false,
-                    updated_at DateTime64(6, 'UTC') DEFAULT now()
+                    updated_at DateTime64(6, 'UTC') DEFAULT now64()
                 ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
                 ORDER BY (key, value, inference_id)"#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
+        // Add the staled_at column to both datapoint tables
         let query = r#"
-            ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Optional(DateTime64(6, 'UTC'));
+            ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
         let query = r#"
-            ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Optional(DateTime64(6, 'UTC'));
+            ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Nullable(DateTime64(6, 'UTC'));
+        "#;
+        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+
+        // Update the defaults of updated_at for the Datapoint tables to be now64
+        let query = r#"
+            ALTER TABLE ChatInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
+        "#;
+        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+
+        let query = r#"
+            ALTER TABLE JsonInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now64();
         "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 

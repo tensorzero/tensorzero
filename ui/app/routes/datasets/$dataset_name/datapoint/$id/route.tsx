@@ -14,7 +14,7 @@ import {
   type ParsedDatasetRow,
 } from "~/utils/clickhouse/datasets";
 import {
-  deleteDatapoint as deleteDatapointServer,
+  staleDatapoint,
   getDatasetCounts,
 } from "~/utils/clickhouse/datasets.server";
 import {
@@ -24,6 +24,7 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
+import { getConfig } from "~/utils/config/index.server";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -48,7 +49,14 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const parsedFormData: ParsedDatasetRow =
     ParsedDatasetRowSchema.parse(rawData);
-  await deleteDatapointServer(parsedFormData);
+  const config = await getConfig();
+  const functionType = config.functions[parsedFormData.function_name].type;
+  // await deleteDatapointServer(parsedFormData);
+  await staleDatapoint(
+    parsedFormData.dataset_name,
+    parsedFormData.id,
+    functionType,
+  );
   const datasetCounts = await getDatasetCounts();
   const datasetCount = datasetCounts.find(
     (count) => count.dataset_name === parsedFormData.dataset_name,
