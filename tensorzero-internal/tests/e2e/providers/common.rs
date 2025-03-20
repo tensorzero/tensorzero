@@ -9354,19 +9354,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
                 content_block.get("name").unwrap().as_str().unwrap()
             );
         }
-
-        let mut redacted_content_block = content_block.clone();
-        redacted_content_block
-            .as_object_mut()
-            .unwrap()
-            .remove("raw_name");
-        redacted_content_block
-            .as_object_mut()
-            .unwrap()
-            .remove("raw_arguments");
-        redacted_content_block["arguments"] =
-            Value::String(redacted_content_block.get("arguments").unwrap().to_string());
-        redacted_tool_calls.push(redacted_content_block);
+        redacted_tool_calls.push(content_block);
     }
 
     // Build the payload for the second inference request
