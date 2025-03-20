@@ -1,13 +1,17 @@
 #![allow(clippy::print_stdout)]
 
+use axum::{extract::State, http::HeaderMap};
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::common::get_gateway_endpoint;
-use tensorzero_internal::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
-    select_model_inference_clickhouse,
+use crate::{common::get_gateway_endpoint, providers::common::make_embedded_gateway_no_config};
+use tensorzero_internal::{
+    clickhouse::test_helpers::{
+        get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
+        select_model_inference_clickhouse,
+    },
+    gateway_util::StructuredJson,
 };
 
 #[tokio::test]
@@ -783,4 +787,29 @@ async fn test_openai_compatible_streaming_tool_call() {
         let response_model = parsed_chunk.get("model").unwrap().as_str().unwrap();
         assert_eq!(response_model, "tensorzero::model_name::openai::gpt-4o");
     }
+}
+
+#[tokio::test]
+#[tracing_test::traced_test]
+async fn test_openai_compatible_warn_unknown_fields() {
+    let client = make_embedded_gateway_no_config().await;
+    let state = client.get_app_state_data().unwrap().clone();
+    tensorzero_internal::endpoints::openai_compatible::inference_handler(
+        State(state),
+        HeaderMap::default(),
+        StructuredJson(
+            serde_json::from_value(serde_json::json!({
+                "messages": [],
+                "model": "tensorzero::model_name::dummy::good",
+                "my_fake_param": "fake_value"
+            }))
+            .unwrap(),
+        ),
+    )
+    .await
+    .unwrap();
+
+    assert!(logs_contain(
+        "Ignoring unknown fields in OpenAI-compatible request: [\"my_fake_param\"]"
+    ));
 }
