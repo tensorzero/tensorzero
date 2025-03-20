@@ -23,7 +23,7 @@ interface BasicInfoProps {
   dataset_counts: DatasetCountInfo[];
   onDatasetSelect: (
     dataset: string,
-    output: "inference" | "demonstration" | "none",
+    output: "inherit" | "demonstration" | "none",
   ) => void;
   hasDemonstration: boolean;
 }
@@ -45,9 +45,7 @@ export default function BasicInfo({
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-xl">Basic Information</CardTitle>
         <div className="flex gap-2">
-          {inference.function_name !== "tensorzero::default" && (
-            <TryWithVariantButton {...tryWithVariantProps} />
-          )}
+          <TryWithVariantButton {...tryWithVariantProps} />
           {FF_ENABLE_DATASETS && (
             <AddToDatasetButton
               dataset_counts={dataset_counts}

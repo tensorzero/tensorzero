@@ -167,7 +167,7 @@ impl std::fmt::Debug for InferenceOutput {
     }
 }
 
-const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
+pub const DEFAULT_FUNCTION_NAME: &str = "tensorzero::default";
 
 #[derive(Copy, Clone, Debug)]
 pub struct InferenceIds {
@@ -506,7 +506,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     assistant_schema: None,
                     tools: vec![],
                     tool_choice: ToolChoice::None,
-                    parallel_tool_calls: false,
+                    parallel_tool_calls: None,
                 })),
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))

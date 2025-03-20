@@ -677,27 +677,38 @@ impl AsyncTensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (*, gateway_url, timeout=None, verbose_errors=false))]
+    #[pyo3(signature = (*, gateway_url, timeout=None, verbose_errors=false, use_async=true))]
     /// Initialize the TensorZero client, using the HTTP gateway.
     /// :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
     /// :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
+    /// :param use_async: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
     /// :return: An `AsyncTensorZeroGateway` instance configured to use the HTTP gateway.
-    fn build_http<'a>(
-        cls: &Bound<'a, PyType>,
+    fn build_http(
+        cls: &Bound<'_, PyType>,
         gateway_url: &str,
         timeout: Option<f64>,
         verbose_errors: bool,
-    ) -> PyResult<Bound<'a, PyAny>> {
+        use_async: bool,
+    ) -> PyResult<Py<PyAny>> {
         let gateway_url = gateway_url.to_string();
-        pyo3_async_runtimes::tokio::future_into_py(cls.py(), async move {
-            Python::with_gil(|py| {
-                let client = BaseTensorZeroGateway::new(py, &gateway_url, timeout, verbose_errors)?;
-                let instance =
-                    PyClassInitializer::from(client).add_subclass(AsyncTensorZeroGateway {});
-                Py::new(py, instance)
-            })
-        })
+        let build_gateway = move |py: Python<'_>| {
+            let client = BaseTensorZeroGateway::new(py, &gateway_url, timeout, verbose_errors)?;
+            let instance = PyClassInitializer::from(client).add_subclass(AsyncTensorZeroGateway {});
+            Ok(Py::new(py, instance)?.into_any())
+        };
+        if use_async {
+            // This doesn't actually do anything async at the moment, but we run
+            // 'build_gateway' inside the future so that any exception is thrown by the future
+            Ok(
+                pyo3_async_runtimes::tokio::future_into_py(cls.py(), async move {
+                    Python::with_gil(build_gateway)
+                })?
+                .unbind(),
+            )
+        } else {
+            build_gateway(cls.py())
+        }
     }
 
     /// **Deprecated** (use `build_http` or `build_embedded` instead)
@@ -739,21 +750,23 @@ impl AsyncTensorZeroGateway {
     // as `AsyncTensorZeroGateway` would be completely async *except* for this one method
     // (which potentially takes a very long time due to running DB migrations).
     #[classmethod]
-    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, timeout=None))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, timeout=None, use_async=true))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
     /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
     /// :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
-    /// :return: A `Future` that resolves to an `AsyncTensorZeroGateway` instance configured to use an embedded gateway.
-    fn build_embedded<'a>(
+    /// :param use_async: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
+    /// :return: A `Future` that resolves to an `AsyncTensorZeroGateway` instance configured to use an embedded gateway (or an `AsyncTensorZeroGateway` if `use_async=False`).
+    fn build_embedded(
         // This is a classmethod, so it receives the class object as a parameter.
-        cls: &Bound<'a, PyType>,
+        cls: &Bound<'_, PyType>,
         config_file: Option<&str>,
         clickhouse_url: Option<String>,
         timeout: Option<f64>,
-    ) -> PyResult<Bound<'a, PyAny>> {
+        use_async: bool,
+    ) -> PyResult<Py<PyAny>> {
         warn_no_config(cls.py(), config_file)?;
         let timeout = timeout
             .map(Duration::try_from_secs_f64)
@@ -766,8 +779,7 @@ impl AsyncTensorZeroGateway {
         })
         .build();
 
-        // See `AsyncStreamWrapper::__anext__` for more details about `future_into_py`
-        pyo3_async_runtimes::tokio::future_into_py(cls.py(), async move {
+        let fut = async move {
             let client = client_fut.await;
             // We need to interact with Python objects here (to build up a Python `AsyncTensorZeroGateway`),
             // so we need the GIL
@@ -789,7 +801,15 @@ impl AsyncTensorZeroGateway {
                 .add_subclass(AsyncTensorZeroGateway {});
                 Py::new(py, instance)
             })
-        })
+        };
+        if use_async {
+            // See `AsyncStreamWrapper::__anext__` for more details about `future_into_py`
+            Ok(pyo3_async_runtimes::tokio::future_into_py(cls.py(), fut)?.unbind())
+        } else {
+            // If the user doesn't want to use async, we block on the future here.
+            // This is useful for testing, or for users who want to use the async client in a synchronous context.
+            Ok(tokio_block_on_without_gil(cls.py(), fut)?.into_any())
+        }
     }
 
     #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None))]

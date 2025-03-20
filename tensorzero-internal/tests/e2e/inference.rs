@@ -645,11 +645,10 @@ async fn e2e_test_tool_call() {
             == "get_temperature"
     );
     assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
-    assert!(!tool_params
-        .get("parallel_tool_calls")
-        .unwrap()
-        .as_bool()
-        .unwrap());
+    assert_eq!(
+        tool_params.get("parallel_tool_calls").unwrap(),
+        &Value::Null
+    );
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -842,11 +841,10 @@ async fn e2e_test_tool_call_malformed() {
             == "get_temperature"
     );
     assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
-    assert!(!tool_params
-        .get("parallel_tool_calls")
-        .unwrap()
-        .as_bool()
-        .unwrap());
+    assert_eq!(
+        tool_params.get("parallel_tool_calls").unwrap(),
+        &Value::Null
+    );
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -2092,11 +2090,10 @@ async fn e2e_test_tool_call_streaming() {
             == "get_temperature"
     );
     assert!(tool_params.get("tool_choice").unwrap().as_str().unwrap() == "auto");
-    assert!(!tool_params
-        .get("parallel_tool_calls")
-        .unwrap()
-        .as_bool()
-        .unwrap());
+    assert_eq!(
+        tool_params.get("parallel_tool_calls").unwrap(),
+        &Value::Null
+    );
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
         .await
@@ -2697,7 +2694,7 @@ async fn test_inference_invalid_default_function_arg() {
 }
 
 #[tokio::test]
-#[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
+
 async fn test_image_inference_without_object_store() {
     let client = make_embedded_gateway_no_config().await;
     let err_msg = client

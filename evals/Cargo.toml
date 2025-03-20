@@ -24,7 +24,7 @@ futures = { workspace = true }
 indicatif = "0.17.11"
 
 [dev-dependencies]
-tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
+tensorzero = { path = "../clients/rust" }
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -40,8 +40,7 @@ dbg_macro = "deny"
 
 
 [features]
-# Forward these features to 'evals', so that our
+default = []
+# Forward this feature to 'evals', so that our
 # tests can recognize things like the `dummy` provider
 e2e_tests = ["tensorzero/e2e_tests"]
-batch_tests = ["tensorzero/batch_tests"]
-default = []

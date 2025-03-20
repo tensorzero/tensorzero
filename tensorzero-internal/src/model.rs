@@ -1453,7 +1453,7 @@ mod tests {
         let tool_config = ToolCallConfig {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
         let api_keys = InferenceCredentials::default();
         let http_client = Client::new();
@@ -1914,7 +1914,7 @@ mod tests {
         let tool_config = ToolCallConfig {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
         let api_keys = InferenceCredentials::default();
         let http_client = Client::new();
@@ -2019,7 +2019,7 @@ mod tests {
         let tool_config = ToolCallConfig {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
         let api_keys = InferenceCredentials::default();
         let http_client = Client::new();

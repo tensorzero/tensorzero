@@ -1,4 +1,5 @@
-#![cfg(test)]
+#![allow(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
+mod batch;
 mod best_of_n;
 mod cache;
 mod clickhouse;

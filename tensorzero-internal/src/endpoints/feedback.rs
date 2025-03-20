@@ -1088,7 +1088,7 @@ mod tests {
                 assistant_schema: None,
                 tools: vec!["get_temperature".to_string()],
                 tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: false,
+                parallel_tool_calls: None,
             })));
 
         // Case 1: a string passed to a chat function
@@ -1096,7 +1096,7 @@ mod tests {
         let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
@@ -1120,7 +1120,7 @@ mod tests {
         let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
@@ -1152,7 +1152,7 @@ mod tests {
         let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
         let err = validate_parse_demonstration(
             function_config_chat_tools,
@@ -1175,7 +1175,7 @@ mod tests {
         let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
         let err = validate_parse_demonstration(
             function_config_chat_tools,
@@ -1272,7 +1272,7 @@ mod tests {
         let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
             .await

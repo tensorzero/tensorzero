@@ -151,8 +151,7 @@ export default function SupervisedFineTuning({
               setSubmissionPhase={setSubmissionPhase}
             />
           )}
-
-          {<FineTuningStatus status={status} />}
+          <FineTuningStatus status={status} />
           <SFTResult finalResult={finalResult} />
         </SectionLayout>
       </PageLayout>

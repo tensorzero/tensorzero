@@ -8,8 +8,8 @@ import {
   AccordionTrigger,
 } from "~/components/ui/accordion";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
-import { Input } from "~/components/ui/input";
 import type { SFTFormValues } from "./types";
+import { NumberInputWithButtons } from "~/components/utils/NumberInputWithButtons";
 
 type AdvancedParametersAccordionProps = {
   control: Control<SFTFormValues>;
@@ -60,12 +60,13 @@ export function AdvancedParametersAccordion({
                   <FormLabel>Validation Split (%)</FormLabel>
                   <div className="grid grid-cols-2 gap-x-8">
                     <div className="flex flex-col gap-2">
-                      <Input
-                        type="number"
+                      <NumberInputWithButtons
+                        value={field.value}
+                        onChange={field.onChange}
                         min={0}
                         max={100}
-                        {...field}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
+                        aria-label-increase="Increase validation split percentage by 1"
+                        aria-label-decrease="Decrease validation split percentage by 1"
                       />
                       {errors.validationSplitPercent && (
                         <p className="text-xs text-red-500">
@@ -86,13 +87,13 @@ export function AdvancedParametersAccordion({
                   <FormLabel>Max. Samples</FormLabel>
                   <div className="grid grid-cols-2 gap-x-8">
                     <div className="flex flex-col gap-1">
-                      <Input
-                        type="number"
+                      <NumberInputWithButtons
+                        value={field.value || null}
+                        onChange={field.onChange}
                         min={10}
                         max={maxSamplesLimit}
-                        step={1}
-                        {...field}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
+                        aria-label-increase="Increase max samples by 1"
+                        aria-label-decrease="Decrease max samples by 1"
                       />
                       {errors.maxSamples && (
                         <p className="text-xs text-red-500">

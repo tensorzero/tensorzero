@@ -2036,7 +2036,7 @@ mod tests {
                 strict: true,
             })],
             tool_choice: ToolChoice::None,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
 
         // Test valid arguments for additional tool
@@ -2160,7 +2160,7 @@ mod tests {
                 strict: true,
             })],
             tool_choice: ToolChoice::None,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
 
         // Test allowed tool call
@@ -2909,7 +2909,7 @@ mod tests {
             "role": "user",
             "content": [
                 {"type": "text", "value": {"complex": "json", "with": ["nested", "array"]}},
-                {"type": "tool_call", "id": "456", "name": "another_tool", "arguments": "{\"key\": \"value\"}"}
+                {"type": "tool_call", "id": "456", "name": "another_tool", "arguments": {"key": "value"}}
             ]
         });
         let message: InputMessage = serde_json::from_value(input).unwrap();
@@ -2928,7 +2928,7 @@ mod tests {
             InputMessageContent::ToolCall(tool_call) => {
                 assert_eq!(tool_call.id, "456");
                 assert_eq!(tool_call.name, "another_tool");
-                assert_eq!(tool_call.arguments, "{\"key\": \"value\"}");
+                assert_eq!(tool_call.arguments, "{\"key\":\"value\"}");
             }
             _ => panic!("Expected ToolCall content"),
         }

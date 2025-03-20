@@ -8,7 +8,12 @@ interface EditButtonProps {
 
 export function EditButton({ onClick, className }: EditButtonProps) {
   return (
-    <Button variant="ghost" size="icon" onClick={onClick} className={className}>
+    <Button
+      variant="outline"
+      size="iconSm"
+      onClick={onClick}
+      className={className}
+    >
       <Pencil className="h-4 w-4" />
     </Button>
   );

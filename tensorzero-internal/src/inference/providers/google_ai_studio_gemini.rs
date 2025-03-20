@@ -1181,7 +1181,7 @@ mod tests {
         let tool_config = ToolCallConfig {
             tools_available: vec![],
             tool_choice: ToolChoice::None,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),

@@ -76,7 +76,7 @@ pub struct DynamicImplicitToolConfig {
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
     pub tool_choice: ToolChoice,
-    pub parallel_tool_calls: bool,
+    pub parallel_tool_calls: Option<bool>,
 }
 
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
@@ -85,14 +85,14 @@ pub struct ToolCallConfig {
 pub struct ToolCallConfigDatabaseInsert {
     pub tools_available: Vec<Tool>,
     pub tool_choice: ToolChoice,
-    pub parallel_tool_calls: bool,
+    pub parallel_tool_calls: Option<bool>,
 }
 
 impl ToolCallConfig {
     pub fn new(
         function_tools: &[String],
         function_tool_choice: &ToolChoice,
-        function_parallel_tool_calls: bool,
+        function_parallel_tool_calls: Option<bool>,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
         dynamic_tool_params: DynamicToolParams,
     ) -> Result<Option<Self>, Error> {
@@ -158,7 +158,7 @@ impl ToolCallConfig {
 
         let parallel_tool_calls = dynamic_tool_params
             .parallel_tool_calls
-            .unwrap_or(function_parallel_tool_calls);
+            .or(function_parallel_tool_calls);
 
         let tool_call_config_option = match tools_available.is_empty() {
             true => None,
@@ -210,12 +210,63 @@ pub struct BatchDynamicToolParams {
 pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize);
 
 /// A ToolCall is a request by a model to call a Tool
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ToolCall {
     pub name: String,
     pub arguments: String,
     pub id: String,
+}
+
+impl<'de> Deserialize<'de> for ToolCall {
+    fn deserialize<D>(deserializer: D) -> Result<ToolCall, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Debug, Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct ToolCallHelper {
+            name: Option<String>,
+            arguments: Option<Value>,
+            id: String,
+            raw_arguments: Option<String>,
+            raw_name: Option<String>,
+        }
+
+        let helper = ToolCallHelper::deserialize(deserializer)?;
+
+        let name = helper.name.or(helper.raw_name).ok_or_else(|| {
+            serde::de::Error::custom("ToolCall must have `name` or `raw_name` set")
+        })?;
+
+        let arguments = if let Some(arguments) = helper.arguments {
+            match arguments {
+                Value::String(s) => {
+                    tracing::warn!("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object. Please pass in a JSON object instead. Support for strings will be removed in a future release: https://github.com/tensorzero/tensorzero/issues/1410");
+                    s
+                }
+                Value::Object(obj) => {
+                    serde_json::to_string(&obj).map_err(serde::de::Error::custom)?
+                }
+                _ => {
+                    return Err(serde::de::Error::custom(
+                        "ToolCall arguments must be a string or an object",
+                    ))
+                }
+            }
+        } else if let Some(raw_arguments) = helper.raw_arguments {
+            raw_arguments
+        } else {
+            return Err(serde::de::Error::custom(
+                "ToolCall must have `arguments` or `raw_arguments` set",
+            ));
+        };
+
+        Ok(ToolCall {
+            name,
+            arguments,
+            id: helper.id,
+        })
+    }
 }
 
 /// A ToolCallOutput is a request by a model to call a Tool
@@ -271,7 +322,7 @@ impl ToolCallConfig {
         Self {
             tools_available: vec![implicit_tool_config],
             tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         }
     }
 }
@@ -391,7 +442,7 @@ pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
     ToolCallConfig {
         tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
-        parallel_tool_calls: false,
+        parallel_tool_calls: None,
     }
 }
 
@@ -526,7 +577,7 @@ pub fn create_implicit_tool_call_config(schema: JSONSchemaFromPath) -> ToolCallC
     ToolCallConfig {
         tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
-        parallel_tool_calls: false,
+        parallel_tool_calls: None,
     }
 }
 
@@ -594,7 +645,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             DynamicToolParams::default(),
         )
@@ -606,7 +657,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             DynamicToolParams::default(),
         )
@@ -614,7 +665,7 @@ mod tests {
         .unwrap();
         assert_eq!(tool_call_config.tools_available.len(), 2);
         assert_eq!(tool_call_config.tool_choice, ToolChoice::Auto);
-        assert!(tool_call_config.parallel_tool_calls);
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
         assert!(tool_call_config.tools_available[0].strict());
         assert!(!tool_call_config.tools_available[1].strict());
 
@@ -626,7 +677,7 @@ mod tests {
         let err = ToolCallConfig::new(
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &EMPTY_TOOLS,
             dynamic_tool_params,
         )
@@ -647,7 +698,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             dynamic_tool_params,
         )
@@ -658,7 +709,7 @@ mod tests {
             tool_call_config.tool_choice,
             ToolChoice::Specific("get_temperature".to_string())
         );
-        assert!(tool_call_config.parallel_tool_calls);
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
 
         // Dynamic tool config specifies a particular tool to call and it's not in the function tools list
         let dynamic_tool_params = DynamicToolParams {
@@ -668,7 +719,7 @@ mod tests {
         let err = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             dynamic_tool_params,
         )
@@ -696,7 +747,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             dynamic_tool_params,
         )
@@ -723,7 +774,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             dynamic_tool_params,
         )
@@ -740,7 +791,7 @@ mod tests {
             tool_call_config.tools_available[1].name(),
             "establish_campground"
         );
-        assert!(!tool_call_config.parallel_tool_calls);
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(false));
 
         // We pass a list of no allowed tools and then configure a new tool
         // This should remove all configured tools and add the new tool
@@ -758,7 +809,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             dynamic_tool_params,
         )
@@ -769,7 +820,7 @@ mod tests {
             tool_call_config.tools_available[0].name(),
             "establish_campground"
         );
-        assert!(tool_call_config.parallel_tool_calls);
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
         assert_eq!(
             tool_call_config.tool_choice,
             ToolChoice::Specific("establish_campground".to_string())
@@ -787,7 +838,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             DynamicToolParams::default(),
         )
@@ -846,7 +897,7 @@ mod tests {
         let tool_call_config = ToolCallConfig::new(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
-            true,
+            Some(true),
             &TOOLS,
             DynamicToolParams {
                 additional_tools: Some(vec![Tool {
@@ -879,6 +930,90 @@ mod tests {
         assert_eq!(
             tool_call_output.arguments,
             Some(json!({"location": "Lucky Dog"}))
+        );
+    }
+
+    #[test]
+    fn test_tool_call_deserialize_plain_raw() {
+        let tool_call = serde_json::json!({
+            "name": "get_temperature",
+            "raw_name": "should have ignored raw name",
+            "arguments": "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}",
+            "raw_arguments": "should have ignored raw arguments",
+            "id": "123"
+        });
+        let tool_call: ToolCall = serde_json::from_value(tool_call).unwrap();
+        assert_eq!(tool_call.name, "get_temperature");
+        assert_eq!(
+            tool_call.arguments,
+            "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}"
+        );
+        assert_eq!(tool_call.id, "123");
+    }
+
+    #[test]
+    fn test_tool_call_deserialize_raw_only() {
+        let tool_call = serde_json::json!({
+            "raw_name": "get_temperature",
+            "raw_arguments": "my raw arguments",
+            "id": "123"
+        });
+        let tool_call: ToolCall = serde_json::from_value(tool_call).unwrap();
+        assert_eq!(tool_call.name, "get_temperature");
+        assert_eq!(tool_call.arguments, "my raw arguments");
+        assert_eq!(tool_call.id, "123");
+    }
+
+    #[test]
+    fn test_tool_call_deserialize_arguments_object() {
+        let tool_call = serde_json::json!({
+            "name": "get_temperature",
+            "arguments": {"my": "arguments"},
+            "id": "123"
+        });
+        let tool_call: ToolCall = serde_json::from_value(tool_call).unwrap();
+        assert_eq!(tool_call.name, "get_temperature");
+        assert_eq!(tool_call.arguments, "{\"my\":\"arguments\"}");
+        assert_eq!(tool_call.id, "123");
+    }
+
+    #[test]
+    fn test_tool_call_deserialize_arguments_string() {
+        let tool_call = serde_json::json!({
+            "name": "get_temperature",
+            "arguments": "{\"my\": \"arguments\"}",
+            "id": "123"
+        });
+        let tool_call: ToolCall = serde_json::from_value(tool_call).unwrap();
+        assert_eq!(tool_call.name, "get_temperature");
+        assert_eq!(tool_call.arguments, "{\"my\": \"arguments\"}");
+        assert_eq!(tool_call.id, "123");
+    }
+
+    #[test]
+    fn test_tool_call_deserialize_missing_name() {
+        let tool_call = serde_json::json!({
+            "arguments": "{\"my\": \"arguments\"}",
+            "id": "123"
+        });
+        let err_msg = serde_json::from_value::<ToolCall>(tool_call)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(err_msg, "ToolCall must have `name` or `raw_name` set");
+    }
+
+    #[test]
+    fn test_tool_call_deserialize_missing_arguments() {
+        let tool_call = serde_json::json!({
+            "name": "get_temperature",
+            "id": "123"
+        });
+        let err_msg = serde_json::from_value::<ToolCall>(tool_call)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            err_msg,
+            "ToolCall must have `arguments` or `raw_arguments` set"
         );
     }
 }

@@ -318,13 +318,13 @@ async fn infer_datapoint(
     }
 }
 
-struct ThrottledTensorZeroClient {
+pub struct ThrottledTensorZeroClient {
     client: Client,
     semaphore: Semaphore,
 }
 
 impl ThrottledTensorZeroClient {
-    fn new(client: Client, semaphore: Semaphore) -> Self {
+    pub fn new(client: Client, semaphore: Semaphore) -> Self {
         Self { client, semaphore }
     }
 

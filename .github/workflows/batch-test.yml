@@ -1,4 +1,4 @@
-name: Batch tests cron job
+name: Batch tests
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -27,6 +27,7 @@ env:
 
 on:
   workflow_dispatch:
+  merge_group:
   schedule:
     - cron: '0 0 * * *'  # Runs at 00:00 UTC every day
 
@@ -37,22 +38,22 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Install Namespace CLI
-        uses: namespacelabs/nscloud-setup@v0
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
 
       - name: Configure Namespace-powered Buildx
-        uses: namespacelabs/nscloud-setup-buildx-action@v0
+        uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
 
       - name: Configure Namespace cache for Rust
-        uses: namespacelabs/nscloud-cache-action@v1
+        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
         with:
           cache: |
             rust
 
       - name: Login to DockerHub
-        uses: docker/login-action@v3
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -62,7 +63,7 @@ jobs:
           curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES'
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
         with:
           tool: cargo-nextest
 

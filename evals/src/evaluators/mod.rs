@@ -9,7 +9,7 @@ use tensorzero_internal::evals::{get_evaluator_metric_name, EvalConfig, Evaluato
 
 mod exact_match;
 use exact_match::run_exact_match_evaluator;
-mod llm_judge;
+pub mod llm_judge;
 use futures::stream::{FuturesUnordered, StreamExt};
 use llm_judge::run_llm_judge_evaluator;
 use uuid::Uuid;

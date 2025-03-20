@@ -705,6 +705,49 @@ async def test_dynamic_tool_use_inference_openai(async_client):
 
 
 @pytest.mark.asyncio
+async def test_dynamic_json_mode_inference_body_param_openai(async_client):
+    header_episode_id = str(uuid7())
+    body_episode_id = str(uuid7())
+    output_schema = {
+        "type": "object",
+        "properties": {"response": {"type": "string"}},
+        "required": ["response"],
+        "additionalProperties": False,
+    }
+    serialized_output_schema = json.dumps(output_schema)
+    messages = [
+        {
+            "role": "system",
+            "content": [
+                {"assistant_name": "Dr. Mehta", "schema": serialized_output_schema}
+            ],
+        },
+        {"role": "user", "content": [{"country": "Japan"}]},
+    ]
+    result = await async_client.chat.completions.create(
+        extra_headers={
+            "episode_id": header_episode_id,
+            "variant_name": "openai",
+        },
+        messages=messages,
+        model="tensorzero::function_name::dynamic_json",
+        response_format={"type": "json_schema", "json_schema": output_schema},
+        extra_body={
+            "tensorzero::episode_id": body_episode_id,
+        },
+    )
+    assert (
+        result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
+    )
+    assert result.episode_id == body_episode_id
+    json_content = json.loads(result.choices[0].message.content)
+    assert "tokyo" in json_content["response"].lower()
+    assert result.choices[0].message.tool_calls is None
+    assert result.usage.prompt_tokens > 50
+    assert result.usage.completion_tokens > 0
+
+
+@pytest.mark.asyncio
 async def test_dynamic_json_mode_inference_openai(async_client):
     episode_id = str(uuid7())
     output_schema = {
@@ -876,13 +919,13 @@ async def test_async_multi_turn_parallel_tool_use(async_client):
     ]
 
     response = await async_client.chat.completions.create(
-        extra_headers={
-            "episode_id": episode_id,
-            "variant_name": "openai",
-        },
         messages=messages,
         model="tensorzero::function_name::weather_helper_parallel",
         parallel_tool_calls=True,
+        extra_body={
+            "tensorzero::episode_id": episode_id,
+            "tensorzero::variant_name": "openai",
+        },
     )
 
     assistant_message = response.choices[0].message

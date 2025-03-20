@@ -48,6 +48,9 @@ where
         let frame = ready!(frame);
         match &frame {
             Some(Ok(frame)) => {
+                if this.done_callback.is_none() {
+                    panic!("poll_frame got frame after done_callback was called");
+                }
                 if let Some(data) = frame.data_ref() {
                     this.buffer.extend(data);
                 } else {
