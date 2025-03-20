@@ -2,6 +2,8 @@ import { ActionBar } from "~/components/layout/ActionBar";
 import { TryWithVariantButton } from "~/components/inference/TryWithVariantButton";
 import { EditButton } from "~/components/utils/EditButton";
 import { DeleteButton } from "~/components/utils/DeleteButton";
+import { SaveButton } from "~/components/utils/SaveButton";
+import { CancelButton } from "~/components/utils/CancelButton";
 
 interface DatapointActionsProps {
   variants: string[];
@@ -9,6 +11,10 @@ interface DatapointActionsProps {
   variantInferenceIsLoading: boolean;
   onDelete: () => void;
   isDeleting: boolean;
+  toggleEditing: () => void;
+  onSave: () => void;
+  isEditing: boolean;
+  onReset: () => void;
   showTryWithVariant: boolean;
   className?: string;
 }
@@ -19,9 +25,17 @@ export function DatapointActions({
   variantInferenceIsLoading,
   onDelete,
   isDeleting,
+  toggleEditing,
+  onSave,
+  isEditing,
+  onReset,
   showTryWithVariant,
   className,
 }: DatapointActionsProps) {
+  const handleCancel = () => {
+    onReset();
+    toggleEditing();
+  };
   return (
     <ActionBar className={className}>
       {showTryWithVariant && (
@@ -31,8 +45,15 @@ export function DatapointActions({
           isLoading={variantInferenceIsLoading}
         />
       )}
+      {isEditing ? (
+        <>
+          <SaveButton onClick={onSave} />
+          <CancelButton onClick={handleCancel} />
+        </>
+      ) : (
+        <EditButton onClick={toggleEditing} />
+      )}
       <DeleteButton onClick={onDelete} isLoading={isDeleting} />
-      <EditButton onClick={() => (window.location.href = "#")} />
     </ActionBar>
   );
 }

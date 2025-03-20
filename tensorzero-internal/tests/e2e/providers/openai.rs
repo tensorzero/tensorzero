@@ -1349,7 +1349,7 @@ pub async fn test_image_inference_with_provider_docker_minio() {
     bucket_name = "{test_bucket}"
     prefix = "{prefix}"
     allow_http = true
-    
+
     [functions.image_test]
     type = "chat"
 

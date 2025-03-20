@@ -35,7 +35,7 @@ export interface InferenceDatasetButtonProps {
   // Callback receives the chosen dataset name plus a flag indicating if it's new.
   onDatasetSelect: (
     dataset: string,
-    output: "inference" | "demonstration" | "none",
+    output: "inherit" | "demonstration" | "none",
   ) => void;
   hasDemonstration: boolean;
 }
@@ -57,9 +57,7 @@ export function AddToDatasetButton({
   );
 
   // Handle the output selection from the alert dialog
-  const handleOutputSelect = (
-    output: "inference" | "demonstration" | "none",
-  ) => {
+  const handleOutputSelect = (output: "inherit" | "demonstration" | "none") => {
     onDatasetSelect(selectedDataset, output);
     setOutputDialogOpen(false);
     setOpen(false);
@@ -193,7 +191,7 @@ export function AddToDatasetButton({
             <AlertDialogCancel onClick={() => setOutputDialogOpen(false)}>
               Cancel
             </AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleOutputSelect("inference")}>
+            <AlertDialogAction onClick={() => handleOutputSelect("inherit")}>
               Inference Output
             </AlertDialogAction>
             {hasDemonstration && (

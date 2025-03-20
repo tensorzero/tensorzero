@@ -1,5 +1,4 @@
 import {
-  parseInferenceOutput,
   queryInferenceById,
   queryModelInferencesByInferenceId,
 } from "~/utils/clickhouse/inference";
@@ -21,6 +20,7 @@ import BasicInfo from "./InferenceBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
+import { tensorZeroClient } from "~/utils/tensorzero.server";
 import { ParameterCard } from "./InferenceParameters";
 import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesAccordion } from "./ModelInferencesAccordion";
@@ -36,12 +36,7 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { InferenceActions } from "./InferenceActions";
-import {
-  getDatasetCounts,
-  insertDatapoint,
-} from "~/utils/clickhouse/datasets.server";
-import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
-import { inferenceRowToDatasetRow } from "~/utils/clickhouse/datasets";
+import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -100,32 +95,11 @@ export async function action({ request }: Route.ActionArgs) {
   if (!dataset || !output || !inference_id) {
     throw data("Missing required fields", { status: 400 });
   }
-  const promises = [queryInferenceById(inference_id.toString())] as const;
-  let datapoint: ParsedDatasetRow;
-  if (output === "demonstration") {
-    const [inference, demonstration_feedback] = await Promise.all([
-      ...promises,
-      queryDemonstrationFeedbackByInferenceId({
-        inference_id: inference_id.toString(),
-        page_size: 1,
-      }),
-    ]);
-    if (!inference) {
-      throw data("No inference found", { status: 404 });
-    }
-    datapoint = inferenceRowToDatasetRow(inference, dataset.toString());
-    datapoint.output = parseInferenceOutput(demonstration_feedback[0].value);
-  } else {
-    const [inference] = await Promise.all(promises);
-    if (!inference) {
-      throw data("No inference found", { status: 404 });
-    }
-    datapoint = inferenceRowToDatasetRow(inference, dataset.toString());
-    if (output === "none") {
-      datapoint.output = undefined;
-    }
-  }
-  await insertDatapoint(datapoint);
+  const datapoint = await tensorZeroClient.createDatapoint(
+    dataset.toString(),
+    inference_id.toString(),
+    output.toString() as "inherit" | "demonstration" | "none",
+  );
   return redirect(`/datasets/${dataset.toString()}/datapoint/${datapoint.id}`);
 }
 
@@ -196,7 +170,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   const handleAddToDataset = (
     dataset: string,
-    output: "inference" | "demonstration" | "none",
+    output: "inherit" | "demonstration" | "none",
   ) => {
     const formData = new FormData();
     formData.append("dataset", dataset);
