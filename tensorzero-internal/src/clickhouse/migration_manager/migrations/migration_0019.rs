@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use super::check_table_exists;
+use super::{check_column_exists, check_table_exists};
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
@@ -14,6 +14,10 @@ use crate::error::{Error, ErrorDetails};
 /// We also add materialized views TagChatInferenceView and TagJsonInferenceView,
 /// These views will insert data into the TagInference table
 /// when data is inserted into the original tables.
+///
+/// Additionally, this migration adds a `staled_at` column to the ChatInferenceDatapoint
+/// and JsonInferenceDatapoint tables. This allows us to express that a datapoint is `stale`
+/// and has been edited or deleted.
 pub struct Migration0019<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
     pub clean_start: bool,
@@ -26,11 +30,21 @@ impl Migration for Migration0019<'_> {
             check_table_exists(self.clickhouse, "ChatInference", "0019").await?;
         let json_inference_table_exists =
             check_table_exists(self.clickhouse, "JsonInference", "0019").await?;
+        let chat_inference_datapoint_table_exists =
+            check_table_exists(self.clickhouse, "ChatInferenceDatapoint", "0019").await?;
+        let json_inference_datapoint_table_exists =
+            check_table_exists(self.clickhouse, "JsonInferenceDatapoint", "0019").await?;
 
         if !chat_inference_table_exists || !json_inference_table_exists {
             return Err(Error::new(ErrorDetails::ClickHouseMigration {
                 id: "0019".to_string(),
                 message: "One or more of the inference tables do not exist".to_string(),
+            }));
+        }
+        if !chat_inference_datapoint_table_exists || !json_inference_datapoint_table_exists {
+            return Err(Error::new(ErrorDetails::ClickHouseMigration {
+                id: "0019".to_string(),
+                message: "One or more of the inference datapoint tables do not exist".to_string(),
             }));
         }
 
@@ -44,9 +58,25 @@ impl Migration for Migration0019<'_> {
             check_table_exists(self.clickhouse, "TagChatInferenceView", "0019").await?;
         let tag_json_inference_view_exists =
             check_table_exists(self.clickhouse, "TagJsonInferenceView", "0019").await?;
+        let chat_inference_datapoint_staled_at_column_exists = check_column_exists(
+            self.clickhouse,
+            "ChatInferenceDatapoint",
+            "staled_at",
+            "0019",
+        )
+        .await?;
+        let json_inference_datapoint_staled_at_column_exists = check_column_exists(
+            self.clickhouse,
+            "JsonInferenceDatapoint",
+            "staled_at",
+            "0019",
+        )
+        .await?;
         Ok(!tag_inference_table_exists
             || !tag_chat_inference_view_exists
-            || !tag_json_inference_view_exists)
+            || !tag_json_inference_view_exists
+            || !chat_inference_datapoint_staled_at_column_exists
+            || !json_inference_datapoint_staled_at_column_exists)
     }
 
     async fn apply(&self) -> Result<(), Error> {
@@ -77,6 +107,16 @@ impl Migration for Migration0019<'_> {
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
                 ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
                 ORDER BY (key, value, inference_id)"#;
+        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+
+        let query = r#"
+            ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Optional(DateTime64(6, 'UTC'));
+        "#;
+        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+
+        let query = r#"
+            ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS staled_at Optional(DateTime64(6, 'UTC'));
+        "#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp

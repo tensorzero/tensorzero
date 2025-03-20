@@ -127,6 +127,9 @@ async fn test_clickhouse_migration_manager() {
         Box::new(Migration0018 {
             clickhouse: &clickhouse,
         }),
+        // NOTE: This migration is currently feature flagged. If you add a migration after this, you should comment this out.
+        // So that we test the database in the same state as the production database.
+        // We can then uncomment this when the migration is un-flagged.
         Box::new(Migration0019 {
             clickhouse: &clickhouse,
             clean_start: true,
