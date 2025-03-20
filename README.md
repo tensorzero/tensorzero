@@ -300,7 +300,7 @@ Optimize your prompts programmatically using research-driven optimization techni
       TensorZero implements MIPROv2, an automated prompt engineering algorithm that jointly optimizes instructions and in-context examples for your prompts.
     </td>
     <td width="50%" align="center" valign="middle">
-      TensorZero comes with several optimization recipes, but you can also easily create your own!
+      TensorZero comes with several optimization recipes, but you can also easily create your own.
       This example shows to optimize a TensorZero function using an arbitrary tool — here, DSPy, a popular library for automated prompt engineering.
     </td>
   </tr>
