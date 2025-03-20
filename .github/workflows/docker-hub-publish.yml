@@ -130,4 +130,4 @@ jobs:
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.container.name }}:${{ steps.meta-gateway.outputs.version }}
+          docker buildx imagetools inspect ${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.container.name }}:${{ steps.meta.outputs.version }}
