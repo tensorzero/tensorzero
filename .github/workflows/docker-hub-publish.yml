@@ -8,6 +8,9 @@ on:
   release:
     types: [published]
 
+env:
+  DOCKERHUB_USER: aaron1011
+
 jobs:
   build:
     name: Build and push Docker image to Docker Hub
@@ -19,6 +22,11 @@ jobs:
             target: linux/amd64
           - runner: ubuntu-24.04-arm
             target: linux/arm64
+        container:
+          - name: ui
+            context: ./ui
+          - name: gateway
+            context: .
     permissions:
       packages: write
       contents: read
@@ -46,43 +54,26 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            tensorzero-ui
-            tensorzero-gateway
+          images: tensorzero-${{ matrix.platform.container.name }}
 
-      - name: Build and push ui Docker image
-        id: push-ui
+      - name: Build and push Docker image
+        id: push
         uses: docker/build-push-action@v6
         with:
           platforms: ${{ matrix.platform.target }}
-          context: ./ui
-          file: ./ui/Dockerfile
+          context: ${{ matrix.platform.container.context }}
+          file: ./${{ matrix.platform.container.name }}/Dockerfile
           push: true
           provenance: mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: aaron1011/tensorzero-ui
-          labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Build and push gateway Docker image
-        id: push-gateway
-        uses: docker/build-push-action@v6
-        with:
-          platforms: ${{ matrix.platform.target }}
-          context: .
-          file: ./gateway/Dockerfile
-          push: true
-          provenance: mode=max
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: aaron1011/tensorzero-gateway
+          tags: $ {{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.platform.container.name }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Export digest
         run: |
           mkdir -p ${{ runner.temp }}/digests
-          gateway_digest="${{ steps.push-gateway.outputs.digest }}"
-          ui_digest="${{ steps.push-ui.outputs.digest }}"
-          touch "${{ runner.temp }}/digests/${gateway_digest#sha256:}"
-          touch "${{ runner.temp }}/digests/${ui_digest#sha256:}"
+          digest="${{ steps.push.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
       - name: Upload digest
         uses: actions/upload-artifact@v4
@@ -113,42 +104,23 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Docker meta for gateway
-        id: meta-gateway
+      - name: Docker meta
+        id: meta
         uses: docker/metadata-action@v5
         with:
-          images: aaron1011/tensorzero-ui
+          images: ${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.platform.container.name }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
-      - name: Create manifest list and push gateway
+      - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'aaron1011/tensorzero-gateway@sha256:%s ' *)
-
-      - name: Docker meta for ui
-        id: meta-ui
-        uses: docker/metadata-action@v5
-        with:
-          images: aaron1011/tensorzero-ui
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-
-
-      - name: Create manifest list and push ui
-        working-directory: ${{ runner.temp }}/digests
-        run: |
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'aaron1011/tensorzero-ui@sha256:%s ' *)
+            $(printf '${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.platform.container.name }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect aaron1011/tensorzero-ui:${{ steps.meta-gateway.outputs.version }}
-          docker buildx imagetools inspect aaron1011/tensorzero-gateway:${{ steps.meta-ui.outputs.version }}
+          docker buildx imagetools inspect ${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.platform.container.name }}:${{ steps.meta.outputs.version }}
