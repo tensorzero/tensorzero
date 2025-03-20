@@ -312,17 +312,26 @@ pub async fn update_datapoint_handler(
                     .map(|x| x.into())
                     .unwrap_or_default(),
             );
-            let validated_output = validate_parse_demonstration(
-                &function_config,
-                &chat.output,
-                dynamic_demonstration_info,
-            )
-            .await?;
 
-            let DemonstrationOutput::Chat(output) = validated_output else {
-                return Err(Error::new(ErrorDetails::InternalError {
-                    message: "Expected chat output from validate_parse_demonstration".to_string(),
-                }));
+            // Only validate and parse output if it exists
+            let output = if let Some(output) = &chat.output {
+                let validated_output = validate_parse_demonstration(
+                    &function_config,
+                    output,
+                    dynamic_demonstration_info,
+                )
+                .await?;
+
+                let DemonstrationOutput::Chat(output) = validated_output else {
+                    return Err(Error::new(ErrorDetails::InternalError {
+                        message: "Expected chat output from validate_parse_demonstration"
+                            .to_string(),
+                    }));
+                };
+
+                Some(output)
+            } else {
+                None
             };
 
             let datapoint = ChatInferenceDatapoint {
@@ -331,7 +340,7 @@ pub async fn update_datapoint_handler(
                 id: path_params.id,
                 episode_id: None,
                 input: resolved_input,
-                output: Some(output),
+                output,
                 tool_params: chat.tool_params,
                 tags: chat.tags,
                 auxiliary: chat.auxiliary,
@@ -351,30 +360,44 @@ pub async fn update_datapoint_handler(
                 })?;
             let resolved_input = json.input.clone().resolve(&fetch_context).await?;
             function_config.validate_input(&json.input)?;
-            let dynamic_demonstration_info = DynamicDemonstrationInfo::Json(json.output_schema);
-            let validated_json = validate_parse_demonstration(
-                &function_config,
-                &json.output,
-                dynamic_demonstration_info,
-            )
-            .await?;
-            let DemonstrationOutput::Json(json_out) = validated_json else {
-                return Err(Error::new(ErrorDetails::InternalError {
-                    message: "Expected JSON output from validate_parse_demonstration".to_string(),
-                }));
+            let dynamic_demonstration_info =
+                DynamicDemonstrationInfo::Json(json.output_schema.clone());
+
+            // Determine output based on whether json.output is None
+            let output = if let Some(output_value) = &json.output {
+                let validated_json = validate_parse_demonstration(
+                    &function_config,
+                    output_value,
+                    dynamic_demonstration_info,
+                )
+                .await?;
+
+                let DemonstrationOutput::Json(json_out) = validated_json else {
+                    return Err(Error::new(ErrorDetails::InternalError {
+                        message: "Expected JSON output from validate_parse_demonstration"
+                            .to_string(),
+                    }));
+                };
+
+                let json_out: JsonInferenceOutput =
+                    serde_json::from_value(json_out).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!("Failed to deserialize validated JSON output: {}", e),
+                        })
+                    })?;
+
+                Some(json_out)
+            } else {
+                None
             };
-            let json_out: JsonInferenceOutput = serde_json::from_value(json_out).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Failed to deserialize validated JSON output: {}", e),
-                })
-            })?;
+
             let datapoint = JsonInferenceDatapoint {
                 dataset_name: path_params.dataset,
                 function_name: json.function_name,
                 id: path_params.id,
                 episode_id: None,
                 input: resolved_input,
-                output: Some(json_out),
+                output,
                 // We currently don't support creating synthetic datapoints with 'output_schema'
                 output_schema: serde_json::Value::Object(Default::default()),
                 tags: json.tags,
@@ -638,12 +661,26 @@ impl From<ClickHouseDatapoint> for Datapoint {
     }
 }
 
+fn deserialize_optional_json_value<'de, D>(
+    deserializer: D,
+) -> Result<Option<serde_json::Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Null => Ok(None),
+        _ => Ok(Some(value)),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SyntheticChatInferenceDatapoint {
     pub function_name: String,
     pub input: Input,
-    pub output: serde_json::Value,
+    #[serde(deserialize_with = "deserialize_optional_json_value")]
+    pub output: Option<serde_json::Value>,
     #[serde(default)]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(default)]
@@ -657,7 +694,8 @@ pub struct SyntheticChatInferenceDatapoint {
 pub struct SyntheticJsonInferenceDatapoint {
     pub function_name: String,
     pub input: Input,
-    pub output: serde_json::Value,
+    #[serde(deserialize_with = "deserialize_optional_json_value")]
+    pub output: Option<serde_json::Value>,
     pub output_schema: serde_json::Value,
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,

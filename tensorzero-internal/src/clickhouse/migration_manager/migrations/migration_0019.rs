@@ -82,7 +82,6 @@ impl Migration for Migration0019<'_> {
             "0019",
         )
         .await?;
-        println!("{}", chat_default_updated_at);
         let chat_default_updated_at_correct = chat_default_updated_at == "now64()";
         let json_default_updated_at = get_default_expression(
             self.clickhouse,
@@ -91,7 +90,6 @@ impl Migration for Migration0019<'_> {
             "0019",
         )
         .await?;
-        println!("{}", json_default_updated_at);
         let json_default_updated_at_correct = json_default_updated_at == "now64()";
         Ok(!tag_inference_table_exists
             || !tag_chat_inference_view_exists

@@ -4,7 +4,7 @@ import { v7 as uuid } from "uuid";
 import BasicInfo from "./DatapointBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
-import { useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useConfig } from "~/context/config";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { VariantResponseModal } from "./VariantResponseModal";
@@ -95,6 +95,7 @@ export async function action({ request }: ActionFunctionArgs) {
     auxiliary: formData.get("auxiliary"),
     is_deleted: formData.get("is_deleted") === "true",
     updated_at: formData.get("updated_at"),
+    staled_at: null,
   };
 
   const cleanedData = Object.fromEntries(
@@ -128,9 +129,10 @@ export async function action({ request }: ActionFunctionArgs) {
     const transformedOutput = transformOutputForTensorZero(
       parsedFormData.output,
     );
+    console.log("transformedOutput", transformedOutput);
 
     try {
-      await tensorZeroClient.updateDatapoint(
+      const { id } = await tensorZeroClient.updateDatapoint(
         parsedFormData.dataset_name,
         uuid(),
         {
@@ -161,7 +163,9 @@ export async function action({ request }: ActionFunctionArgs) {
         functionType,
       );
 
-      return { success: true };
+      return redirect(
+        `/datasets/${parsedFormData.dataset_name}/datapoint/${id}`,
+      );
     } catch (error) {
       console.error("Error updating datapoint:", error);
       return {
@@ -201,12 +205,24 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
+  const originalInput = useMemo(() => datapoint.input, []);
   const [output, setOutput] = useState<typeof datapoint.output>(
     datapoint.output,
   );
+  const originalOutput = useMemo(() => datapoint.output, []);
   const config = useConfig();
   const [isEditing, setIsEditing] = useState(false);
   const [resetKey, setResetKey] = useState(0);
+  const [canSave, setCanSave] = useState(false);
+  useEffect(() => {
+    // Use JSON.stringify to compare object values rather than references
+    const inputChanged =
+      JSON.stringify(input) !== JSON.stringify(originalInput);
+    const outputChanged =
+      JSON.stringify(output) !== JSON.stringify(originalOutput);
+
+    setCanSave(isEditing && (inputChanged || outputChanged));
+  }, [isEditing, input, output, originalInput, originalOutput]);
 
   const toggleEditing = () => setIsEditing(!isEditing);
 
@@ -302,6 +318,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
               isDeleting={fetcher.state === "submitting" && !saveError}
               toggleEditing={toggleEditing}
               isEditing={isEditing}
+              canSave={canSave}
               onSave={handleSave}
               onReset={handleReset}
               showTryWithVariant={
