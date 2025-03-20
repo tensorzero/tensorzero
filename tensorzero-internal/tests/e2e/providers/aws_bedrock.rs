@@ -1,24 +1,20 @@
-#[cfg(feature = "e2e_tests")]
 use reqwest::Client;
-#[cfg(feature = "e2e_tests")]
+
 use reqwest::StatusCode;
-#[cfg(feature = "e2e_tests")]
+
 use serde_json::{json, Value};
 use std::collections::HashMap;
-#[cfg(feature = "e2e_tests")]
+
 use uuid::Uuid;
 
-#[cfg(feature = "e2e_tests")]
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
-#[cfg(feature = "e2e_tests")]
+
 use tensorzero_internal::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
 };
 
-#[cfg(feature = "e2e_tests")]
 crate::generate_provider_tests!(get_providers);
-#[cfg(feature = "batch_tests")]
 crate::generate_batch_inference_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
@@ -69,14 +65,12 @@ async fn get_providers() -> E2ETestProviders {
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
         image_inference: vec![],
-        #[cfg(feature = "e2e_tests")]
+
         shorthand_inference: vec![],
-        #[cfg(feature = "batch_tests")]
         supports_batch_inference: false,
     }
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_inference_with_explicit_region() {
     let client = Client::new();
@@ -189,7 +183,6 @@ async fn test_inference_with_explicit_region() {
     let _ = raw_response_json.get("debug").unwrap().as_str().unwrap();
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_inference_with_explicit_broken_region() {
     let client = Client::new();

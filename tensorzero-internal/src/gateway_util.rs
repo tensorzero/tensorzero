@@ -146,7 +146,7 @@ const DEFAULT_HTTP_CLIENT_TIMEOUT: std::time::Duration = std::time::Duration::fr
 pub fn setup_http_client() -> Result<Client, Error> {
     let mut http_client_builder = Client::builder().timeout(DEFAULT_HTTP_CLIENT_TIMEOUT);
 
-    if cfg!(any(feature = "e2e_tests", feature = "batch_tests")) {
+    if cfg!(feature = "e2e_tests") {
         if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {
             tracing::info!("Using proxy URL from TENSORZERO_E2E_PROXY: {proxy_url}");
             http_client_builder = http_client_builder

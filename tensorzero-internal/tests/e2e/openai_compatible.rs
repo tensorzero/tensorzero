@@ -10,7 +10,6 @@ use tensorzero_internal::clickhouse::test_helpers::{
     select_model_inference_clickhouse,
 };
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_openai_compatible_route() {
     // Test that both the old and new formats work.
@@ -219,13 +218,11 @@ async fn test_openai_compatible_dryrun() {
     assert!(json_result.is_none());
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_openai_compatible_route_model_name_shorthand() {
     test_openai_compatible_route_with_default_function("tensorzero::model_name::dummy::good", "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.").await;
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_openai_compatible_route_model_name_toml() {
     test_openai_compatible_route_with_default_function(
@@ -362,7 +359,6 @@ async fn test_openai_compatible_route_with_default_function(
     assert_eq!(finish_reason, "stop");
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_openai_compatible_route_bad_model_name() {
     let client = Client::new();
@@ -400,7 +396,6 @@ async fn test_openai_compatible_route_bad_model_name() {
     )
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_openai_compatible_route_with_json_mode_on() {
     let client = Client::new();
@@ -535,7 +530,6 @@ async fn test_openai_compatible_route_with_json_mode_on() {
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_openai_compatible_route_with_json_schema() {
     let client = Client::new();
@@ -673,7 +667,6 @@ async fn test_openai_compatible_route_with_json_schema() {
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
 }
 
-#[cfg(feature = "e2e_tests")]
 #[tokio::test]
 async fn test_openai_compatible_streaming_tool_call() {
     use futures::StreamExt;

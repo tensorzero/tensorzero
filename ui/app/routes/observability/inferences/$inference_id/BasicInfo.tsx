@@ -23,7 +23,7 @@ interface BasicInfoProps {
   dataset_counts: DatasetCountInfo[];
   onDatasetSelect: (
     dataset: string,
-    output: "inference" | "demonstration" | "none",
+    output: "inherit" | "demonstration" | "none",
   ) => void;
   hasDemonstration: boolean;
 }

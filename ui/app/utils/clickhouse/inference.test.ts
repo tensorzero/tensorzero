@@ -118,7 +118,7 @@ test("queryInferenceTable pages through all results correctly using before", asy
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements
-  expect(totalElements).toBe(2477);
+  expect(totalElements).toBe(2478);
 
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
@@ -178,7 +178,7 @@ test("queryInferenceTable pages through all results correctly using after", asyn
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements matches the previous test
-  expect(totalElements).toBe(2476); // One less than with before because we excluded the first ID
+  expect(totalElements).toBe(2477); // One less than with before because we excluded the first ID
 
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
@@ -317,13 +317,13 @@ test("queryInferenceTableByEpisodeId pages through all results correctly using a
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("01954435-76a5-7331-8a3a-16296a0ba5b6");
+  expect(bounds.last_id).toBe("019595b9-34d3-7101-9b30-d7aadd6f3f92");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("01954435-76a5-7331-8a3a-16296a0ba5b6");
+  expect(bounds.last_id).toBe("019595b9-34d3-7101-9b30-d7aadd6f3f92");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -509,7 +509,7 @@ test("queryEpisodeTable pages through all results correctly using before", async
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements
-  expect(totalElements).toBe(946);
+  expect(totalElements).toBe(947);
 
   // We should have seen at least 9 full pages
   expect(numFullPages).toBeGreaterThan(8);
@@ -571,7 +571,7 @@ test("queryEpisodeTable pages through all results correctly using after", async 
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements matches the previous test
-  expect(totalElements).toBe(945); // One less than with before because we excluded the first ID
+  expect(totalElements).toBe(946); // One less than with before because we excluded the first ID
 
   // We should have seen at least 9 full pages
   expect(numFullPages).toBeGreaterThan(8);
@@ -624,9 +624,9 @@ test("countInferencesByFunction", async () => {
   const countsInfo = await countInferencesByFunction();
   expect(countsInfo).toEqual([
     {
-      count: 1,
+      count: 2,
       function_name: "tensorzero::default",
-      max_timestamp: "2025-02-26T21:41:49Z",
+      max_timestamp: "2025-03-14T17:34:57Z",
     },
     {
       count: 1,

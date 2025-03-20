@@ -1,4 +1,5 @@
 import typing as t
+from importlib.metadata import version
 
 import httpx
 
@@ -59,6 +60,8 @@ __all__ = [
 ]
 
 T = t.TypeVar("T", bound=t.Any)
+
+__version__ = version("tensorzero")
 
 
 def _attach_fields(client: T, gateway: t.Any) -> T:

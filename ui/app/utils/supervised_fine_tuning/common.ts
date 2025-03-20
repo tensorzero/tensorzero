@@ -1,4 +1,5 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
+import type { AnalysisData } from "~/routes/optimization/supervised-fine-tuning/SFTAnalysis";
 import type { ParsedInferenceExample } from "../clickhouse/curation";
 import type { ProviderType } from "../config/models";
 
@@ -41,6 +42,7 @@ export type SFTJobStatus =
       jobUrl: string;
       rawData: RawData;
       estimatedCompletionTime?: Date;
+      analysisData?: AnalysisData;
     }
   | {
       status: "completed";
@@ -49,6 +51,7 @@ export type SFTJobStatus =
       jobUrl: string;
       rawData: RawData;
       result: string;
+      analysisData?: AnalysisData;
     }
   | {
       status: "error";
@@ -57,6 +60,7 @@ export type SFTJobStatus =
       jobUrl: string;
       rawData: RawData;
       error: string;
+      analysisData?: AnalysisData;
     }
   | { status: "idle" };
 

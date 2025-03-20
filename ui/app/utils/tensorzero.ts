@@ -56,12 +56,39 @@ export type ToolResult = z.infer<typeof ToolResultSchema>;
 /**
  * An input message's content may be structured.
  */
-export const InputMessageContentSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("text"), value: JSONValueSchema }),
-  z.object({ type: z.literal("raw_text"), value: z.string() }),
-  z.object({ type: z.literal("tool_call"), value: ToolCallSchema }),
-  z.object({ type: z.literal("tool_result"), value: ToolResultSchema }),
+export const TextContentSchema = z.object({
+  type: z.literal("text"),
+  value: JSONValueSchema,
+});
+
+export const TextArgumentsContentSchema = z.object({
+  type: z.literal("text"),
+  arguments: JSONValueSchema,
+});
+
+export const RawTextContentSchema = z.object({
+  type: z.literal("raw_text"),
+  value: z.string(),
+});
+
+export const ToolCallContentSchema = z.object({
+  type: z.literal("tool_call"),
+  ...ToolCallSchema.shape,
+});
+
+export const ToolResultContentSchema = z.object({
+  type: z.literal("tool_result"),
+  ...ToolResultSchema.shape,
+});
+
+export const InputMessageContentSchema = z.union([
+  TextContentSchema,
+  TextArgumentsContentSchema,
+  RawTextContentSchema,
+  ToolCallContentSchema,
+  ToolResultContentSchema,
 ]);
+
 export type InputMessageContent = z.infer<typeof InputMessageContentSchema>;
 
 /**
@@ -200,6 +227,60 @@ export const FeedbackResponseSchema = z.object({
 export type FeedbackResponse = z.infer<typeof FeedbackResponseSchema>;
 
 /**
+ * Schema for tool parameters in a datapoint
+ */
+export const ToolParamsSchema = z.record(JSONValueSchema);
+export type ToolParams = z.infer<typeof ToolParamsSchema>;
+
+/**
+ * Base schema for datapoints with common fields
+ */
+const BaseDatapointSchema = z.object({
+  function_name: z.string(),
+  input: InputSchema,
+  output: JSONValueSchema,
+  tags: z.record(z.string()).optional(),
+  auxiliary: z.string().optional(),
+});
+
+/**
+ * Schema for chat inference datapoints
+ */
+export const ChatInferenceDatapointSchema = BaseDatapointSchema.extend({
+  tool_params: ToolParamsSchema.optional(),
+});
+export type ChatInferenceDatapoint = z.infer<
+  typeof ChatInferenceDatapointSchema
+>;
+
+/**
+ * Schema for JSON inference datapoints
+ */
+export const JsonInferenceDatapointSchema = BaseDatapointSchema.extend({
+  output_schema: JSONValueSchema,
+});
+export type JsonInferenceDatapoint = z.infer<
+  typeof JsonInferenceDatapointSchema
+>;
+
+/**
+ * Combined schema for any type of datapoint
+ */
+export const DatapointSchema = z.union([
+  ChatInferenceDatapointSchema,
+  JsonInferenceDatapointSchema,
+]);
+export type Datapoint = z.infer<typeof DatapointSchema>;
+
+/**
+ * Schema for datapoint response
+ */
+export const DatapointResponseSchema = z.object({
+  id: z.string(),
+});
+export type DatapointResponse = z.infer<typeof DatapointResponseSchema>;
+
+/**
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
  */
 export class TensorZeroClient {
@@ -312,5 +393,95 @@ export class TensorZeroClient {
       throw new Error(`Feedback request failed with status ${response.status}`);
     }
     return (await response.json()) as FeedbackResponse;
+  }
+
+  /**
+   * Inserts a datapoint from an existing inference with a given ID and setting for where to get the output from.
+   * @param datasetName - The name of the dataset to insert the datapoint into
+   * @param inferenceId - The ID of the existing inference to use as a base
+   * @param outputKind - How to handle the output field: inherit from inference, use demonstration, or none
+   * @returns A promise that resolves with the created datapoint response containing the new ID
+   * @throws Error if validation fails or the request fails
+   */
+  async createDatapoint(
+    datasetName: string,
+    inferenceId: string,
+    outputKind: "inherit" | "demonstration" | "none" = "inherit",
+  ): Promise<DatapointResponse> {
+    if (!datasetName || typeof datasetName !== "string") {
+      throw new Error("Dataset name must be a non-empty string");
+    }
+
+    if (!inferenceId || typeof inferenceId !== "string") {
+      throw new Error("Inference ID must be a non-empty string");
+    }
+
+    const url = `${this.baseUrl}/datasets/${encodeURIComponent(datasetName)}/datapoints`;
+
+    const request = {
+      inference_id: inferenceId,
+      output: outputKind,
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Create datapoint request failed with status ${response.status}`,
+      );
+    }
+
+    const body = await response.json();
+    return DatapointResponseSchema.parse(body);
+  }
+
+  /**
+   * Updates an existing datapoint in a dataset with the given ID.
+   * @param datasetName - The name of the dataset containing the datapoint
+   * @param datapointId - The UUID of the datapoint to update
+   * @param datapoint - The datapoint data containing function_name, input, output, and optional fields
+   * @returns A promise that resolves with the response containing the datapoint ID
+   * @throws Error if validation fails or the request fails
+   */
+  async updateDatapoint(
+    datasetName: string,
+    datapointId: string,
+    datapoint: Datapoint,
+  ): Promise<DatapointResponse> {
+    if (!datasetName || typeof datasetName !== "string") {
+      throw new Error("Dataset name must be a non-empty string");
+    }
+
+    if (!datapointId || typeof datapointId !== "string") {
+      throw new Error("Datapoint ID must be a non-empty string");
+    }
+
+    // Validate the datapoint using the Zod schema
+    const validationResult = DatapointSchema.safeParse(datapoint);
+    if (!validationResult.success) {
+      throw new Error(`Invalid datapoint: ${validationResult.error.message}`);
+    }
+
+    const url = `${this.baseUrl}/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapointId)}`;
+
+    const response = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(datapoint),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Update datapoint request failed with status ${response.status}: ${errorText}`,
+      );
+    }
+
+    const body = await response.json();
+    return DatapointResponseSchema.parse(body);
   }
 }

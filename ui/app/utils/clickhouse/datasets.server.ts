@@ -484,7 +484,7 @@ function parseDatapointRow(row: DatapointRow): ParsedDatasetRow {
         : undefined,
       tool_params:
         row.tool_params === ""
-          ? {}
+          ? undefined
           : z
               .record(z.string(), z.unknown())
               .parse(JSON.parse(row.tool_params)),
@@ -555,7 +555,10 @@ export async function insertDatapoint(
       // Add type-specific fields
       ...("tool_params" in datapoint
         ? { tool_params: datapoint.tool_params }
-        : { output_schema: datapoint.output_schema }),
+        : {}),
+      ...("output_schema" in datapoint
+        ? { output_schema: datapoint.output_schema }
+        : {}),
     },
   ];
 

@@ -17,6 +17,7 @@ import {
 import { Badge } from "~/components/ui/badge";
 import { Plus, Check } from "lucide-react";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
+import { AddToDataset } from "~/components/icons/Icons";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -34,7 +35,7 @@ export interface InferenceDatasetButtonProps {
   // Callback receives the chosen dataset name plus a flag indicating if it's new.
   onDatasetSelect: (
     dataset: string,
-    output: "inference" | "demonstration" | "none",
+    output: "inherit" | "demonstration" | "none",
   ) => void;
   hasDemonstration: boolean;
 }
@@ -56,9 +57,7 @@ export function AddToDatasetButton({
   );
 
   // Handle the output selection from the alert dialog
-  const handleOutputSelect = (
-    output: "inference" | "demonstration" | "none",
-  ) => {
+  const handleOutputSelect = (output: "inherit" | "demonstration" | "none") => {
     onDatasetSelect(selectedDataset, output);
     setOutputDialogOpen(false);
     setOpen(false);
@@ -68,7 +67,7 @@ export function AddToDatasetButton({
     <>
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="w-full justify-between">
+          <Button variant="outline" size="sm">
             {selectedDataset ? (
               <div className="flex items-center">
                 {sortedDatasets.find(
@@ -97,9 +96,12 @@ export function AddToDatasetButton({
                 )}
               </div>
             ) : (
-              "Add to dataset..."
+              <>
+                <AddToDataset className="h-4 w-4 text-fg-tertiary" />
+                Add to dataset
+              </>
             )}
-            <ChevronDown className="ml-2 h-4 w-4" />
+            <ChevronDown className="h-4 w-4 text-fg-tertiary" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-80 p-0">
@@ -189,7 +191,7 @@ export function AddToDatasetButton({
             <AlertDialogCancel onClick={() => setOutputDialogOpen(false)}>
               Cancel
             </AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleOutputSelect("inference")}>
+            <AlertDialogAction onClick={() => handleOutputSelect("inherit")}>
               Inference Output
             </AlertDialogAction>
             {hasDemonstration && (

@@ -1,4 +1,4 @@
-use jsonschema::JSONSchema;
+use jsonschema::Validator;
 use serde::Serialize;
 use serde_json::Value;
 use std::fs;
@@ -34,7 +34,7 @@ impl<'a> JsonSchemaRef<'a> {
 #[derive(Clone, Debug, Serialize)]
 pub struct JSONSchemaFromPath {
     #[serde(skip)]
-    pub compiled: Arc<JSONSchema>,
+    pub compiled: Arc<Validator>,
     pub value: &'static serde_json::Value,
 }
 
@@ -55,7 +55,7 @@ impl Default for JSONSchemaFromPath {
         // Compile the schema
         #[allow(clippy::expect_used)]
         let compiled_schema =
-            JSONSchema::compile(static_schema).expect("Failed to compile empty schema");
+            jsonschema::validator_for(static_schema).expect("Failed to compile empty schema");
 
         Self {
             compiled: Arc::new(compiled_schema),
@@ -82,7 +82,7 @@ impl JSONSchemaFromPath {
         })?;
         // We can 'leak' memory here because we want the schema to exist for the duration of the process
         let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(schema));
-        let compiled_schema = JSONSchema::compile(schema_boxed).map_err(|e| {
+        let compiled_schema = jsonschema::validator_for(schema_boxed).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
                 message: format!("Failed to compile JSON Schema `{}`: {}", path.display(), e),
             })
@@ -95,7 +95,7 @@ impl JSONSchemaFromPath {
     // NOTE: This function is to be used only for tests and constants
     pub fn from_value(value: &serde_json::Value) -> Result<Self, Error> {
         let schema_boxed: &'static serde_json::Value = Box::leak(Box::new(value.clone()));
-        let compiled_schema = JSONSchema::compile(schema_boxed).map_err(|e| {
+        let compiled_schema = jsonschema::validator_for(schema_boxed).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
                 message: format!("Failed to compile JSON Schema: {}", e),
             })
@@ -109,10 +109,7 @@ impl JSONSchemaFromPath {
     pub fn validate(&self, instance: &serde_json::Value) -> Result<(), Error> {
         self.compiled.validate(instance).map_err(|e| {
             Error::new(ErrorDetails::JsonSchemaValidation {
-                messages: e
-                    .into_iter()
-                    .map(|error| error.to_string())
-                    .collect::<Vec<String>>(),
+                messages: vec![e.to_string()],
                 data: Box::new(instance.clone()),
                 schema: Box::new(self.value.clone()),
             })
@@ -131,7 +128,7 @@ impl JSONSchemaFromPath {
 pub struct DynamicJSONSchema {
     pub value: Value,
     #[serde(skip)]
-    compiled_schema: Arc<OnceCell<JSONSchema>>,
+    compiled_schema: Arc<OnceCell<Validator>>,
 }
 
 impl PartialEq for DynamicJSONSchema {
@@ -164,23 +161,22 @@ impl DynamicJSONSchema {
             .await?
             .validate(instance)
             .map_err(|e| {
-                let messages = e.into_iter().map(|error| error.to_string()).collect();
                 Error::new(ErrorDetails::JsonSchemaValidation {
-                    messages,
+                    messages: vec![e.to_string()],
                     data: Box::new(instance.clone()),
                     schema: Box::new(self.value.clone()),
                 })
             })
     }
 
-    async fn get_or_init_compiled_schema(&self) -> Result<&JSONSchema, Error> {
+    async fn get_or_init_compiled_schema(&self) -> Result<&Validator, Error> {
         self.compiled_schema
             .get_or_try_init(|| {
                 let schema = self.value.clone();
                 async {
-                    // Use a blocking task, since `JSONSchema::compile` is cpu-bound
+                    // Use a blocking task, since `jsonschema::validator_for` is cpu-bound
                     tokio::task::spawn_blocking(move || {
-                        JSONSchema::compile(&schema).map_err(|e| {
+                        jsonschema::validator_for(&schema).map_err(|e| {
                             Error::new(ErrorDetails::DynamicJsonSchema {
                                 message: e.to_string(),
                             })
