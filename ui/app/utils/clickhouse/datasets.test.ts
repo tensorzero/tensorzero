@@ -552,6 +552,16 @@ describe("datapoint operations", () => {
     );
     // Test that the datapoint was properly staled
     expect(staled_getter_result).toBeNull();
+
+    // Also check that if we force it to allow stale then it is retrieved
+    const staledDatapoint = await getDatapoint(
+      "test_chat_dataset",
+      datapoint_id,
+      true,
+    );
+    expect(staledDatapoint).toBeDefined();
+    expect(staledDatapoint?.id).toEqual(datapoint_id);
+    expect(staledDatapoint?.staled_at).toBeDefined();
   });
 
   test("json datapoint lifecycle - insert, get, delete", async () => {
@@ -632,6 +642,16 @@ describe("datapoint operations", () => {
       datapoint_id,
     );
     expect(deletedDatapoint).toBeNull();
+
+    // Also check that if we force it to allow stale then it is retrieved
+    const staledDatapoint = await getDatapoint(
+      "test_json_dataset",
+      datapoint_id,
+      true,
+    );
+    expect(staledDatapoint).toBeDefined();
+    expect(staledDatapoint?.id).toEqual(datapoint_id);
+    expect(staledDatapoint?.staled_at).toBeDefined();
   });
 
   test("handles non-existent datapoint retrieval", async () => {

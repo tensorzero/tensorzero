@@ -401,8 +401,9 @@ export async function getDatasetRows(
 export async function getDatapoint(
   dataset_name: string,
   id: string,
+  allow_stale: boolean = false,
 ): Promise<ParsedDatasetRow | null> {
-  const chat_query = `
+  let chat_query = `
     SELECT
       dataset_name,
       function_name,
@@ -418,10 +419,12 @@ export async function getDatapoint(
     FROM ChatInferenceDatapoint FINAL
     WHERE dataset_name = {dataset_name:String}
       AND id = {id:String}
-      AND staled_at IS NULL
   `;
+  if (!allow_stale) {
+    chat_query += "\nAND staled_at IS NULL";
+  }
 
-  const json_query = `
+  let json_query = `
     SELECT
       dataset_name,
       function_name,
@@ -433,12 +436,14 @@ export async function getDatapoint(
       tags,
       auxiliary,
       formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at,
-      staled_at,
+      formatDateTime(staled_at, '%Y-%m-%dT%H:%i:%SZ') AS staled_at
     FROM JsonInferenceDatapoint FINAL
     WHERE dataset_name = {dataset_name:String}
       AND id = {id:String}
-      AND staled_at IS NULL
   `;
+  if (!allow_stale) {
+    json_query += "\nAND staled_at IS NULL";
+  }
 
   const [chatResult, jsonResult] = await Promise.all([
     clickhouseClient
@@ -467,6 +472,7 @@ export async function getDatapoint(
       `Expected exactly one result for dataset ${dataset_name} and id ${id}, but found ${allResults.length}`,
     );
   }
+  console.log(allResults[0]);
   const row = DatapointRowSchema.parse(allResults[0]);
   const parsedRow = parseDatapointRow(row);
 
