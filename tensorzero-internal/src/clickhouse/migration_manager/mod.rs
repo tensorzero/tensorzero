@@ -13,13 +13,12 @@ use migrations::migration_0006::Migration0006;
 use migrations::migration_0008::Migration0008;
 use migrations::migration_0009::Migration0009;
 use migrations::migration_0011::Migration0011;
-// use migrations::migration_0012::Migration0012;
 use migrations::migration_0013::Migration0013;
 use migrations::migration_0015::Migration0015;
 use migrations::migration_0016::Migration0016;
 use migrations::migration_0017::Migration0017;
 use migrations::migration_0018::Migration0018;
-use migrations::migration_0019::Migration0019;
+use migrations::migration_0020::Migration0020;
 
 use async_trait::async_trait;
 
@@ -72,12 +71,12 @@ pub async fn run(clickhouse: &ClickHouseConnectionInfo) -> Result<(), Error> {
     run_migration(&Migration0016 { clickhouse }).await?;
     run_migration(&Migration0017 { clickhouse }).await?;
     run_migration(&Migration0018 { clickhouse }).await?;
-    if std::env::var("TENSORZERO_FF_DANGEROUS_MIGRATION_0019")
+    if std::env::var("TENSORZERO_FF_DANGEROUS_MIGRATION_0020")
         .ok()
         .as_deref()
         == Some("1")
     {
-        run_migration(&Migration0019 {
+        run_migration(&Migration0020 {
             clickhouse,
             clean_start,
         })
