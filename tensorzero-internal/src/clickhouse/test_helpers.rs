@@ -20,10 +20,12 @@ pub async fn get_clickhouse() -> ClickHouseConnectionInfo {
 
 #[cfg(feature = "e2e_tests")]
 pub async fn clickhouse_flush_async_insert(clickhouse: &ClickHouseConnectionInfo) {
-    clickhouse
+    if let Err(e) = clickhouse
         .run_query("SYSTEM FLUSH ASYNC INSERT QUEUE".to_string(), None)
         .await
-        .unwrap();
+    {
+        tracing::warn!("Failed to run `SYSTEM FLUSH ASYNC INSERT QUEUE`: {}", e);
+    }
 }
 
 #[allow(dead_code)]
@@ -182,7 +184,6 @@ pub async fn select_inference_tags_clickhouse(
     Some(json)
 }
 
-#[cfg(feature = "batch_tests")]
 pub async fn select_batch_model_inference_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     inference_id: Uuid,
@@ -204,7 +205,6 @@ pub async fn select_batch_model_inference_clickhouse(
     Some(serde_json::from_str(&text).unwrap())
 }
 
-#[cfg(feature = "batch_tests")]
 pub async fn select_batch_model_inferences_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_id: Uuid,
@@ -230,7 +230,6 @@ pub async fn select_batch_model_inferences_clickhouse(
     Some(json_rows)
 }
 
-#[cfg(feature = "batch_tests")]
 pub async fn select_latest_batch_request_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     batch_id: Uuid,
@@ -238,6 +237,46 @@ pub async fn select_latest_batch_request_clickhouse(
     let query = format!(
         "SELECT * FROM BatchRequest WHERE batch_id = '{}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow",
         batch_id
+    );
+
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}
+
+#[cfg(feature = "e2e_tests")]
+pub async fn select_feedback_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    table_name: &str,
+    feedback_id: Uuid,
+) -> Option<Value> {
+    clickhouse_flush_async_insert(clickhouse_connection_info).await;
+
+    let query = format!(
+        "SELECT * FROM {} WHERE id = '{}' FORMAT JSONEachRow",
+        table_name, feedback_id
+    );
+
+    let text = clickhouse_connection_info
+        .run_query(query, None)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_str(&text).ok()?;
+    Some(json)
+}
+
+#[cfg(feature = "e2e_tests")]
+pub async fn select_feedback_by_target_id_clickhouse(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    table_name: &str,
+    target_id: Uuid,
+) -> Option<Value> {
+    let query = format!(
+        "SELECT * FROM {} WHERE target_id = '{}' FORMAT JSONEachRow",
+        table_name, target_id
     );
 
     let text = clickhouse_connection_info

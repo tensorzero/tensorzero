@@ -639,7 +639,7 @@ mod tests {
         let tool_config = ToolCallConfig {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         };
 
         // Create a sample inference config
@@ -690,7 +690,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
         let json_mode = JsonMode::Off;
 
@@ -886,7 +886,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
 
         let request_messages = vec![RequestMessage {
@@ -988,7 +988,7 @@ mod tests {
             implicit_tool_call_config: crate::tool::ToolCallConfig {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: false,
+                parallel_tool_calls: None,
             },
         });
         let output_schema = json!({
@@ -1153,7 +1153,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
 
         let request_messages = vec![RequestMessage {
@@ -1281,7 +1281,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: crate::tool::ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         });
 
         // Create an input message
@@ -1423,7 +1423,7 @@ mod tests {
             assistant_schema: None,
             tools: vec![],
             tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: false,
+            parallel_tool_calls: None,
         })));
 
         let request_messages = vec![RequestMessage {

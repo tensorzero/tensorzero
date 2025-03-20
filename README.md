@@ -145,25 +145,31 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 
 You can access any provider using the OpenAI Python client with TensorZero.
 
-1. Deploy `tensorzero/gateway` using Docker.
-   **[Detailed instructions →](https://www.tensorzero.com/docs/gateway/deployment)**
-2. Set up the TensorZero configuration.
+1. `pip install tensorzero`
+2. Optional: Set up the TensorZero configuration.
 3. Run inference:
 
 ```python
 from openai import OpenAI
+from tensorzero import patch_openai_client
+
+client = patch_openai_client(
+    OpenAI(),
+    clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",
+    config_file="config/tensorzero.toml",
+    async_setup=False,
+)
 
 
-with OpenAI(base_url="http://localhost:3000/openai/v1") as client:
-    response = client.chat.completions.create(
-        model="tensorzero::model_name::openai::gpt-4o-mini",
-        messages=[
-            {
-                "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
-            }
-        ],
-    )
+response = client.chat.completions.create(
+    model="tensorzero::model_name::openai::gpt-4o-mini",
+    messages=[
+        {
+            "role": "user",
+            "content": "Write a haiku about artificial intelligence.",
+        }
+    ],
+)
 ```
 
 See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more information.

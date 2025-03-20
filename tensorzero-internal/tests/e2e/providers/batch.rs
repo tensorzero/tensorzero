@@ -31,8 +31,8 @@ use tensorzero_internal::clickhouse::test_helpers::{
 
 use crate::providers::common::{
     check_dynamic_json_mode_inference_response, check_dynamic_tool_use_inference_response,
-    check_json_mode_inference_response, check_parallel_tool_use_inference_response,
-    check_tool_use_multi_turn_inference_response,
+    check_json_mode_inference_response, check_multi_turn_parallel_tool_use_inference_response,
+    check_parallel_tool_use_inference_response, check_tool_use_multi_turn_inference_response,
     check_tool_use_tool_choice_allowed_tools_inference_response,
     check_tool_use_tool_choice_auto_unused_inference_response,
     check_tool_use_tool_choice_auto_used_inference_response,
@@ -80,6 +80,9 @@ macro_rules! generate_batch_inference_tests {
         use $crate::providers::batch::test_allowed_tools_batch_inference_request_with_provider;
         use $crate::providers::batch::test_poll_existing_allowed_tools_batch_inference_request_with_provider;
         use $crate::providers::batch::test_poll_completed_allowed_tools_batch_inference_request_with_provider;
+        use $crate::providers::batch::test_multi_turn_parallel_tool_use_batch_inference_request_with_provider;
+        use $crate::providers::batch::test_poll_existing_multi_turn_parallel_batch_inference_request_with_provider;
+        use $crate::providers::batch::test_poll_completed_multi_turn_parallel_batch_inference_request_with_provider;
 
         #[tokio::test]
         async fn test_start_simple_image_batch_inference_request() {
@@ -209,6 +212,39 @@ macro_rules! generate_batch_inference_tests {
             if all_providers.supports_batch_inference {
                 for provider in providers {
                     test_poll_completed_multi_turn_batch_inference_request_with_provider(provider).await;
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn test_start_multi_turn_parallel_tool_use_batch_inference_request() {
+            let all_providers = $func().await;
+            let providers = all_providers.parallel_tool_use_inference;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_multi_turn_parallel_tool_use_batch_inference_request_with_provider(provider).await;
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn test_poll_existing_multi_turn_parallel_tool_use_batch_inference_request() {
+            let all_providers = $func().await;
+            let providers = all_providers.parallel_tool_use_inference;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_poll_existing_multi_turn_parallel_batch_inference_request_with_provider(provider).await;
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn test_poll_completed_multi_turn_parallel_tool_use_batch_inference_request() {
+            let all_providers = $func().await;
+            let providers = all_providers.parallel_tool_use_inference;
+            if all_providers.supports_batch_inference {
+                for provider in providers {
+                    test_poll_completed_multi_turn_parallel_batch_inference_request_with_provider(provider).await;
                 }
             }
         }
@@ -1465,7 +1501,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
     let expected_tool_params = [
         json!({
             "tool_choice": "auto",
-            "parallel_tool_calls": false,
+            "parallel_tool_calls": null,
             "tools_available": [{
                 "name": "get_temperature",
                 "description": "Get the current temperature in a given location",
@@ -1513,7 +1549,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
                 "strict": false
             }],
             "tool_choice": "auto",
-            "parallel_tool_calls": false
+            "parallel_tool_calls": null
         }),
         json!({
             "tools_available": [{
@@ -1539,7 +1575,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
                 "strict": false
             }],
             "tool_choice": "required",
-            "parallel_tool_calls": false
+            "parallel_tool_calls": null
         }),
         json!({
             "tools_available": [{
@@ -1565,7 +1601,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
                 "strict": false
             }],
             "tool_choice": "none",
-            "parallel_tool_calls": false
+            "parallel_tool_calls": null
         }),
         json!({
             "tools_available": [{
@@ -1608,7 +1644,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
             "tool_choice": {
                 "specific": "self_destruct"
             },
-            "parallel_tool_calls": false
+            "parallel_tool_calls": null
         }),
     ];
 
@@ -2118,7 +2154,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
             "strict": false
         }],
         "tool_choice": "required",
-        "parallel_tool_calls": false
+        "parallel_tool_calls": null
     });
     assert_eq!(tool_params, expected_tool_params);
 
@@ -2362,6 +2398,299 @@ pub async fn test_poll_completed_allowed_tools_batch_inference_request_with_prov
     .await;
 }
 
+pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!(
+        {
+      "function_name": "weather_helper_parallel",
+      "episode_ids": [episode_id],
+      "inputs": [{
+        "system": {
+          "assistant_name": "Dr. Mehta"
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "tool_call",
+                "arguments": "{\"location\":\"Tokyo\",\"units\":\"fahrenheit\"}",
+                "id": "1234",
+                "name": "get_temperature"
+              },
+              {
+                "type": "tool_call",
+                "arguments": "{\"location\":\"Tokyo\"}",
+                "id": "5678",
+                "name": "get_humidity"
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "tool_result",
+                "id": "1234",
+                "name": "get_temperature",
+                "result": "70"
+              },
+              {
+                "type": "tool_result",
+                "id": "5678",
+                "name": "get_humidity",
+                "result": "30"
+              }
+            ]
+          }
+        ]
+      }],
+      "parallel_tool_calls": [true],
+      "variant_name": provider.variant_name,
+      "tags": [{"test": "multi_turn_parallel_tool_use"}]
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/batch_inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+    let batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let batch_id = Uuid::parse_str(batch_id).unwrap();
+
+    let inference_ids = response_json
+        .get("inference_ids")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(inference_ids.len(), 1);
+    let inference_id = inference_ids.first().unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let episode_ids = response_json
+        .get("episode_ids")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(episode_ids.len(), 1);
+    let returned_episode_id = episode_ids.first().unwrap().as_str().unwrap();
+    let returned_episode_id = Uuid::parse_str(returned_episode_id).unwrap();
+    assert_eq!(returned_episode_id, episode_id);
+
+    // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    // Check if ClickHouse is ok - BatchModelInference Table
+    let clickhouse = get_clickhouse().await;
+    let result = select_batch_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - BatchModelInference: {result:#?}");
+
+    let id = result.get("inference_id").unwrap().as_str().unwrap();
+    let id = Uuid::parse_str(id).unwrap();
+    assert_eq!(id, inference_id);
+
+    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
+    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
+    assert_eq!(retrieved_batch_id, batch_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, payload["function_name"]);
+
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "Dr. Mehta"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."}]
+            },
+            {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "tool_call",
+                    "arguments": "{\"location\":\"Tokyo\",\"units\":\"fahrenheit\"}",
+                    "id": "1234",
+                    "name": "get_temperature"
+                  },
+                  {
+                    "type": "tool_call",
+                    "arguments": "{\"location\":\"Tokyo\"}",
+                    "id": "5678",
+                    "name": "get_humidity"
+                  }
+                ]
+              },
+            {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "tool_result",
+                    "id": "1234",
+                    "name": "get_temperature",
+                    "result": "70"
+                  },
+                  {
+                    "type": "tool_result",
+                    "id": "5678",
+                    "name": "get_humidity",
+                    "result": "30"
+                  }
+                ]
+              }
+        ],
+    });
+    assert_eq!(input, correct_input);
+
+    let input_messages = result.get("input_messages").unwrap().as_str().unwrap();
+    let input_messages: Vec<RequestMessage> = serde_json::from_str(input_messages).unwrap();
+    let expected_input_messages = vec![
+        RequestMessage {
+            role: Role::User,
+            content: vec![
+                "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+                    .to_string()
+                    .into(),
+            ],
+        },
+        RequestMessage {
+            role: Role::Assistant,
+            content: vec![ContentBlock::ToolCall(ToolCall {
+                name: "get_temperature".to_string(),
+                arguments: "{\"location\":\"Tokyo\",\"units\":\"fahrenheit\"}".to_string(),
+                id: "1234".to_string(),
+            }), ContentBlock::ToolCall(ToolCall {
+                name: "get_humidity".to_string(),
+                arguments: "{\"location\":\"Tokyo\"}".to_string(),
+                id: "5678".to_string(),
+            })],
+        },
+        RequestMessage {
+            role: Role::User,
+            content: vec![ContentBlock::ToolResult(ToolResult {
+                name: "get_temperature".to_string(),
+                result: "70".to_string(),
+                id: "1234".to_string(),
+            }), ContentBlock::ToolResult(ToolResult {
+                name: "get_humidity".to_string(),
+                result: "30".to_string(),
+                id: "5678".to_string(),
+            })],
+        },
+    ];
+    assert_eq!(input_messages, expected_input_messages);
+
+    let system = result.get("system").unwrap().as_str().unwrap();
+    assert_eq!(
+    system,
+    "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
+);
+
+    let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
+    let tool_params: Value = serde_json::from_str(tool_params).unwrap();
+    let expected_tool_params = json!({
+        "tools_available":[
+            {"description":"Get the current temperature in a given location","parameters":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"location":{"type":"string","description":"The location to get the temperature for (e.g. \"New York\")"},"units":{"type":"string","description":"The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")","enum":["fahrenheit","celsius"]}},"required":["location"],"additionalProperties":false},"name":"get_temperature","strict":false},
+            {"description": "Get the current humidity in a given location", "parameters": {"$schema": "http://json-schema.org/draft-07/schema#", "type": "object", "properties": {"location": {"type": "string", "description": "The location to get the humidity for (e.g. \"New York\")"}}, "required": ["location"], "additionalProperties": false}, "name": "get_humidity", "strict": false}
+        ],
+        "tool_choice":"auto",
+        "parallel_tool_calls": true
+    });
+    assert_eq!(tool_params, expected_tool_params);
+
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let inference_params = inference_params.get("chat_completion").unwrap();
+    assert!(inference_params.get("temperature").is_none());
+    assert!(inference_params.get("seed").is_none());
+    let expected_max_tokens = if provider.model_name.starts_with("o1") {
+        1000
+    } else {
+        100
+    };
+    assert_eq!(
+        inference_params
+            .get("max_tokens")
+            .unwrap()
+            .as_u64()
+            .unwrap(),
+        expected_max_tokens
+    );
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let output_schema = result.get("output_schema");
+    assert_eq!(output_schema, Some(&Value::Null));
+
+    let tags = result.get("tags").unwrap().as_object().unwrap();
+    assert_eq!(tags.len(), 1);
+    assert_eq!(
+        tags.get("test").unwrap().as_str().unwrap(),
+        "multi_turn_parallel_tool_use"
+    );
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(!raw_request.is_empty());
+
+    // Check if ClickHouse is ok - BatchRequest Table
+    let result = select_latest_batch_request_clickhouse(&clickhouse, batch_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - BatchRequest: {result:#?}");
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    Uuid::parse_str(id).unwrap();
+
+    let retrieved_batch_id = result.get("batch_id").unwrap().as_str().unwrap();
+    let retrieved_batch_id = Uuid::parse_str(retrieved_batch_id).unwrap();
+    assert_eq!(retrieved_batch_id, batch_id);
+    let batch_params = result.get("batch_params").unwrap().as_str().unwrap();
+    let _batch_params: Value = serde_json::from_str(batch_params).unwrap();
+    // We can't check that the batch params are exactly the same because they vary per-provider
+    // We will check that they are valid by using them instead.
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let status = result.get("status").unwrap().as_str().unwrap();
+    assert_eq!(status, "pending");
+
+    let errors = result.get("errors").unwrap().as_array().unwrap();
+    assert_eq!(errors.len(), 0);
+}
+
 pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
 
@@ -2524,7 +2853,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();
-    let expected_tool_params = json!({"tools_available":[{"description":"Get the current temperature in a given location","parameters":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"location":{"type":"string","description":"The location to get the temperature for (e.g. \"New York\")"},"units":{"type":"string","description":"The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")","enum":["fahrenheit","celsius"]}},"required":["location"],"additionalProperties":false},"name":"get_temperature","strict":false}],"tool_choice":"auto","parallel_tool_calls":false});
+    let expected_tool_params = json!({"tools_available":[{"description":"Get the current temperature in a given location","parameters":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"location":{"type":"string","description":"The location to get the temperature for (e.g. \"New York\")"},"units":{"type":"string","description":"The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")","enum":["fahrenheit","celsius"]}},"required":["location"],"additionalProperties":false},"name":"get_temperature","strict":false}],"tool_choice":"auto","parallel_tool_calls":null});
     assert_eq!(tool_params, expected_tool_params);
 
     let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
@@ -2668,6 +2997,173 @@ pub async fn test_poll_existing_multi_turn_batch_inference_request_with_provider
     assert_eq!(inferences_json.len(), 1);
     check_tool_use_multi_turn_inference_response(inferences_json[0].clone(), &provider, None, true)
         .await;
+}
+
+pub async fn test_poll_existing_multi_turn_parallel_batch_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
+    let clickhouse = get_clickhouse().await;
+    let function_name = "weather_helper_parallel";
+    let latest_pending_batch_inference = get_latest_batch_inference(
+        &clickhouse,
+        function_name,
+        &provider.variant_name,
+        "pending",
+        Some(HashMap::from([(
+            "test".to_string(),
+            "multi_turn_parallel_tool_use".to_string(),
+        )])),
+    )
+    .await;
+    let batch_inference = match latest_pending_batch_inference {
+        None => return, // No pending batch inference found, so we can't test polling
+        Some(batch_inference) => batch_inference,
+    };
+    let batch_id = batch_inference.batch_id;
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id,
+        inference_id: None,
+    });
+    let response = Client::new().get(url).send().await.unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+    match response_json.get("status").unwrap().as_str().unwrap() {
+        "pending" => return,
+        "completed" => (),
+        _ => panic!("Batch inference failed"),
+    }
+    let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
+    assert_eq!(returned_batch_id, batch_id);
+
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
+    assert_eq!(inferences_json.len(), 1);
+    // Check the response from polling by batch_id
+    check_multi_turn_parallel_tool_use_inference_response(
+        inferences_json[0].clone(),
+        &provider,
+        None,
+        true,
+    )
+    .await;
+
+    // Check the response from polling by inference_id
+    let inference_id = inferences_json[0]
+        .get("inference_id")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id,
+        inference_id: Some(Uuid::parse_str(inference_id).unwrap()),
+    });
+    let response = Client::new().get(url).send().await.unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+
+    let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
+    assert_eq!(returned_batch_id, batch_id);
+
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
+    assert_eq!(inferences_json.len(), 1);
+    check_multi_turn_parallel_tool_use_inference_response(
+        inferences_json[0].clone(),
+        &provider,
+        None,
+        true,
+    )
+    .await;
+}
+
+pub async fn test_poll_completed_multi_turn_parallel_batch_inference_request_with_provider(
+    provider: E2ETestProvider,
+) {
+    let clickhouse = get_clickhouse().await;
+    let function_name = "weather_helper_parallel";
+    let latest_pending_batch_inference = insert_fake_pending_batch_inference_data(
+        &clickhouse,
+        function_name,
+        &provider.variant_name,
+        Some(HashMap::from([(
+            "test".to_string(),
+            "multi_turn_parallel_tool_use".to_string(),
+        )])),
+    )
+    .await;
+    let ids = match latest_pending_batch_inference {
+        None => return, // No completed batch inference found, so we can't test polling
+        Some(batch_inference) => batch_inference,
+    };
+    sleep(Duration::from_millis(200)).await;
+
+    // Poll by inference_id
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id: ids.batch_id,
+        inference_id: Some(ids.inference_id),
+    });
+    let response = Client::new().get(url).send().await.unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+    match response_json.get("status").unwrap().as_str().unwrap() {
+        "pending" => panic!("Batch inference is pending"),
+        "completed" => (),
+        _ => panic!("Batch inference failed"),
+    }
+    let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
+    assert_eq!(returned_batch_id, ids.batch_id);
+
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
+    assert_eq!(inferences_json.len(), 1);
+
+    check_multi_turn_parallel_tool_use_inference_response(
+        inferences_json[0].clone(),
+        &provider,
+        None,
+        true,
+    )
+    .await;
+
+    // Poll by batch_id
+    let url = get_poll_batch_inference_url(PollPathParams {
+        batch_id: ids.batch_id,
+        inference_id: None,
+    });
+    let response = Client::new().get(url).send().await.unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json:#?}");
+    match response_json.get("status").unwrap().as_str().unwrap() {
+        "pending" => panic!("Batch inference is pending"),
+        "completed" => (),
+        _ => panic!("Batch inference failed"),
+    }
+    let returned_batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
+    let returned_batch_id = Uuid::parse_str(returned_batch_id).unwrap();
+    assert_eq!(returned_batch_id, ids.batch_id);
+
+    let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
+    assert_eq!(inferences_json.len(), 1);
+
+    check_multi_turn_parallel_tool_use_inference_response(
+        inferences_json[0].clone(),
+        &provider,
+        None,
+        true,
+    )
+    .await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -2911,7 +3407,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
             "strict": false
         }],
         "tool_choice": "auto",
-        "parallel_tool_calls": false
+        "parallel_tool_calls": null
     });
     assert_eq!(tool_params, expected_tool_params);
 
@@ -3398,8 +3894,14 @@ pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_p
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
     // Check the response from polling by batch_id
-    check_parallel_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
-        .await;
+    check_parallel_tool_use_inference_response(
+        inferences_json[0].clone(),
+        &provider,
+        None,
+        true,
+        true.into(),
+    )
+    .await;
 
     // Check the response from polling by inference_id
     let inference_id = inferences_json[0]
@@ -3425,8 +3927,14 @@ pub async fn test_poll_existing_parallel_tool_use_batch_inference_request_with_p
 
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
-    check_parallel_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
-        .await;
+    check_parallel_tool_use_inference_response(
+        inferences_json[0].clone(),
+        &provider,
+        None,
+        true,
+        true.into(),
+    )
+    .await;
 }
 
 /// If there is a completed batch inference for the function, variant, and tags
@@ -3481,8 +3989,14 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_parallel_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
-        .await;
+    check_parallel_tool_use_inference_response(
+        inferences_json[0].clone(),
+        &provider,
+        None,
+        true,
+        true.into(),
+    )
+    .await;
 
     // Poll by batch_id
     let url = get_poll_batch_inference_url(PollPathParams {
@@ -3507,8 +4021,14 @@ pub async fn test_poll_completed_parallel_tool_use_batch_inference_request_with_
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_parallel_tool_use_inference_response(inferences_json[0].clone(), &provider, None, true)
-        .await;
+    check_parallel_tool_use_inference_response(
+        inferences_json[0].clone(),
+        &provider,
+        None,
+        true,
+        true.into(),
+    )
+    .await;
 }
 
 pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ETestProvider) {

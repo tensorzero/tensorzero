@@ -32,7 +32,7 @@ pub struct Config<'c> {
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
-    pub evals: HashMap<String, EvalConfig>,    // eval name => eval config
+    pub evals: HashMap<String, Arc<EvalConfig>>, // eval name => eval config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
 }
@@ -42,6 +42,9 @@ pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,
     pub debug: bool,
+    /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
+    /// Defaults to `false`
+    pub enable_template_filesystem_access: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -168,14 +171,7 @@ impl ObjectStoreInfo {
 // improved warning messages.
 // We are attempting to find this error: `https://github.com/seanmonstar/reqwest/blob/c4a9fb060fb518f0053b98f78c7583071a760cf4/src/error.rs#L340`
 fn contains_bad_scheme_err(e: &impl StdError) -> bool {
-    let mut source: Option<&dyn StdError> = Some(e);
-    while let Some(err) = source {
-        if format!("{err:?}") == "BadScheme" {
-            return true;
-        }
-        source = err.source();
-    }
-    false
+    format!("{e:?}").contains("BadScheme")
 }
 
 /// Note: This struct and the impl below can be removed in favor of a derived impl for Deserialize once we have removed the `disable_observability` flag
@@ -190,6 +186,8 @@ pub struct UninitializedGatewayConfig {
     pub observability: ObservabilityConfig,
     #[serde(default)]
     pub debug: bool,
+    #[serde(default)]
+    pub enable_template_filesystem_access: bool,
 }
 
 impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
@@ -216,6 +214,7 @@ impl TryFrom<UninitializedGatewayConfig> for GatewayConfig {
                 async_writes: config.observability.async_writes,
             },
             debug: config.debug,
+            enable_template_filesystem_access: config.enable_template_filesystem_access,
         })
     }
 }
@@ -342,7 +341,13 @@ impl<'c> Config<'c> {
 
         // Initialize the templates
         let template_paths = config.get_templates();
-        config.templates.initialize(template_paths)?;
+        config.templates.initialize(
+            template_paths,
+            config
+                .gateway
+                .enable_template_filesystem_access
+                .then_some(base_path.clone()),
+        )?;
 
         // Validate the config
         config.validate()?;
@@ -353,7 +358,7 @@ impl<'c> Config<'c> {
         for (name, eval_config) in uninitialized_config.evals {
             let (eval_config, eval_function_configs, eval_metric_configs) =
                 eval_config.load(&config.functions, &base_path, &name)?;
-            evals.insert(name, eval_config);
+            evals.insert(name, Arc::new(eval_config));
             for (eval_function_name, eval_function_config) in eval_function_configs {
                 if config.functions.contains_key(&eval_function_name) {
                     return Err(ErrorDetails::Config {
@@ -364,6 +369,21 @@ impl<'c> Config<'c> {
                     }
                     .into());
                 }
+                for variant in eval_function_config.variants().values() {
+                    for template in variant.get_all_template_paths() {
+                        config.templates.add_template(
+                            template.path.to_string_lossy().as_ref(),
+                            &template.contents,
+                        )?;
+                    }
+                }
+                eval_function_config.validate(
+                    &config.tools,
+                    &mut config.models,
+                    &config.embedding_models,
+                    &config.templates,
+                    &eval_function_name,
+                )?;
                 config
                     .functions
                     .insert(eval_function_name, eval_function_config);
@@ -507,7 +527,7 @@ impl<'c> Config<'c> {
 
     /// Get all templates from the config
     /// The HashMap returned is a mapping from the path as given in the TOML file
-    /// (relative to the directory containing the TOML file) to the path on the filesystem.
+    /// (relative to the directory containing the TOML file) to the file contents.
     /// The former path is used as the name of the template for retrieval by variants later.
     pub fn get_templates(&self) -> HashMap<String, String> {
         let mut templates = HashMap::new();
@@ -621,7 +641,7 @@ struct UninitializedFunctionConfigChat {
     #[serde(default)]
     tool_choice: ToolChoice,
     #[serde(default)]
-    parallel_tool_calls: bool,
+    parallel_tool_calls: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2037,8 +2057,21 @@ mod tests {
             "Return a number between 0 and 1 where 1 is very NSFW and 0 is the least NSFW content.\n\n"
                 .to_string(),
         );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::eval1::llm_judge_bool::user")
+                .unwrap(),
+            include_str!("evals/llm_judge_user_template.minijinja").to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::eval1::llm_judge_float::user")
+                .unwrap(),
+            include_str!("evals/llm_judge_user_template.minijinja").to_string()
+        );
+
         // Check the total number of templates
-        assert_eq!(templates.len(), 12);
+        assert_eq!(templates.len(), 14);
     }
 
     #[test]

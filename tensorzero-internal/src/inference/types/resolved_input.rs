@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::tool::{ToolCall, ToolResult};
 
-use super::{storage::StoragePath, Base64Image, Role};
+use super::{storage::StoragePath, Base64Image, Role, Thought};
 
 /// Like `Input`, but with all network resources resolved.
 /// Currently, this is just used to fetch image URLs in the image input,
@@ -36,6 +36,7 @@ pub enum ResolvedInputMessageContent {
     RawText {
         value: String,
     },
+    Thought(Thought),
     Image(ImageWithPath),
     Unknown {
         data: Value,

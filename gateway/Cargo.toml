@@ -13,8 +13,8 @@ tracing-subscriber = { version = "0.3.18", features = [
     "json",
 ] }
 tokio = { workspace = true }
-mimalloc = "0.1.43"
-clap = "4.5.28"
+mimalloc = "0.1.44"
+clap = { workspace = true }
 
 [lints]
 workspace = true
