@@ -3,6 +3,9 @@ import { TryWithVariantButton } from "~/components/inference/TryWithVariantButto
 import { AddToDatasetButton } from "./AddToDatasetButton";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 
+const FF_ENABLE_DATASETS =
+  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
+
 interface InferenceActionsProps {
   variants: string[];
   onVariantSelect: (variant: string) => void;
@@ -32,11 +35,13 @@ export function InferenceActions({
         onVariantSelect={onVariantSelect}
         isLoading={variantInferenceIsLoading}
       />
-      <AddToDatasetButton
-        dataset_counts={dataset_counts}
-        onDatasetSelect={onDatasetSelect}
-        hasDemonstration={hasDemonstration}
-      />
+      {FF_ENABLE_DATASETS && (
+        <AddToDatasetButton
+          dataset_counts={dataset_counts}
+          onDatasetSelect={onDatasetSelect}
+          hasDemonstration={hasDemonstration}
+        />
+      )}
     </ActionBar>
   );
 }
