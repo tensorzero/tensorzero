@@ -2012,7 +2012,7 @@ def test_uuid7_import():
 
 def test_patch_sync_openai_client_sync_setup():
     client = OpenAI()
-    client = tensorzero.patch_openai_client(
+    tensorzero.patch_openai_client(
         client,
         config_file="../../examples/readme/config/tensorzero.toml",
         clickhouse_url=None,
@@ -2052,7 +2052,7 @@ async def test_patch_sync_openai_client_async_setup():
 
 def test_patch_openai_client_no_config():
     client = OpenAI()
-    client = tensorzero.patch_openai_client(client, async_setup=False)
+    tensorzero.patch_openai_client(client, async_setup=False)
     response = client.chat.completions.create(
         model="tensorzero::model_name::dummy::json",
         messages=[
@@ -2067,7 +2067,7 @@ def test_patch_openai_client_no_config():
 
 def test_patch_openai_client_with_config():
     client = OpenAI()
-    client = tensorzero.patch_openai_client(
+    tensorzero.patch_openai_client(
         client,
         config_file="../../tensorzero-internal/tests/e2e/tensorzero.toml",
         async_setup=False,
@@ -2100,7 +2100,7 @@ def test_patch_openai_client_with_config():
 @pytest.mark.asyncio
 async def test_patch_async_openai_client_sync_setup():
     client = AsyncOpenAI()
-    client = tensorzero.patch_openai_client(
+    tensorzero.patch_openai_client(
         client,
         config_file="../../examples/readme/config/tensorzero.toml",
         clickhouse_url=None,
