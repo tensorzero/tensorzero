@@ -196,6 +196,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_short_inference_request_with_provider;
         use $crate::providers::common::test_multi_turn_parallel_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_streaming_invalid_request_with_provider;
 
 
         #[tokio::test]
@@ -241,6 +242,13 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test]
+        async fn test_streaming_invalid_request() {
+            let providers = $func().await.simple_inference;
+            for provider in providers {
+                test_streaming_invalid_request_with_provider(provider).await;
+            }
+        }
 
         #[tokio::test]
         async fn test_inference_params_inference_request() {
@@ -1835,6 +1843,55 @@ pub async fn check_simple_image_inference_response(
         result.get("cached").unwrap().as_bool().unwrap(),
         should_be_cached
     );
+}
+
+pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
+    // A top_p of -100 and temperature of -100 should produce errors on all providers
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "params": {
+            "chat_completion": {
+                "temperature": -100,
+                "top_p": -100
+            }
+        },
+        "input":
+            {
+               "system": {"assistant_name": format!("Dr. Mehta")},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": true,
+    });
+
+    let mut event_source = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+
+    while let Some(event) = event_source.next().await {
+        if let Ok(reqwest_eventsource::Event::Open) = event {
+            continue;
+        }
+        let err = event.unwrap_err();
+        let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = err else {
+            panic!("Unexpected error: {err:?}")
+        };
+        assert_eq!(code, StatusCode::BAD_GATEWAY);
+        let resp: Value = resp.json().await.unwrap();
+        let err_msg = resp.get("error").unwrap().as_str().unwrap();
+        assert!(
+            err_msg.contains("top_p")
+                || err_msg.contains("topP")
+                || err_msg.contains("temperature"),
+            "Unexpected error message: {resp}"
+        );
+    }
 }
 
 pub async fn test_simple_streaming_inference_request_with_provider(provider: E2ETestProvider) {
