@@ -79,9 +79,9 @@ export function getStaledWindowQuery(run_timestamps: Date[]): string {
   if (run_timestamps.length === 0) return "";
 
   const clauses = run_timestamps.map((ts) => {
-    // Format the Date to ISO string (adjust formatting as needed for ClickHouse)
-    const formattedTimestamp = ts.toISOString();
-    return `(UUIDv7ToTimestamp(id) < '${formattedTimestamp}' AND (staled_at IS NULL OR staled_at > '${formattedTimestamp}'))`;
+    // Format the Date to ms Unix timestamp
+    const formattedTimestamp = ts.getTime();
+    return `(UUIDv7ToDateTime(id) < ${formattedTimestamp} AND (staled_at IS NULL OR staled_at > ${formattedTimestamp}))`;
   });
 
   return clauses.join(" OR ");
