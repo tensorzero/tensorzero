@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use super::{check_column_exists, check_table_exists};
+use super::{check_column_exists, check_table_exists, get_default_expression};
 use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
@@ -75,11 +75,31 @@ impl Migration for Migration0019<'_> {
             "0019",
         )
         .await?;
+        let chat_default_updated_at = get_default_expression(
+            self.clickhouse,
+            "ChatInferenceDatapoint",
+            "updated_at",
+            "0019",
+        )
+        .await?;
+        println!("{}", chat_default_updated_at);
+        let chat_default_updated_at_correct = chat_default_updated_at == "now64()";
+        let json_default_updated_at = get_default_expression(
+            self.clickhouse,
+            "JsonInferenceDatapoint",
+            "updated_at",
+            "0019",
+        )
+        .await?;
+        println!("{}", json_default_updated_at);
+        let json_default_updated_at_correct = json_default_updated_at == "now64()";
         Ok(!tag_inference_table_exists
             || !tag_chat_inference_view_exists
             || !tag_json_inference_view_exists
             || !chat_inference_datapoint_staled_at_column_exists
-            || !json_inference_datapoint_staled_at_column_exists)
+            || !json_inference_datapoint_staled_at_column_exists
+            || !chat_default_updated_at_correct
+            || !json_default_updated_at_correct)
     }
 
     async fn apply(&self) -> Result<(), Error> {
@@ -243,6 +263,12 @@ impl Migration for Migration0019<'_> {
         \n
         -- Drop the `TagInference` table\n\
         DROP TABLE IF EXISTS TagInference;
+        -- Drop the `staled_at` column in the datapoint tables\n\
+        ALTER TABLE ChatInferenceDatapoint DROP COLUMN staled_at;
+        ALTER TABLE JsonInferenceDatapoint DROP COLUMN staled_at;
+        -- Revert the change to the default of `updated_at` in the datapoint tables\n\
+        ALTER TABLE ChatInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now();
+        ALTER TABLE JsonInferenceDatapoint MODIFY COLUMN updated_at DateTime64(6, 'UTC') default now();
     "
         .to_string()
     }

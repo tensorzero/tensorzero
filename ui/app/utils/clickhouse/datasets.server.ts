@@ -472,7 +472,6 @@ export async function getDatapoint(
       `Expected exactly one result for dataset ${dataset_name} and id ${id}, but found ${allResults.length}`,
     );
   }
-  console.log(allResults[0]);
   const row = DatapointRowSchema.parse(allResults[0]);
   const parsedRow = parseDatapointRow(row);
 
