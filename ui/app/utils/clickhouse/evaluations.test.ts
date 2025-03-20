@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { getEvalResults, getEvalRunIds } from "./evaluations.server";
+import {
+  getEvalResults,
+  getEvalRunIds,
+  getEvalStatistics,
+} from "./evaluations.server";
 
 describe("getEvalRunIds", () => {
   test("should return correct run ids for entity_extraction eval", async () => {
@@ -115,5 +119,94 @@ describe("getEvalResults", () => {
     // Verify that the number of distinct datapoint ids is 6
     const datapointIds = new Set(results.map((r) => r.datapoint_id));
     expect(datapointIds.size).toBe(6);
+  });
+});
+
+describe("getEvalStatistics", () => {
+  test("should return correct statistics for haiku eval", async () => {
+    const statistics = await getEvalStatistics(
+      "foo",
+      "write_haiku",
+      "chat",
+      [
+        "tensorzero::eval_name::haiku::evaluator_name::topic_starts_with_f",
+        "tensorzero::eval_name::haiku::evaluator_name::exact_match",
+      ],
+      ["0195aef7-96fe-7d60-a2e6-5a6ea990c425"],
+    );
+    expect(statistics.length).toBe(2);
+    expect(statistics[0].eval_run_id).toBe(
+      "0195aef7-96fe-7d60-a2e6-5a6ea990c425",
+    );
+    expect(statistics[0].metric_name).toBe(
+      "tensorzero::eval_name::haiku::evaluator_name::exact_match",
+    );
+    expect(statistics[0].datapoint_count).toBe(75);
+    expect(statistics[0].mean_metric).toBe(0);
+    expect(statistics[0].stderr_metric).toBe(0);
+    expect(statistics[1].eval_run_id).toBe(
+      "0195aef7-96fe-7d60-a2e6-5a6ea990c425",
+    );
+    expect(statistics[1].metric_name).toBe(
+      "tensorzero::eval_name::haiku::evaluator_name::topic_starts_with_f",
+    );
+    expect(statistics[1].datapoint_count).toBe(75);
+    expect(statistics[1].mean_metric).toBeCloseTo(0.066667);
+    expect(statistics[1].stderr_metric).toBeCloseTo(0.02428);
+  });
+
+  test("should return correct statistics for entity_extraction eval", async () => {
+    const statistics = await getEvalStatistics(
+      "foo",
+      "extract_entities",
+      "json",
+      [
+        "tensorzero::eval_name::entity_extraction::evaluator_name::exact_match",
+        "tensorzero::eval_name::entity_extraction::evaluator_name::count_sports",
+      ],
+      [
+        "0195aef7-ec99-7312-924f-32b71c3496ee",
+        "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
+      ],
+    );
+    expect(statistics.length).toBe(4); // 2 eval runs * 2 metrics
+    expect(statistics[0].eval_run_id).toBe(
+      "0195aef7-ec99-7312-924f-32b71c3496ee",
+    );
+    expect(statistics[0].metric_name).toBe(
+      "tensorzero::eval_name::entity_extraction::evaluator_name::count_sports",
+    );
+    expect(statistics[0].datapoint_count).toBe(41);
+    expect(statistics[0].mean_metric).toBeCloseTo(0.7805);
+    expect(statistics[0].stderr_metric).toBeCloseTo(0.06545);
+    expect(statistics[1].eval_run_id).toBe(
+      "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
+    );
+    expect(statistics[1].metric_name).toBe(
+      "tensorzero::eval_name::entity_extraction::evaluator_name::count_sports",
+    );
+    expect(statistics[1].datapoint_count).toBe(41);
+    expect(statistics[1].mean_metric).toBeCloseTo(0.8048);
+    expect(statistics[1].stderr_metric).toBeCloseTo(0.06545);
+
+    expect(statistics[2].eval_run_id).toBe(
+      "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
+    );
+    expect(statistics[2].metric_name).toBe(
+      "tensorzero::eval_name::entity_extraction::evaluator_name::exact_match",
+    );
+    expect(statistics[2].datapoint_count).toBe(41);
+    expect(statistics[2].mean_metric).toBeCloseTo(0.22);
+    expect(statistics[2].stderr_metric).toBeCloseTo(0.06545);
+
+    expect(statistics[3].eval_run_id).toBe(
+      "0195aef7-ec99-7312-924f-32b71c3496ee",
+    );
+    expect(statistics[3].metric_name).toBe(
+      "tensorzero::eval_name::entity_extraction::evaluator_name::exact_match",
+    );
+    expect(statistics[3].datapoint_count).toBe(41);
+    expect(statistics[3].mean_metric).toBeCloseTo(0.54);
+    expect(statistics[3].stderr_metric).toBeCloseTo(0.0788);
   });
 });
