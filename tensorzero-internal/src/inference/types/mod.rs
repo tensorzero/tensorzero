@@ -1,6 +1,7 @@
 use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::batch::deserialize_optional_json_string;
 use derive_builder::Builder;
+use extra_body::FilteredInferenceExtraBody;
 use futures::stream::Peekable;
 use futures::Stream;
 use image::sanitize_raw_request;
@@ -38,6 +39,7 @@ use crate::{
 use crate::{jsonschema_util::DynamicJSONSchema, tool::ToolCallConfigDatabaseInsert};
 
 pub mod batch;
+pub mod extra_body;
 pub mod image;
 pub mod resolved_input;
 pub mod storage;
@@ -78,6 +80,32 @@ impl Input {
             system: self.system,
             messages,
         })
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum InferenceExtraBody {
+    Provider {
+        model_provider_name: String,
+        pointer: String,
+        value: serde_json::Value,
+    },
+    Variant {
+        variant_name: String,
+        pointer: String,
+        value: serde_json::Value,
+    },
+}
+
+impl InferenceExtraBody {
+    pub fn should_apply_variant(&self, variant_name: &str) -> bool {
+        match self {
+            InferenceExtraBody::Provider { .. } => true,
+            InferenceExtraBody::Variant {
+                variant_name: v, ..
+            } => v == variant_name,
+        }
     }
 }
 
@@ -357,6 +385,12 @@ pub enum ModelInferenceRequestJsonMode {
     Strict,
 }
 
+#[derive(Builder, Clone, Debug, Default, PartialEq, Serialize)]
+pub struct FullExtraBodyConfig {
+    pub extra_body: ExtraBodyConfig,
+    pub inference_extra_body: Vec<InferenceExtraBody>,
+}
+
 /// Top-level TensorZero type for an inference request to a particular model.
 /// This should contain all the information required to make a valid inference request
 /// for a provider, except for information about what model to actually request,
@@ -380,7 +414,7 @@ pub struct ModelInferenceRequest<'a> {
     pub json_mode: ModelInferenceRequestJsonMode,
     pub function_type: FunctionType,
     pub output_schema: Option<&'a Value>,
-    pub extra_body: Option<&'a ExtraBodyConfig>,
+    pub extra_body: Option<FullExtraBodyConfig>,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
@@ -624,6 +658,8 @@ pub struct ChatInferenceDatabaseInsert {
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u32>,
     pub tags: HashMap<String, String>,
+    #[serde(default)]
+    pub extra_body: FilteredInferenceExtraBody,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -641,6 +677,8 @@ pub struct JsonInferenceDatabaseInsert {
     pub processing_time_ms: Option<u32>,
     pub output_schema: Value,
     pub tags: HashMap<String, String>,
+    #[serde(default)]
+    pub extra_body: FilteredInferenceExtraBody,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1086,6 +1124,7 @@ impl ChatInferenceDatabaseInsert {
             output: chat_result.content,
             processing_time_ms,
             tags: metadata.tags,
+            extra_body: metadata.extra_body,
         }
     }
 }
@@ -1113,6 +1152,7 @@ impl JsonInferenceDatabaseInsert {
             processing_time_ms,
             output_schema: json_result.output_schema,
             tags: metadata.tags,
+            extra_body: metadata.extra_body,
         }
     }
 }
@@ -1275,6 +1315,7 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub templates: &'a TemplateConfig<'a>,
     pub tool_config: Option<&'b ToolCallConfig>,
     pub cached: bool,
+    pub filtered_extra_body: FilteredInferenceExtraBody,
 }
 
 // Modify the collect_chunks function to accept CollectChunksArgs
@@ -1297,6 +1338,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         templates,
         tool_config,
         cached,
+        filtered_extra_body,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -1513,6 +1555,8 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         tool_config,
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
+        // TODO: get the real extra_body
+        filtered_extra_body,
         extra_cache_key: None,
     };
     function
@@ -2319,6 +2363,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
+            filtered_extra_body: Default::default(),
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert_eq!(
@@ -2381,6 +2426,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
+            filtered_extra_body: Default::default(),
         };
         let result = collect_chunks(collect_chunks_args).await.unwrap();
         let chat_result = match result {
@@ -2474,6 +2520,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
+            filtered_extra_body: Default::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {
@@ -2551,6 +2598,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
+            filtered_extra_body: Default::default(),
         };
         let result = collect_chunks(collect_chunks_args).await;
         assert!(result.is_ok());
@@ -2627,6 +2675,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
+            filtered_extra_body: Default::default(),
         };
         let result = collect_chunks(collect_chunks_args).await;
         if let Ok(InferenceResult::Chat(chat_response)) = result {
@@ -2728,6 +2777,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
+            filtered_extra_body: Default::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {
@@ -2833,6 +2883,7 @@ mod tests {
             templates: &templates,
             tool_config: None,
             cached: false,
+            filtered_extra_body: Default::default(),
         };
         let response = collect_chunks(collect_chunks_args).await.unwrap();
         match response {

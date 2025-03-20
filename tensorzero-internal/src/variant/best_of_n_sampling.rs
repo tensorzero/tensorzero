@@ -17,7 +17,7 @@ use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
-use crate::inference::types::{ContentBlockOutput, ResolvedInput};
+use crate::inference::types::{ContentBlockOutput, FullExtraBodyConfig, ResolvedInput};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::model::ModelTable;
 use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
@@ -660,6 +660,13 @@ impl EvaluatorConfig {
             JsonMode::ImplicitTool => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
             _ => None,
         };
+        if !inference_config.filtered_extra_body.data.is_empty() {
+            return Err(ErrorDetails::InvalidRequest {
+                message: "Inference-level `extra_body` is not yet supported for best_of_n variant"
+                    .to_string(),
+            }
+            .into());
+        }
         Ok((
             ModelInferenceRequest {
                 inference_id: inference_config.ids.inference_id,
@@ -676,7 +683,10 @@ impl EvaluatorConfig {
                 json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
-                extra_body: self.inner.extra_body.as_ref(),
+                extra_body: self.inner.extra_body.clone().map(|c| FullExtraBodyConfig {
+                    extra_body: c,
+                    inference_extra_body: Default::default(),
+                }),
                 extra_cache_key: inference_config.extra_cache_key.clone(),
             },
             skipped_indices,
@@ -1223,6 +1233,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: Some(""),
+            filtered_extra_body: Default::default(),
             extra_cache_key: None,
         };
 

@@ -10,6 +10,7 @@ use crate::config_parser::PathWithContents;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::ContentBlock;
+use crate::inference::types::FullExtraBodyConfig;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::{
@@ -506,6 +507,13 @@ impl DiclConfig {
                 self.presence_penalty,
                 self.frequency_penalty,
             );
+        if !inference_config.filtered_extra_body.data.is_empty() {
+            return Err(ErrorDetails::InvalidRequest {
+                message: "Inference-level `extra_body` is not yet supported for dynamic_in_content_learning variant"
+                    .to_string(),
+            }
+            .into());
+        }
         prepare_model_inference_request(
             messages,
             system,
@@ -514,7 +522,12 @@ impl DiclConfig {
             stream,
             inference_params,
             self.json_mode,
-            self.extra_body.as_ref(),
+            self.extra_body
+                .clone()
+                .map(|extra_body| FullExtraBodyConfig {
+                    extra_body,
+                    inference_extra_body: Default::default(),
+                }),
         )
     }
 }

@@ -9,10 +9,10 @@ use tokio::time::{timeout, Duration};
 use crate::config_parser::PathWithContents;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
-use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
 };
+use crate::inference::types::{FullExtraBodyConfig, ResolvedInput};
 use crate::model::ModelTable;
 use crate::{
     endpoints::inference::InferenceParams,
@@ -529,6 +529,15 @@ impl FuserConfig {
                 self.inner.presence_penalty,
                 self.inner.frequency_penalty,
             );
+
+        if !inference_config.filtered_extra_body.data.is_empty() {
+            return Err(ErrorDetails::InvalidRequest {
+                message:
+                    "Inference-level `extra_body` is not yet supported for mixture_of_n variant"
+                        .to_string(),
+            }
+            .into());
+        }
         let model_inference_request = prepare_model_inference_request(
             messages,
             system,
@@ -537,7 +546,13 @@ impl FuserConfig {
             false,
             inference_params,
             self.inner.json_mode,
-            self.inner.extra_body.as_ref(),
+            self.inner
+                .extra_body
+                .clone()
+                .map(|extra_body| FullExtraBodyConfig {
+                    extra_body,
+                    inference_extra_body: Default::default(),
+                }),
         )?;
         Ok((model_inference_request, included_indices))
     }
@@ -1049,6 +1064,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: Some(""),
+            filtered_extra_body: Default::default(),
             extra_cache_key: None,
         };
 

@@ -76,6 +76,7 @@ pub async fn run_llm_judge_evaluator(
             max_age_s: None,
             enabled: CacheEnabledMode::On,
         },
+        extra_body: Default::default(),
     };
     let result = tensorzero_client.inference(params).await?;
     let response = match result {
