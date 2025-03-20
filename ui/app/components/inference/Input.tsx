@@ -282,12 +282,12 @@ function InputToolCallBlock({
       setDisplayValue(newValue);
 
       try {
-        const parsedValue = JSON.parse(newValue);
+        JSON.parse(newValue);
         setJsonError(null);
         onContentChange({
           type: "tool_call",
           name: block.name,
-          arguments: parsedValue,
+          arguments: newValue,
           id: block.id,
         });
       } catch {
