@@ -14,7 +14,7 @@ async-stream = { workspace = true }
 tokio-stream = { workspace = true }
 tensorzero-internal = { path = "../../tensorzero-internal" }
 url = { workspace = true }
-thiserror = "2.0.11"
+thiserror = "2.0.12"
 pyo3 = { workspace = true, optional = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
