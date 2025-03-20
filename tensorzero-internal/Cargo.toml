@@ -5,22 +5,14 @@ edition = "2021"
 
 
 [features]
-# Forward these features to the Rust client, so that the embedded gateway
+# Forward this feature to the Rust client, so that the embedded gateway
 # has the `e2e_tests` feature enabled when we run our e2e tests
 e2e_tests = ["tensorzero/e2e_tests"]
-batch_tests = ["tensorzero/batch_tests"]
-
 
 [[test]]
 name = "e2e"
 path = "tests/e2e/tests.rs"
 required-features = ["e2e_tests"]
-
-[[test]]
-name = "batch"
-path = "tests/e2e/batch.rs"
-required-features = ["batch_tests"]
-
 
 [lints]
 workspace = true

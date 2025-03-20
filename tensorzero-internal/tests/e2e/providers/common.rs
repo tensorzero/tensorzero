@@ -73,7 +73,7 @@ pub struct E2ETestProviders {
     pub reasoning_inference: Vec<E2ETestProvider>,
     #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub inference_params_dynamic_credentials: Vec<E2ETestProvider>,
-    #[cfg_attr(not(feature = "batch_tests"), allow(dead_code))]
+    #[cfg_attr(not(feature = "e2e_tests"), allow(dead_code))]
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
     pub tool_multi_turn_inference: Vec<E2ETestProvider>,
@@ -84,7 +84,6 @@ pub struct E2ETestProviders {
     pub image_inference: Vec<E2ETestProvider>,
     #[cfg(feature = "e2e_tests")]
     pub shorthand_inference: Vec<E2ETestProvider>,
-    #[cfg(feature = "batch_tests")]
     pub supports_batch_inference: bool,
 }
 
@@ -1648,7 +1647,6 @@ pub async fn check_simple_inference_response(
     );
 }
 
-#[cfg_attr(not(feature = "batch_tests"), allow(dead_code))]
 pub async fn check_simple_image_inference_response(
     response_json: Value,
     episode_id: Option<Uuid>,
