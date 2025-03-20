@@ -1,7 +1,9 @@
 #![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 
+use futures::StreamExt;
 use reqwest::{Client, StatusCode};
+use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -482,4 +484,261 @@ async fn test_redacted_thinking() {
         content_blocks
     );
     assert_eq!(content_blocks[1]["type"], "text");
+}
+
+/// This test checks that streaming inference works as expected.
+#[tokio::test]
+async fn test_streaming_thinking() {
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "model_name": "claude-3-7-sonnet-20250219-thinking",
+        "episode_id": episode_id,
+        "input": {
+            "system": "Always thinking before responding",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital of Japan?"
+                }
+            ]
+        },
+        "tool_choice": "auto",
+        "additional_tools": [
+            {
+                "description": "Gets the capital of the provided country",
+                "name": "get_capital",
+                "parameters": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "country": {
+                            "type": "string",
+                            "description": "The country to lookup",
+                        }
+                    },
+                    "required": ["country"],
+                    "additionalProperties": false
+                },
+                "strict": true,
+            }
+        ],
+        "stream": true,
+    });
+
+    let client = Client::new();
+
+    let mut event_source = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .eventsource()
+        .unwrap();
+    let mut chunks = vec![];
+    while let Some(event) = event_source.next().await {
+        let event = event.unwrap();
+        match event {
+            Event::Open => continue,
+            Event::Message(message) => {
+                if message.data == "[DONE]" {
+                    break;
+                }
+                chunks.push(message.data);
+            }
+        }
+    }
+    let mut inference_id = None;
+    let mut content_blocks: HashMap<String, String> = HashMap::new();
+    let mut content_block_signatures: HashMap<String, String> = HashMap::new();
+    for chunk in chunks {
+        let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
+        println!("Chunk: {chunk_json}");
+        inference_id = Some(
+            chunk_json
+                .get("inference_id")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_string(),
+        );
+        for block in chunk_json.get("content").unwrap().as_array().unwrap() {
+            let block_id = block.get("id").unwrap().as_str().unwrap();
+            let block_type = block.get("type").unwrap().as_str().unwrap();
+            let target = content_blocks.entry(block_id.to_string()).or_default();
+            if block_type == "text" {
+                *target += block.get("text").unwrap().as_str().unwrap();
+            } else if block_type == "thought" {
+                if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                    *target += text;
+                } else if let Some(signature) = block.get("signature").and_then(|s| s.as_str()) {
+                    *content_block_signatures
+                        .entry(block_id.to_string())
+                        .or_default() += signature;
+                }
+            } else if block_type == "tool_call" {
+                *target += block.get("raw_arguments").unwrap().as_str().unwrap();
+            } else {
+                panic!("Unexpected block type: {block_type}");
+            }
+        }
+    }
+    assert_eq!(content_blocks.len(), 3);
+    assert_eq!(content_block_signatures.len(), 1);
+    let inference_id = Uuid::parse_str(&inference_id.unwrap()).unwrap();
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input: Value = json!(
+        {
+            "system": "Always thinking before responding",
+            "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+            }
+        ]}
+    );
+    assert_eq!(input, correct_input);
+    // Check content blocks
+    let clickhouse_content_blocks = result.get("output").unwrap().as_str().unwrap();
+    let clickhouse_content_blocks: Vec<Value> =
+        serde_json::from_str(clickhouse_content_blocks).unwrap();
+    println!("Got content blocks: {clickhouse_content_blocks:?}");
+    // We should reconstruct thee blocks - a thought block, tool call, and text block
+    // Note that we currently always store the tool call first in ClickHouse
+    assert_eq!(clickhouse_content_blocks.len(), 3);
+    assert_eq!(clickhouse_content_blocks[0]["type"], "tool_call");
+    assert_eq!(clickhouse_content_blocks[1]["type"], "thought");
+    assert_eq!(clickhouse_content_blocks[2]["type"], "text");
+
+    assert_eq!(clickhouse_content_blocks[1]["text"], content_blocks["0"]);
+    assert_eq!(
+        clickhouse_content_blocks[1]["signature"],
+        content_block_signatures["0"]
+    );
+    assert_eq!(clickhouse_content_blocks[2]["text"], content_blocks["1"]);
+
+    let tool_call_id = clickhouse_content_blocks[0]["id"].as_str().unwrap();
+
+    assert_eq!(
+        clickhouse_content_blocks[0]["raw_arguments"],
+        content_blocks[tool_call_id]
+    );
+
+    // We already check ModelInference in lots of tests, so we don't check it here
+
+    // Call Anthropic again with our reconstructed blocks, and make sure that it accepts the signed thought block
+
+    let good_input = json!({
+        "model_name": "claude-3-7-sonnet-20250219-thinking",
+        "episode_id": episode_id,
+        "input": {
+            "system": "Always thinking before responding",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital of Japan?"
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "thought",
+                            "text": content_blocks["0"],
+                            "signature": content_block_signatures["0"],
+                        },
+                        {
+                            "type": "text",
+                            "text": content_blocks["1"]
+                        },
+                        {
+                            "type": "tool_call",
+                            "name": "get_capital",
+                            "id": tool_call_id,
+                            "arguments": serde_json::Value::String(content_blocks[tool_call_id].to_string()),
+                        },
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content":[
+                        {
+                            "type": "tool_result",
+                            "name": "get_capital",
+                            "id": tool_call_id,
+                            "result": "FakeCapital",
+                        },
+                    ]
+                }
+            ]
+        },
+        "tool_choice": "auto",
+        "additional_tools": [
+            {
+                "description": "Gets the capital of the provided country",
+                "name": "get_capital",
+                "parameters": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "country": {
+                            "type": "string",
+                            "description": "The country to lookup",
+                        }
+                    },
+                    "required": ["country"],
+                    "additionalProperties": false
+                },
+                "strict": true,
+            }
+        ],
+        "stream": false,
+    });
+
+    let good_response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&good_input)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(good_response.status(), StatusCode::OK);
+    let good_json = good_response.json::<Value>().await.unwrap();
+    println!("Good response: {good_json}");
+
+    // Break the signature and check that it fails
+    let bad_signature = "A".repeat(content_block_signatures["0"].len());
+    let mut bad_input = good_input.clone();
+    bad_input["input"]["messages"][1]["content"][0]["signature"] =
+        Value::String(bad_signature.clone());
+
+    let bad_response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&bad_input)
+        .send()
+        .await
+        .unwrap();
+
+    let status = bad_response.status();
+    let resp: Value = bad_response.json().await.unwrap();
+    assert_eq!(
+        status,
+        StatusCode::BAD_GATEWAY,
+        "Request should have failed: {resp}"
+    );
+    assert!(
+        resp["error"]
+            .as_str()
+            .unwrap()
+            .contains("Invalid `signature`"),
+        "Unexpected error: {resp}"
+    );
 }

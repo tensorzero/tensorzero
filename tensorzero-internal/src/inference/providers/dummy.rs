@@ -605,7 +605,8 @@ async fn create_streaming_reasoning_response(
 ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
     let thinking_chunks = thinking_chunks.into_iter().map(|chunk| {
         ContentBlockChunk::Thought(ThoughtChunk {
-            text: chunk.to_string(),
+            text: Some(chunk.to_string()),
+            signature: None,
             id: "0".to_string(),
         })
     });
