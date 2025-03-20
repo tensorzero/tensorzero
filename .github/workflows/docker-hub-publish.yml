@@ -33,11 +33,11 @@ jobs:
           platform=${{ matrix.platform.target }}
           echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
 
-      # - name: Login to DockerHub
-      #   uses: docker/login-action@v3
-      #   with:
-      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
-      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_TEMP_USERNAME }}
+          password: ${{ secrets.DOCKER_TEMP_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -47,7 +47,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ttl.sh/tensorzero
+            aaron1011/
 
       - name: Build and push ui Docker image
         id: push-ui
@@ -59,7 +59,7 @@ jobs:
           push: true
           provenance: mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: ttl.sh/tensorzero-ui
+          tags: aaron1011/tensorzero-ui
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Build and push gateway Docker image
@@ -72,7 +72,7 @@ jobs:
           push: true
           provenance: mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: ttl.sh/tensorzero-gateway
+          tags: aaron1011/tensorzero-gateway
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Export digest
@@ -103,11 +103,11 @@ jobs:
           pattern: digests-*
           merge-multiple: true
 
-      # - name: Login to Docker Hub
-      #   uses: docker/login-action@v3
-      #   with:
-      #     username: ${{ vars.DOCKERHUB_USERNAME }}
-      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_TEMP_USERNAME }}
+          password: ${{ secrets.DOCKER_TEMP_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -117,8 +117,8 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ttl.sh/tensorzero-ui
-            ttl.sh/tensorzero-gateway
+            aaron1011/tensorzero-ui
+            aaron1011/tensorzero-gateway
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -129,15 +129,15 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'ttl.sh/tensorzero-ui@sha256:%s ' *)
+            $(printf 'aaron1011/tensorzero-ui@sha256:%s ' *)
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'ttl.sh/tensorzero-gateway@sha256:%s ' *)
+            $(printf 'aaron1011/tensorzero-gateway@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ttl.sh/tensorzero-ui:${{ steps.meta.outputs.version }}
-          docker buildx imagetools inspect ttl.sh/tensorzero-gateway:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect aaron1011/tensorzero-ui:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect aaron1011/tensorzero-gateway:${{ steps.meta.outputs.version }}
