@@ -222,6 +222,34 @@ const VariantLabel = ({
         </TooltipTrigger>
         <TooltipContent side="top" className="p-2">
           <p className="text-xs">Run ID: {runId}</p>
+          <p className="text-xs">Variant: {variantName}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
+
+// Component for variant circle with color coding and tooltip
+const VariantCircle = ({
+  runId,
+  variantName,
+  allRunIds,
+}: {
+  runId: string;
+  variantName: string;
+  allRunIds: EvaluationRunInfo[];
+}) => {
+  const colorClass = getVariantColor(runId, allRunIds);
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className={`${colorClass} h-4 w-4 cursor-help rounded-full`} />
+        </TooltipTrigger>
+        <TooltipContent side="top" className="p-2">
+          <p className="text-xs">Variant: {variantName}</p>
+          <p className="text-xs">Run ID: {runId}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -424,7 +452,9 @@ export function EvaluationTable({
                     Reference Output
                   </TableHead>
                   {showVariantColumn && (
-                    <TableHead className="text-center">Variant</TableHead>
+                    <TableHead className="py-2 text-center">
+                      {/* Empty header with minimal space */}
+                    </TableHead>
                   )}
                   <TableHead className="py-2 text-center">
                     Generated Output
@@ -448,7 +478,7 @@ export function EvaluationTable({
                     Summary ({uniqueDatapoints.length} inputs)
                   </TableCell>
 
-                  {/* If showing variant column, add variant badges */}
+                  {/* If showing variant column, add variant circles */}
                   {showVariantColumn ? (
                     <TableCell className="align-middle">
                       <div className="flex flex-col gap-2">
@@ -550,10 +580,10 @@ export function EvaluationTable({
                             </TableCell>
                           )}
 
-                          {/* Variant label - only if multiple variants are selected */}
+                          {/* Variant circle - only if multiple variants are selected */}
                           {showVariantColumn && (
                             <TableCell className="text-center align-middle">
-                              <VariantLabel
+                              <VariantCircle
                                 runId={runId}
                                 variantName={
                                   runIdToVariant.get(runId) || "Unknown"
