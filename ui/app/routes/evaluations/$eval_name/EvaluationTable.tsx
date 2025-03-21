@@ -381,16 +381,18 @@ export function EvaluationTable({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="py-2 text-center">Input</TableHead>
-                  <TableHead className="py-2 text-center">
+                  <TableHead className="py-2 text-center align-top">
+                    Input
+                  </TableHead>
+                  <TableHead className="py-2 text-center align-top">
                     Reference Output
                   </TableHead>
                   {showVariantColumn && (
-                    <TableHead className="py-2 text-center">
+                    <TableHead className="py-2 text-center align-top">
                       {/* Empty header with minimal space */}
                     </TableHead>
                   )}
-                  <TableHead className="py-2 text-center">
+                  <TableHead className="py-2 text-center align-top">
                     Generated Output
                   </TableHead>
                   {/* Dynamic metric columns */}
