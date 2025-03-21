@@ -86,14 +86,13 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Results" />
-          {has_selected_runs ? (
-            <EvaluationTable
-              available_eval_run_ids={available_eval_run_ids}
-              eval_results={eval_results}
-              eval_statistics={eval_statistics}
-            />
-          ) : (
-            <div className="py-4 text-center text-gray-500">
+          <EvaluationTable
+            available_eval_run_ids={available_eval_run_ids}
+            eval_results={eval_results}
+            eval_statistics={eval_statistics}
+          />
+          {!has_selected_runs && (
+            <div className="mt-4 text-center text-gray-500">
               Select evaluation run IDs to view results
             </div>
           )}

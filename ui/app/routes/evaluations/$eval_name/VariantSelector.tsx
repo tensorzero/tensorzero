@@ -36,9 +36,7 @@ export function VariantSelector({ available_run_ids }: VariantSelectorProps) {
   const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
   const selectedRunIds = selectedRunIdsParam
     ? selectedRunIdsParam.split(",")
-    : available_run_ids.length > 0
-      ? [available_run_ids[0].eval_run_id]
-      : [];
+    : [];
 
   // State to track if dropdown is open
   const [isOpen, setIsOpen] = useState(false);
@@ -53,9 +51,6 @@ export function VariantSelector({ available_run_ids }: VariantSelectorProps) {
   // Toggle a run selection
   const toggleRun = (runId: string) => {
     if (selectedRunIds.includes(runId)) {
-      // If all runs would be deselected, don't allow it
-      if (selectedRunIds.length === 1) return;
-
       updateSelectedRunIds(selectedRunIds.filter((id) => id !== runId));
     } else {
       updateSelectedRunIds([...selectedRunIds, runId]);
@@ -95,7 +90,6 @@ export function VariantSelector({ available_run_ids }: VariantSelectorProps) {
                   key={info.eval_run_id}
                   checked={isSelected}
                   onCheckedChange={() => toggleRun(info.eval_run_id)}
-                  disabled={isSelected && selectedRunIds.length === 1}
                   className="flex items-center gap-2"
                 >
                   <div className="flex flex-1 items-center gap-2">

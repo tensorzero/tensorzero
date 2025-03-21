@@ -123,9 +123,7 @@ export function EvaluationTable({
   const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
   const selectedRunIds = selectedRunIdsParam
     ? selectedRunIdsParam.split(",")
-    : available_eval_run_ids.length > 0
-      ? [available_eval_run_ids[0].eval_run_id]
-      : [];
+    : [];
 
   // Determine if we should show the variant column
   const showVariantColumn = selectedRunIds.length > 1;
@@ -304,169 +302,171 @@ export function EvaluationTable({
       {/* Variant selector */}
       <VariantSelector available_run_ids={available_eval_run_ids} />
 
-      <div className="overflow-x-auto">
-        <div className="min-w-max">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="py-2 text-center">Input</TableHead>
-                <TableHead className="py-2 text-center">
-                  Reference Output
-                </TableHead>
-                {showVariantColumn && (
-                  <TableHead className="text-center">Variant</TableHead>
-                )}
-                <TableHead className="py-2 text-center">
-                  Generated Output
-                </TableHead>
-
-                {/* Dynamic metric columns */}
-                {uniqueMetrics.map((metric) => (
-                  <TableHead key={metric} className="py-2 text-center">
-                    <div>{metric.split("::").pop()}</div>
+      {selectedRunIds.length > 0 && (
+        <div className="overflow-x-auto">
+          <div className="min-w-max">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="py-2 text-center">Input</TableHead>
+                  <TableHead className="py-2 text-center">
+                    Reference Output
                   </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
+                  {showVariantColumn && (
+                    <TableHead className="text-center">Variant</TableHead>
+                  )}
+                  <TableHead className="py-2 text-center">
+                    Generated Output
+                  </TableHead>
 
-            <TableBody>
-              {/* Map through datapoints and variants */}
-              {uniqueDatapoints.map((datapoint) => {
-                const variantData = organizedResults.get(datapoint.id);
-                if (!variantData) return null;
+                  {/* Dynamic metric columns */}
+                  {uniqueMetrics.map((metric) => (
+                    <TableHead key={metric} className="py-2 text-center">
+                      <div>{metric.split("::").pop()}</div>
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
 
-                const filteredVariants = Array.from(
-                  variantData.entries(),
-                ).filter(([runId]) => selectedRunIds.includes(runId));
+              <TableBody>
+                {/* Map through datapoints and variants */}
+                {uniqueDatapoints.map((datapoint) => {
+                  const variantData = organizedResults.get(datapoint.id);
+                  if (!variantData) return null;
 
-                if (filteredVariants.length === 0) return null;
+                  const filteredVariants = Array.from(
+                    variantData.entries(),
+                  ).filter(([runId]) => selectedRunIds.includes(runId));
 
-                return (
-                  <React.Fragment key={datapoint.id}>
-                    {filteredVariants.map(([runId, data], index) => (
-                      <TableRow key={`input-${datapoint.id}-variant-${runId}`}>
-                        {/* Input cell - only for the first variant row */}
-                        {index === 0 && (
-                          <TableCell
-                            rowSpan={filteredVariants.length}
-                            className="max-w-[200px] align-top"
-                          >
-                            <TruncatedText text={datapoint.input} />
-                          </TableCell>
-                        )}
+                  if (filteredVariants.length === 0) return null;
 
-                        {/* Reference Output cell - only for the first variant row */}
-                        {index === 0 && (
-                          <TableCell
-                            rowSpan={filteredVariants.length}
-                            className="max-w-[200px] align-top"
-                          >
-                            <TruncatedText text={datapoint.reference_output} />
-                          </TableCell>
-                        )}
+                  return (
+                    <React.Fragment key={datapoint.id}>
+                      {filteredVariants.map(([runId, data], index) => (
+                        <TableRow key={`input-${datapoint.id}-variant-${runId}`}>
+                          {/* Input cell - only for the first variant row */}
+                          {index === 0 && (
+                            <TableCell
+                              rowSpan={filteredVariants.length}
+                              className="max-w-[200px] align-top"
+                            >
+                              <TruncatedText text={datapoint.input} />
+                            </TableCell>
+                          )}
 
-                        {/* Variant label - only if multiple variants are selected */}
-                        {showVariantColumn && (
-                          <TableCell className="text-center align-middle">
-                            <VariantLabel
-                              runId={runId}
-                              variantName={
-                                runIdToVariant.get(runId) || "Unknown"
-                              }
-                              allRunIds={available_eval_run_ids}
+                          {/* Reference Output cell - only for the first variant row */}
+                          {index === 0 && (
+                            <TableCell
+                              rowSpan={filteredVariants.length}
+                              className="max-w-[200px] align-top"
+                            >
+                              <TruncatedText text={datapoint.reference_output} />
+                            </TableCell>
+                          )}
+
+                          {/* Variant label - only if multiple variants are selected */}
+                          {showVariantColumn && (
+                            <TableCell className="text-center align-middle">
+                              <VariantLabel
+                                runId={runId}
+                                variantName={
+                                  runIdToVariant.get(runId) || "Unknown"
+                                }
+                                allRunIds={available_eval_run_ids}
+                              />
+                            </TableCell>
+                          )}
+
+                          {/* Generated output */}
+                          <TableCell className="max-w-[200px] align-middle">
+                            <TruncatedText
+                              text={data.generated_output}
+                              noWrap={true}
                             />
                           </TableCell>
-                        )}
 
-                        {/* Generated output */}
-                        <TableCell className="max-w-[200px] align-middle">
-                          <TruncatedText
-                            text={data.generated_output}
-                            noWrap={true}
-                          />
-                        </TableCell>
+                          {/* Metrics cells */}
+                          {uniqueMetrics.map((metric) => {
+                            const metricValue = data.metrics.get(metric);
+                            const isBoolean = metricValue
+                              ? isMetricBoolean(metricValue)
+                              : false;
 
-                        {/* Metrics cells */}
-                        {uniqueMetrics.map((metric) => {
-                          const metricValue = data.metrics.get(metric);
-                          const isBoolean = metricValue
-                            ? isMetricBoolean(metricValue)
-                            : false;
-
-                          return (
-                            <TableCell
-                              key={metric}
-                              className="h-[52px] text-center align-middle"
-                            >
-                              <div className="flex h-full items-center justify-center">
-                                {metricValue
-                                  ? formatMetricValue(metricValue, isBoolean)
-                                  : "-"}
-                              </div>
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    ))}
-                  </React.Fragment>
-                );
-              })}
-
-              {/* Summary Row */}
-              <TableRow className="bg-muted/50 font-medium">
-                <TableCell colSpan={2} className="text-left">
-                  Summary ({uniqueDatapoints.length} inputs)
-                </TableCell>
-
-                {/* If showing variant column, add variant badges */}
-                {showVariantColumn ? (
-                  <TableCell className="align-middle">
-                    <div className="flex flex-col gap-2">
-                      {selectedRunIds.map((runId) => (
-                        <div
-                          key={`summary-variant-${runId}`}
-                          className="flex justify-center"
-                        >
-                          <VariantLabel
-                            runId={runId}
-                            variantName={runIdToVariant.get(runId) || "Unknown"}
-                            allRunIds={available_eval_run_ids}
-                          />
-                        </div>
+                            return (
+                              <TableCell
+                                key={metric}
+                                className="h-[52px] text-center align-middle"
+                              >
+                                <div className="flex h-full items-center justify-center">
+                                  {metricValue
+                                    ? formatMetricValue(metricValue, isBoolean)
+                                    : "-"}
+                                </div>
+                              </TableCell>
+                            );
+                          })}
+                        </TableRow>
                       ))}
-                    </div>
+                    </React.Fragment>
+                  );
+                })}
+
+                {/* Summary Row */}
+                <TableRow className="bg-muted/50 font-medium">
+                  <TableCell colSpan={2} className="text-left">
+                    Summary ({uniqueDatapoints.length} inputs)
                   </TableCell>
-                ) : null}
 
-                {/* Empty cell for Generated Output column */}
-                <TableCell />
+                  {/* If showing variant column, add variant badges */}
+                  {showVariantColumn ? (
+                    <TableCell className="align-middle">
+                      <div className="flex flex-col gap-2">
+                        {selectedRunIds.map((runId) => (
+                          <div
+                            key={`summary-variant-${runId}`}
+                            className="flex justify-center"
+                          >
+                            <VariantLabel
+                              runId={runId}
+                              variantName={runIdToVariant.get(runId) || "Unknown"}
+                              allRunIds={available_eval_run_ids}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </TableCell>
+                  ) : null}
 
-                {/* Summary cells for each metric */}
-                {uniqueMetrics.map((metric) => (
-                  <TableCell key={metric} className="text-center align-middle">
-                    {selectedRunIds.map((runId) => {
-                      const metricValue = formattedStats
-                        .get(runId)
-                        ?.get(metric);
+                  {/* Empty cell for Generated Output column */}
+                  <TableCell />
 
-                      return (
-                        <div
-                          key={`summary-${runId}-${metric}`}
-                          className="flex justify-center py-1"
-                        >
-                          {metricValue !== undefined
-                            ? formatStatValue(metricValue)
-                            : "-"}
-                        </div>
-                      );
-                    })}
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableBody>
-          </Table>
+                  {/* Summary cells for each metric */}
+                  {uniqueMetrics.map((metric) => (
+                    <TableCell key={metric} className="text-center align-middle">
+                      {selectedRunIds.map((runId) => {
+                        const metricValue = formattedStats
+                          .get(runId)
+                          ?.get(metric);
+
+                        return (
+                          <div
+                            key={`summary-${runId}-${metric}`}
+                            className="flex justify-center py-1"
+                          >
+                            {metricValue !== undefined
+                              ? formatStatValue(metricValue)
+                              : "-"}
+                          </div>
+                        );
+                      })}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
