@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import React from "react";
 import { useSearchParams } from "react-router";
-import { Info, Check, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 import {
   Table,
@@ -63,9 +63,6 @@ const TruncatedContent = ({
           <TooltipTrigger asChild>
             <div className="flex cursor-help items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
               <span className="font-mono text-sm">{truncated}</span>
-              {content.length > maxLength && (
-                <Info className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-              )}
             </div>
           </TooltipTrigger>
           <TooltipContent
@@ -93,7 +90,6 @@ const TruncatedContent = ({
           <TooltipTrigger asChild>
             <div className="flex cursor-help items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
               <span className="font-mono text-sm">{inputSummary}</span>
-              <Info className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
             </div>
           </TooltipTrigger>
           <TooltipContent
@@ -125,7 +121,6 @@ const TruncatedContent = ({
           <TooltipTrigger asChild>
             <div className="flex cursor-help items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
               <span className="font-mono text-sm">{outputSummary}</span>
-              <Info className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
             </div>
           </TooltipTrigger>
           <TooltipContent
