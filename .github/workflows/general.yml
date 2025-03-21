@@ -238,9 +238,10 @@ jobs:
       # (and fail the job immediately if the build fails)
       - name: Build the gateway for E2E tests
         run: cargo build-e2e
+
       - name: Launch the gateway for E2E tests
         run: |
-          TENSORZERO_E2E_PROXY="http://localhost:3003" cargo run-e2e > e2e_logs.txt 2>&1 &
+          cargo run-e2e > e2e_logs.txt 2>&1 &
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
             echo "Waiting for gateway to be healthy..."
             sleep 1
