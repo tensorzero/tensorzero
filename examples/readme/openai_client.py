@@ -1,8 +1,10 @@
 from openai import OpenAI
 from tensorzero import patch_openai_client
 
-client = patch_openai_client(
-    OpenAI(),
+client = OpenAI()
+
+patch_openai_client(
+    client,
     clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",
     config_file="config/tensorzero.toml",
     async_setup=False,

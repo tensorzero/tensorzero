@@ -26,7 +26,7 @@ use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ImageKind, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, Usage,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk, Usage,
 };
 use crate::model::{
     build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
@@ -35,6 +35,7 @@ use crate::model::{
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
 use super::helpers::{inject_extra_body, peek_first_chunk};
+use super::openai::convert_stream_error;
 
 lazy_static! {
     static ref ANTHROPIC_BASE_URL: Url = {
@@ -321,12 +322,7 @@ fn stream_anthropic(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(ErrorDetails::InferenceServer {
-                        message: e.to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: None,
-                    }.into());
+                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -989,6 +985,10 @@ enum AnthropicMessageBlock {
     Text {
         text: String,
     },
+    Thinking {
+        thinking: String,
+        signature: String,
+    },
     TextDelta {
         text: String,
     },
@@ -999,6 +999,12 @@ enum AnthropicMessageBlock {
     },
     InputJsonDelta {
         partial_json: String,
+    },
+    SignatureDelta {
+        signature: String,
+    },
+    ThinkingDelta {
+        thinking: String,
     },
 }
 
@@ -1096,6 +1102,32 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
+            AnthropicMessageBlock::ThinkingDelta { thinking } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: Some(thinking),
+                        signature: None,
+                        id: index.to_string(),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            AnthropicMessageBlock::SignatureDelta { signature } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        signature: Some(signature),
+                        id: index.to_string(),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
             _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockDelta".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
@@ -1138,6 +1170,20 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
+            AnthropicMessageBlock::Thinking {
+                thinking,
+                signature,
+            } => Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Thought(ThoughtChunk {
+                    text: Some(thinking),
+                    signature: Some(signature),
+                    id: index.to_string(),
+                })],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            ))),
             _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockStart".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
