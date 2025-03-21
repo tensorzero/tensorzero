@@ -160,12 +160,15 @@ export const RawConfig = z
         for (const [key, func] of Object.entries(config.functions)) {
           loadedFunctions[key] = await func.load(config_path);
         }
+        for (const [key, metric] of Object.entries(config.metrics)) {
+          loadedMetrics[key] = metric;
+        }
         return {
           gateway: config.gateway,
           models: config.models,
           embedding_models: config.embedding_models,
           functions: loadedFunctions,
-          metrics: config.metrics,
+          metrics: loadedMetrics,
           tools: config.tools,
           evals: loadedEvals,
         };
