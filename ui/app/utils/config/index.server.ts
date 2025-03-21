@@ -1,7 +1,7 @@
 import { parse } from "smol-toml";
 import { promises as fs } from "fs";
 import { Config, GatewayConfig } from ".";
-import { MetricConfigSchema } from "./metric";
+import { MetricConfigSchema, type MetricConfig } from "./metric";
 import {
   DEFAULT_FUNCTION_NAME,
   getDefaultFunctionWithVariants,
@@ -11,6 +11,8 @@ import { z } from "zod";
 import { EmbeddingModelConfigSchema, ModelConfigSchema } from "./models";
 import { ToolConfigSchema } from "./tool";
 import type { FunctionConfig } from "./function";
+import type { EvalConfig } from "./evals";
+import { RawEvalConfigSchema } from "./evals.server";
 
 const DEFAULT_CONFIG_PATH = "config/tensorzero.toml";
 const ENV_CONFIG_PATH = process.env.TENSORZERO_UI_CONFIG_PATH;
@@ -67,6 +69,7 @@ export async function loadConfig(config_path?: string): Promise<Config> {
         functions: {},
         metrics: {},
         tools: {},
+        evals: {},
       };
     }
   }
@@ -131,23 +134,43 @@ export const RawConfig = z
       .default({}),
     metrics: z.record(z.string(), MetricConfigSchema).optional().default({}),
     tools: z.record(z.string(), ToolConfigSchema).optional().default({}),
+    evals: z.record(z.string(), RawEvalConfigSchema).optional().default({}),
   })
   .transform((raw) => {
     const config = { ...raw };
     return {
       ...config,
       load: async function (config_path: string): Promise<Config> {
+        const loadedMetrics: Record<string, MetricConfig> = {};
         const loadedFunctions: Record<string, FunctionConfig> = {};
+        const loadedEvals: Record<string, EvalConfig> = {};
+        for (const [key, evalItem] of Object.entries(config.evals)) {
+          const { evalConfig, functionConfigs, metricConfigs } =
+            await evalItem.load(config_path, key, config.functions);
+          loadedEvals[key] = evalConfig;
+          for (const [funcKey, funcConfig] of Object.entries(functionConfigs)) {
+            loadedFunctions[funcKey] = funcConfig;
+          }
+          for (const [metricKey, metricConfig] of Object.entries(
+            metricConfigs,
+          )) {
+            loadedMetrics[metricKey] = metricConfig;
+          }
+        }
         for (const [key, func] of Object.entries(config.functions)) {
           loadedFunctions[key] = await func.load(config_path);
+        }
+        for (const [key, metric] of Object.entries(config.metrics)) {
+          loadedMetrics[key] = metric;
         }
         return {
           gateway: config.gateway,
           models: config.models,
           embedding_models: config.embedding_models,
           functions: loadedFunctions,
-          metrics: config.metrics,
+          metrics: loadedMetrics,
           tools: config.tools,
+          evals: loadedEvals,
         };
       },
     };

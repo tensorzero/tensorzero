@@ -1,9 +1,10 @@
 import { useFetcher } from "react-router";
 import { data, isRouteErrorResponse, redirect } from "react-router";
+import { v7 as uuid } from "uuid";
 import BasicInfo from "./DatapointBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
-import { useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useConfig } from "~/context/config";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { VariantResponseModal } from "./VariantResponseModal";
@@ -14,7 +15,7 @@ import {
   type ParsedDatasetRow,
 } from "~/utils/clickhouse/datasets";
 import {
-  deleteDatapoint as deleteDatapointServer,
+  staleDatapoint,
   getDatasetCounts,
 } from "~/utils/clickhouse/datasets.server";
 import { tensorZeroClient } from "~/utils/tensorzero.server";
@@ -94,18 +95,25 @@ export async function action({ request }: ActionFunctionArgs) {
     auxiliary: formData.get("auxiliary"),
     is_deleted: formData.get("is_deleted") === "true",
     updated_at: formData.get("updated_at"),
+    staled_at: null,
   };
+
   const cleanedData = Object.fromEntries(
     Object.entries(rawData).filter(([, value]) => value !== undefined),
   );
-  const action = formData.get("action");
   const parsedFormData: ParsedDatasetRow =
     ParsedDatasetRowSchema.parse(cleanedData);
   const config = await getConfig();
   const functionConfig = config.functions[parsedFormData.function_name];
   const functionType = functionConfig?.type;
+  // await deleteDatapointServer(parsedFormData);
+  const action = formData.get("action");
   if (action === "delete") {
-    await deleteDatapointServer(parsedFormData);
+    await staleDatapoint(
+      parsedFormData.dataset_name,
+      parsedFormData.id,
+      functionType,
+    );
     const datasetCounts = await getDatasetCounts();
     const datasetCount = datasetCounts.find(
       (count) => count.dataset_name === parsedFormData.dataset_name,
@@ -123,9 +131,9 @@ export async function action({ request }: ActionFunctionArgs) {
     );
 
     try {
-      await tensorZeroClient.updateDatapoint(
+      const { id } = await tensorZeroClient.updateDatapoint(
         parsedFormData.dataset_name,
-        parsedFormData.id,
+        uuid(),
         {
           function_name: parsedFormData.function_name,
           input: transformedInput,
@@ -148,7 +156,15 @@ export async function action({ request }: ActionFunctionArgs) {
             : {}),
         },
       );
-      return { success: true };
+      await staleDatapoint(
+        parsedFormData.dataset_name,
+        parsedFormData.id,
+        functionType,
+      );
+
+      return redirect(
+        `/datasets/${parsedFormData.dataset_name}/datapoint/${id}`,
+      );
     } catch (error) {
       console.error("Error updating datapoint:", error);
       return {
@@ -188,12 +204,24 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
+  const originalInput = useMemo(() => datapoint.input, []);
   const [output, setOutput] = useState<typeof datapoint.output>(
     datapoint.output,
   );
+  const originalOutput = useMemo(() => datapoint.output, []);
   const config = useConfig();
   const [isEditing, setIsEditing] = useState(false);
   const [resetKey, setResetKey] = useState(0);
+  const [canSave, setCanSave] = useState(false);
+  useEffect(() => {
+    // Use JSON.stringify to compare object values rather than references
+    const inputChanged =
+      JSON.stringify(input) !== JSON.stringify(originalInput);
+    const outputChanged =
+      JSON.stringify(output) !== JSON.stringify(originalOutput);
+
+    setCanSave(isEditing && (inputChanged || outputChanged));
+  }, [isEditing, input, output, originalInput, originalOutput]);
 
   const toggleEditing = () => setIsEditing(!isEditing);
 
@@ -289,6 +317,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
               isDeleting={fetcher.state === "submitting" && !saveError}
               toggleEditing={toggleEditing}
               isEditing={isEditing}
+              canSave={canSave}
               onSave={handleSave}
               onReset={handleReset}
               showTryWithVariant={

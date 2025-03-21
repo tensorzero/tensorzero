@@ -268,7 +268,7 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
           max(updated_at) AS last_updated
         FROM ChatInferenceDatapoint
         FINAL
-        WHERE is_deleted = false
+        WHERE staled_at IS NULL
         GROUP BY dataset_name
         UNION ALL
         SELECT
@@ -277,7 +277,7 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
           max(updated_at) AS last_updated
         FROM JsonInferenceDatapoint
         FINAL
-        WHERE is_deleted = false
+        WHERE staled_at IS NULL
         GROUP BY dataset_name
       )
       GROUP BY dataset_name
@@ -336,7 +336,8 @@ export async function insertRowsForDataset(
       tags,
       auxiliary,
       false as is_deleted,
-      now() as updated_at
+      now64() as updated_at,
+      null as staled_at
     FROM (
       ${sourceQuery}
     ) AS t
@@ -368,7 +369,7 @@ export async function getDatasetRows(
           formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
         FROM ChatInferenceDatapoint
         FINAL
-        WHERE dataset_name = {dataset_name:String} AND is_deleted = false
+        WHERE dataset_name = {dataset_name:String} AND staled_at IS NULL
         UNION ALL
         SELECT
           id,
@@ -378,7 +379,7 @@ export async function getDatasetRows(
           formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
         FROM JsonInferenceDatapoint
         FINAL
-        WHERE dataset_name = {dataset_name:String} AND is_deleted = false
+        WHERE dataset_name = {dataset_name:String} AND staled_at IS NULL
       )
       ORDER BY updated_at DESC, id DESC
       LIMIT {page_size:UInt32}
@@ -401,13 +402,49 @@ export async function getDatasetRows(
 export async function getDatapoint(
   dataset_name: string,
   id: string,
+  allow_stale: boolean = false,
 ): Promise<ParsedDatasetRow | null> {
-  const chat_query = `
-    SELECT dataset_name,function_name, id, episode_id, input, output, tool_params, tags, auxiliary,  formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM ChatInferenceDatapoint FINAL WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
+  let chat_query = `
+    SELECT
+      dataset_name,
+      function_name,
+      id,
+      episode_id,
+      input,
+      output,
+      tool_params,
+      tags,
+      auxiliary,
+      formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at,
+      formatDateTime(staled_at, '%Y-%m-%dT%H:%i:%SZ') as staled_at
+    FROM ChatInferenceDatapoint FINAL
+    WHERE dataset_name = {dataset_name:String}
+      AND id = {id:String}
   `;
-  const json_query = `
-    SELECT dataset_name, function_name, id, episode_id, input, output, output_schema, tags, auxiliary, formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at FROM JsonInferenceDatapoint FINAL WHERE dataset_name = {dataset_name:String} AND id = {id:String} AND is_deleted = false
+  if (!allow_stale) {
+    chat_query += "\nAND staled_at IS NULL";
+  }
+
+  let json_query = `
+    SELECT
+      dataset_name,
+      function_name,
+      id,
+      episode_id,
+      input,
+      output,
+      output_schema,
+      tags,
+      auxiliary,
+      formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at,
+      formatDateTime(staled_at, '%Y-%m-%dT%H:%i:%SZ') AS staled_at
+    FROM JsonInferenceDatapoint FINAL
+    WHERE dataset_name = {dataset_name:String}
+      AND id = {id:String}
   `;
+  if (!allow_stale) {
+    json_query += "\nAND staled_at IS NULL";
+  }
 
   const [chatResult, jsonResult] = await Promise.all([
     clickhouseClient
@@ -474,38 +511,32 @@ function parseDatapointRow(row: DatapointRow): ParsedDatasetRow {
   }
 }
 
-export async function deleteDatapoint(
-  datapoint: ParsedDatasetRow,
+export async function staleDatapoint(
+  dataset_name: string,
+  datapoint_id: string,
+  function_type: "chat" | "json",
 ): Promise<void> {
   const table =
-    "tool_params" in datapoint
+    function_type === "chat"
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
-  const values = [
-    {
-      dataset_name: datapoint.dataset_name,
-      function_name: datapoint.function_name,
-      id: datapoint.id,
-      episode_id: datapoint.episode_id,
-      input: datapoint.input,
-      output: datapoint.output,
-      tags: datapoint.tags,
-      auxiliary: datapoint.auxiliary,
-      is_deleted: true,
-      // Add type-specific fields
-      ...("tool_params" in datapoint
-        ? { tool_params: datapoint.tool_params }
-        : {}),
-      ...("output_schema" in datapoint
-        ? { output_schema: datapoint.output_schema }
-        : {}),
+  const query = `
+    INSERT INTO {table:Identifier}
+    SELECT
+      * EXCEPT (staled_at, updated_at),
+      now64() as staled_at,
+      now64() as updated_at
+    FROM {table:Identifier} FINAL
+    WHERE dataset_name = {dataset_name:String}
+      AND id = {datapoint_id:String}
+  `;
+  clickhouseClient.query({
+    query,
+    query_params: {
+      table,
+      dataset_name,
+      datapoint_id,
     },
-  ];
-
-  await clickhouseClient.insert({
-    table,
-    values,
-    format: "JSONEachRow",
   });
 }
 
