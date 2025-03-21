@@ -80,7 +80,10 @@ export function VariantSelector({ available_run_ids }: VariantSelectorProps) {
             <DropdownMenuSeparator />
             {available_run_ids.map((info) => {
               const isSelected = selectedRunIds.includes(info.eval_run_id);
-              const variantColor = getVariantColorClass(info.eval_run_id);
+              const variantColor = getVariantColorClass(
+                info.eval_run_id,
+                available_run_ids,
+              );
               const runIdSegment = getLastUuidSegment(info.eval_run_id);
 
               return (
@@ -176,14 +179,12 @@ export function getVariantColor(
 }
 
 // Helper function to get color class for the small badge in dropdown
-function getVariantColorClass(runId: string) {
-  // Simple color assignment based on the UUID
-  const hashCode = Array.from(runId).reduce(
-    (acc, char) => char.charCodeAt(0) + ((acc << 5) - acc),
-    0,
-  );
+function getVariantColorClass(runId: string, allRunIds: EvaluationRunInfo[]) {
+  // Get the index just like in getVariantColor
+  const index = allRunIds.findIndex((info) => info.eval_run_id === runId);
 
-  switch (Math.abs(hashCode) % 4) {
+  // Return only the background color class
+  switch (index % 4) {
     case 0:
       return "bg-blue-600";
     case 1:

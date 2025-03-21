@@ -433,7 +433,9 @@ export function EvaluationTable({
                   {/* Dynamic metric columns */}
                   {metric_names.map((metric) => (
                     <TableHead key={metric} className="py-2 text-center">
-                      <div>{metric.split("::").pop()}</div>
+                      <div className="font-mono">
+                        {metric.split("::").pop()}
+                      </div>
                     </TableHead>
                   ))}
                 </TableRow>
