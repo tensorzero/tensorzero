@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import React from "react";
-
+import { useSearchParams } from "@remix-run/react";
 import { Info, Check, X } from "lucide-react";
 
 import {
@@ -20,19 +20,14 @@ import {
 } from "~/components/ui/tooltip";
 import { Badge } from "~/components/ui/badge";
 
-// Import the evaluation data from the separate file
-// import { evaluationData, variants } from "@/data/evaluation-data";
-// import {
-//   VariantSelector,
-//   getVariantColor,
-//   getLastUuidSegment,
-// } from "@/components/variant-selector";
+import { VariantSelector, getVariantColor, getLastUuidSegment } from "./VariantSelector";
+import type { EvaluationRunInfo, EvaluationResult } from "~/utils/clickhouse/evaluations";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
 
 // Update the TruncatedText component to truncate earlier and never wrap
-const TruncatedText = ({ text, maxLength = 30, noWrap = false }) => {
+const TruncatedText = ({ text, maxLength = 30, noWrap = false }: { text: string, maxLength?: number, noWrap?: boolean }) => {
   const truncated =
     text.length > maxLength ? text.slice(0, maxLength) + "..." : text;
 
@@ -63,273 +58,10 @@ const TruncatedText = ({ text, maxLength = 30, noWrap = false }) => {
   );
 };
 
-// Define evaluator properties - update LLM Judge 4 to have a cutoff of 10%
-const evaluatorProperties = {
-  exactMatch: { type: "boolean", goal: "max", cutoff: null },
-  llmJudge1: { type: "boolean", goal: "max", cutoff: 0.9 },
-  llmJudge2: { type: "float", goal: "max", cutoff: 0.8 },
-  llmJudge3: { type: "float", goal: "max", cutoff: null },
-  llmJudge4: { type: "boolean", goal: "min", cutoff: 0.1 }, // Added cutoff of 10%
-  llmJudge5: { type: "int", goal: "min", cutoff: 25 },
-};
-
-// Component to display evaluator properties as pills - updated to be more subtle
-const EvaluatorProperties = ({ properties }) => {
-  return (
-    <div className="mt-2 flex flex-col items-center gap-1">
-      <div className="flex justify-center gap-1">
-        <Badge
-          variant="outline"
-          className="border-muted bg-transparent text-xs text-muted-foreground"
-        >
-          {properties.type}
-        </Badge>
-        <Badge
-          variant="outline"
-          className="border-muted bg-transparent text-xs text-muted-foreground"
-        >
-          {properties.goal}
-        </Badge>
-      </div>
-      {properties.cutoff !== null && (
-        <div className="mt-1 flex justify-center">
-          <Badge
-            variant="outline"
-            className="border-muted bg-transparent text-center text-xs text-muted-foreground"
-          >
-            cutoff: {properties.cutoff}
-          </Badge>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Update the EvaluatorResult component to swap icons for boolean min
-const EvaluatorResult = ({ value, evaluatorType, isSummary = false }) => {
-  const properties = evaluatorProperties[evaluatorType];
-
-  // Handle boolean values
-  if (
-    typeof value === "boolean" ||
-    (isSummary && properties.type === "boolean")
-  ) {
-    // For summary row, value is a percentage (0-1)
-    const displayValue = isSummary
-      ? `${Math.round(value * 100)}%`
-      : value
-        ? "True"
-        : "False";
-
-    // Determine which icon to show based on goal (max or min)
-    let icon = null;
-    if (!isSummary) {
-      if (properties.goal === "max") {
-        // For max goal: checkmark for true, X for false
-        icon = value ? (
-          <Check className="mr-1 h-3 w-3 flex-shrink-0" />
-        ) : (
-          <X className="mr-1 h-3 w-3 flex-shrink-0" />
-        );
-      } else {
-        // For min goal: X for true, checkmark for false (swapped)
-        icon = value ? (
-          <X className="mr-1 h-3 w-3 flex-shrink-0" />
-        ) : (
-          <Check className="mr-1 h-3 w-3 flex-shrink-0" />
-        );
-      }
-    }
-
-    // Boolean max: true/high % = green, false/low % = red
-    if (properties.goal === "max") {
-      // For summary row with cutoff
-      if (isSummary && properties.cutoff !== null) {
-        const textColor =
-          value >= properties.cutoff ? "text-green-700" : "text-red-700";
-
-        return (
-          <span className={`${textColor} whitespace-nowrap`}>
-            {displayValue}
-          </span>
-        );
-      }
-      // Regular boolean or summary without cutoff
-      else {
-        return (
-          <span
-            className={`${value ? "text-green-700" : "text-red-700"} flex items-center whitespace-nowrap`}
-          >
-            {icon}
-            {displayValue}
-          </span>
-        );
-      }
-    }
-    // Boolean min: true/high % = red, false/low % = green
-    else {
-      // For summary row with cutoff
-      if (isSummary && properties.cutoff !== null) {
-        const textColor =
-          value <= properties.cutoff ? "text-green-700" : "text-red-700";
-
-        return (
-          <span className={`${textColor} whitespace-nowrap`}>
-            {displayValue}
-          </span>
-        );
-      }
-      // Regular boolean or summary without cutoff
-      else {
-        return (
-          <span
-            className={`${value ? "text-red-700" : "text-green-700"} flex items-center whitespace-nowrap`}
-          >
-            {icon}
-            {displayValue}
-          </span>
-        );
-      }
-    }
-  }
-
-  // Rest of the function remains unchanged
-  // Handle numeric values
-  else if (typeof value === "number") {
-    // For LLM Judge 5 (int type) or any int in summary
-    if (
-      properties.type === "int" ||
-      (isSummary && evaluatorType === "llmJudge5")
-    ) {
-      // Format the value - for summary, round to nearest integer
-      const displayValue = isSummary ? Math.round(value) : value;
-
-      // Min goal with cutoff
-      if (properties.goal === "min" && properties.cutoff !== null) {
-        const textColor =
-          value <= properties.cutoff ? "text-green-700" : "text-red-700";
-
-        return (
-          <span className={`${textColor} whitespace-nowrap`}>
-            {displayValue}
-          </span>
-        );
-      }
-      // Max goal with cutoff
-      else if (properties.goal === "max" && properties.cutoff !== null) {
-        const textColor =
-          value >= properties.cutoff ? "text-green-700" : "text-red-700";
-
-        return (
-          <span className={`${textColor} whitespace-nowrap`}>
-            {displayValue}
-          </span>
-        );
-      }
-      // No cutoff - use grayscale
-      else {
-        return (
-          <span className="whitespace-nowrap text-gray-700">
-            {displayValue}
-          </span>
-        );
-      }
-    }
-    // For float values (0-1 range)
-    else if (
-      (value >= 0 && value <= 1) ||
-      (isSummary &&
-        (evaluatorType === "llmJudge2" || evaluatorType === "llmJudge3"))
-    ) {
-      const percentage = Math.round(value * 100);
-
-      // Float max with cutoff
-      if (properties.goal === "max" && properties.cutoff !== null) {
-        const textColor =
-          value >= properties.cutoff ? "text-green-700" : "text-red-700";
-
-        return (
-          <span className={`${textColor} whitespace-nowrap`}>
-            {percentage}%
-          </span>
-        );
-      }
-      // Float min with cutoff
-      else if (properties.goal === "min" && properties.cutoff !== null) {
-        const textColor =
-          value <= properties.cutoff ? "text-green-700" : "text-red-700";
-
-        return (
-          <span className={`${textColor} whitespace-nowrap`}>
-            {percentage}%
-          </span>
-        );
-      }
-      // No cutoff - use grayscale
-      else {
-        return (
-          <span className="whitespace-nowrap text-gray-700">{percentage}%</span>
-        );
-      }
-    }
-  }
-
-  return <span className="whitespace-nowrap">{value.toString()}</span>;
-};
-
-// Calculate summary values for the evaluators by variant
-const calculateSummaryByVariant = (data, variantId) => {
-  const summary = {
-    exactMatch: 0,
-    llmJudge1: 0,
-    llmJudge2: 0,
-    llmJudge3: 0,
-    llmJudge4: 0,
-    llmJudge5: 0,
-  };
-
-  let count = 0;
-
-  // Count the number of true values for boolean evaluators
-  // Calculate the sum for numeric evaluators
-  data.forEach((row) => {
-    const variantData = row.variants.find((v) => v.variantId === variantId);
-    if (variantData) {
-      count++;
-      Object.keys(summary).forEach((key) => {
-        const value = variantData.evaluators[key];
-        if (typeof value === "boolean") {
-          summary[key] += value ? 1 : 0;
-        } else {
-          summary[key] += value;
-        }
-      });
-    }
-  });
-
-  // Convert counts to percentages for boolean evaluators
-  // Calculate averages for numeric evaluators
-  if (count > 0) {
-    Object.keys(summary).forEach((key) => {
-      const properties = evaluatorProperties[key];
-      if (properties.type === "boolean") {
-        summary[key] = summary[key] / count;
-      } else {
-        summary[key] = summary[key] / count;
-      }
-    });
-  }
-
-  return summary;
-};
-
 // Component for variant label with color coding and run ID tooltip
-const VariantLabel = ({ variantId }) => {
-  const variant = variants.find((v) => v.id === variantId);
-  if (!variant) return null;
-
-  const colorClass = getVariantColor(variantId);
-  const runIdSegment = getLastUuidSegment(variant.runId);
+const VariantLabel = ({ runId, variantName, allRunIds }: { runId: string, variantName: string, allRunIds: EvaluationRunInfo[] }) => {
+  const colorClass = getVariantColor(runId, allRunIds);
+  const runIdSegment = getLastUuidSegment(runId);
 
   return (
     <TooltipProvider>
@@ -338,43 +70,184 @@ const VariantLabel = ({ variantId }) => {
           <Badge
             className={`${colorClass} flex cursor-help items-center gap-1.5 px-2 py-1`}
           >
-            <span>{variant.name}</span>
+            <span>{variantName}</span>
             <span className="border-l border-white/30 pl-1.5 text-xs opacity-80">
               {runIdSegment}
             </span>
           </Badge>
         </TooltipTrigger>
         <TooltipContent side="top" className="p-2">
-          <p className="text-xs">Run ID: {variant.runId}</p>
+          <p className="text-xs">Run ID: {runId}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
 };
 
-export function EvaluationTable() {
-  // State for selected variants - start with only baseline selected
-  const [selectedVariants, setSelectedVariants] = useState(["baseline"]);
+interface EvaluationTableProps {
+  available_eval_run_ids: EvaluationRunInfo[];
+  eval_results: EvaluationResult[];
+  eval_statistics: Array<{
+    eval_run_id: string;
+    metric_name: string;
+    datapoint_count: number;
+    mean_metric: number;
+    stderr_metric: number;
+  }>;
+}
+
+export function EvaluationTable({ available_eval_run_ids, eval_results, eval_statistics }: EvaluationTableProps) {
+  const [searchParams] = useSearchParams();
+  const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
+  const selectedRunIds = selectedRunIdsParam ? selectedRunIdsParam.split(",") :
+    available_eval_run_ids.length > 0 ? [available_eval_run_ids[0].eval_run_id] : [];
 
   // Determine if we should show the variant column
-  const showVariantColumn = selectedVariants.length > 1;
+  const showVariantColumn = selectedRunIds.length > 1;
 
-  // Calculate summary values for each selected variant
-  const summaryByVariant = {};
-  selectedVariants.forEach((variantId) => {
-    summaryByVariant[variantId] = calculateSummaryByVariant(
-      evaluationData,
-      variantId,
-    );
-  });
+  // Get all unique metric names from the data
+  const uniqueMetrics = useMemo(() => {
+    const metrics = new Set<string>();
+    eval_results.forEach(result => {
+      if (result.metric_name) {
+        metrics.add(result.metric_name);
+      }
+    });
+    return Array.from(metrics);
+  }, [eval_results]);
+
+  // Get all unique datapoints from the results
+  const uniqueDatapoints = useMemo(() => {
+    const datapoints = new Map<string, {
+      id: string,
+      input: string,
+      reference_output: string
+    }>();
+
+    eval_results.forEach(result => {
+      if (!datapoints.has(result.datapoint_id)) {
+        datapoints.set(result.datapoint_id, {
+          id: result.datapoint_id,
+          input: result.input,
+          reference_output: result.reference_output
+        });
+      }
+    });
+
+    return Array.from(datapoints.values());
+  }, [eval_results]);
+
+  // Organize results by datapoint and run ID
+  const organizedResults = useMemo(() => {
+    const organized = new Map<string, Map<string, {
+      generated_output: string,
+      metrics: Map<string, string>
+    }>>();
+
+    // Initialize with empty maps for all datapoints
+    uniqueDatapoints.forEach(datapoint => {
+      organized.set(datapoint.id, new Map());
+    });
+
+    // Fill in the results
+    eval_results.forEach(result => {
+      if (!result.datapoint_id || !result.eval_run_id) return;
+
+      const datapointMap = organized.get(result.datapoint_id);
+      if (!datapointMap) return;
+
+      if (!datapointMap.has(result.eval_run_id)) {
+        datapointMap.set(result.eval_run_id, {
+          generated_output: result.generated_output,
+          metrics: new Map()
+        });
+      }
+
+      const runData = datapointMap.get(result.eval_run_id);
+      if (runData && result.metric_name) {
+        runData.metrics.set(result.metric_name, result.metric_value);
+      }
+    });
+
+    return organized;
+  }, [eval_results, uniqueDatapoints]);
+
+  // Map run ID to variant name
+  const runIdToVariant = useMemo(() => {
+    const map = new Map<string, string>();
+    available_eval_run_ids.forEach(info => {
+      map.set(info.eval_run_id, info.variant_name);
+    });
+    return map;
+  }, [available_eval_run_ids]);
+
+  // Format statistics for display
+  const formattedStats = useMemo(() => {
+    const stats = new Map<string, Map<string, number>>();
+
+    available_eval_run_ids.forEach(info => {
+      stats.set(info.eval_run_id, new Map());
+    });
+
+    eval_statistics.forEach(stat => {
+      const runStats = stats.get(stat.eval_run_id);
+      if (runStats) {
+        runStats.set(stat.metric_name, stat.mean_metric);
+      }
+    });
+
+    return stats;
+  }, [eval_statistics, available_eval_run_ids]);
+
+  // Determine if metric is boolean or float based on its value
+  const isMetricBoolean = (value: string): boolean => {
+    return value === "true" || value === "false" || value === "1" || value === "0";
+  };
+
+  // Format metric value for display
+  const formatMetricValue = (value: string, isBoolean = false): React.ReactNode => {
+    if (isBoolean) {
+      const boolValue = value === "true" || value === "1";
+      const icon = boolValue ?
+        <Check className="mr-1 h-3 w-3 flex-shrink-0" /> :
+        <X className="mr-1 h-3 w-3 flex-shrink-0" />;
+
+      return (
+        <span className={`flex items-center whitespace-nowrap ${boolValue ? "text-green-700" : "text-red-700"}`}>
+          {icon}
+          {boolValue ? "True" : "False"}
+        </span>
+      );
+    } else {
+      // Try to parse as number
+      const numValue = parseFloat(value);
+      if (!isNaN(numValue)) {
+        // If it's between 0 and 1, display as percentage
+        if (numValue >= 0 && numValue <= 1) {
+          const percentage = Math.round(numValue * 100);
+          return <span className="whitespace-nowrap text-gray-700">{percentage}%</span>;
+        }
+        return <span className="whitespace-nowrap text-gray-700">{numValue}</span>;
+      }
+
+      // Default case: return as string
+      return <span className="whitespace-nowrap">{value}</span>;
+    }
+  };
+
+  // Format statistic for display
+  const formatStatValue = (value: number): React.ReactNode => {
+    if (value >= 0 && value <= 1) {
+      const percentage = Math.round(value * 100);
+      return <span className="whitespace-nowrap text-gray-700">{percentage}%</span>;
+    }
+    return <span className="whitespace-nowrap text-gray-700">{value.toFixed(2)}</span>;
+  };
 
   return (
     <div>
       {/* Variant selector */}
-      <VariantSelector
-        selectedVariants={selectedVariants}
-        onVariantChange={setSelectedVariants}
-      />
+      <VariantSelector available_run_ids={available_eval_run_ids} />
 
       <div className="overflow-x-auto">
         <div className="min-w-max">
@@ -391,67 +264,38 @@ export function EvaluationTable() {
                 <TableHead className="py-2 text-center">
                   Generated Output
                 </TableHead>
-                <TableHead className="py-2 text-center">
-                  <div>Exact Match</div>
-                  <EvaluatorProperties
-                    properties={evaluatorProperties.exactMatch}
-                  />
-                </TableHead>
-                <TableHead className="py-2 text-center">
-                  <div>LLM Judge 1</div>
-                  <EvaluatorProperties
-                    properties={evaluatorProperties.llmJudge1}
-                  />
-                </TableHead>
-                <TableHead className="py-2 text-center">
-                  <div>LLM Judge 2</div>
-                  <EvaluatorProperties
-                    properties={evaluatorProperties.llmJudge2}
-                  />
-                </TableHead>
-                <TableHead className="py-2 text-center">
-                  <div>LLM Judge 3</div>
-                  <EvaluatorProperties
-                    properties={evaluatorProperties.llmJudge3}
-                  />
-                </TableHead>
-                <TableHead className="py-2 text-center">
-                  <div>LLM Judge 4</div>
-                  <EvaluatorProperties
-                    properties={evaluatorProperties.llmJudge4}
-                  />
-                </TableHead>
-                <TableHead className="py-2 text-center">
-                  <div>LLM Judge 5</div>
-                  <EvaluatorProperties
-                    properties={evaluatorProperties.llmJudge5}
-                  />
-                </TableHead>
+
+                {/* Dynamic metric columns */}
+                {uniqueMetrics.map(metric => (
+                  <TableHead key={metric} className="py-2 text-center">
+                    <div>{metric.split('::').pop()}</div>
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
 
             <TableBody>
-              {/* Group rows by input */}
-              {evaluationData.map((inputData) => {
-                const filteredVariants = inputData.variants.filter((v) =>
-                  selectedVariants.includes(v.variantId),
-                );
+              {/* Map through datapoints and variants */}
+              {uniqueDatapoints.map((datapoint) => {
+                const variantData = organizedResults.get(datapoint.id);
+                if (!variantData) return null;
+
+                const filteredVariants = Array.from(variantData.entries())
+                  .filter(([runId]) => selectedRunIds.includes(runId));
 
                 if (filteredVariants.length === 0) return null;
 
                 return (
-                  <React.Fragment key={inputData.inputId}>
-                    {filteredVariants.map((variant, index) => (
-                      <TableRow
-                        key={`input-${inputData.inputId}-variant-${variant.variantId}`}
-                      >
+                  <React.Fragment key={datapoint.id}>
+                    {filteredVariants.map(([runId, data], index) => (
+                      <TableRow key={`input-${datapoint.id}-variant-${runId}`}>
                         {/* Input cell - only for the first variant row */}
                         {index === 0 && (
                           <TableCell
                             rowSpan={filteredVariants.length}
                             className="max-w-[200px] align-top"
                           >
-                            <TruncatedText text={inputData.input} />
+                            <TruncatedText text={datapoint.input} />
                           </TableCell>
                         )}
 
@@ -461,74 +305,42 @@ export function EvaluationTable() {
                             rowSpan={filteredVariants.length}
                             className="max-w-[200px] align-top"
                           >
-                            <TruncatedText text={inputData.referenceOutput} />
+                            <TruncatedText text={datapoint.reference_output} />
                           </TableCell>
                         )}
 
                         {/* Variant label - only if multiple variants are selected */}
                         {showVariantColumn && (
                           <TableCell className="text-center align-middle">
-                            <VariantLabel variantId={variant.variantId} />
+                            <VariantLabel
+                              runId={runId}
+                              variantName={runIdToVariant.get(runId) || "Unknown"}
+                              allRunIds={available_eval_run_ids}
+                            />
                           </TableCell>
                         )}
 
                         {/* Generated output */}
                         <TableCell className="max-w-[200px] align-middle">
                           <TruncatedText
-                            text={variant.generatedOutput}
+                            text={data.generated_output}
                             noWrap={true}
                           />
                         </TableCell>
 
-                        {/* Evaluator results */}
-                        <TableCell className="h-[52px] text-center align-middle">
-                          <div className="flex h-full items-center justify-center">
-                            <EvaluatorResult
-                              value={variant.evaluators.exactMatch}
-                              evaluatorType="exactMatch"
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell className="h-[52px] text-center align-middle">
-                          <div className="flex h-full items-center justify-center">
-                            <EvaluatorResult
-                              value={variant.evaluators.llmJudge1}
-                              evaluatorType="llmJudge1"
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell className="h-[52px] text-center align-middle">
-                          <div className="flex h-full items-center justify-center">
-                            <EvaluatorResult
-                              value={variant.evaluators.llmJudge2}
-                              evaluatorType="llmJudge2"
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell className="h-[52px] text-center align-middle">
-                          <div className="flex h-full items-center justify-center">
-                            <EvaluatorResult
-                              value={variant.evaluators.llmJudge3}
-                              evaluatorType="llmJudge3"
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell className="h-[52px] text-center align-middle">
-                          <div className="flex h-full items-center justify-center">
-                            <EvaluatorResult
-                              value={variant.evaluators.llmJudge4}
-                              evaluatorType="llmJudge4"
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell className="h-[52px] text-center align-middle">
-                          <div className="flex h-full items-center justify-center">
-                            <EvaluatorResult
-                              value={variant.evaluators.llmJudge5}
-                              evaluatorType="llmJudge5"
-                            />
-                          </div>
-                        </TableCell>
+                        {/* Metrics cells */}
+                        {uniqueMetrics.map(metric => {
+                          const metricValue = data.metrics.get(metric);
+                          const isBoolean = metricValue ? isMetricBoolean(metricValue) : false;
+
+                          return (
+                            <TableCell key={metric} className="h-[52px] text-center align-middle">
+                              <div className="flex h-full items-center justify-center">
+                                {metricValue ? formatMetricValue(metricValue, isBoolean) : "-"}
+                              </div>
+                            </TableCell>
+                          );
+                        })}
                       </TableRow>
                     ))}
                   </React.Fragment>
@@ -538,19 +350,23 @@ export function EvaluationTable() {
               {/* Summary Row */}
               <TableRow className="bg-muted/50 font-medium">
                 <TableCell colSpan={2} className="text-left">
-                  Summary ({evaluationData.length} inputs)
+                  Summary ({uniqueDatapoints.length} inputs)
                 </TableCell>
 
                 {/* If showing variant column, add variant badges */}
                 {showVariantColumn ? (
                   <TableCell className="align-middle">
                     <div className="flex flex-col gap-2">
-                      {selectedVariants.map((variantId) => (
+                      {selectedRunIds.map((runId) => (
                         <div
-                          key={`summary-variant-${variantId}`}
+                          key={`summary-variant-${runId}`}
                           className="flex justify-center"
                         >
-                          <VariantLabel variantId={variantId} />
+                          <VariantLabel
+                            runId={runId}
+                            variantName={runIdToVariant.get(runId) || "Unknown"}
+                            allRunIds={available_eval_run_ids}
+                          />
                         </div>
                       ))}
                     </div>
@@ -560,91 +376,23 @@ export function EvaluationTable() {
                 {/* Empty cell for Generated Output column */}
                 <TableCell />
 
-                {/* Summary cells for each evaluator - without variant badges */}
-                <TableCell className="text-center align-middle">
-                  {selectedVariants.map((variantId) => (
-                    <div
-                      key={`summary-${variantId}-exactMatch`}
-                      className="flex justify-center py-1"
-                    >
-                      <EvaluatorResult
-                        value={summaryByVariant[variantId].exactMatch}
-                        evaluatorType="exactMatch"
-                        isSummary={true}
-                      />
-                    </div>
-                  ))}
-                </TableCell>
-                <TableCell className="text-center align-middle">
-                  {selectedVariants.map((variantId) => (
-                    <div
-                      key={`summary-${variantId}-llmJudge1`}
-                      className="flex justify-center py-1"
-                    >
-                      <EvaluatorResult
-                        value={summaryByVariant[variantId].llmJudge1}
-                        evaluatorType="llmJudge1"
-                        isSummary={true}
-                      />
-                    </div>
-                  ))}
-                </TableCell>
-                <TableCell className="text-center align-middle">
-                  {selectedVariants.map((variantId) => (
-                    <div
-                      key={`summary-${variantId}-llmJudge2`}
-                      className="flex justify-center py-1"
-                    >
-                      <EvaluatorResult
-                        value={summaryByVariant[variantId].llmJudge2}
-                        evaluatorType="llmJudge2"
-                        isSummary={true}
-                      />
-                    </div>
-                  ))}
-                </TableCell>
-                <TableCell className="text-center align-middle">
-                  {selectedVariants.map((variantId) => (
-                    <div
-                      key={`summary-${variantId}-llmJudge3`}
-                      className="flex justify-center py-1"
-                    >
-                      <EvaluatorResult
-                        value={summaryByVariant[variantId].llmJudge3}
-                        evaluatorType="llmJudge3"
-                        isSummary={true}
-                      />
-                    </div>
-                  ))}
-                </TableCell>
-                <TableCell className="text-center align-middle">
-                  {selectedVariants.map((variantId) => (
-                    <div
-                      key={`summary-${variantId}-llmJudge4`}
-                      className="flex justify-center py-1"
-                    >
-                      <EvaluatorResult
-                        value={summaryByVariant[variantId].llmJudge4}
-                        evaluatorType="llmJudge4"
-                        isSummary={true}
-                      />
-                    </div>
-                  ))}
-                </TableCell>
-                <TableCell className="text-center align-middle">
-                  {selectedVariants.map((variantId) => (
-                    <div
-                      key={`summary-${variantId}-llmJudge5`}
-                      className="flex justify-center py-1"
-                    >
-                      <EvaluatorResult
-                        value={summaryByVariant[variantId].llmJudge5}
-                        evaluatorType="llmJudge5"
-                        isSummary={true}
-                      />
-                    </div>
-                  ))}
-                </TableCell>
+                {/* Summary cells for each metric */}
+                {uniqueMetrics.map(metric => (
+                  <TableCell key={metric} className="text-center align-middle">
+                    {selectedRunIds.map((runId) => {
+                      const metricValue = formattedStats.get(runId)?.get(metric);
+
+                      return (
+                        <div
+                          key={`summary-${runId}-${metric}`}
+                          className="flex justify-center py-1"
+                        >
+                          {metricValue !== undefined ? formatStatValue(metricValue) : "-"}
+                        </div>
+                      );
+                    })}
+                  </TableCell>
+                ))}
               </TableRow>
             </TableBody>
           </Table>
