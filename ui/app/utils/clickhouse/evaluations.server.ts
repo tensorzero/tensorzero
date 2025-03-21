@@ -22,7 +22,7 @@ export async function getEvalRunIds(
     WHERE name_tag.key = 'tensorzero::eval_name'
       AND name_tag.value = {eval_name:String}
       AND run_tag.key = 'tensorzero::eval_run_id'
-    ORDER BY eval_run_id, variant_name
+    ORDER BY toUInt128(toUUID(eval_run_id)) DESC
     LIMIT {limit:UInt32}
     OFFSET {offset:UInt32}
     `;
@@ -75,7 +75,7 @@ export async function getEvalResults(
       AND (
         ${staled_window_query}
       )
-    ORDER BY id
+    ORDER BY toUInt128(id) DESC
     LIMIT {limit:UInt32}
     OFFSET {offset:UInt32}
   ) dp
