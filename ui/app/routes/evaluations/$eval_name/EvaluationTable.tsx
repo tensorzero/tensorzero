@@ -29,49 +29,175 @@ import type {
   EvaluationStatistics,
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
+import type { Input } from "~/utils/clickhouse/common";
+import type {
+  JsonInferenceOutput,
+  ContentBlockOutput,
+} from "~/utils/clickhouse/common";
+import InputComponent from "~/components/inference/Input";
+import OutputComponent from "~/components/inference/Output";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
 
-// Update the TruncatedText component to truncate earlier and never wrap
-const TruncatedText = ({
-  text,
+// Enhanced TruncatedText component that can handle complex structures
+const TruncatedContent = ({
+  content,
   maxLength = 30,
-  noWrap = false,
+  type = "text",
 }: {
-  text: string;
+  content: string | Input | JsonInferenceOutput | ContentBlockOutput[];
   maxLength?: number;
-  noWrap?: boolean;
+  type?: "text" | "input" | "output";
 }) => {
-  const truncated =
-    text.length > maxLength ? text.slice(0, maxLength) + "..." : text;
+  // For simple strings, use the existing TruncatedText component
+  if (typeof content === "string" && type === "text") {
+    const truncated =
+      content.length > maxLength
+        ? content.slice(0, maxLength) + "..."
+        : content;
 
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            className={`flex cursor-help items-center gap-1 ${noWrap ? "overflow-hidden text-ellipsis whitespace-nowrap" : ""}`}
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex cursor-help items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
+              <span className="font-mono text-sm">{truncated}</span>
+              {content.length > maxLength && (
+                <Info className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+              )}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent
+            side="right"
+            align="start"
+            sideOffset={5}
+            className="tooltip-scrollable max-h-[60vh] max-w-md overflow-auto shadow-lg"
+            avoidCollisions={true}
           >
-            <span className="font-mono text-sm">{truncated}</span>
-            {text.length > maxLength && (
+            <pre className="whitespace-pre-wrap text-xs">{content}</pre>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  // For Input type
+  if (type === "input" && typeof content !== "string") {
+    // For the truncated display, just show a brief summary
+    const inputSummary = getInputSummary(content as Input);
+
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex cursor-help items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
+              <span className="font-mono text-sm">{inputSummary}</span>
               <Info className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-            )}
-          </div>
-        </TooltipTrigger>
-        <TooltipContent
-          side="right"
-          align="start"
-          sideOffset={5}
-          className="tooltip-scrollable max-h-[60vh] max-w-md overflow-auto p-4 shadow-lg"
-          avoidCollisions={true}
-        >
-          <pre className="whitespace-pre-wrap text-xs">{text}</pre>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
+            </div>
+          </TooltipTrigger>
+          <TooltipContent
+            side="right"
+            align="start"
+            sideOffset={5}
+            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto p-4 shadow-lg"
+            avoidCollisions={true}
+          >
+            <div className="w-full origin-top-left scale-90 transform">
+              <InputComponent input={content as Input} />
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  // For Output type
+  if (type === "output" && typeof content !== "string") {
+    // For the truncated display, just show a brief summary
+    const outputSummary = getOutputSummary(
+      content as JsonInferenceOutput | ContentBlockOutput[],
+    );
+
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex cursor-help items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
+              <span className="font-mono text-sm">{outputSummary}</span>
+              <Info className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent
+            side="right"
+            align="start"
+            sideOffset={5}
+            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto p-4 shadow-lg"
+            avoidCollisions={true}
+          >
+            <div className="w-full origin-top-left scale-90 transform">
+              <OutputComponent
+                output={content as JsonInferenceOutput | ContentBlockOutput[]}
+              />
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  // Fallback for unknown types
+  return <span>Unsupported content type</span>;
 };
+
+// Helper function to generate a summary of an Input object
+function getInputSummary(input: Input): string {
+  if (!input || !input.messages || input.messages.length === 0) {
+    return "Empty input";
+  }
+
+  // Get the first message's first text content
+  const firstMessage = input.messages[0];
+  if (!firstMessage.content || firstMessage.content.length === 0) {
+    return `${firstMessage.role} message`;
+  }
+
+  const firstContent = firstMessage.content[0];
+  if (firstContent.type === "text") {
+    const text =
+      typeof firstContent.value === "string"
+        ? firstContent.value
+        : JSON.stringify(firstContent.value);
+    return text.length > 30 ? text.substring(0, 30) + "..." : text;
+  }
+
+  return `${firstMessage.role} message (${firstContent.type})`;
+}
+
+// Helper function to generate a summary of an Output object
+function getOutputSummary(
+  output: JsonInferenceOutput | ContentBlockOutput[],
+): string {
+  if (Array.isArray(output)) {
+    // It's ContentBlockOutput[]
+    if (output.length === 0) return "Empty output";
+
+    const firstBlock = output[0];
+    if (firstBlock.type === "text") {
+      return firstBlock.text.length > 30
+        ? firstBlock.text.substring(0, 30) + "..."
+        : firstBlock.text;
+    }
+    return `${firstBlock.type} output`;
+  } else {
+    // It's JsonInferenceOutput
+    if (!output.raw) return "Empty output";
+
+    return output.raw.length > 30
+      ? output.raw.substring(0, 30) + "..."
+      : output.raw;
+  }
+}
 
 // Component for variant label with color coding and run ID tooltip
 const VariantLabel = ({
@@ -135,8 +261,8 @@ export function EvaluationTable({
       string,
       {
         id: string;
-        input: string;
-        reference_output: string;
+        input: Input;
+        reference_output: JsonInferenceOutput | ContentBlockOutput[];
       }
     >();
 
@@ -160,7 +286,7 @@ export function EvaluationTable({
       Map<
         string,
         {
-          generated_output: string;
+          generated_output: JsonInferenceOutput | ContentBlockOutput[];
           metrics: Map<string, string>;
         }
       >
@@ -386,7 +512,9 @@ export function EvaluationTable({
                     .filter(([, data]) => data !== undefined) as [
                     string,
                     {
-                      generated_output: string;
+                      generated_output:
+                        | JsonInferenceOutput
+                        | ContentBlockOutput[];
                       metrics: Map<string, string>;
                     },
                   ][];
@@ -405,7 +533,10 @@ export function EvaluationTable({
                               rowSpan={filteredVariants.length}
                               className="max-w-[200px] align-top"
                             >
-                              <TruncatedText text={datapoint.input} />
+                              <TruncatedContent
+                                content={datapoint.input}
+                                type="input"
+                              />
                             </TableCell>
                           )}
 
@@ -415,8 +546,9 @@ export function EvaluationTable({
                               rowSpan={filteredVariants.length}
                               className="max-w-[200px] align-top"
                             >
-                              <TruncatedText
-                                text={datapoint.reference_output}
+                              <TruncatedContent
+                                content={datapoint.reference_output}
+                                type="output"
                               />
                             </TableCell>
                           )}
@@ -436,9 +568,9 @@ export function EvaluationTable({
 
                           {/* Generated output */}
                           <TableCell className="max-w-[200px] align-middle">
-                            <TruncatedText
-                              text={data.generated_output}
-                              noWrap={true}
+                            <TruncatedContent
+                              content={data.generated_output}
+                              type="output"
                             />
                           </TableCell>
 
