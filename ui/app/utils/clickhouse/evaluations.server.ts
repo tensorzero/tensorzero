@@ -1,11 +1,11 @@
 import { clickhouseClient } from "./client.server";
 import {
-  EvaluationResultSchema,
   EvaluationRunInfoSchema,
   EvaluationStatisticsSchema,
   type EvaluationResult,
   type EvaluationRunInfo,
   type EvaluationStatistics,
+  parseEvaluationResult,
 } from "./evaluations";
 import { getStaledWindowQuery, uuidv7ToTimestamp } from "./helpers";
 
@@ -118,7 +118,7 @@ export async function getEvalResults(
     },
   });
   const rows = await result.json<EvaluationResult>();
-  return rows.map((row) => EvaluationResultSchema.parse(row));
+  return rows.map((row) => parseEvaluationResult(row));
 }
 
 /*

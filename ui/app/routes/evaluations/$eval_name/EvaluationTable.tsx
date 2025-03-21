@@ -26,8 +26,8 @@ import {
 } from "./VariantSelector";
 import type {
   EvaluationRunInfo,
-  EvaluationResult,
   EvaluationStatistics,
+  ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
 
 // Import the custom tooltip styles
@@ -109,7 +109,7 @@ const VariantLabel = ({
 
 interface EvaluationTableProps {
   available_eval_run_ids: EvaluationRunInfo[];
-  eval_results: EvaluationResult[];
+  eval_results: ParsedEvaluationResult[];
   eval_statistics: EvaluationStatistics[];
   metric_names: string[];
 }

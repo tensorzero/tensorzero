@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { contentBlockOutputSchema, jsonInferenceOutputSchema } from "./common";
+import { inputSchema } from "./common";
 
 export const EvaluationRunInfoSchema = z.object({
   eval_run_id: z.string(),
@@ -18,6 +20,78 @@ export const EvaluationResultSchema = z.object({
 });
 
 export type EvaluationResult = z.infer<typeof EvaluationResultSchema>;
+
+export const JsonEvaluationResultSchema = z.object({
+  datapoint_id: z.string().uuid(),
+  eval_run_id: z.string().uuid(),
+  input: inputSchema,
+  generated_output: jsonInferenceOutputSchema,
+  reference_output: jsonInferenceOutputSchema,
+  metric_name: z.string(),
+  metric_value: z.string(),
+});
+
+export type JsonEvaluationResult = z.infer<typeof JsonEvaluationResultSchema>;
+
+export const ChatEvaluationResultSchema = z.object({
+  datapoint_id: z.string().uuid(),
+  eval_run_id: z.string().uuid(),
+  input: inputSchema,
+  generated_output: z.array(contentBlockOutputSchema),
+  reference_output: z.array(contentBlockOutputSchema),
+  metric_name: z.string(),
+  metric_value: z.string(),
+});
+
+export type ChatEvaluationResult = z.infer<typeof ChatEvaluationResultSchema>;
+
+export const ParsedEvaluationResultSchema = z.union([
+  JsonEvaluationResultSchema,
+  ChatEvaluationResultSchema,
+]);
+
+export type ParsedEvaluationResult = z.infer<
+  typeof ParsedEvaluationResultSchema
+>;
+
+export function parseEvaluationResult(
+  result: EvaluationResult,
+): ParsedEvaluationResult {
+  try {
+    // Parse the input field
+    const parsedInput = inputSchema.parse(JSON.parse(result.input));
+
+    // Parse the outputs
+    const generatedOutput = JSON.parse(result.generated_output);
+    const referenceOutput = JSON.parse(result.reference_output);
+
+    // Determine if this is a chat result by checking if generated_output is an array
+    if (Array.isArray(generatedOutput)) {
+      // This is likely a chat evaluation result
+      return ChatEvaluationResultSchema.parse({
+        ...result,
+        input: parsedInput,
+        generated_output: generatedOutput,
+        reference_output: referenceOutput,
+      });
+    } else {
+      // This is likely a JSON evaluation result
+      return JsonEvaluationResultSchema.parse({
+        ...result,
+        input: parsedInput,
+        generated_output: generatedOutput,
+        reference_output: referenceOutput,
+      });
+    }
+  } catch (error) {
+    console.warn(
+      "Failed to parse evaluation result using structure-based detection:",
+      error,
+    );
+    // If structure-based detection fails, try the original parsing as fallback
+    return ParsedEvaluationResultSchema.parse(result);
+  }
+}
 
 export const EvaluationStatisticsSchema = z.object({
   eval_run_id: z.string(),
