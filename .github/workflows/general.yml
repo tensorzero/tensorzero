@@ -242,10 +242,17 @@ jobs:
       - name: Launch the gateway for E2E tests
         run: |
           cargo run-e2e > e2e_logs.txt 2>&1 &
-          while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
-            echo "Waiting for gateway to be healthy..."
-            sleep 1
-          done
+            count=0
+            max_attempts=60
+            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+              echo "Waiting for gateway to be healthy..."
+              sleep 1
+              count=$((count + 1))
+              if [ $count -ge $max_attempts ]; then
+                echo "Gateway failed to become healthy after $max_attempts attempts"
+                exit 1
+              fi
+            done
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
       - name: Test (Rust)
