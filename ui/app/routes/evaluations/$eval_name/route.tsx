@@ -5,10 +5,17 @@ import {
   getEvalResults,
   getEvalRunIds,
   getEvaluatorMetricName,
+  type EvaluationStatistics,
 } from "~/utils/clickhouse/evaluations.server";
 import { EvaluationTable } from "./EvaluationTable";
-import { PageLayout } from "~/components/layout/PageLayout";
-import { ContentLayout } from "~/components/layout/ContentLayout";
+import {
+  PageHeader,
+  PageLayout,
+  SectionHeader,
+  SectionLayout,
+  SectionsGroup,
+} from "~/components/layout/PageLayout";
+import type { EvaluationResult } from "~/utils/clickhouse/evaluations";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -28,10 +35,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     getEvaluatorMetricName(params.eval_name, evaluatorName),
   );
 
-  // Run these concurrently
-  const [available_eval_run_ids, eval_results, eval_statistics] =
-    await Promise.all([
-      getEvalRunIds(params.eval_name),
+  // Always fetch available run IDs
+  const available_eval_run_ids = await getEvalRunIds(params.eval_name);
+
+  // Only fetch results and statistics if run IDs are selected
+  let eval_results: EvaluationResult[] = [];
+  let eval_statistics: EvaluationStatistics[] = [];
+
+  if (selected_eval_run_ids_array.length > 0) {
+    [eval_results, eval_statistics] = await Promise.all([
       getEvalResults(
         dataset_name,
         function_name,
@@ -47,30 +59,46 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         selected_eval_run_ids_array,
       ),
     ]);
+  }
+
   return {
     eval_name: params.eval_name,
     available_eval_run_ids,
     eval_results,
     eval_statistics,
+    has_selected_runs: selected_eval_run_ids_array.length > 0,
   };
 }
 
 export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
-  const { eval_name, available_eval_run_ids, eval_results, eval_statistics } =
-    loaderData;
+  const {
+    eval_name,
+    available_eval_run_ids,
+    eval_results,
+    eval_statistics,
+    has_selected_runs,
+  } = loaderData;
 
   return (
-    <PageLayout
-      title={`Evaluation: ${eval_name}`}
-      description={`Results for evaluation "${eval_name}"`}
-    >
-      <ContentLayout>
-        <EvaluationTable
-          available_eval_run_ids={available_eval_run_ids}
-          eval_results={eval_results}
-          eval_statistics={eval_statistics}
-        />
-      </ContentLayout>
+    <PageLayout>
+      <PageHeader heading="Evaluation" name={eval_name} />
+
+      <SectionsGroup>
+        <SectionLayout>
+          <SectionHeader heading="Results" />
+          {has_selected_runs ? (
+            <EvaluationTable
+              available_eval_run_ids={available_eval_run_ids}
+              eval_results={eval_results}
+              eval_statistics={eval_statistics}
+            />
+          ) : (
+            <div className="py-4 text-center text-gray-500">
+              Select evaluation run IDs to view results
+            </div>
+          )}
+        </SectionLayout>
+      </SectionsGroup>
     </PageLayout>
   );
 }

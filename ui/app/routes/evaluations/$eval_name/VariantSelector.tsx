@@ -18,7 +18,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import { useSearchParams, useNavigate } from "@remix-run/react";
+import { useSearchParams, useNavigate } from "react-router";
 import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
 
 interface VariantSelectorProps {
@@ -31,11 +31,14 @@ export function getLastUuidSegment(uuid: string): string {
 }
 
 export function VariantSelector({ available_run_ids }: VariantSelectorProps) {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
-  const selectedRunIds = selectedRunIdsParam ? selectedRunIdsParam.split(",") :
-    available_run_ids.length > 0 ? [available_run_ids[0].eval_run_id] : [];
+  const selectedRunIds = selectedRunIdsParam
+    ? selectedRunIdsParam.split(",")
+    : available_run_ids.length > 0
+      ? [available_run_ids[0].eval_run_id]
+      : [];
 
   // State to track if dropdown is open
   const [isOpen, setIsOpen] = useState(false);
@@ -152,10 +155,14 @@ export function VariantSelector({ available_run_ids }: VariantSelectorProps) {
 }
 
 // Helper function to get the appropriate color class based on variant
-export function getVariantColor(runId: string, allRunIds: EvaluationRunInfo[], isSelected = true) {
+export function getVariantColor(
+  runId: string,
+  allRunIds: EvaluationRunInfo[],
+  isSelected = true,
+) {
   // Assign a color based on the index in the array
-  const index = allRunIds.findIndex(info => info.eval_run_id === runId);
-  
+  const index = allRunIds.findIndex((info) => info.eval_run_id === runId);
+
   switch (index % 4) {
     case 0:
       return isSelected
@@ -180,9 +187,10 @@ export function getVariantColor(runId: string, allRunIds: EvaluationRunInfo[], i
 function getVariantColorClass(runId: string) {
   // Simple color assignment based on the UUID
   const hashCode = Array.from(runId).reduce(
-    (acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0
+    (acc, char) => char.charCodeAt(0) + ((acc << 5) - acc),
+    0,
   );
-  
+
   switch (Math.abs(hashCode) % 4) {
     case 0:
       return "bg-blue-600";

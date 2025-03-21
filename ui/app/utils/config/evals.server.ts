@@ -318,39 +318,39 @@ async function loadEvaluator(
       `Evaluator names cannot contain "::" (referenced in [evals.${evalName}.${evaluatorName}])`,
     );
   }
+  switch (config.type) {
+    case "exact_match":
+      return {
+        evaluatorConfig: {
+          type: "exact_match",
+          cutoff: config.cutoff,
+        },
+        metricConfig: {
+          type: "boolean",
+          optimize: "max",
+          level: "inference",
+        },
+      };
 
-  if (config.type === "exact_match") {
-    return {
-      evaluatorConfig: {
-        type: "exact_match",
-        cutoff: config.cutoff,
-      },
-      metricConfig: {
-        type: "boolean",
-        optimize: "max",
-        level: "inference",
-      },
-    };
-  } else if (config.type === "llm_judge") {
-    const { evaluatorConfig, functionConfig } = await loadLLMJudgeEvaluator(
-      config,
-      basePath,
-      evalName,
-      evaluatorName,
-    );
+    case "llm_judge": {
+      const { evaluatorConfig, functionConfig } = await loadLLMJudgeEvaluator(
+        config,
+        basePath,
+        evalName,
+        evaluatorName,
+      );
 
-    return {
-      evaluatorConfig,
-      functionConfig,
-      metricConfig: {
-        type: config.output_type === "float" ? "float" : "boolean",
-        optimize: config.optimize,
-        level: "inference",
-      },
-    };
+      return {
+        evaluatorConfig,
+        functionConfig,
+        metricConfig: {
+          type: config.output_type === "float" ? "float" : "boolean",
+          optimize: config.optimize,
+          level: "inference",
+        },
+      };
+    }
   }
-
-  throw new Error(`Unsupported evaluator type: ${(config as any).type}`);
 }
 
 // Transform the raw eval config
