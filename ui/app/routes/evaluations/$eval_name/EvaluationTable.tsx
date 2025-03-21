@@ -329,6 +329,63 @@ export function EvaluationTable({
               </TableHeader>
 
               <TableBody>
+                {/* Summary Row - Moved to top */}
+                <TableRow className="bg-muted/50 font-medium">
+                  <TableCell colSpan={2} className="text-left">
+                    Summary ({uniqueDatapoints.length} inputs)
+                  </TableCell>
+
+                  {/* If showing variant column, add variant badges */}
+                  {showVariantColumn ? (
+                    <TableCell className="align-middle">
+                      <div className="flex flex-col gap-2">
+                        {selectedRunIds.map((runId) => (
+                          <div
+                            key={`summary-variant-${runId}`}
+                            className="flex justify-center"
+                          >
+                            <VariantLabel
+                              runId={runId}
+                              variantName={
+                                runIdToVariant.get(runId) || "Unknown"
+                              }
+                              allRunIds={available_eval_run_ids}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </TableCell>
+                  ) : null}
+
+                  {/* Empty cell for Generated Output column */}
+                  <TableCell />
+
+                  {/* Summary cells for each metric */}
+                  {uniqueMetrics.map((metric) => (
+                    <TableCell
+                      key={metric}
+                      className="text-center align-middle"
+                    >
+                      {selectedRunIds.map((runId) => {
+                        const metricValue = formattedStats
+                          .get(runId)
+                          ?.get(metric);
+
+                        return (
+                          <div
+                            key={`summary-${runId}-${metric}`}
+                            className="flex justify-center py-1"
+                          >
+                            {metricValue !== undefined
+                              ? formatStatValue(metricValue)
+                              : "-"}
+                          </div>
+                        );
+                      })}
+                    </TableCell>
+                  ))}
+                </TableRow>
+
                 {/* Map through datapoints and variants */}
                 {uniqueDatapoints.map((datapoint) => {
                   const variantData = organizedResults.get(datapoint.id);
@@ -343,7 +400,9 @@ export function EvaluationTable({
                   return (
                     <React.Fragment key={datapoint.id}>
                       {filteredVariants.map(([runId, data], index) => (
-                        <TableRow key={`input-${datapoint.id}-variant-${runId}`}>
+                        <TableRow
+                          key={`input-${datapoint.id}-variant-${runId}`}
+                        >
                           {/* Input cell - only for the first variant row */}
                           {index === 0 && (
                             <TableCell
@@ -360,7 +419,9 @@ export function EvaluationTable({
                               rowSpan={filteredVariants.length}
                               className="max-w-[200px] align-top"
                             >
-                              <TruncatedText text={datapoint.reference_output} />
+                              <TruncatedText
+                                text={datapoint.reference_output}
+                              />
                             </TableCell>
                           )}
 
@@ -410,58 +471,6 @@ export function EvaluationTable({
                     </React.Fragment>
                   );
                 })}
-
-                {/* Summary Row */}
-                <TableRow className="bg-muted/50 font-medium">
-                  <TableCell colSpan={2} className="text-left">
-                    Summary ({uniqueDatapoints.length} inputs)
-                  </TableCell>
-
-                  {/* If showing variant column, add variant badges */}
-                  {showVariantColumn ? (
-                    <TableCell className="align-middle">
-                      <div className="flex flex-col gap-2">
-                        {selectedRunIds.map((runId) => (
-                          <div
-                            key={`summary-variant-${runId}`}
-                            className="flex justify-center"
-                          >
-                            <VariantLabel
-                              runId={runId}
-                              variantName={runIdToVariant.get(runId) || "Unknown"}
-                              allRunIds={available_eval_run_ids}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </TableCell>
-                  ) : null}
-
-                  {/* Empty cell for Generated Output column */}
-                  <TableCell />
-
-                  {/* Summary cells for each metric */}
-                  {uniqueMetrics.map((metric) => (
-                    <TableCell key={metric} className="text-center align-middle">
-                      {selectedRunIds.map((runId) => {
-                        const metricValue = formattedStats
-                          .get(runId)
-                          ?.get(metric);
-
-                        return (
-                          <div
-                            key={`summary-${runId}-${metric}`}
-                            className="flex justify-center py-1"
-                          >
-                            {metricValue !== undefined
-                              ? formatStatValue(metricValue)
-                              : "-"}
-                          </div>
-                        );
-                      })}
-                    </TableCell>
-                  ))}
-                </TableRow>
               </TableBody>
             </Table>
           </div>
