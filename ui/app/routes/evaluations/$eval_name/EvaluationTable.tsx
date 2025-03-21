@@ -381,9 +381,15 @@ export function EvaluationTable({
                   const variantData = organizedResults.get(datapoint.id);
                   if (!variantData) return null;
 
-                  const filteredVariants = Array.from(
-                    variantData.entries(),
-                  ).filter(([runId]) => selectedRunIds.includes(runId));
+                  const filteredVariants = selectedRunIds
+                    .map((runId) => [runId, variantData.get(runId)])
+                    .filter(([, data]) => data !== undefined) as [
+                    string,
+                    {
+                      generated_output: string;
+                      metrics: Map<string, string>;
+                    },
+                  ][];
 
                   if (filteredVariants.length === 0) return null;
 
