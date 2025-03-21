@@ -6,6 +6,7 @@ services:
     image: tensorzero/gateway
     volumes:
       - ./config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
     environment:
       - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:?Environment variable AZURE_OPENAI_API_KEY must be set.}
     ports:
