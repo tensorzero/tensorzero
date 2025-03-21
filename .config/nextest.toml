@@ -48,7 +48,8 @@ test-group = 'e2e_xai'
 
 [[profile.default.overrides]]
 filter = 'test(test_concurrent_clickhouse_migrations)'
-slow-timeout = { period = "120s" }
+# the test fails if migrations > 60s so we can kill it at 65
+slow-timeout = { period = "65s" }
 
 [[profile.default.overrides]]
 # Settings for running batch tests
