@@ -129,33 +129,35 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <PageLayout>
-      <PageHeader heading="Evaluation" name={eval_name} />
+    <div className="container mx-auto px-4 pb-8">
+      <PageLayout>
+        <PageHeader heading="Evaluation" name={eval_name} />
 
-      <SectionsGroup>
-        <SectionLayout>
-          <SectionHeader heading="Results" />
-          <EvaluationTable
-            eval_name={eval_name}
-            available_eval_run_ids={available_eval_run_ids}
-            eval_results={eval_results}
-            eval_statistics={eval_statistics}
-            evaluator_names={evaluator_names}
-            metric_names={metric_names}
-          />
-          <PageButtons
-            onPreviousPage={handlePreviousPage}
-            onNextPage={handleNextPage}
-            disablePrevious={offset === 0}
-            disableNext={offset + pageSize >= total_datapoints}
-          />
-          {!has_selected_runs && (
-            <div className="mt-4 text-center text-gray-500">
-              Select evaluation run IDs to view results
-            </div>
-          )}
-        </SectionLayout>
-      </SectionsGroup>
-    </PageLayout>
+        <SectionsGroup>
+          <SectionLayout>
+            <SectionHeader heading="Results" />
+            <EvaluationTable
+              eval_name={eval_name}
+              available_eval_run_ids={available_eval_run_ids}
+              eval_results={eval_results}
+              eval_statistics={eval_statistics}
+              evaluator_names={evaluator_names}
+              metric_names={metric_names}
+            />
+            <PageButtons
+              onPreviousPage={handlePreviousPage}
+              onNextPage={handleNextPage}
+              disablePrevious={offset === 0}
+              disableNext={offset + pageSize >= total_datapoints}
+            />
+            {!has_selected_runs && (
+              <div className="mt-4 text-center text-gray-500">
+                Select evaluation run IDs to view results
+              </div>
+            )}
+          </SectionLayout>
+        </SectionsGroup>
+      </PageLayout>
+    </div>
   );
 }
