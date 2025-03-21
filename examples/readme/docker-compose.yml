@@ -18,6 +18,7 @@ services:
 
   gateway:
     image: tensorzero/gateway
+    command: --default-config  # no `tensorzero.toml` configuration file provided
     volumes:
       # Mount our tensorzero.toml file into the container
       - ./config:/app/config:ro
