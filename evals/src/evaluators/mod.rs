@@ -74,6 +74,7 @@ pub(crate) async fn evaluate_inference(
                                     "tensorzero::datapoint_id".to_string(),
                                     datapoint.id().to_string(),
                                 ),
+                                ("tensorzero::eval_name".to_string(), eval_name.to_string()),
                             ]),
                         })
                         .await?;
