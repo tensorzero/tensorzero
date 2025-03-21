@@ -28,8 +28,8 @@ import {
 import type {
   EvaluationRunInfo,
   EvaluationResult,
+  EvaluationStatistics,
 } from "~/utils/clickhouse/evaluations";
-import type { EvaluationStatistics } from "~/utils/clickhouse/evaluations.server";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";

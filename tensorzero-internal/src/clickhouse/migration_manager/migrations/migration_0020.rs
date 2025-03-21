@@ -7,9 +7,9 @@ use crate::clickhouse::migration_manager::migration_trait::Migration;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 
-/// This migration adds a replacing mergetree table TagInference.
+/// This migration adds a ReplacingMergeTree table TagInference.
 /// This table stores data that allows us to efficiently query for tags by key and value
-/// and to efficiently find inferences and feedbacks associated with them
+/// and to efficiently find inferences and feedbacks associated with them.
 ///
 /// We also add materialized views TagChatInferenceView and TagJsonInferenceView,
 /// These views will insert data into the TagInference table
@@ -20,7 +20,7 @@ use crate::error::{Error, ErrorDetails};
 /// and has been edited or deleted.
 ///
 /// Additionally, we fixed the default for the updated_at column of ChatInferenceDatapoint
-/// and JsonInferenceDatapoint to now64() from now() since now() is only second resolution (bad!).
+/// and JsonInferenceDatapoint to now64() from now() since now() is only second resolution.
 pub struct Migration0020<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
     pub clean_start: bool,

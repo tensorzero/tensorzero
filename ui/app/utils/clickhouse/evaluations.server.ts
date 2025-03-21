@@ -1,10 +1,11 @@
-import { z } from "zod";
 import { clickhouseClient } from "./client.server";
 import {
   EvaluationResultSchema,
   EvaluationRunInfoSchema,
+  EvaluationStatisticsSchema,
   type EvaluationResult,
   type EvaluationRunInfo,
+  type EvaluationStatistics,
 } from "./evaluations";
 import { getStaledWindowQuery, uuidv7ToTimestamp } from "./helpers";
 
@@ -199,16 +200,6 @@ export async function getEvalStatistics(
   const rows = await result.json<EvaluationStatistics>();
   return rows.map((row) => EvaluationStatisticsSchema.parse(row));
 }
-
-export const EvaluationStatisticsSchema = z.object({
-  eval_run_id: z.string(),
-  metric_name: z.string(),
-  datapoint_count: z.number(),
-  mean_metric: z.number(),
-  stderr_metric: z.number(),
-});
-
-export type EvaluationStatistics = z.infer<typeof EvaluationStatisticsSchema>;
 
 export function getEvaluatorMetricName(
   evalName: string,

@@ -18,3 +18,13 @@ export const EvaluationResultSchema = z.object({
 });
 
 export type EvaluationResult = z.infer<typeof EvaluationResultSchema>;
+
+export const EvaluationStatisticsSchema = z.object({
+  eval_run_id: z.string(),
+  metric_name: z.string(),
+  datapoint_count: z.number(),
+  mean_metric: z.number(),
+  stderr_metric: z.number(),
+});
+
+export type EvaluationStatistics = z.infer<typeof EvaluationStatisticsSchema>;

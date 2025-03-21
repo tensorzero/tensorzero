@@ -266,6 +266,10 @@ async fn run_exact_match_eval_chat() {
             clickhouse_feedback["tags"]["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::eval_name"],
+            "haiku_with_outputs"
+        );
         parsed_output.push(parsed);
     }
     assert_eq!(parsed_output.len(), 29);
@@ -378,6 +382,10 @@ async fn run_llm_judge_eval_chat() {
         assert_eq!(
             clickhouse_feedback["tags"]["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::eval_name"],
+            "haiku_without_outputs"
         );
         parsed_output.push(parsed);
     }
