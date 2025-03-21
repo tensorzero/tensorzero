@@ -6,6 +6,7 @@ services:
     image: tensorzero/gateway
     volumes:
       - ./config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
     environment:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:?Environment variable AWS_ACCESS_KEY_ID must be set.}
       - AWS_REGION=${AWS_REGION:?Environment variable AWS_REGION must be set.}
