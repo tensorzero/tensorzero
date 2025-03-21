@@ -5,7 +5,7 @@ import {
   getEvalResults,
   getEvalRunIds,
   getEvaluatorMetricName,
-  type EvaluationStatistics,
+  countDatapointsForEval,
 } from "~/utils/clickhouse/evaluations.server";
 import { EvaluationTable } from "./EvaluationTable";
 import {
@@ -15,7 +15,8 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
-import type { EvaluationResult } from "~/utils/clickhouse/evaluations";
+import PageButtons from "~/components/utils/PageButtons";
+import { useNavigate } from "react-router";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -28,6 +29,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const selected_eval_run_ids_array = selected_eval_run_ids
     ? selected_eval_run_ids.split(",")
     : [];
+  const offset = parseInt(searchParams.get("offset") || "0");
+  const pageSize = parseInt(searchParams.get("pageSize") || "15");
 
   const metric_names = Object.keys(
     config.evals[params.eval_name].evaluators,
@@ -35,31 +38,55 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     getEvaluatorMetricName(params.eval_name, evaluatorName),
   );
 
-  // Always fetch available run IDs
-  const available_eval_run_ids = await getEvalRunIds(params.eval_name);
+  // Set up all three promises to run concurrently
+  const evalRunIdsPromise = getEvalRunIds(params.eval_name);
 
-  // Only fetch results and statistics if run IDs are selected
-  let eval_results: EvaluationResult[] = [];
-  let eval_statistics: EvaluationStatistics[] = [];
+  // Create placeholder promises for results and statistics that will be used conditionally
+  const resultsPromise =
+    selected_eval_run_ids_array.length > 0
+      ? getEvalResults(
+          dataset_name,
+          function_name,
+          function_type,
+          metric_names,
+          selected_eval_run_ids_array,
+          pageSize,
+          offset,
+        )
+      : Promise.resolve([]);
 
-  if (selected_eval_run_ids_array.length > 0) {
-    [eval_results, eval_statistics] = await Promise.all([
-      getEvalResults(
-        dataset_name,
-        function_name,
-        function_type,
-        metric_names,
-        selected_eval_run_ids_array,
-      ),
-      getEvalStatistics(
-        dataset_name,
-        function_name,
-        function_type,
-        metric_names,
-        selected_eval_run_ids_array,
-      ),
-    ]);
-  }
+  const statisticsPromise =
+    selected_eval_run_ids_array.length > 0
+      ? getEvalStatistics(
+          dataset_name,
+          function_name,
+          function_type,
+          metric_names,
+          selected_eval_run_ids_array,
+        )
+      : Promise.resolve([]);
+  const total_datapoints_promise =
+    selected_eval_run_ids_array.length > 0
+      ? countDatapointsForEval(
+          dataset_name,
+          function_name,
+          function_type,
+          selected_eval_run_ids_array,
+        )
+      : 0;
+
+  // Wait for all three promises to complete concurrently
+  const [
+    available_eval_run_ids,
+    eval_results,
+    eval_statistics,
+    total_datapoints,
+  ] = await Promise.all([
+    evalRunIdsPromise,
+    resultsPromise,
+    statisticsPromise,
+    total_datapoints_promise,
+  ]);
 
   return {
     eval_name: params.eval_name,
@@ -67,6 +94,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     eval_results,
     eval_statistics,
     has_selected_runs: selected_eval_run_ids_array.length > 0,
+    offset,
+    pageSize,
+    total_datapoints,
   };
 }
 
@@ -77,7 +107,21 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     eval_results,
     eval_statistics,
     has_selected_runs,
+    offset,
+    pageSize,
+    total_datapoints,
   } = loaderData;
+  const navigate = useNavigate();
+  const handleNextPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("offset", String(offset + pageSize));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+  const handlePreviousPage = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("offset", String(offset - pageSize));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
 
   return (
     <PageLayout>
@@ -90,6 +134,12 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             available_eval_run_ids={available_eval_run_ids}
             eval_results={eval_results}
             eval_statistics={eval_statistics}
+          />
+          <PageButtons
+            onPreviousPage={handlePreviousPage}
+            onNextPage={handleNextPage}
+            disablePrevious={offset === 0}
+            disableNext={offset + pageSize >= total_datapoints}
           />
           {!has_selected_runs && (
             <div className="mt-4 text-center text-gray-500">

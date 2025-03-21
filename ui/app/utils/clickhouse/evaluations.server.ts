@@ -216,3 +216,39 @@ export function getEvaluatorMetricName(
 ): string {
   return `tensorzero::eval_name::${evalName}::evaluator_name::${evaluatorName}`;
 }
+
+export async function countDatapointsForEval(
+  dataset_name: string,
+  function_name: string,
+  function_type: "chat" | "json",
+  eval_run_ids: string[],
+) {
+  const datapoint_table_name =
+    function_type === "chat"
+      ? "ChatInferenceDatapoint"
+      : "JsonInferenceDatapoint";
+  const eval_run_timestamps = eval_run_ids.map((id) => uuidv7ToTimestamp(id));
+  const staled_window_query = getStaledWindowQuery(eval_run_timestamps);
+
+  const query = `
+      SELECT toUInt32(count()) as count
+      FROM {datapoint_table_name:Identifier}
+      WHERE dataset_name = {dataset_name:String}
+        AND function_name = {function_name:String}
+        AND (
+          ${staled_window_query}
+        )
+  `;
+
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: {
+      dataset_name: dataset_name,
+      function_name: function_name,
+      datapoint_table_name: datapoint_table_name,
+    },
+  });
+  const rows = await result.json<{ count: number }>();
+  return rows[0].count;
+}
