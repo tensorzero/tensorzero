@@ -1,6 +1,11 @@
-import { getEvalRunIds } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/route";
 import { getConfig } from "~/utils/config/index.server";
+import {
+  getEvalStatistics,
+  getEvalResults,
+  getEvalRunIds,
+  getEvaluatorMetricName,
+} from "~/utils/clickhouse/evaluations.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -14,5 +19,43 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ? selected_eval_run_ids.split(",")
     : [];
 
-  const available_eval_run_ids = await getEvalRunIds(params.eval_name);
+  const metric_names = Object.keys(
+    config.evals[params.eval_name].evaluators,
+  ).map((evaluatorName) =>
+    getEvaluatorMetricName(params.eval_name, evaluatorName),
+  );
+
+  // Run these concurrently
+  const [available_eval_run_ids, eval_results, eval_statistics] =
+    await Promise.all([
+      getEvalRunIds(params.eval_name),
+      getEvalResults(
+        dataset_name,
+        function_name,
+        function_type,
+        metric_names,
+        selected_eval_run_ids_array,
+      ),
+      getEvalStatistics(
+        dataset_name,
+        function_name,
+        function_type,
+        metric_names,
+        selected_eval_run_ids_array,
+      ),
+    ]);
+  return {
+    available_eval_run_ids,
+    eval_results,
+    eval_statistics,
+  };
+}
+
+export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
+  const { available_eval_run_ids, eval_results, eval_statistics } = loaderData;
+  return (
+    <div>
+      <h1>Evaluations</h1>
+    </div>
+  );
 }
