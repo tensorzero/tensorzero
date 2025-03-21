@@ -1,10 +1,10 @@
 # TensorZero Evals
 
-:::important
-
-This is currently work in progress - please bear with us and anticipate breaking changes for now.
-
-:::
+> [!IMPORTANT]
+>
+> This is currently work in progress - please bear with us and anticipate breaking changes for now.
+>
+>
 
 To run the evals binary on an example of fixture data:
 
