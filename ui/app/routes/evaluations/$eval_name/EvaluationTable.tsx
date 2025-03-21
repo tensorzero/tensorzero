@@ -1,7 +1,7 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import React from "react";
-import { useSearchParams } from "@remix-run/react";
+import { useSearchParams } from "react-router";
 import { Info, Check, X } from "lucide-react";
 
 import {
@@ -20,14 +20,30 @@ import {
 } from "~/components/ui/tooltip";
 import { Badge } from "~/components/ui/badge";
 
-import { VariantSelector, getVariantColor, getLastUuidSegment } from "./VariantSelector";
-import type { EvaluationRunInfo, EvaluationResult } from "~/utils/clickhouse/evaluations";
+import {
+  VariantSelector,
+  getVariantColor,
+  getLastUuidSegment,
+} from "./VariantSelector";
+import type {
+  EvaluationRunInfo,
+  EvaluationResult,
+} from "~/utils/clickhouse/evaluations";
+import type { EvaluationStatistics } from "~/utils/clickhouse/evaluations.server";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
 
 // Update the TruncatedText component to truncate earlier and never wrap
-const TruncatedText = ({ text, maxLength = 30, noWrap = false }: { text: string, maxLength?: number, noWrap?: boolean }) => {
+const TruncatedText = ({
+  text,
+  maxLength = 30,
+  noWrap = false,
+}: {
+  text: string;
+  maxLength?: number;
+  noWrap?: boolean;
+}) => {
   const truncated =
     text.length > maxLength ? text.slice(0, maxLength) + "..." : text;
 
@@ -59,7 +75,15 @@ const TruncatedText = ({ text, maxLength = 30, noWrap = false }: { text: string,
 };
 
 // Component for variant label with color coding and run ID tooltip
-const VariantLabel = ({ runId, variantName, allRunIds }: { runId: string, variantName: string, allRunIds: EvaluationRunInfo[] }) => {
+const VariantLabel = ({
+  runId,
+  variantName,
+  allRunIds,
+}: {
+  runId: string;
+  variantName: string;
+  allRunIds: EvaluationRunInfo[];
+}) => {
   const colorClass = getVariantColor(runId, allRunIds);
   const runIdSegment = getLastUuidSegment(runId);
 
@@ -87,20 +111,21 @@ const VariantLabel = ({ runId, variantName, allRunIds }: { runId: string, varian
 interface EvaluationTableProps {
   available_eval_run_ids: EvaluationRunInfo[];
   eval_results: EvaluationResult[];
-  eval_statistics: Array<{
-    eval_run_id: string;
-    metric_name: string;
-    datapoint_count: number;
-    mean_metric: number;
-    stderr_metric: number;
-  }>;
+  eval_statistics: EvaluationStatistics[];
 }
 
-export function EvaluationTable({ available_eval_run_ids, eval_results, eval_statistics }: EvaluationTableProps) {
+export function EvaluationTable({
+  available_eval_run_ids,
+  eval_results,
+  eval_statistics,
+}: EvaluationTableProps) {
   const [searchParams] = useSearchParams();
   const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
-  const selectedRunIds = selectedRunIdsParam ? selectedRunIdsParam.split(",") :
-    available_eval_run_ids.length > 0 ? [available_eval_run_ids[0].eval_run_id] : [];
+  const selectedRunIds = selectedRunIdsParam
+    ? selectedRunIdsParam.split(",")
+    : available_eval_run_ids.length > 0
+      ? [available_eval_run_ids[0].eval_run_id]
+      : [];
 
   // Determine if we should show the variant column
   const showVariantColumn = selectedRunIds.length > 1;
@@ -108,7 +133,7 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
   // Get all unique metric names from the data
   const uniqueMetrics = useMemo(() => {
     const metrics = new Set<string>();
-    eval_results.forEach(result => {
+    eval_results.forEach((result) => {
       if (result.metric_name) {
         metrics.add(result.metric_name);
       }
@@ -118,18 +143,21 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
 
   // Get all unique datapoints from the results
   const uniqueDatapoints = useMemo(() => {
-    const datapoints = new Map<string, {
-      id: string,
-      input: string,
-      reference_output: string
-    }>();
+    const datapoints = new Map<
+      string,
+      {
+        id: string;
+        input: string;
+        reference_output: string;
+      }
+    >();
 
-    eval_results.forEach(result => {
+    eval_results.forEach((result) => {
       if (!datapoints.has(result.datapoint_id)) {
         datapoints.set(result.datapoint_id, {
           id: result.datapoint_id,
           input: result.input,
-          reference_output: result.reference_output
+          reference_output: result.reference_output,
         });
       }
     });
@@ -139,18 +167,24 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
 
   // Organize results by datapoint and run ID
   const organizedResults = useMemo(() => {
-    const organized = new Map<string, Map<string, {
-      generated_output: string,
-      metrics: Map<string, string>
-    }>>();
+    const organized = new Map<
+      string,
+      Map<
+        string,
+        {
+          generated_output: string;
+          metrics: Map<string, string>;
+        }
+      >
+    >();
 
     // Initialize with empty maps for all datapoints
-    uniqueDatapoints.forEach(datapoint => {
+    uniqueDatapoints.forEach((datapoint) => {
       organized.set(datapoint.id, new Map());
     });
 
     // Fill in the results
-    eval_results.forEach(result => {
+    eval_results.forEach((result) => {
       if (!result.datapoint_id || !result.eval_run_id) return;
 
       const datapointMap = organized.get(result.datapoint_id);
@@ -159,7 +193,7 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
       if (!datapointMap.has(result.eval_run_id)) {
         datapointMap.set(result.eval_run_id, {
           generated_output: result.generated_output,
-          metrics: new Map()
+          metrics: new Map(),
         });
       }
 
@@ -175,7 +209,7 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
   // Map run ID to variant name
   const runIdToVariant = useMemo(() => {
     const map = new Map<string, string>();
-    available_eval_run_ids.forEach(info => {
+    available_eval_run_ids.forEach((info) => {
       map.set(info.eval_run_id, info.variant_name);
     });
     return map;
@@ -185,11 +219,11 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
   const formattedStats = useMemo(() => {
     const stats = new Map<string, Map<string, number>>();
 
-    available_eval_run_ids.forEach(info => {
+    available_eval_run_ids.forEach((info) => {
       stats.set(info.eval_run_id, new Map());
     });
 
-    eval_statistics.forEach(stat => {
+    eval_statistics.forEach((stat) => {
       const runStats = stats.get(stat.eval_run_id);
       if (runStats) {
         runStats.set(stat.metric_name, stat.mean_metric);
@@ -201,19 +235,28 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
 
   // Determine if metric is boolean or float based on its value
   const isMetricBoolean = (value: string): boolean => {
-    return value === "true" || value === "false" || value === "1" || value === "0";
+    return (
+      value === "true" || value === "false" || value === "1" || value === "0"
+    );
   };
 
   // Format metric value for display
-  const formatMetricValue = (value: string, isBoolean = false): React.ReactNode => {
+  const formatMetricValue = (
+    value: string,
+    isBoolean = false,
+  ): React.ReactNode => {
     if (isBoolean) {
       const boolValue = value === "true" || value === "1";
-      const icon = boolValue ?
-        <Check className="mr-1 h-3 w-3 flex-shrink-0" /> :
-        <X className="mr-1 h-3 w-3 flex-shrink-0" />;
+      const icon = boolValue ? (
+        <Check className="mr-1 h-3 w-3 flex-shrink-0" />
+      ) : (
+        <X className="mr-1 h-3 w-3 flex-shrink-0" />
+      );
 
       return (
-        <span className={`flex items-center whitespace-nowrap ${boolValue ? "text-green-700" : "text-red-700"}`}>
+        <span
+          className={`flex items-center whitespace-nowrap ${boolValue ? "text-green-700" : "text-red-700"}`}
+        >
           {icon}
           {boolValue ? "True" : "False"}
         </span>
@@ -225,9 +268,15 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
         // If it's between 0 and 1, display as percentage
         if (numValue >= 0 && numValue <= 1) {
           const percentage = Math.round(numValue * 100);
-          return <span className="whitespace-nowrap text-gray-700">{percentage}%</span>;
+          return (
+            <span className="whitespace-nowrap text-gray-700">
+              {percentage}%
+            </span>
+          );
         }
-        return <span className="whitespace-nowrap text-gray-700">{numValue}</span>;
+        return (
+          <span className="whitespace-nowrap text-gray-700">{numValue}</span>
+        );
       }
 
       // Default case: return as string
@@ -239,9 +288,15 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
   const formatStatValue = (value: number): React.ReactNode => {
     if (value >= 0 && value <= 1) {
       const percentage = Math.round(value * 100);
-      return <span className="whitespace-nowrap text-gray-700">{percentage}%</span>;
+      return (
+        <span className="whitespace-nowrap text-gray-700">{percentage}%</span>
+      );
     }
-    return <span className="whitespace-nowrap text-gray-700">{value.toFixed(2)}</span>;
+    return (
+      <span className="whitespace-nowrap text-gray-700">
+        {value.toFixed(2)}
+      </span>
+    );
   };
 
   return (
@@ -266,9 +321,9 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
                 </TableHead>
 
                 {/* Dynamic metric columns */}
-                {uniqueMetrics.map(metric => (
+                {uniqueMetrics.map((metric) => (
                   <TableHead key={metric} className="py-2 text-center">
-                    <div>{metric.split('::').pop()}</div>
+                    <div>{metric.split("::").pop()}</div>
                   </TableHead>
                 ))}
               </TableRow>
@@ -280,8 +335,9 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
                 const variantData = organizedResults.get(datapoint.id);
                 if (!variantData) return null;
 
-                const filteredVariants = Array.from(variantData.entries())
-                  .filter(([runId]) => selectedRunIds.includes(runId));
+                const filteredVariants = Array.from(
+                  variantData.entries(),
+                ).filter(([runId]) => selectedRunIds.includes(runId));
 
                 if (filteredVariants.length === 0) return null;
 
@@ -314,7 +370,9 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
                           <TableCell className="text-center align-middle">
                             <VariantLabel
                               runId={runId}
-                              variantName={runIdToVariant.get(runId) || "Unknown"}
+                              variantName={
+                                runIdToVariant.get(runId) || "Unknown"
+                              }
                               allRunIds={available_eval_run_ids}
                             />
                           </TableCell>
@@ -329,14 +387,21 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
                         </TableCell>
 
                         {/* Metrics cells */}
-                        {uniqueMetrics.map(metric => {
+                        {uniqueMetrics.map((metric) => {
                           const metricValue = data.metrics.get(metric);
-                          const isBoolean = metricValue ? isMetricBoolean(metricValue) : false;
+                          const isBoolean = metricValue
+                            ? isMetricBoolean(metricValue)
+                            : false;
 
                           return (
-                            <TableCell key={metric} className="h-[52px] text-center align-middle">
+                            <TableCell
+                              key={metric}
+                              className="h-[52px] text-center align-middle"
+                            >
                               <div className="flex h-full items-center justify-center">
-                                {metricValue ? formatMetricValue(metricValue, isBoolean) : "-"}
+                                {metricValue
+                                  ? formatMetricValue(metricValue, isBoolean)
+                                  : "-"}
                               </div>
                             </TableCell>
                           );
@@ -377,17 +442,21 @@ export function EvaluationTable({ available_eval_run_ids, eval_results, eval_sta
                 <TableCell />
 
                 {/* Summary cells for each metric */}
-                {uniqueMetrics.map(metric => (
+                {uniqueMetrics.map((metric) => (
                   <TableCell key={metric} className="text-center align-middle">
                     {selectedRunIds.map((runId) => {
-                      const metricValue = formattedStats.get(runId)?.get(metric);
+                      const metricValue = formattedStats
+                        .get(runId)
+                        ?.get(metric);
 
                       return (
                         <div
                           key={`summary-${runId}-${metric}`}
                           className="flex justify-center py-1"
                         >
-                          {metricValue !== undefined ? formatStatValue(metricValue) : "-"}
+                          {metricValue !== undefined
+                            ? formatStatValue(metricValue)
+                            : "-"}
                         </div>
                       );
                     })}

@@ -6,6 +6,9 @@ import {
   getEvalRunIds,
   getEvaluatorMetricName,
 } from "~/utils/clickhouse/evaluations.server";
+import { EvaluationTable } from "./EvaluationTable";
+import { PageLayout } from "~/components/layout/PageLayout";
+import { ContentLayout } from "~/components/layout/ContentLayout";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -45,6 +48,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       ),
     ]);
   return {
+    eval_name: params.eval_name,
     available_eval_run_ids,
     eval_results,
     eval_statistics,
@@ -52,10 +56,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
-  const { available_eval_run_ids, eval_results, eval_statistics } = loaderData;
+  const { eval_name, available_eval_run_ids, eval_results, eval_statistics } =
+    loaderData;
+
   return (
-    <div>
-      <h1>Evaluations</h1>
-    </div>
+    <PageLayout
+      title={`Evaluation: ${eval_name}`}
+      description={`Results for evaluation "${eval_name}"`}
+    >
+      <ContentLayout>
+        <EvaluationTable
+          available_eval_run_ids={available_eval_run_ids}
+          eval_results={eval_results}
+          eval_statistics={eval_statistics}
+        />
+      </ContentLayout>
+    </PageLayout>
   );
 }

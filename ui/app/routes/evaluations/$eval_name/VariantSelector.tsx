@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -11,18 +11,18 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "~/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { variants } from "@/data/evaluation-data";
+} from "~/components/ui/tooltip";
+import { useSearchParams, useNavigate } from "@remix-run/react";
+import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
 
 interface VariantSelectorProps {
-  selectedVariants: string[];
-  onVariantChange: (variants: string[]) => void;
+  available_run_ids: EvaluationRunInfo[];
 }
 
 // Helper function to get the last 6 digits of a UUID
@@ -30,28 +30,38 @@ export function getLastUuidSegment(uuid: string): string {
   return uuid.slice(-6);
 }
 
-export function VariantSelector({
-  selectedVariants,
-  onVariantChange,
-}: VariantSelectorProps) {
+export function VariantSelector({ available_run_ids }: VariantSelectorProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
+  const selectedRunIds = selectedRunIdsParam ? selectedRunIdsParam.split(",") :
+    available_run_ids.length > 0 ? [available_run_ids[0].eval_run_id] : [];
+
   // State to track if dropdown is open
   const [isOpen, setIsOpen] = useState(false);
 
-  // Toggle a variant selection
-  const toggleVariant = (variantId: string) => {
-    if (selectedVariants.includes(variantId)) {
-      // If all variants would be deselected, don't allow it
-      if (selectedVariants.length === 1) return;
+  // Update the URL with the selected run IDs
+  const updateSelectedRunIds = (runIds: string[]) => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set("eval_run_ids", runIds.join(","));
+    navigate(`?${newParams.toString()}`, { replace: true });
+  };
 
-      onVariantChange(selectedVariants.filter((id) => id !== variantId));
+  // Toggle a run selection
+  const toggleRun = (runId: string) => {
+    if (selectedRunIds.includes(runId)) {
+      // If all runs would be deselected, don't allow it
+      if (selectedRunIds.length === 1) return;
+
+      updateSelectedRunIds(selectedRunIds.filter((id) => id !== runId));
     } else {
-      onVariantChange([...selectedVariants, variantId]);
+      updateSelectedRunIds([...selectedRunIds, runId]);
     }
   };
 
-  // Select all variants
+  // Select all runs
   const selectAll = () => {
-    onVariantChange(variants.map((v) => v.id));
+    updateSelectedRunIds(available_run_ids.map((info) => info.eval_run_id));
   };
 
   return (
@@ -70,24 +80,24 @@ export function VariantSelector({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuLabel>Select Variants</DropdownMenuLabel>
+            <DropdownMenuLabel>Select Run IDs</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {variants.map((variant) => {
-              const isSelected = selectedVariants.includes(variant.id);
-              const variantColor = getVariantColorClass(variant.id, isSelected);
-              const runIdSegment = getLastUuidSegment(variant.runId);
+            {available_run_ids.map((info) => {
+              const isSelected = selectedRunIds.includes(info.eval_run_id);
+              const variantColor = getVariantColorClass(info.eval_run_id);
+              const runIdSegment = getLastUuidSegment(info.eval_run_id);
 
               return (
                 <DropdownMenuCheckboxItem
-                  key={variant.id}
+                  key={info.eval_run_id}
                   checked={isSelected}
-                  onCheckedChange={() => toggleVariant(variant.id)}
-                  disabled={isSelected && selectedVariants.length === 1}
+                  onCheckedChange={() => toggleRun(info.eval_run_id)}
+                  disabled={isSelected && selectedRunIds.length === 1}
                   className="flex items-center gap-2"
                 >
                   <div className="flex flex-1 items-center gap-2">
                     <Badge className={`${variantColor} h-3 w-3 p-0`} />
-                    <span className="flex-1 truncate">{variant.name}</span>
+                    <span className="flex-1 truncate">{info.variant_name}</span>
                     <span className="text-xs text-muted-foreground">
                       {runIdSegment}
                     </span>
@@ -97,7 +107,7 @@ export function VariantSelector({
             })}
             <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem
-              checked={selectedVariants.length === variants.length}
+              checked={selectedRunIds.length === available_run_ids.length}
               onCheckedChange={selectAll}
               className="font-medium"
             >
@@ -109,28 +119,28 @@ export function VariantSelector({
 
       {/* Display selected variants as badges */}
       <div className="mt-3 flex flex-wrap gap-2">
-        {selectedVariants.map((variantId) => {
-          const variant = variants.find((v) => v.id === variantId);
-          if (!variant) return null;
+        {selectedRunIds.map((runId) => {
+          const info = available_run_ids.find((i) => i.eval_run_id === runId);
+          if (!info) return null;
 
-          const variantColor = getVariantColor(variantId);
-          const runIdSegment = getLastUuidSegment(variant.runId);
+          const variantColor = getVariantColor(runId, available_run_ids);
+          const runIdSegment = getLastUuidSegment(runId);
 
           return (
-            <TooltipProvider key={variantId}>
+            <TooltipProvider key={runId}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge
                     className={`${variantColor} flex cursor-help items-center gap-1.5 px-2 py-1`}
                   >
-                    <span>{variant.name}</span>
+                    <span>{info.variant_name}</span>
                     <span className="border-l border-white/30 pl-1.5 text-xs opacity-80">
                       {runIdSegment}
                     </span>
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="p-2">
-                  <p className="text-xs">Run ID: {variant.runId}</p>
+                  <p className="text-xs">Run ID: {runId}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -142,20 +152,20 @@ export function VariantSelector({
 }
 
 // Helper function to get the appropriate color class based on variant
-export function getVariantColor(variantId: string, isSelected = true) {
-  const variant = variants.find((v) => v.id === variantId);
-  if (!variant) return "";
-
-  switch (variant.color) {
-    case "blue":
+export function getVariantColor(runId: string, allRunIds: EvaluationRunInfo[], isSelected = true) {
+  // Assign a color based on the index in the array
+  const index = allRunIds.findIndex(info => info.eval_run_id === runId);
+  
+  switch (index % 4) {
+    case 0:
       return isSelected
         ? "bg-blue-600 hover:bg-blue-700"
         : "border-blue-600 text-blue-600 hover:bg-blue-50";
-    case "purple":
+    case 1:
       return isSelected
         ? "bg-purple-600 hover:bg-purple-700"
         : "border-purple-600 text-purple-600 hover:bg-purple-50";
-    case "green":
+    case 2:
       return isSelected
         ? "bg-green-600 hover:bg-green-700"
         : "border-green-600 text-green-600 hover:bg-green-50";
@@ -167,16 +177,18 @@ export function getVariantColor(variantId: string, isSelected = true) {
 }
 
 // Helper function to get color class for the small badge in dropdown
-function getVariantColorClass(variantId: string, isSelected = true) {
-  const variant = variants.find((v) => v.id === variantId);
-  if (!variant) return "";
-
-  switch (variant.color) {
-    case "blue":
+function getVariantColorClass(runId: string) {
+  // Simple color assignment based on the UUID
+  const hashCode = Array.from(runId).reduce(
+    (acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0
+  );
+  
+  switch (Math.abs(hashCode) % 4) {
+    case 0:
       return "bg-blue-600";
-    case "purple":
+    case 1:
       return "bg-purple-600";
-    case "green":
+    case 2:
       return "bg-green-600";
     default:
       return "bg-gray-600";
