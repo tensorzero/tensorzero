@@ -97,6 +97,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     offset,
     pageSize,
     total_datapoints,
+    metric_names,
   };
 }
 
@@ -110,6 +111,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     offset,
     pageSize,
     total_datapoints,
+    metric_names,
   } = loaderData;
   const navigate = useNavigate();
   const handleNextPage = () => {
@@ -134,6 +136,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             available_eval_run_ids={available_eval_run_ids}
             eval_results={eval_results}
             eval_statistics={eval_statistics}
+            metric_names={metric_names}
           />
           <PageButtons
             onPreviousPage={handlePreviousPage}

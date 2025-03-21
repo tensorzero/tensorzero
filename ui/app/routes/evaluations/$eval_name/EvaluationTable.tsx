@@ -111,12 +111,14 @@ interface EvaluationTableProps {
   available_eval_run_ids: EvaluationRunInfo[];
   eval_results: EvaluationResult[];
   eval_statistics: EvaluationStatistics[];
+  metric_names: string[];
 }
 
 export function EvaluationTable({
   available_eval_run_ids,
   eval_results,
   eval_statistics,
+  metric_names,
 }: EvaluationTableProps) {
   const [searchParams] = useSearchParams();
   const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
@@ -126,17 +128,6 @@ export function EvaluationTable({
 
   // Determine if we should show the variant column
   const showVariantColumn = selectedRunIds.length > 1;
-
-  // Get all unique metric names from the data
-  const uniqueMetrics = useMemo(() => {
-    const metrics = new Set<string>();
-    eval_results.forEach((result) => {
-      if (result.metric_name) {
-        metrics.add(result.metric_name);
-      }
-    });
-    return Array.from(metrics);
-  }, [eval_results]);
 
   // Get all unique datapoints from the results
   const uniqueDatapoints = useMemo(() => {
@@ -319,7 +310,7 @@ export function EvaluationTable({
                   </TableHead>
 
                   {/* Dynamic metric columns */}
-                  {uniqueMetrics.map((metric) => (
+                  {metric_names.map((metric) => (
                     <TableHead key={metric} className="py-2 text-center">
                       <div>{metric.split("::").pop()}</div>
                     </TableHead>
@@ -360,7 +351,7 @@ export function EvaluationTable({
                   <TableCell />
 
                   {/* Summary cells for each metric */}
-                  {uniqueMetrics.map((metric) => (
+                  {metric_names.map((metric) => (
                     <TableCell
                       key={metric}
                       className="text-center align-middle"
@@ -446,7 +437,7 @@ export function EvaluationTable({
                           </TableCell>
 
                           {/* Metrics cells */}
-                          {uniqueMetrics.map((metric) => {
+                          {metric_names.map((metric) => {
                             const metricValue = data.metrics.get(metric);
                             const isBoolean = metricValue
                               ? isMetricBoolean(metricValue)
