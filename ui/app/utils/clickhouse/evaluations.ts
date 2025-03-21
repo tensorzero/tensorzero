@@ -102,3 +102,10 @@ export const EvaluationStatisticsSchema = z.object({
 });
 
 export type EvaluationStatistics = z.infer<typeof EvaluationStatisticsSchema>;
+
+export function getEvaluatorMetricName(
+  evalName: string,
+  evaluatorName: string,
+): string {
+  return `tensorzero::eval_name::${evalName}::evaluator_name::${evaluatorName}`;
+}

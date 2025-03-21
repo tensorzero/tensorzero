@@ -17,13 +17,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import { Badge } from "~/components/ui/badge";
 
-import {
-  VariantSelector,
-  getVariantColor,
-  getLastUuidSegment,
-} from "./VariantSelector";
+import { VariantSelector, getVariantColor } from "./VariantSelector";
 import type {
   EvaluationRunInfo,
   EvaluationStatistics,
@@ -39,6 +34,9 @@ import OutputComponent from "~/components/inference/Output";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
+import { useConfig } from "~/context/config";
+import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
+import type { MetricConfig } from "~/utils/config/metric";
 
 // Enhanced TruncatedText component that can handle complex structures
 const TruncatedContent = ({
@@ -194,41 +192,6 @@ function getOutputSummary(
   }
 }
 
-// Component for variant label with color coding and run ID tooltip
-const VariantLabel = ({
-  runId,
-  variantName,
-  allRunIds,
-}: {
-  runId: string;
-  variantName: string;
-  allRunIds: EvaluationRunInfo[];
-}) => {
-  const colorClass = getVariantColor(runId, allRunIds);
-  const runIdSegment = getLastUuidSegment(runId);
-
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge
-            className={`${colorClass} flex cursor-help items-center gap-1.5 px-2 py-1`}
-          >
-            <span>{variantName}</span>
-            <span className="border-l border-white/30 pl-1.5 text-xs opacity-80">
-              {runIdSegment}
-            </span>
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="p-2">
-          <p className="text-xs">Run ID: {runId}</p>
-          <p className="text-xs">Variant: {variantName}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-};
-
 // Component for variant circle with color coding and tooltip
 const VariantCircle = ({
   runId,
@@ -260,14 +223,18 @@ interface EvaluationTableProps {
   available_eval_run_ids: EvaluationRunInfo[];
   eval_results: ParsedEvaluationResult[];
   eval_statistics: EvaluationStatistics[];
+  evaluator_names: string[];
   metric_names: string[];
+  eval_name: string;
 }
 
 export function EvaluationTable({
   available_eval_run_ids,
   eval_results,
   eval_statistics,
+  evaluator_names,
   metric_names,
+  eval_name,
 }: EvaluationTableProps) {
   const [searchParams] = useSearchParams();
   const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
@@ -352,24 +319,6 @@ export function EvaluationTable({
     return map;
   }, [available_eval_run_ids]);
 
-  // Format statistics for display
-  const formattedStats = useMemo(() => {
-    const stats = new Map<string, Map<string, number>>();
-
-    available_eval_run_ids.forEach((info) => {
-      stats.set(info.eval_run_id, new Map());
-    });
-
-    eval_statistics.forEach((stat) => {
-      const runStats = stats.get(stat.eval_run_id);
-      if (runStats) {
-        runStats.set(stat.metric_name, stat.mean_metric);
-      }
-    });
-
-    return stats;
-  }, [eval_statistics, available_eval_run_ids]);
-
   // Determine if metric is boolean or float based on its value
   const isMetricBoolean = (value: string): boolean => {
     return (
@@ -421,21 +370,6 @@ export function EvaluationTable({
     }
   };
 
-  // Format statistic for display
-  const formatStatValue = (value: number): React.ReactNode => {
-    if (value >= 0 && value <= 1) {
-      const percentage = Math.round(value * 100);
-      return (
-        <span className="whitespace-nowrap text-gray-700">{percentage}%</span>
-      );
-    }
-    return (
-      <span className="whitespace-nowrap text-gray-700">
-        {value.toFixed(2)}
-      </span>
-    );
-  };
-
   return (
     <div>
       {/* Variant selector */}
@@ -459,76 +393,37 @@ export function EvaluationTable({
                   <TableHead className="py-2 text-center">
                     Generated Output
                   </TableHead>
-
                   {/* Dynamic metric columns */}
-                  {metric_names.map((metric) => (
-                    <TableHead key={metric} className="py-2 text-center">
-                      <div className="font-mono">
-                        {metric.split("::").pop()}
-                      </div>
-                    </TableHead>
-                  ))}
+                  {evaluator_names.map((evaluator_name) => {
+                    // Get the metric name for this evaluator
+                    const metric_name = getEvaluatorMetricName(
+                      eval_name,
+                      evaluator_name,
+                    );
+
+                    // Filter statistics for this specific metric
+                    const filteredStats = eval_statistics.filter(
+                      (stat) => stat.metric_name === metric_name,
+                    );
+
+                    return (
+                      <TableHead
+                        key={evaluator_name}
+                        className="py-2 text-center"
+                      >
+                        <EvaluatorHeader
+                          eval_name={eval_name}
+                          evaluator_name={evaluator_name}
+                          summaryStats={filteredStats}
+                          evalRunIds={available_eval_run_ids}
+                        />
+                      </TableHead>
+                    );
+                  })}
                 </TableRow>
               </TableHeader>
 
               <TableBody>
-                {/* Summary Row - Moved to top */}
-                <TableRow className="bg-muted/50 font-medium">
-                  <TableCell colSpan={2} className="text-left">
-                    Summary ({uniqueDatapoints.length} inputs)
-                  </TableCell>
-
-                  {/* If showing variant column, add variant circles */}
-                  {showVariantColumn ? (
-                    <TableCell className="align-middle">
-                      <div className="flex flex-col gap-2">
-                        {selectedRunIds.map((runId) => (
-                          <div
-                            key={`summary-variant-${runId}`}
-                            className="flex justify-center"
-                          >
-                            <VariantLabel
-                              runId={runId}
-                              variantName={
-                                runIdToVariant.get(runId) || "Unknown"
-                              }
-                              allRunIds={available_eval_run_ids}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </TableCell>
-                  ) : null}
-
-                  {/* Empty cell for Generated Output column */}
-                  <TableCell />
-
-                  {/* Summary cells for each metric */}
-                  {metric_names.map((metric) => (
-                    <TableCell
-                      key={metric}
-                      className="text-center align-middle"
-                    >
-                      {selectedRunIds.map((runId) => {
-                        const metricValue = formattedStats
-                          .get(runId)
-                          ?.get(metric);
-
-                        return (
-                          <div
-                            key={`summary-${runId}-${metric}`}
-                            className="flex justify-center py-1"
-                          >
-                            {metricValue !== undefined
-                              ? formatStatValue(metricValue)
-                              : "-"}
-                          </div>
-                        );
-                      })}
-                    </TableCell>
-                  ))}
-                </TableRow>
-
                 {/* Map through datapoints and variants */}
                 {uniqueDatapoints.map((datapoint) => {
                   const variantData = organizedResults.get(datapoint.id);
@@ -634,3 +529,117 @@ export function EvaluationTable({
     </div>
   );
 }
+
+const EvaluatorHeader = ({
+  eval_name,
+  evaluator_name,
+  summaryStats,
+  evalRunIds,
+}: {
+  eval_name: string;
+  evaluator_name: string;
+  summaryStats: EvaluationStatistics[];
+  evalRunIds: EvaluationRunInfo[];
+}) => {
+  const config = useConfig();
+  const evalConfig = config.evals[eval_name];
+  const evaluatorConfig = evalConfig.evaluators[evaluator_name];
+  const metric_name = getEvaluatorMetricName(eval_name, evaluator_name);
+  const metricProperties = config.metrics[metric_name];
+  if (
+    metricProperties.type === "comment" ||
+    metricProperties.type === "demonstration"
+  ) {
+    return null;
+  }
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="cursor-help">
+            <div>{evaluator_name}</div>
+            <EvaluatorProperties
+              metricConfig={metricProperties}
+              summaryStats={summaryStats}
+              evalRunIds={evalRunIds}
+            />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="p-3">
+          <div className="space-y-1 text-left text-xs">
+            <div>
+              <span className="font-medium">Type:</span>
+              <span className="ml-2 font-mono">{metricProperties.type}</span>
+            </div>
+            <div>
+              <span className="font-medium">Optimize:</span>
+              <span className="ml-2 font-mono">
+                {metricProperties.optimize}
+              </span>
+            </div>
+            {evaluatorConfig.cutoff !== null && (
+              <div>
+                <span className="font-medium">Cutoff:</span>
+                <span className="ml-2 font-mono">{evaluatorConfig.cutoff}</span>
+              </div>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
+
+const EvaluatorProperties = ({
+  metricConfig,
+  summaryStats,
+  evalRunIds,
+}: {
+  metricConfig: MetricConfig;
+  summaryStats: EvaluationStatistics[];
+  evalRunIds: EvaluationRunInfo[];
+}) => {
+  console.log(evalRunIds);
+  console.log(summaryStats);
+  return (
+    <div className="mt-2 flex flex-col items-center gap-1">
+      {summaryStats && (
+        <div className="mt-2 text-center text-xs text-muted-foreground">
+          {summaryStats.map((stat, index) => {
+            // Get the variant color for the circle
+            const variantColorClass = getVariantColor(
+              evalRunIds[index].eval_run_id,
+              evalRunIds,
+            );
+
+            return (
+              <div
+                key={index}
+                className="mt-1 flex items-center justify-center gap-1.5"
+              >
+                <div
+                  className={`h-2 w-2 rounded-full ${variantColorClass} flex-shrink-0`}
+                ></div>
+                <span>
+                  {formatSummaryValue(stat.mean_metric, metricConfig)} ± 0.05
+                  (n=
+                  {stat.datapoint_count})
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Update the formatSummaryValue function to use percentages for boolean and decimals for float
+const formatSummaryValue = (value: number, metricConfig: MetricConfig) => {
+  if (metricConfig.type === "boolean") {
+    return `${Math.round(value * 100)}%`;
+  } else if (metricConfig.type === "float") {
+    return value.toFixed(2);
+  }
+  return value;
+};

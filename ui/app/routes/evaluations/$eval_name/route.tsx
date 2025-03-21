@@ -4,9 +4,9 @@ import {
   getEvalStatistics,
   getEvalResults,
   getEvalRunIds,
-  getEvaluatorMetricName,
   countDatapointsForEval,
 } from "~/utils/clickhouse/evaluations.server";
+import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import { EvaluationTable } from "./EvaluationTable";
 import {
   PageHeader,
@@ -32,9 +32,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
 
-  const metric_names = Object.keys(
+  const evaluator_names = Object.keys(
     config.evals[params.eval_name].evaluators,
-  ).map((evaluatorName) =>
+  );
+  const metric_names = evaluator_names.map((evaluatorName) =>
     getEvaluatorMetricName(params.eval_name, evaluatorName),
   );
 
@@ -97,6 +98,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     offset,
     pageSize,
     total_datapoints,
+    evaluator_names,
     metric_names,
   };
 }
@@ -111,6 +113,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     offset,
     pageSize,
     total_datapoints,
+    evaluator_names,
     metric_names,
   } = loaderData;
   const navigate = useNavigate();
@@ -133,9 +136,11 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
         <SectionLayout>
           <SectionHeader heading="Results" />
           <EvaluationTable
+            eval_name={eval_name}
             available_eval_run_ids={available_eval_run_ids}
             eval_results={eval_results}
             eval_statistics={eval_statistics}
+            evaluator_names={evaluator_names}
             metric_names={metric_names}
           />
           <PageButtons

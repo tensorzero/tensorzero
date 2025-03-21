@@ -201,13 +201,6 @@ export async function getEvalStatistics(
   return rows.map((row) => EvaluationStatisticsSchema.parse(row));
 }
 
-export function getEvaluatorMetricName(
-  evalName: string,
-  evaluatorName: string,
-): string {
-  return `tensorzero::eval_name::${evalName}::evaluator_name::${evaluatorName}`;
-}
-
 export async function countDatapointsForEval(
   dataset_name: string,
   function_name: string,
