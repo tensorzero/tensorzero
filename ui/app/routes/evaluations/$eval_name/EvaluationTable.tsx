@@ -455,7 +455,7 @@ export function EvaluationTable({
                           {index === 0 && (
                             <TableCell
                               rowSpan={filteredVariants.length}
-                              className="max-w-[200px] align-top"
+                              className="max-w-[200px] align-middle"
                             >
                               <TruncatedContent
                                 content={datapoint.input}
@@ -468,7 +468,7 @@ export function EvaluationTable({
                           {index === 0 && (
                             <TableCell
                               rowSpan={filteredVariants.length}
-                              className="max-w-[200px] align-top"
+                              className="max-w-[200px] align-middle"
                             >
                               <TruncatedContent
                                 content={datapoint.reference_output}
@@ -601,8 +601,6 @@ const EvaluatorProperties = ({
   summaryStats: EvaluationStatistics[];
   evalRunIds: EvaluationRunInfo[];
 }) => {
-  console.log(evalRunIds);
-  console.log(summaryStats);
   return (
     <div className="mt-2 flex flex-col items-center gap-1">
       {summaryStats && (
