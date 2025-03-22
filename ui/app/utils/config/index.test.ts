@@ -113,9 +113,170 @@ test("parse e2e config", async () => {
   expect(getTemperatureTool.parameters).toBe(
     "../../fixtures/config/tools/get_temperature.json",
   );
+
+  // Test eval configs are properly generated
+  // Test that evals from the config are present
+  expect(validatedConfig.evals).toBeDefined();
+  expect(Object.keys(validatedConfig.evals).length).toBeGreaterThan(0);
+
+  // Get a sample eval and check its structure
+  const sampleEval = validatedConfig.evals["entity_test"]; // Using an eval from the test config
+  if (sampleEval) {
+    expect(sampleEval.function_name).toBeDefined();
+    expect(sampleEval.dataset_name).toBeDefined();
+    expect(sampleEval.evaluators).toBeDefined();
+
+    // Check if evaluators are properly loaded
+    expect(Object.keys(sampleEval.evaluators).length).toBeGreaterThan(0);
+
+    // If there's an exact_match evaluator, check its properties
+    const exactMatchEval = Object.entries(sampleEval.evaluators).find(
+      ([, eval_config]) => eval_config.type === "exact_match",
+    );
+    if (exactMatchEval) {
+      const [name, config] = exactMatchEval;
+      expect(name).toBeDefined();
+      expect(config.type).toBe("exact_match");
+      if ("cutoff" in config) {
+        expect(typeof config.cutoff).toBe("number");
+      }
+    }
+
+    // If there's an llm_judge evaluator, check its properties
+    const llmJudgeEval = Object.entries(sampleEval.evaluators).find(
+      ([, eval_config]) => eval_config.type === "llm_judge",
+    );
+    if (llmJudgeEval) {
+      const [name, config] = llmJudgeEval;
+      expect(name).toBeDefined();
+      expect(config.type).toBe("llm_judge");
+
+      // Check for the generated function
+      const functionName = `tensorzero::llm_judge::entity_test::${name}`;
+      expect(validatedConfig.functions[functionName]).toBeDefined();
+
+      if (validatedConfig.functions[functionName]) {
+        const generatedFunction = validatedConfig.functions[functionName];
+        if (generatedFunction.type === "json") {
+          expect(generatedFunction.variants).toBeDefined();
+          expect(
+            Object.keys(generatedFunction.variants).length,
+          ).toBeGreaterThan(0);
+          expect(generatedFunction.output_schema).toBeDefined();
+          expect(generatedFunction.user_schema).toBeDefined();
+        }
+      }
+
+      // Check for the generated metric
+      const metricName = `tensorzero::eval_name::entity_test::evaluator_name::${name}`;
+      expect(validatedConfig.metrics[metricName]).toBeDefined();
+
+      if (validatedConfig.metrics[metricName]) {
+        const generatedMetric = validatedConfig.metrics[metricName];
+        if (
+          generatedMetric.type === "float" ||
+          generatedMetric.type === "boolean"
+        ) {
+          expect(generatedMetric.optimize).toMatch(/min|max/);
+          expect(generatedMetric.level).toBe("inference");
+        }
+      }
+    }
+  }
 });
 
 test("parse empty config", async () => {
   const validatedConfig = await loadConfig("fixtures/config/empty.toml");
   expect(validatedConfig).toBeDefined();
+});
+
+test("parse fixture config with evals", async () => {
+  const validatedConfig = await loadConfig("fixtures/config/tensorzero.toml");
+  expect(validatedConfig).toBeDefined();
+  expect(validatedConfig.evals).toBeDefined();
+
+  // Check entity_extraction eval
+  const entityExtractionEval = validatedConfig.evals["entity_extraction"];
+  expect(entityExtractionEval).toBeDefined();
+  expect(entityExtractionEval.function_name).toBe("extract_entities");
+  expect(entityExtractionEval.dataset_name).toBe("foo");
+
+  // Check exact_match evaluator
+  const exactMatchEvaluator = entityExtractionEval.evaluators["exact_match"];
+  expect(exactMatchEvaluator).toBeDefined();
+  expect(exactMatchEvaluator.type).toBe("exact_match");
+  expect(exactMatchEvaluator.cutoff).toBe(0.6);
+
+  // Check count_sports evaluator (llm_judge)
+  const countSportsEvaluator = entityExtractionEval.evaluators["count_sports"];
+  expect(countSportsEvaluator).toBeDefined();
+  if (countSportsEvaluator.type === "llm_judge") {
+    expect(countSportsEvaluator.output_type).toBe("float");
+    expect(countSportsEvaluator.optimize).toBe("min");
+    expect(countSportsEvaluator.cutoff).toBe(0.5);
+  }
+
+  // Check for generated function for count_sports
+  const countSportsFunctionName =
+    "tensorzero::llm_judge::entity_extraction::count_sports";
+  expect(validatedConfig.functions[countSportsFunctionName]).toBeDefined();
+
+  // Check function properties
+  const countSportsFunction =
+    validatedConfig.functions[countSportsFunctionName];
+  if (countSportsFunction && countSportsFunction.type === "json") {
+    expect(countSportsFunction.variants).toBeDefined();
+
+    // Check variants
+    const miniVariant = countSportsFunction.variants["mini"];
+    expect(miniVariant).toBeDefined();
+    if (miniVariant && miniVariant.type === "chat_completion") {
+      expect(miniVariant.model).toBe("openai::gpt-4o-mini-2024-07-18");
+      expect(miniVariant.weight).toBe(1.0); // Should be 1.0 since active=true
+    }
+  }
+
+  // Check for generated metric
+  const countSportsMetricName =
+    "tensorzero::eval_name::entity_extraction::evaluator_name::count_sports";
+  expect(validatedConfig.metrics[countSportsMetricName]).toBeDefined();
+
+  // Check metric properties
+  const countSportsMetric = validatedConfig.metrics[countSportsMetricName];
+  if (countSportsMetric && countSportsMetric.type === "float") {
+    expect(countSportsMetric.optimize).toBe("min");
+    expect(countSportsMetric.level).toBe("inference");
+  }
+
+  // Check haiku eval
+  const haikuEval = validatedConfig.evals["haiku"];
+  expect(haikuEval).toBeDefined();
+  expect(haikuEval.function_name).toBe("write_haiku");
+
+  // Check topic_starts_with_f evaluator
+  const topicStartsWithFEvaluator = haikuEval.evaluators["topic_starts_with_f"];
+  expect(topicStartsWithFEvaluator).toBeDefined();
+  if (
+    topicStartsWithFEvaluator &&
+    topicStartsWithFEvaluator.type === "llm_judge"
+  ) {
+    expect(topicStartsWithFEvaluator.output_type).toBe("boolean");
+  }
+
+  // Check for generated function for topic_starts_with_f
+  const topicStartsWithFFunctionName =
+    "tensorzero::llm_judge::haiku::topic_starts_with_f";
+  expect(validatedConfig.functions[topicStartsWithFFunctionName]).toBeDefined();
+
+  // Check for generated metric
+  const topicStartsWithFMetricName =
+    "tensorzero::eval_name::haiku::evaluator_name::topic_starts_with_f";
+  expect(validatedConfig.metrics[topicStartsWithFMetricName]).toBeDefined();
+
+  // Check metric properties
+  const topicStartsWithFMetric =
+    validatedConfig.metrics[topicStartsWithFMetricName];
+  if (topicStartsWithFMetric && topicStartsWithFMetric.type === "boolean") {
+    expect(topicStartsWithFMetric.optimize).toBe("min");
+  }
 });

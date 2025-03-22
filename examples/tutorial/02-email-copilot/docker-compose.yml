@@ -21,6 +21,7 @@ services:
     volumes:
       # Mount our tensorzero.toml file into the container
       - ./config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?Environment variable ANTHROPIC_API_KEY must be set.}
       - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero

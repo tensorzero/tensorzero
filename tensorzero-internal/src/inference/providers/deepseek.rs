@@ -29,10 +29,11 @@ use crate::tool::ToolCallChunk;
 
 use super::helpers::inject_extra_body;
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
-    tensorzero_to_openai_system_message, OpenAIAssistantRequestMessage, OpenAIContentBlock,
-    OpenAIFinishReason, OpenAIRequestMessage, OpenAIResponseToolCall, OpenAISystemRequestMessage,
-    OpenAITool, OpenAIToolChoice, OpenAIUsage, OpenAIUserRequestMessage, StreamOptions,
+    convert_stream_error, get_chat_url, handle_openai_error, prepare_openai_tools,
+    tensorzero_to_openai_messages, tensorzero_to_openai_system_message,
+    OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
+    OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIUsage,
+    OpenAIUserRequestMessage, StreamOptions,
 };
 
 lazy_static! {
@@ -395,12 +396,7 @@ fn stream_deepseek(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(ErrorDetails::InferenceServer {
-                        message: e.to_string(),
-                        raw_request: None,
-                        raw_response: None,
-                        provider_type: PROVIDER_TYPE.to_string(),
-                    }.into());
+                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -515,7 +511,8 @@ fn deepseek_to_tensorzero_chunk(
         }
         if let Some(reasoning) = choice.delta.reasoning_content {
             content.push(ContentBlockChunk::Thought(ThoughtChunk {
-                text: reasoning,
+                text: Some(reasoning),
+                signature: None,
                 id: "0".to_string(),
             }));
         }

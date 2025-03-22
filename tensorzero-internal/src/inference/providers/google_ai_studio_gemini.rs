@@ -33,6 +33,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
 use super::helpers::inject_extra_body;
+use super::openai::convert_stream_error;
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
 const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
@@ -297,12 +298,7 @@ fn stream_google_ai_studio_gemini(
                     if matches!(e, reqwest_eventsource::Error::StreamEnded) {
                         break;
                     }
-                    yield Err(ErrorDetails::InferenceServer {
-                        message: e.to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: None,
-                    }.into())
+                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,

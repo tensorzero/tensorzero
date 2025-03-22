@@ -27,8 +27,8 @@ use crate::{
 use super::{
     helpers::inject_extra_body,
     openai::{
-        get_chat_url, tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage,
-        OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
+        convert_stream_error, get_chat_url, tensorzero_to_openai_messages, OpenAIFunction,
+        OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
     },
     provider_trait::InferenceProvider,
 };
@@ -308,12 +308,7 @@ pub fn stream_mistral(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(ErrorDetails::InferenceServer {
-                        message: e.to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: None,
-                        raw_response: None,
-                    }.into());
+                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
