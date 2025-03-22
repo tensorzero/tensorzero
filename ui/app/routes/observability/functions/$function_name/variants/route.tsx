@@ -199,62 +199,60 @@ export default function VariantDetails() {
   };
   const function_type = function_config.type;
   return (
-    <div className="container mx-auto px-4 pb-8">
-      <PageLayout>
-        <PageHeader heading="Variant" name={variant_name} />
+    <PageLayout>
+      <PageHeader label="Variant" name={variant_name} />
 
-        <SectionsGroup>
-          <SectionLayout>
-            <BasicInfo
-              variantConfig={variant_config}
-              function_name={function_name}
-              function_type={function_type}
+      <SectionsGroup>
+        <SectionLayout>
+          <BasicInfo
+            variantConfig={variant_config}
+            function_name={function_name}
+            function_type={function_type}
+          />
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Template" />
+          <VariantTemplate variantConfig={variant_config} />
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Metric" />
+          <MetricSelector
+            metricsWithFeedback={metricsWithFeedback}
+            selectedMetric={metric_name || ""}
+            onMetricChange={handleMetricChange}
+          />
+          {variant_performances && (
+            <VariantPerformance
+              variant_performances={variant_performances}
+              metric_name={metric_name}
+              time_granularity={time_granularity}
+              onTimeGranularityChange={handleTimeGranularityChange}
             />
-          </SectionLayout>
+          )}
+        </SectionLayout>
 
-          <SectionLayout>
-            <SectionHeader heading="Template" />
-            <VariantTemplate variantConfig={variant_config} />
-          </SectionLayout>
-
-          <SectionLayout>
-            <SectionHeader heading="Metric" />
-            <MetricSelector
-              metricsWithFeedback={metricsWithFeedback}
-              selectedMetric={metric_name || ""}
-              onMetricChange={handleMetricChange}
-            />
-            {variant_performances && (
-              <VariantPerformance
-                variant_performances={variant_performances}
-                metric_name={metric_name}
-                time_granularity={time_granularity}
-                onTimeGranularityChange={handleTimeGranularityChange}
+        <SectionLayout>
+          <SectionHeader heading="Inferences" count={num_inferences} />
+          {inferences.length > 0 ? (
+            <>
+              <VariantInferenceTable inferences={inferences} />
+              <PageButtons
+                onPreviousPage={handlePreviousInferencePage}
+                onNextPage={handleNextInferencePage}
+                disablePrevious={disablePreviousInferencePage}
+                disableNext={disableNextInferencePage}
               />
-            )}
-          </SectionLayout>
-
-          <SectionLayout>
-            <SectionHeader heading="Inferences" count={num_inferences} />
-            {inferences.length > 0 ? (
-              <>
-                <VariantInferenceTable inferences={inferences} />
-                <PageButtons
-                  onPreviousPage={handlePreviousInferencePage}
-                  onNextPage={handleNextInferencePage}
-                  disablePrevious={disablePreviousInferencePage}
-                  disableNext={disableNextInferencePage}
-                />
-              </>
-            ) : (
-              <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
-                No inferences found
-              </div>
-            )}
-          </SectionLayout>
-        </SectionsGroup>
-      </PageLayout>
-    </div>
+            </>
+          ) : (
+            <div className="rounded-lg border border-gray-200 p-4 text-center text-gray-500">
+              No inferences found
+            </div>
+          )}
+        </SectionLayout>
+      </SectionsGroup>
+    </PageLayout>
   );
 }
 

@@ -65,10 +65,17 @@ pub(crate) async fn evaluate_inference(
                             dryrun: Some(false),
                             episode_id: None,
                             internal: true,
-                            tags: HashMap::from([(
-                                "tensorzero::eval_run_id".to_string(),
-                                eval_run_id.to_string(),
-                            )]),
+                            tags: HashMap::from([
+                                (
+                                    "tensorzero::eval_run_id".to_string(),
+                                    eval_run_id.to_string(),
+                                ),
+                                (
+                                    "tensorzero::datapoint_id".to_string(),
+                                    datapoint.id().to_string(),
+                                ),
+                                ("tensorzero::eval_name".to_string(), eval_name.to_string()),
+                            ]),
                         })
                         .await?;
                 }
