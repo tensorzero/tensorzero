@@ -51,12 +51,10 @@ class Text(ContentBlock):
             )
 
     def to_dict(self) -> Dict[str, Any]:
-        print("AAAA", self)
         if self.text is not None:
             # Handle ongoing deprecation: https://github.com/tensorzero/tensorzero/issues/1170
             # The first branch will be removed in a future release.
             if isinstance(self.text, dict):
-                print("BBBB", self.text)
                 return dict(type="text", arguments=self.text)
             else:
                 return dict(type="text", text=self.text)

@@ -2369,7 +2369,8 @@ def test_text_arguments_deprecation_1170_warning(sync_client):
     """Test that using Text with dictionary for text parameter works but emits DeprecationWarning for #1170."""
 
     with pytest.warns(
-        DeprecationWarning, match="Please use `ContentBlock.*when providing arguments"
+        DeprecationWarning,
+        match=r"Please use `ContentBlock\(type=\"text\", arguments=...\)` when providing arguments for a prompt template/schema. In a future release, `Text\(type=\"text\", text=...\)` will require a string literal.",
     ):
         response = sync_client.inference(
             function_name="json_success",
