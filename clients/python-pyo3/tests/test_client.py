@@ -1649,7 +1649,7 @@ def test_sync_basic_inference_with_content_block_plain_dict(sync_client):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "value": "Hello"},
+                        {"type": "text", "text": "Hello"},
                         {
                             "type": "tool_call",
                             "id": "1",
@@ -1729,7 +1729,7 @@ def test_prepare_inference_request(sync_client):
                 {
                     "role": "user",
                     "content": [
-                        Text(type="text", text={"foo": "bar"}),
+                        Text(type="text", arguments={"foo": "bar"}),
                         ToolResult(name="drill", result="screwed", id="aaaa"),
                     ],
                 },
@@ -1762,7 +1762,7 @@ def test_prepare_inference_request(sync_client):
     }
     assert request["input"]["messages"][2]["content"][0] == {
         "type": "text",
-        "value": {"foo": "bar"},
+        "arguments": {"foo": "bar"},
     }
     assert request["input"]["messages"][2]["content"][1] == {
         "type": "tool_result",
@@ -2363,3 +2363,31 @@ async def test_async_multi_turn_parallel_tool_use(async_client):
 
     assert "70" in assistant_message
     assert "30" in assistant_message
+
+
+def test_text_arguments_deprecation_1170_warning(sync_client):
+    """Test that using Text with dictionary for text parameter works but emits DeprecationWarning for #1170."""
+
+    with pytest.warns(
+        DeprecationWarning, match="Please use `ContentBlock.*when providing arguments"
+    ):
+        response = sync_client.inference(
+            function_name="json_success",
+            input={
+                "system": {"assistant_name": "Alfred Pennyworth"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [Text(type="text", text={"country": "Japan"})],
+                    }
+                ],
+            },
+        )
+
+    assert isinstance(response, JsonInferenceResponse)
+    assert response.variant_name == "test"
+    assert response.output.raw == '{"answer":"Hello"}'
+    assert response.output.parsed == {"answer": "Hello"}
+    assert response.usage.input_tokens == 10
+    assert response.usage.output_tokens == 10
+    assert response.finish_reason == FinishReason.STOP
