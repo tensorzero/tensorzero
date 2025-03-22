@@ -145,43 +145,41 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     feedback_bounds.first_id === bottomFeedback.id;
 
   return (
-    <div className="container mx-auto px-4 pb-8">
-      <PageLayout>
-        <PageHeader heading="Episode" name={episode_id} />
+    <PageLayout>
+      <PageHeader label="Episode" name={episode_id} />
 
-        <SectionsGroup>
-          <SectionLayout>
-            <SectionHeader heading="Inferences" count={num_inferences} />
-            <EpisodeInferenceTable inferences={inferences} />
-            <PageButtons
-              onPreviousPage={handlePreviousInferencePage}
-              onNextPage={handleNextInferencePage}
-              disablePrevious={disablePreviousInferencePage}
-              disableNext={disableNextInferencePage}
-            />
-          </SectionLayout>
+      <SectionsGroup>
+        <SectionLayout>
+          <SectionHeader heading="Inferences" count={num_inferences} />
+          <EpisodeInferenceTable inferences={inferences} />
+          <PageButtons
+            onPreviousPage={handlePreviousInferencePage}
+            onNextPage={handleNextInferencePage}
+            disablePrevious={disablePreviousInferencePage}
+            disableNext={disableNextInferencePage}
+          />
+        </SectionLayout>
 
-          <SectionLayout>
-            <SectionHeader
-              heading="Feedback"
-              count={num_feedbacks}
-              badge={{
-                name: "episode",
-                tooltip:
-                  "This table only includes episode-level feedback. To see inference-level feedback, open the detail page for that inference.",
-              }}
-            />
-            <FeedbackTable feedback={feedbacks} />
-            <PageButtons
-              onPreviousPage={handlePreviousFeedbackPage}
-              onNextPage={handleNextFeedbackPage}
-              disablePrevious={disablePreviousFeedbackPage}
-              disableNext={disableNextFeedbackPage}
-            />
-          </SectionLayout>
-        </SectionsGroup>
-      </PageLayout>
-    </div>
+        <SectionLayout>
+          <SectionHeader
+            heading="Feedback"
+            count={num_feedbacks}
+            badge={{
+              name: "episode",
+              tooltip:
+                "This table only includes episode-level feedback. To see inference-level feedback, open the detail page for that inference.",
+            }}
+          />
+          <FeedbackTable feedback={feedbacks} />
+          <PageButtons
+            onPreviousPage={handlePreviousFeedbackPage}
+            onNextPage={handleNextFeedbackPage}
+            disablePrevious={disablePreviousFeedbackPage}
+            disableNext={disableNextFeedbackPage}
+          />
+        </SectionLayout>
+      </SectionsGroup>
+    </PageLayout>
   );
 }
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

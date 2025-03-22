@@ -17,7 +17,7 @@ export function ContentLayout({
       <div className={cn("h-[calc(100vh-16px)] w-full", className)} {...props}>
         <ScrollArea className="h-full rounded-md border border-border bg-bg-secondary max-md:rounded-none max-md:border-none">
           <PageSubNav />
-          <div className="px-4">{children}</div>
+          {children}
         </ScrollArea>
       </div>
     </div>

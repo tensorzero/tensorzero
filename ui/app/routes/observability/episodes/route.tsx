@@ -47,17 +47,15 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 
   if (episodes.length === 0) {
     return (
-      <div className="container mx-auto px-4 pb-8">
-        <PageLayout>
-          <PageHeader heading="Episodes" count={totalCount} />
-          <SectionLayout>
-            <EpisodeSearchBar />
-            <div className="py-8 text-center text-gray-500">
-              No episodes found
-            </div>
-          </SectionLayout>
-        </PageLayout>
-      </div>
+      <PageLayout>
+        <PageHeader heading="Episodes" count={totalCount} />
+        <SectionLayout>
+          <EpisodeSearchBar />
+          <div className="py-8 text-center text-gray-500">
+            No episodes found
+          </div>
+        </SectionLayout>
+      </PageLayout>
     );
   }
 
@@ -85,21 +83,19 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
     !bounds?.first_id || bounds.first_id === bottomEpisode.last_inference_id;
 
   return (
-    <div className="container mx-auto px-4 pb-8">
-      <PageLayout>
-        <PageHeader heading="Episodes" count={totalCount} />
-        <SectionLayout>
-          <EpisodeSearchBar />
-          <EpisodesTable episodes={episodes} />
-          <PageButtons
-            onPreviousPage={handlePreviousPage}
-            onNextPage={handleNextPage}
-            disablePrevious={disablePrevious}
-            disableNext={disableNext}
-          />
-        </SectionLayout>
-      </PageLayout>
-    </div>
+    <PageLayout>
+      <PageHeader heading="Episodes" count={totalCount} />
+      <SectionLayout>
+        <EpisodeSearchBar />
+        <EpisodesTable episodes={episodes} />
+        <PageButtons
+          onPreviousPage={handlePreviousPage}
+          onNextPage={handleNextPage}
+          disablePrevious={disablePrevious}
+          disableNext={disableNext}
+        />
+      </SectionLayout>
+    </PageLayout>
   );
 }
 

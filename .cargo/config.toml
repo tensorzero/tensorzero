@@ -13,5 +13,11 @@ test-all = "nextest run --features e2e_tests"
 test-batch = ["nextest", "run", "--features", "e2e_tests", "-E",      "test(batch)"]
 test-e2e   = ["nextest", "run", "--features", "e2e_tests", "-E", "not (test(batch))"]
 
+# Runs e2e tests that don't require any credentials available.
+# This is useful for both running on PR CI (where we don't have creds at all),
+# and for testing against several different ClickHouse versions (to avoid spending lots of money on inference).
+test-e2e-no-creds = ["nextest", "run", "--features", "e2e_tests", "-E", "test(test_dummy_only) | test(clickhouse)"]
+
+build-e2e = "build --bin gateway --features e2e_tests"
 run-e2e = "run --bin gateway --features e2e_tests -- --config-file tensorzero-internal/tests/e2e/tensorzero.toml"
 watch-e2e = "watch -x run-e2e"
