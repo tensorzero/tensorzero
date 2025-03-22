@@ -180,103 +180,97 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <div className="container mx-auto px-4 pb-8">
-      <PageLayout>
-        <PageHeader heading="Inference" name={inference.id} />
+    <PageLayout>
+      <PageHeader label="Inference" name={inference.id}>
+        <BasicInfo
+          inference={inference}
+          inferenceUsage={getTotalInferenceUsage(model_inferences)}
+        />
 
-        <SectionsGroup>
-          <SectionLayout>
-            <BasicInfo
-              inference={inference}
-              inferenceUsage={getTotalInferenceUsage(model_inferences)}
-            />
-          </SectionLayout>
+        <InferenceActions
+          variants={variants}
+          onVariantSelect={onVariantSelect}
+          variantInferenceIsLoading={variantInferenceIsLoading}
+          dataset_counts={dataset_counts}
+          onDatasetSelect={handleAddToDataset}
+          hasDemonstration={hasDemonstration}
+        />
+      </PageHeader>
 
-          <SectionLayout>
-            <InferenceActions
-              variants={variants}
-              onVariantSelect={onVariantSelect}
-              variantInferenceIsLoading={variantInferenceIsLoading}
-              dataset_counts={dataset_counts}
-              onDatasetSelect={handleAddToDataset}
-              hasDemonstration={hasDemonstration}
-            />
-          </SectionLayout>
+      <SectionsGroup>
+        <SectionLayout>
+          <SectionHeader heading="Input" />
+          <Input input={inference.input} />
+        </SectionLayout>
 
-          <SectionLayout>
-            <SectionHeader heading="Input" />
-            <Input input={inference.input} />
-          </SectionLayout>
+        <SectionLayout>
+          <SectionHeader heading="Output" />
+          <Output output={inference.output} />
+        </SectionLayout>
 
-          <SectionLayout>
-            <SectionHeader heading="Output" />
-            <Output output={inference.output} />
-          </SectionLayout>
-
-          <SectionLayout>
-            <SectionHeader
-              heading="Feedback"
-              count={num_feedbacks}
-              badge={{
-                name: "inference",
-                tooltip:
-                  "This table only includes inference-level feedback. To see episode-level feedback, open the detail page for that episode.",
-              }}
-            />
-            <FeedbackTable feedback={feedback} />
-            <PageButtons
-              onNextPage={handleNextFeedbackPage}
-              onPreviousPage={handlePreviousFeedbackPage}
-              disableNext={disableNextFeedbackPage}
-              disablePrevious={disablePreviousFeedbackPage}
-            />
-          </SectionLayout>
-
-          <SectionLayout>
-            <SectionHeader heading="Inference Parameters" />
-            <ParameterCard parameters={inference.inference_params} />
-          </SectionLayout>
-
-          {inference.function_type === "chat" && (
-            <SectionLayout>
-              <SectionHeader heading="Tool Parameters" />
-              <ParameterCard parameters={inference.tool_params} />
-            </SectionLayout>
-          )}
-
-          {inference.function_type === "json" && (
-            <SectionLayout>
-              <SectionHeader heading="Output Schema" />
-              <ParameterCard parameters={inference.output_schema} />
-            </SectionLayout>
-          )}
-
-          {Object.keys(inference.tags).length > 0 && (
-            <SectionLayout>
-              <SectionHeader heading="Tags" />
-              <TagsTable tags={inference.tags} />
-            </SectionLayout>
-          )}
-
-          <SectionLayout>
-            <SectionHeader heading="Model Inferences" />
-            <ModelInferencesAccordion modelInferences={model_inferences} />
-          </SectionLayout>
-        </SectionsGroup>
-
-        {selectedVariant && (
-          <VariantResponseModal
-            isOpen={isModalOpen}
-            isLoading={variantInferenceIsLoading}
-            setIsLoading={setVariantInferenceIsLoading}
-            onClose={handleModalClose}
-            inference={inference}
-            inferenceUsage={getTotalInferenceUsage(model_inferences)}
-            selectedVariant={selectedVariant}
+        <SectionLayout>
+          <SectionHeader
+            heading="Feedback"
+            count={num_feedbacks}
+            badge={{
+              name: "inference",
+              tooltip:
+                "This table only includes inference-level feedback. To see episode-level feedback, open the detail page for that episode.",
+            }}
           />
+          <FeedbackTable feedback={feedback} />
+          <PageButtons
+            onNextPage={handleNextFeedbackPage}
+            onPreviousPage={handlePreviousFeedbackPage}
+            disableNext={disableNextFeedbackPage}
+            disablePrevious={disablePreviousFeedbackPage}
+          />
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Inference Parameters" />
+          <ParameterCard parameters={inference.inference_params} />
+        </SectionLayout>
+
+        {inference.function_type === "chat" && (
+          <SectionLayout>
+            <SectionHeader heading="Tool Parameters" />
+            <ParameterCard parameters={inference.tool_params} />
+          </SectionLayout>
         )}
-      </PageLayout>
-    </div>
+
+        {inference.function_type === "json" && (
+          <SectionLayout>
+            <SectionHeader heading="Output Schema" />
+            <ParameterCard parameters={inference.output_schema} />
+          </SectionLayout>
+        )}
+
+        {Object.keys(inference.tags).length > 0 && (
+          <SectionLayout>
+            <SectionHeader heading="Tags" />
+            <TagsTable tags={inference.tags} />
+          </SectionLayout>
+        )}
+
+        <SectionLayout>
+          <SectionHeader heading="Model Inferences" />
+          <ModelInferencesAccordion modelInferences={model_inferences} />
+        </SectionLayout>
+      </SectionsGroup>
+
+      {selectedVariant && (
+        <VariantResponseModal
+          isOpen={isModalOpen}
+          isLoading={variantInferenceIsLoading}
+          setIsLoading={setVariantInferenceIsLoading}
+          onClose={handleModalClose}
+          inference={inference}
+          inferenceUsage={getTotalInferenceUsage(model_inferences)}
+          selectedVariant={selectedVariant}
+        />
+      )}
+    </PageLayout>
   );
 }
 
