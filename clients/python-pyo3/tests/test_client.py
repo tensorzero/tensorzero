@@ -2392,3 +2392,29 @@ def test_text_arguments_deprecation_1170_warning(sync_client):
     assert response.usage.input_tokens == 10
     assert response.usage.output_tokens == 10
     assert response.finish_reason == FinishReason.STOP
+
+
+def test_content_block_text_init_validation():
+    """Test Text initialization validation for text and arguments parameters."""
+
+    # Test providing neither text nor arguments fails
+    with pytest.raises(
+        ValueError, match=r"Either `text` or `arguments` must be provided."
+    ):
+        Text(type="text")
+
+    with pytest.raises(
+        ValueError, match=r"Only one of `text` or `arguments` must be provided."
+    ):
+        Text(type="text", text="Hello", arguments={"foo": "bar"})
+
+    # Test with valid text parameter
+    text = Text(type="text", text="Hello")
+    assert text.text == "Hello"
+    assert text.arguments is None
+
+    # Test with valid arguments parameter
+    arguments = {"foo": "bar"}
+    text = Text(type="text", arguments=arguments)
+    assert text.text is None
+    assert text.arguments == arguments
