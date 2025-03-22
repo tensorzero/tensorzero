@@ -55,6 +55,15 @@ pub async fn inference_handler(
     headers: HeaderMap,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
+    if !openai_compatible_params.unknown_fields.is_empty() {
+        tracing::warn!(
+            "Ignoring unknown fields in OpenAI-compatible request: {:?}",
+            openai_compatible_params
+                .unknown_fields
+                .keys()
+                .collect::<Vec<_>>()
+        );
+    }
     let params = Params::try_from_openai(headers, openai_compatible_params)?;
 
     // The prefix for the response's `model` field depends on the inference target
@@ -229,6 +238,8 @@ pub struct OpenAICompatibleParams {
     tensorzero_dryrun: Option<bool>,
     #[serde(rename = "tensorzero::episode_id")]
     tensorzero_episode_id: Option<Uuid>,
+    #[serde(flatten)]
+    unknown_fields: HashMap<String, Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1030,6 +1041,7 @@ mod tests {
                 tensorzero_episode_id: None,
                 tensorzero_variant_name: None,
                 tensorzero_dryrun: None,
+                unknown_fields: Default::default(),
             },
         )
         .unwrap();
