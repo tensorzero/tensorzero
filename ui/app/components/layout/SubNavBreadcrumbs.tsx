@@ -38,6 +38,7 @@ const breadcrumbConfig: BreadcrumbConfig = {
     datasets: "Datasets",
     datapoints: "Datapoints",
     datapoint: "Datapoint",
+    evaluations: "Evaluations",
   },
   specialPaths: {
     // Handle variants special case
@@ -125,6 +126,14 @@ export function SubNavBreadcrumbs() {
           breadcrumbs.push({
             label: segment,
             href: `/datasets/${segment}`,
+          });
+          continue;
+        }
+
+        if (prevSegment === "evaluations") {
+          breadcrumbs.push({
+            label: segment,
+            href: `/evaluations/${segment}`,
           });
           continue;
         }

@@ -1,11 +1,11 @@
 import { clickhouseClient } from "./client.server";
 import {
-  EvaluationResultSchema,
   EvaluationRunInfoSchema,
   EvaluationStatisticsSchema,
   type EvaluationResult,
   type EvaluationRunInfo,
   type EvaluationStatistics,
+  parseEvaluationResult,
 } from "./evaluations";
 import { getStaledWindowQuery, uuidv7ToTimestamp } from "./helpers";
 
@@ -118,7 +118,7 @@ export async function getEvalResults(
     },
   });
   const rows = await result.json<EvaluationResult>();
-  return rows.map((row) => EvaluationResultSchema.parse(row));
+  return rows.map((row) => parseEvaluationResult(row));
 }
 
 /*
@@ -199,13 +199,6 @@ export async function getEvalStatistics(
   });
   const rows = await result.json<EvaluationStatistics>();
   return rows.map((row) => EvaluationStatisticsSchema.parse(row));
-}
-
-export function getEvaluatorMetricName(
-  evalName: string,
-  evaluatorName: string,
-): string {
-  return `tensorzero::eval_name::${evalName}::evaluator_name::${evaluatorName}`;
 }
 
 export async function countDatapointsForEval(

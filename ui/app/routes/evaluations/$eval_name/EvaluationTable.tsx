@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import React from "react";
 import { useSearchParams } from "react-router";
-import { Info, Check, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 import {
   Table,
@@ -17,64 +17,183 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import { Badge } from "~/components/ui/badge";
 
-import {
-  VariantSelector,
-  getVariantColor,
-  getLastUuidSegment,
-} from "./VariantSelector";
+import { VariantSelector, getVariantColor } from "./VariantSelector";
 import type {
   EvaluationRunInfo,
-  EvaluationResult,
   EvaluationStatistics,
+  ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
+import type { Input } from "~/utils/clickhouse/common";
+import type {
+  JsonInferenceOutput,
+  ContentBlockOutput,
+} from "~/utils/clickhouse/common";
+import InputComponent from "~/components/inference/Input";
+import OutputComponent from "~/components/inference/Output";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
+import { useConfig } from "~/context/config";
+import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
+import type { MetricConfig } from "~/utils/config/metric";
 
-// Update the TruncatedText component to truncate earlier and never wrap
-const TruncatedText = ({
-  text,
+// Enhanced TruncatedText component that can handle complex structures
+const TruncatedContent = ({
+  content,
   maxLength = 30,
-  noWrap = false,
+  type = "text",
 }: {
-  text: string;
+  content: string | Input | JsonInferenceOutput | ContentBlockOutput[];
   maxLength?: number;
-  noWrap?: boolean;
+  type?: "text" | "input" | "output";
 }) => {
-  const truncated =
-    text.length > maxLength ? text.slice(0, maxLength) + "..." : text;
+  // For simple strings, use the existing TruncatedText component
+  if (typeof content === "string" && type === "text") {
+    const truncated =
+      content.length > maxLength
+        ? content.slice(0, maxLength) + "..."
+        : content;
 
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            className={`flex cursor-help items-center gap-1 ${noWrap ? "overflow-hidden text-ellipsis whitespace-nowrap" : ""}`}
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex cursor-help items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
+              <span className="font-mono text-sm">{truncated}</span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent
+            side="right"
+            align="start"
+            sideOffset={5}
+            className="tooltip-scrollable max-h-[60vh] max-w-md overflow-auto shadow-lg"
+            avoidCollisions={true}
           >
-            <span className="font-mono text-sm">{truncated}</span>
-            {text.length > maxLength && (
-              <Info className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-            )}
-          </div>
-        </TooltipTrigger>
-        <TooltipContent
-          side="right"
-          align="start"
-          sideOffset={5}
-          className="tooltip-scrollable max-h-[60vh] max-w-md overflow-auto p-4 shadow-lg"
-          avoidCollisions={true}
-        >
-          <pre className="whitespace-pre-wrap text-xs">{text}</pre>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
+            <pre className="whitespace-pre-wrap text-xs">{content}</pre>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  // For Input type
+  if (type === "input" && typeof content !== "string") {
+    // For the truncated display, just show a brief summary
+    const inputSummary = getInputSummary(content as Input);
+
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex cursor-help items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
+              <span className="font-mono text-sm">{inputSummary}</span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent
+            side="right"
+            align="start"
+            sideOffset={5}
+            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto p-4 shadow-lg"
+            avoidCollisions={true}
+          >
+            <div className="w-full origin-top-left scale-90 transform">
+              <InputComponent input={content as Input} />
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  // For Output type
+  if (type === "output" && typeof content !== "string") {
+    // For the truncated display, just show a brief summary
+    const outputSummary = getOutputSummary(
+      content as JsonInferenceOutput | ContentBlockOutput[],
+    );
+
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex cursor-help items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
+              <span className="font-mono text-sm">{outputSummary}</span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent
+            side="right"
+            align="start"
+            sideOffset={5}
+            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto p-4 shadow-lg"
+            avoidCollisions={true}
+          >
+            <div className="w-full origin-top-left scale-90 transform">
+              <OutputComponent
+                output={content as JsonInferenceOutput | ContentBlockOutput[]}
+              />
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  // Fallback for unknown types
+  return <span>Unsupported content type</span>;
 };
 
-// Component for variant label with color coding and run ID tooltip
-const VariantLabel = ({
+// Helper function to generate a summary of an Input object
+function getInputSummary(input: Input): string {
+  if (!input || !input.messages || input.messages.length === 0) {
+    return "Empty input";
+  }
+
+  // Get the first message's first text content
+  const firstMessage = input.messages[0];
+  if (!firstMessage.content || firstMessage.content.length === 0) {
+    return `${firstMessage.role} message`;
+  }
+
+  const firstContent = firstMessage.content[0];
+  if (firstContent.type === "text") {
+    const text =
+      typeof firstContent.value === "string"
+        ? firstContent.value
+        : JSON.stringify(firstContent.value);
+    return text.length > 30 ? text.substring(0, 30) + "..." : text;
+  }
+
+  return `${firstMessage.role} message (${firstContent.type})`;
+}
+
+// Helper function to generate a summary of an Output object
+function getOutputSummary(
+  output: JsonInferenceOutput | ContentBlockOutput[],
+): string {
+  if (Array.isArray(output)) {
+    // It's ContentBlockOutput[]
+    if (output.length === 0) return "Empty output";
+
+    const firstBlock = output[0];
+    if (firstBlock.type === "text") {
+      return firstBlock.text.length > 30
+        ? firstBlock.text.substring(0, 30) + "..."
+        : firstBlock.text;
+    }
+    return `${firstBlock.type} output`;
+  } else {
+    // It's JsonInferenceOutput
+    if (!output.raw) return "Empty output";
+
+    return output.raw.length > 30
+      ? output.raw.substring(0, 30) + "..."
+      : output.raw;
+  }
+}
+
+// Component for variant circle with color coding and tooltip
+const VariantCircle = ({
   runId,
   variantName,
   allRunIds,
@@ -84,22 +203,15 @@ const VariantLabel = ({
   allRunIds: EvaluationRunInfo[];
 }) => {
   const colorClass = getVariantColor(runId, allRunIds);
-  const runIdSegment = getLastUuidSegment(runId);
 
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Badge
-            className={`${colorClass} flex cursor-help items-center gap-1.5 px-2 py-1`}
-          >
-            <span>{variantName}</span>
-            <span className="border-l border-white/30 pl-1.5 text-xs opacity-80">
-              {runIdSegment}
-            </span>
-          </Badge>
+          <div className={`${colorClass} h-4 w-4 cursor-help rounded-full`} />
         </TooltipTrigger>
         <TooltipContent side="top" className="p-2">
+          <p className="text-xs">Variant: {variantName}</p>
           <p className="text-xs">Run ID: {runId}</p>
         </TooltipContent>
       </Tooltip>
@@ -109,14 +221,20 @@ const VariantLabel = ({
 
 interface EvaluationTableProps {
   available_eval_run_ids: EvaluationRunInfo[];
-  eval_results: EvaluationResult[];
+  eval_results: ParsedEvaluationResult[];
   eval_statistics: EvaluationStatistics[];
+  evaluator_names: string[];
+  metric_names: string[];
+  eval_name: string;
 }
 
 export function EvaluationTable({
   available_eval_run_ids,
   eval_results,
   eval_statistics,
+  evaluator_names,
+  metric_names,
+  eval_name,
 }: EvaluationTableProps) {
   const [searchParams] = useSearchParams();
   const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
@@ -127,25 +245,14 @@ export function EvaluationTable({
   // Determine if we should show the variant column
   const showVariantColumn = selectedRunIds.length > 1;
 
-  // Get all unique metric names from the data
-  const uniqueMetrics = useMemo(() => {
-    const metrics = new Set<string>();
-    eval_results.forEach((result) => {
-      if (result.metric_name) {
-        metrics.add(result.metric_name);
-      }
-    });
-    return Array.from(metrics);
-  }, [eval_results]);
-
   // Get all unique datapoints from the results
   const uniqueDatapoints = useMemo(() => {
     const datapoints = new Map<
       string,
       {
         id: string;
-        input: string;
-        reference_output: string;
+        input: Input;
+        reference_output: JsonInferenceOutput | ContentBlockOutput[];
       }
     >();
 
@@ -169,7 +276,7 @@ export function EvaluationTable({
       Map<
         string,
         {
-          generated_output: string;
+          generated_output: JsonInferenceOutput | ContentBlockOutput[];
           metrics: Map<string, string>;
         }
       >
@@ -211,24 +318,6 @@ export function EvaluationTable({
     });
     return map;
   }, [available_eval_run_ids]);
-
-  // Format statistics for display
-  const formattedStats = useMemo(() => {
-    const stats = new Map<string, Map<string, number>>();
-
-    available_eval_run_ids.forEach((info) => {
-      stats.set(info.eval_run_id, new Map());
-    });
-
-    eval_statistics.forEach((stat) => {
-      const runStats = stats.get(stat.eval_run_id);
-      if (runStats) {
-        runStats.set(stat.metric_name, stat.mean_metric);
-      }
-    });
-
-    return stats;
-  }, [eval_statistics, available_eval_run_ids]);
 
   // Determine if metric is boolean or float based on its value
   const isMetricBoolean = (value: string): boolean => {
@@ -281,21 +370,6 @@ export function EvaluationTable({
     }
   };
 
-  // Format statistic for display
-  const formatStatValue = (value: number): React.ReactNode => {
-    if (value >= 0 && value <= 1) {
-      const percentage = Math.round(value * 100);
-      return (
-        <span className="whitespace-nowrap text-gray-700">{percentage}%</span>
-      );
-    }
-    return (
-      <span className="whitespace-nowrap text-gray-700">
-        {value.toFixed(2)}
-      </span>
-    );
-  };
-
   return (
     <div>
       {/* Variant selector */}
@@ -307,92 +381,67 @@ export function EvaluationTable({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="py-2 text-center">Input</TableHead>
-                  <TableHead className="py-2 text-center">
+                  <TableHead className="py-2 text-center align-top">
+                    Input
+                  </TableHead>
+                  <TableHead className="py-2 text-center align-top">
                     Reference Output
                   </TableHead>
                   {showVariantColumn && (
-                    <TableHead className="text-center">Variant</TableHead>
+                    <TableHead className="py-2 text-center align-top">
+                      {/* Empty header with minimal space */}
+                    </TableHead>
                   )}
-                  <TableHead className="py-2 text-center">
+                  <TableHead className="py-2 text-center align-top">
                     Generated Output
                   </TableHead>
-
                   {/* Dynamic metric columns */}
-                  {uniqueMetrics.map((metric) => (
-                    <TableHead key={metric} className="py-2 text-center">
-                      <div>{metric.split("::").pop()}</div>
-                    </TableHead>
-                  ))}
+                  {evaluator_names.map((evaluator_name) => {
+                    // Get the metric name for this evaluator
+                    const metric_name = getEvaluatorMetricName(
+                      eval_name,
+                      evaluator_name,
+                    );
+
+                    // Filter statistics for this specific metric
+                    const filteredStats = eval_statistics.filter(
+                      (stat) => stat.metric_name === metric_name,
+                    );
+
+                    return (
+                      <TableHead
+                        key={evaluator_name}
+                        className="py-2 text-center"
+                      >
+                        <EvaluatorHeader
+                          eval_name={eval_name}
+                          evaluator_name={evaluator_name}
+                          summaryStats={filteredStats}
+                          evalRunIds={available_eval_run_ids}
+                        />
+                      </TableHead>
+                    );
+                  })}
                 </TableRow>
               </TableHeader>
 
               <TableBody>
-                {/* Summary Row - Moved to top */}
-                <TableRow className="bg-muted/50 font-medium">
-                  <TableCell colSpan={2} className="text-left">
-                    Summary ({uniqueDatapoints.length} inputs)
-                  </TableCell>
-
-                  {/* If showing variant column, add variant badges */}
-                  {showVariantColumn ? (
-                    <TableCell className="align-middle">
-                      <div className="flex flex-col gap-2">
-                        {selectedRunIds.map((runId) => (
-                          <div
-                            key={`summary-variant-${runId}`}
-                            className="flex justify-center"
-                          >
-                            <VariantLabel
-                              runId={runId}
-                              variantName={
-                                runIdToVariant.get(runId) || "Unknown"
-                              }
-                              allRunIds={available_eval_run_ids}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </TableCell>
-                  ) : null}
-
-                  {/* Empty cell for Generated Output column */}
-                  <TableCell />
-
-                  {/* Summary cells for each metric */}
-                  {uniqueMetrics.map((metric) => (
-                    <TableCell
-                      key={metric}
-                      className="text-center align-middle"
-                    >
-                      {selectedRunIds.map((runId) => {
-                        const metricValue = formattedStats
-                          .get(runId)
-                          ?.get(metric);
-
-                        return (
-                          <div
-                            key={`summary-${runId}-${metric}`}
-                            className="flex justify-center py-1"
-                          >
-                            {metricValue !== undefined
-                              ? formatStatValue(metricValue)
-                              : "-"}
-                          </div>
-                        );
-                      })}
-                    </TableCell>
-                  ))}
-                </TableRow>
-
                 {/* Map through datapoints and variants */}
                 {uniqueDatapoints.map((datapoint) => {
                   const variantData = organizedResults.get(datapoint.id);
                   if (!variantData) return null;
 
-                  const filteredVariants = Array.from(
-                    variantData.entries(),
-                  ).filter(([runId]) => selectedRunIds.includes(runId));
+                  const filteredVariants = selectedRunIds
+                    .map((runId) => [runId, variantData.get(runId)])
+                    .filter(([, data]) => data !== undefined) as [
+                    string,
+                    {
+                      generated_output:
+                        | JsonInferenceOutput
+                        | ContentBlockOutput[];
+                      metrics: Map<string, string>;
+                    },
+                  ][];
 
                   if (filteredVariants.length === 0) return null;
 
@@ -406,9 +455,12 @@ export function EvaluationTable({
                           {index === 0 && (
                             <TableCell
                               rowSpan={filteredVariants.length}
-                              className="max-w-[200px] align-top"
+                              className="max-w-[200px] align-middle"
                             >
-                              <TruncatedText text={datapoint.input} />
+                              <TruncatedContent
+                                content={datapoint.input}
+                                type="input"
+                              />
                             </TableCell>
                           )}
 
@@ -416,18 +468,19 @@ export function EvaluationTable({
                           {index === 0 && (
                             <TableCell
                               rowSpan={filteredVariants.length}
-                              className="max-w-[200px] align-top"
+                              className="max-w-[200px] align-middle"
                             >
-                              <TruncatedText
-                                text={datapoint.reference_output}
+                              <TruncatedContent
+                                content={datapoint.reference_output}
+                                type="output"
                               />
                             </TableCell>
                           )}
 
-                          {/* Variant label - only if multiple variants are selected */}
+                          {/* Variant circle - only if multiple variants are selected */}
                           {showVariantColumn && (
                             <TableCell className="text-center align-middle">
-                              <VariantLabel
+                              <VariantCircle
                                 runId={runId}
                                 variantName={
                                   runIdToVariant.get(runId) || "Unknown"
@@ -439,14 +492,14 @@ export function EvaluationTable({
 
                           {/* Generated output */}
                           <TableCell className="max-w-[200px] align-middle">
-                            <TruncatedText
-                              text={data.generated_output}
-                              noWrap={true}
+                            <TruncatedContent
+                              content={data.generated_output}
+                              type="output"
                             />
                           </TableCell>
 
                           {/* Metrics cells */}
-                          {uniqueMetrics.map((metric) => {
+                          {metric_names.map((metric) => {
                             const metricValue = data.metrics.get(metric);
                             const isBoolean = metricValue
                               ? isMetricBoolean(metricValue)
@@ -478,3 +531,115 @@ export function EvaluationTable({
     </div>
   );
 }
+
+const EvaluatorHeader = ({
+  eval_name,
+  evaluator_name,
+  summaryStats,
+  evalRunIds,
+}: {
+  eval_name: string;
+  evaluator_name: string;
+  summaryStats: EvaluationStatistics[];
+  evalRunIds: EvaluationRunInfo[];
+}) => {
+  const config = useConfig();
+  const evalConfig = config.evals[eval_name];
+  const evaluatorConfig = evalConfig.evaluators[evaluator_name];
+  const metric_name = getEvaluatorMetricName(eval_name, evaluator_name);
+  const metricProperties = config.metrics[metric_name];
+  if (
+    metricProperties.type === "comment" ||
+    metricProperties.type === "demonstration"
+  ) {
+    return null;
+  }
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="cursor-help">
+            <div>{evaluator_name}</div>
+            <EvaluatorProperties
+              metricConfig={metricProperties}
+              summaryStats={summaryStats}
+              evalRunIds={evalRunIds}
+            />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="p-3">
+          <div className="space-y-1 text-left text-xs">
+            <div>
+              <span className="font-medium">Type:</span>
+              <span className="ml-2 font-mono">{metricProperties.type}</span>
+            </div>
+            <div>
+              <span className="font-medium">Optimize:</span>
+              <span className="ml-2 font-mono">
+                {metricProperties.optimize}
+              </span>
+            </div>
+            {evaluatorConfig.cutoff !== null && (
+              <div>
+                <span className="font-medium">Cutoff:</span>
+                <span className="ml-2 font-mono">{evaluatorConfig.cutoff}</span>
+              </div>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
+
+const EvaluatorProperties = ({
+  metricConfig,
+  summaryStats,
+  evalRunIds,
+}: {
+  metricConfig: MetricConfig;
+  summaryStats: EvaluationStatistics[];
+  evalRunIds: EvaluationRunInfo[];
+}) => {
+  return (
+    <div className="mt-2 flex flex-col items-center gap-1">
+      {summaryStats && (
+        <div className="mt-2 text-center text-xs text-muted-foreground">
+          {summaryStats.map((stat, index) => {
+            // Get the variant color for the circle
+            const variantColorClass = getVariantColor(
+              evalRunIds[index].eval_run_id,
+              evalRunIds,
+            );
+
+            return (
+              <div
+                key={index}
+                className="mt-1 flex items-center justify-center gap-1.5"
+              >
+                <div
+                  className={`h-2 w-2 rounded-full ${variantColorClass} flex-shrink-0`}
+                ></div>
+                <span>
+                  {formatSummaryValue(stat.mean_metric, metricConfig)} ± 0.05
+                  (n=
+                  {stat.datapoint_count})
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Update the formatSummaryValue function to use percentages for boolean and decimals for float
+const formatSummaryValue = (value: number, metricConfig: MetricConfig) => {
+  if (metricConfig.type === "boolean") {
+    return `${Math.round(value * 100)}%`;
+  } else if (metricConfig.type === "float") {
+    return value.toFixed(2);
+  }
+  return value;
+};
