@@ -293,75 +293,73 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <div className="container mx-auto px-4 pb-8">
-      <PageLayout>
-        <PageHeader heading="Datapoint" name={datapoint.id} />
-        {saveError && (
-          <div className="mt-2 rounded-md bg-red-100 px-4 py-3 text-red-800">
-            <p className="font-medium">Error saving datapoint</p>
-            <p>{saveError}</p>
-          </div>
-        )}
+    <PageLayout>
+      <PageHeader label="Datapoint" name={datapoint.id} />
+      {saveError && (
+        <div className="mt-2 rounded-md bg-red-100 px-4 py-3 text-red-800">
+          <p className="font-medium">Error saving datapoint</p>
+          <p>{saveError}</p>
+        </div>
+      )}
 
-        <SectionsGroup>
-          <SectionLayout>
-            <BasicInfo datapoint={datapoint} />
-          </SectionLayout>
+      <SectionsGroup>
+        <SectionLayout>
+          <BasicInfo datapoint={datapoint} />
+        </SectionLayout>
 
-          <SectionLayout>
-            <DatapointActions
-              variants={variants}
-              onVariantSelect={onVariantSelect}
-              variantInferenceIsLoading={variantInferenceIsLoading}
-              onDelete={handleDelete}
-              isDeleting={fetcher.state === "submitting" && !saveError}
-              toggleEditing={toggleEditing}
-              isEditing={isEditing}
-              canSave={canSave}
-              onSave={handleSave}
-              onReset={handleReset}
-              showTryWithVariant={
-                datapoint.function_name !== "tensorzero::default"
-              }
-            />
-          </SectionLayout>
-
-          <SectionLayout>
-            <SectionHeader heading="Input" />
-            <Input
-              key={`input-${resetKey}`}
-              input={input}
-              isEditing={isEditing}
-              onSystemChange={handleSystemChange}
-              onMessagesChange={handleMessagesChange}
-            />
-          </SectionLayout>
-
-          {output && (
-            <SectionLayout>
-              <SectionHeader heading="Output" />
-              <Output
-                key={`output-${resetKey}`}
-                output={output}
-                isEditing={isEditing}
-                onOutputChange={handleOutputChange}
-              />
-            </SectionLayout>
-          )}
-        </SectionsGroup>
-
-        {selectedVariant && (
-          <VariantResponseModal
-            isOpen={isModalOpen}
-            isLoading={variantInferenceIsLoading}
-            setIsLoading={setVariantInferenceIsLoading}
-            onClose={handleModalClose}
-            datapoint={datapoint}
-            selectedVariant={selectedVariant}
+        <SectionLayout>
+          <DatapointActions
+            variants={variants}
+            onVariantSelect={onVariantSelect}
+            variantInferenceIsLoading={variantInferenceIsLoading}
+            onDelete={handleDelete}
+            isDeleting={fetcher.state === "submitting" && !saveError}
+            toggleEditing={toggleEditing}
+            isEditing={isEditing}
+            canSave={canSave}
+            onSave={handleSave}
+            onReset={handleReset}
+            showTryWithVariant={
+              datapoint.function_name !== "tensorzero::default"
+            }
           />
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Input" />
+          <Input
+            key={`input-${resetKey}`}
+            input={input}
+            isEditing={isEditing}
+            onSystemChange={handleSystemChange}
+            onMessagesChange={handleMessagesChange}
+          />
+        </SectionLayout>
+
+        {output && (
+          <SectionLayout>
+            <SectionHeader heading="Output" />
+            <Output
+              key={`output-${resetKey}`}
+              output={output}
+              isEditing={isEditing}
+              onOutputChange={handleOutputChange}
+            />
+          </SectionLayout>
         )}
-      </PageLayout>
-    </div>
+      </SectionsGroup>
+
+      {selectedVariant && (
+        <VariantResponseModal
+          isOpen={isModalOpen}
+          isLoading={variantInferenceIsLoading}
+          setIsLoading={setVariantInferenceIsLoading}
+          onClose={handleModalClose}
+          datapoint={datapoint}
+          selectedVariant={selectedVariant}
+        />
+      )}
+    </PageLayout>
   );
 }
 

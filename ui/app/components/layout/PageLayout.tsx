@@ -7,6 +7,30 @@ import {
 } from "~/components/ui/tooltip";
 import type { ReactNode } from "react";
 import { forwardRef } from "react";
+import { cn } from "~/utils/common";
+
+// PageLayout component
+interface PageLayoutProps {
+  children: ReactNode;
+  className?: string;
+}
+
+const PageLayout = forwardRef<HTMLDivElement, PageLayoutProps>(
+  ({ children, className }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={cn(
+          "container mx-auto flex flex-col gap-12 px-8 pb-20 pt-16",
+          className,
+        )}
+      >
+        {children}
+      </div>
+    );
+  },
+);
+PageLayout.displayName = "PageLayout";
 
 // PageHeader component
 interface PageHeaderProps {
@@ -16,38 +40,100 @@ interface PageHeaderProps {
   count?: number;
   lateral?: string;
   className?: string;
+  icon?: ReactNode;
+  iconBg?: string;
+  children?: ReactNode;
 }
 
 const PageHeader = forwardRef<HTMLDivElement, PageHeaderProps>(
-  ({ heading, label, name, count, lateral, className }, ref) => {
+  (
+    {
+      heading,
+      label,
+      name,
+      count,
+      lateral,
+      className,
+      icon,
+      iconBg = "bg-none",
+      children,
+    },
+    ref,
+  ) => {
     return (
-      <div ref={ref} className={`${className || ""}`}>
-        {label !== undefined && (
-          <p className="text-sm font-normal text-fg-muted">{label}</p>
-        )}
-        <div className="flex items-baseline gap-2">
-          {heading !== undefined && (
-            <h4 className="text-2xl font-medium">{heading}</h4>
+      <div ref={ref} className={cn("flex flex-col", className)}>
+        <div className="flex flex-col gap-2">
+          {label !== undefined && (
+            <p className="flex items-center gap-1.5 text-sm font-normal text-fg-secondary">
+              {icon && (
+                <div
+                  className={`${iconBg} flex size-5 items-center justify-center rounded-sm`}
+                >
+                  {icon}
+                </div>
+              )}
+              {label}
+            </p>
           )}
-          {name !== undefined && (
-            <span className="font-mono text-2xl font-medium leading-none">
-              {name}
-            </span>
-          )}
-          {lateral !== undefined && (
-            <p className="text-sm font-normal text-fg-muted">{lateral}</p>
-          )}
-          {count !== undefined && (
-            <h4 className="text-2xl font-medium text-fg-muted">
-              {count.toLocaleString()}
-            </h4>
-          )}
+          <div className="flex items-baseline gap-2">
+            {heading !== undefined && (
+              <h1 className="text-2xl font-medium">{heading}</h1>
+            )}
+            {name !== undefined && (
+              <span className="font-mono text-2xl font-medium leading-none">
+                {name}
+              </span>
+            )}
+            {lateral !== undefined && (
+              <p className="text-sm font-normal text-fg-tertiary">{lateral}</p>
+            )}
+            {count !== undefined && (
+              <h1 className="text-2xl font-medium text-fg-muted">
+                {count.toLocaleString()}
+              </h1>
+            )}
+          </div>
         </div>
+        {children && <div className="mt-8 flex flex-col gap-8">{children}</div>}
       </div>
     );
   },
 );
 PageHeader.displayName = "PageHeader";
+
+// SectionsGroup component
+interface SectionsGroupProps {
+  children: ReactNode;
+  className?: string;
+}
+
+const SectionsGroup = forwardRef<HTMLDivElement, SectionsGroupProps>(
+  ({ children, className }, ref) => {
+    return (
+      <div ref={ref} className={`flex flex-col gap-12 ${className || ""}`}>
+        {children}
+      </div>
+    );
+  },
+);
+SectionsGroup.displayName = "SectionsGroup";
+
+// SectionLayout component
+interface SectionLayoutProps {
+  children: ReactNode;
+  className?: string;
+}
+
+const SectionLayout = forwardRef<HTMLDivElement, SectionLayoutProps>(
+  ({ children, className }, ref) => {
+    return (
+      <div ref={ref} className={`flex flex-col gap-4 ${className || ""}`}>
+        {children}
+      </div>
+    );
+  },
+);
+SectionLayout.displayName = "SectionLayout";
 
 // SectionHeader component
 interface SectionHeaderProps {
@@ -63,7 +149,7 @@ interface SectionHeaderProps {
 const SectionHeader = forwardRef<HTMLHeadingElement, SectionHeaderProps>(
   ({ heading, count, badge, className }, ref) => {
     return (
-      <h3
+      <h2
         ref={ref}
         className={`flex items-center gap-2 text-xl font-medium ${className || ""}`}
       >
@@ -92,64 +178,10 @@ const SectionHeader = forwardRef<HTMLHeadingElement, SectionHeaderProps>(
             </Tooltip>
           </TooltipProvider>
         )}
-      </h3>
+      </h2>
     );
   },
 );
 SectionHeader.displayName = "SectionHeader";
-
-// SectionLayout component
-interface SectionLayoutProps {
-  children: ReactNode;
-  className?: string;
-}
-
-const SectionLayout = forwardRef<HTMLDivElement, SectionLayoutProps>(
-  ({ children, className }, ref) => {
-    return (
-      <div ref={ref} className={`flex flex-col gap-4 ${className || ""}`}>
-        {children}
-      </div>
-    );
-  },
-);
-SectionLayout.displayName = "SectionLayout";
-
-// SectionsGroup component
-interface SectionsGroupProps {
-  children: ReactNode;
-  className?: string;
-}
-
-const SectionsGroup = forwardRef<HTMLDivElement, SectionsGroupProps>(
-  ({ children, className }, ref) => {
-    return (
-      <div ref={ref} className={`flex flex-col gap-12 ${className || ""}`}>
-        {children}
-      </div>
-    );
-  },
-);
-SectionsGroup.displayName = "SectionsGroup";
-
-// PageLayout component
-interface PageLayoutProps {
-  children: ReactNode;
-  className?: string;
-}
-
-const PageLayout = forwardRef<HTMLDivElement, PageLayoutProps>(
-  ({ children, className }, ref) => {
-    return (
-      <div
-        ref={ref}
-        className={`flex flex-col gap-8 pb-20 pt-16 ${className || ""}`}
-      >
-        {children}
-      </div>
-    );
-  },
-);
-PageLayout.displayName = "PageLayout";
 
 export { PageHeader, SectionHeader, SectionLayout, SectionsGroup, PageLayout };
