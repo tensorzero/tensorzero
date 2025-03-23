@@ -125,7 +125,7 @@ from tensorzero import TensorZeroGateway  # or AsyncTensorZeroGateway
 with TensorZeroGateway.build_embedded(clickhouse_url="...", config_file="...") as client:
     response = client.inference(
         model_name="openai::gpt-4o-mini",
-        # Try other providers easily: "anthropic::claude-3-7-sonnet-20240229",
+        # Try other providers easily: "anthropic::claude-3-7-sonnet-20240229"
         input={
             "messages": [
                 {
