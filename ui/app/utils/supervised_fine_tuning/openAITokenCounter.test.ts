@@ -24,7 +24,7 @@ const shouldRunApiTests =
   process.env.ENABLE_TEST_WITH_OPENAI_API === "true";
 
 const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || "fake-api-key",
 });
 
 describe("openAITokenCounter", () => {
