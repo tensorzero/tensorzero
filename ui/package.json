@@ -13,6 +13,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@babel/runtime": "7.26.10",
     "@clickhouse/client": "^1.10.1",
     "@eslint/js": "^9.19.0",
     "@hookform/resolvers": "^3.10.0",
@@ -64,15 +65,16 @@
     "@typescript-eslint/eslint-plugin": "^8.22.0",
     "@typescript-eslint/parser": "^8.22.0",
     "autoprefixer": "^10.4.20",
+    "esbuild": "0.25.1",
     "eslint": "^9.21.0",
-    "postcss": "^8.5.1",
+    "postcss": "^8.5.3",
     "prettier": "^3.4.2",
     "prettier-plugin-tailwindcss": "^0.6.11",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
-    "vite": "^5.4.14",
+    "vite": "^6.2.2",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^2.1.9"
+    "vitest": "^3.0.8"
   },
   "overrides": {
     "react-is": "^19.0.0-rc-69d4b800-20241021"
