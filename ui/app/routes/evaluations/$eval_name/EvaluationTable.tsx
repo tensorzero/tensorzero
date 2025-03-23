@@ -37,6 +37,7 @@ import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import type { MetricConfig } from "~/utils/config/metric";
+import type { EvaluatorConfig } from "~/utils/config/evals";
 
 // Enhanced TruncatedText component that can handle complex structures
 const TruncatedContent = ({
@@ -550,6 +551,7 @@ const EvaluatorHeader = ({
               metricConfig={metricProperties}
               summaryStats={summaryStats}
               evalRunIds={evalRunIds}
+              evaluatorConfig={evaluatorConfig}
             />
           </div>
         </TooltipTrigger>
@@ -584,11 +586,14 @@ const EvaluatorProperties = ({
   metricConfig,
   summaryStats,
   evalRunIds,
+  evaluatorConfig,
 }: {
   metricConfig: MetricConfig;
   summaryStats: EvaluationStatistics[];
   evalRunIds: EvaluationRunInfo[];
+  evaluatorConfig: EvaluatorConfig;
 }) => {
+  const failed = isCutoffFailed(summaryStats[0].mean_metric, evaluatorConfig);
   return (
     <div className="mt-2 flex flex-col items-center gap-1">
       {summaryStats && (
@@ -603,7 +608,9 @@ const EvaluatorProperties = ({
             return (
               <div
                 key={index}
-                className="mt-1 flex items-center justify-center gap-1.5"
+                className={`mt-1 flex items-center justify-center gap-1.5 ${
+                  failed ? "text-red-500" : ""
+                }`}
               >
                 <div
                   className={`h-2 w-2 rounded-full ${variantColorClass} flex-shrink-0`}
@@ -629,4 +636,22 @@ const formatSummaryValue = (value: number, metricConfig: MetricConfig) => {
     return value.toFixed(2);
   }
   return value;
+};
+
+const isCutoffFailed = (value: number, evaluatorConfig: EvaluatorConfig) => {
+  switch (evaluatorConfig.type) {
+    case "exact_match":
+      return evaluatorConfig.cutoff ? value < evaluatorConfig.cutoff : false;
+    case "llm_judge":
+      switch (evaluatorConfig.optimize) {
+        case "min":
+          return evaluatorConfig.cutoff
+            ? value > evaluatorConfig.cutoff
+            : false;
+        case "max":
+          return evaluatorConfig.cutoff
+            ? value < evaluatorConfig.cutoff
+            : false;
+      }
+  }
 };
