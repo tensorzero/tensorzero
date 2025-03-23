@@ -79,7 +79,7 @@ export async function getEvalResults(
     LIMIT {limit:UInt32}
     OFFSET {offset:UInt32}
   ) dp
-  LEFT JOIN TagInference datapoint_tag
+  LEFT JOIN TagInference datapoint_tag FINAL
     ON dp.id = toUUIDOrNull(datapoint_tag.value)
     AND datapoint_tag.key = 'tensorzero::datapoint_id'
     AND datapoint_tag.function_name = {function_name:String}
@@ -157,7 +157,7 @@ export async function getEvalStatistics(
         ${staled_window_query}
       )
   ) dp
-  LEFT JOIN TagInference datapoint_tag
+  LEFT JOIN TagInference datapoint_tag FINAL
     ON dp.id = toUUIDOrNull(datapoint_tag.value)
     AND datapoint_tag.key = 'tensorzero::datapoint_id'
     AND datapoint_tag.function_name = {function_name:String}

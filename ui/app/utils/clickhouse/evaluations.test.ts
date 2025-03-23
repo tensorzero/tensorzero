@@ -59,6 +59,7 @@ describe("getEvalResults", () => {
       0,
     );
     // Verify we get the expected number of results (10 = 5 datapoints * 2 metrics)
+    console.log(results);
     expect(results.length).toBe(10);
 
     // Check that each result has the expected structure
