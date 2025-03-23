@@ -975,7 +975,7 @@ async def test_async_multi_turn_parallel_tool_use(async_client):
 
 
 @pytest.mark.asyncio
-async def test_patch_openai_client_with_async_client_use_async_true():
+async def test_patch_openai_client_with_async_client_async_setup_true():
     """Tests that tensorzero.patch_openai_client works with AsyncOpenAI client."""
     client = AsyncOpenAI(api_key="donotuse")
 
@@ -1015,7 +1015,7 @@ async def test_patch_openai_client_with_async_client_use_async_true():
 
 
 @pytest.mark.asyncio
-async def test_patch_openai_client_with_async_client_use_async_false():
+async def test_patch_openai_client_with_async_client_async_setup_false():
     """Tests that tensorzero.patch_openai_client works with AsyncOpenAI client using sync setup."""
     client = AsyncOpenAI(api_key="donotuse")
 

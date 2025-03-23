@@ -35,10 +35,36 @@ class ContentBlock(ABC):
 
 @dataclass
 class Text(ContentBlock):
-    text: str
+    text: Optional[str] = None
+    arguments: Optional[Any] = None
+
+    def __post_init__(self):
+        if self.text is None and self.arguments is None:
+            raise ValueError("Either `text` or `arguments` must be provided.")
+
+        if self.text is not None and self.arguments is not None:
+            raise ValueError("Only one of `text` or `arguments` must be provided.")
+
+        # Warn about on going deprecation: https://github.com/tensorzero/tensorzero/issues/1170
+        if self.text is not None and not isinstance(self.text, str):
+            warnings.warn(
+                'Please use `ContentBlock(type="text", arguments=...)` when providing arguments for a prompt template/schema. In a future release, `Text(type="text", text=...)` will require a string literal.',
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
     def to_dict(self) -> Dict[str, Any]:
-        return dict(type="text", value=self.text)
+        if self.text is not None:
+            # Handle ongoing deprecation: https://github.com/tensorzero/tensorzero/issues/1170
+            # The first branch will be removed in a future release.
+            if isinstance(self.text, dict):
+                return dict(type="text", arguments=self.text)
+            else:
+                return dict(type="text", text=self.text)
+        elif self.arguments is not None:
+            return dict(type="text", arguments=self.arguments)
+        else:
+            raise ValueError("Either `text` or `arguments` must be provided.")
 
 
 @dataclass
