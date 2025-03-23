@@ -177,8 +177,7 @@ export async function getEvalStatistics(
   ) feedback
     ON feedback.target_id = ci.id
   WHERE
-    (ci.tags['tensorzero::eval_run_id'] IS NULL OR
-     ci.tags['tensorzero::eval_run_id'] IN ({eval_run_ids:Array(String)}))
+     ci.tags['tensorzero::eval_run_id'] IN ({eval_run_ids:Array(String)})
     AND feedback.value IS NOT NULL
   GROUP BY
     ci.tags['tensorzero::eval_run_id'],

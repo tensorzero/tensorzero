@@ -322,19 +322,12 @@ export function EvaluationTable({
     return map;
   }, [available_eval_run_ids]);
 
-  // Determine if metric is boolean or float based on its value
-  const isMetricBoolean = (value: string): boolean => {
-    return (
-      value === "true" || value === "false" || value === "1" || value === "0"
-    );
-  };
-
   // Format metric value for display
   const formatMetricValue = (
     value: string,
-    isBoolean = false,
+    metricType: string,
   ): React.ReactNode => {
-    if (isBoolean) {
+    if (metricType === "boolean") {
       const boolValue = value === "true" || value === "1";
       const icon = boolValue ? (
         <Check className="mr-1 h-3 w-3 flex-shrink-0" />
@@ -354,15 +347,6 @@ export function EvaluationTable({
       // Try to parse as number
       const numValue = parseFloat(value);
       if (!isNaN(numValue)) {
-        // If it's between 0 and 1, display as percentage
-        if (numValue >= 0 && numValue <= 1) {
-          const percentage = Math.round(numValue * 100);
-          return (
-            <span className="whitespace-nowrap text-gray-700">
-              {percentage}%
-            </span>
-          );
-        }
         return (
           <span className="whitespace-nowrap text-gray-700">{numValue}</span>
         );
@@ -372,6 +356,7 @@ export function EvaluationTable({
       return <span className="whitespace-nowrap">{value}</span>;
     }
   };
+  const config = useConfig();
 
   return (
     <div>
@@ -504,9 +489,7 @@ export function EvaluationTable({
                           {/* Metrics cells */}
                           {metric_names.map((metric) => {
                             const metricValue = data.metrics.get(metric);
-                            const isBoolean = metricValue
-                              ? isMetricBoolean(metricValue)
-                              : false;
+                            const metricType = config.metrics[metric].type;
 
                             return (
                               <TableCell
@@ -515,7 +498,7 @@ export function EvaluationTable({
                               >
                                 <div className="flex h-full items-center justify-center">
                                   {metricValue
-                                    ? formatMetricValue(metricValue, isBoolean)
+                                    ? formatMetricValue(metricValue, metricType)
                                     : "-"}
                                 </div>
                               </TableCell>
@@ -574,18 +557,20 @@ const EvaluatorHeader = ({
           <div className="space-y-1 text-left text-xs">
             <div>
               <span className="font-medium">Type:</span>
-              <span className="ml-2 font-mono">{metricProperties.type}</span>
+              <span className="ml-2 font-medium">{metricProperties.type}</span>
             </div>
             <div>
               <span className="font-medium">Optimize:</span>
-              <span className="ml-2 font-mono">
+              <span className="ml-2 font-medium">
                 {metricProperties.optimize}
               </span>
             </div>
             {evaluatorConfig.cutoff !== null && (
               <div>
                 <span className="font-medium">Cutoff:</span>
-                <span className="ml-2 font-mono">{evaluatorConfig.cutoff}</span>
+                <span className="ml-2 font-medium">
+                  {evaluatorConfig.cutoff}
+                </span>
               </div>
             )}
           </div>
@@ -614,6 +599,7 @@ const EvaluatorProperties = ({
               evalRunIds[index].eval_run_id,
               evalRunIds,
             );
+            console.log(stat);
 
             return (
               <div
@@ -624,8 +610,8 @@ const EvaluatorProperties = ({
                   className={`h-2 w-2 rounded-full ${variantColorClass} flex-shrink-0`}
                 ></div>
                 <span>
-                  {formatSummaryValue(stat.mean_metric, metricConfig)} ± 0.05
-                  (n=
+                  {formatSummaryValue(stat.mean_metric, metricConfig)} ±{" "}
+                  {formatSummaryValue(stat.stderr_metric, metricConfig)} (n=
                   {stat.datapoint_count})
                 </span>
               </div>
@@ -637,7 +623,6 @@ const EvaluatorProperties = ({
   );
 };
 
-// Update the formatSummaryValue function to use percentages for boolean and decimals for float
 const formatSummaryValue = (value: number, metricConfig: MetricConfig) => {
   if (metricConfig.type === "boolean") {
     return `${Math.round(value * 100)}%`;
