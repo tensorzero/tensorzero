@@ -81,7 +81,7 @@ export function getStaledWindowQuery(run_timestamps: Date[]): string {
   const clauses = run_timestamps.map((ts) => {
     // Format the Date to ms Unix timestamp
     const formattedTimestamp = ts.getTime();
-    return `(UUIDv7ToDateTime(id) < ${formattedTimestamp} AND (staled_at IS NULL OR staled_at > ${formattedTimestamp}))`;
+    return `(toUnixTimestamp64Milli(UUIDv7ToDateTime(id)) < ${formattedTimestamp} AND (staled_at IS NULL OR toUnixTimestamp64Milli(staled_at) > ${formattedTimestamp}))`;
   });
 
   return clauses.join(" OR ");

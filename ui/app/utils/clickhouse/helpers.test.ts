@@ -42,7 +42,7 @@ describe("getStaledWindowQuery", () => {
   it("should generate the correct clause for a single timestamp", () => {
     const testDate = new Date("2022-01-01T00:00:00.000Z");
     const result = getStaledWindowQuery([testDate]);
-    const expected = `(UUIDv7ToDateTime(id) < 1640995200000 AND (staled_at IS NULL OR staled_at > 1640995200000))`;
+    const expected = `(toUnixTimestamp64Milli(UUIDv7ToDateTime(id)) < 1640995200000 AND (staled_at IS NULL OR toUnixTimestamp64Milli(staled_at) > 1640995200000))`;
     expect(result).toBe(expected);
   });
 
@@ -50,7 +50,7 @@ describe("getStaledWindowQuery", () => {
     const date1 = new Date("2022-01-01T00:00:00.000Z");
     const date2 = new Date("2022-06-01T12:30:00.000Z");
     const result = getStaledWindowQuery([date1, date2]);
-    const expected = `(UUIDv7ToDateTime(id) < 1640995200000 AND (staled_at IS NULL OR staled_at > 1640995200000)) OR (UUIDv7ToDateTime(id) < 1654086600000 AND (staled_at IS NULL OR staled_at > 1654086600000))`;
+    const expected = `(toUnixTimestamp64Milli(UUIDv7ToDateTime(id)) < 1640995200000 AND (staled_at IS NULL OR toUnixTimestamp64Milli(staled_at) > 1640995200000)) OR (toUnixTimestamp64Milli(UUIDv7ToDateTime(id)) < 1654086600000 AND (staled_at IS NULL OR toUnixTimestamp64Milli(staled_at) > 1654086600000))`;
     expect(result).toBe(expected);
   });
 });

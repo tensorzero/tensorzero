@@ -27,6 +27,10 @@ describe("getEvalRunIds", () => {
     const runIds = await getEvalRunIds("haiku");
     expect(runIds).toMatchObject([
       {
+        eval_run_id: "0195c498-1cbe-7ac0-b5b2-5856741f5890",
+        variant_name: "better_prompt_haiku_3_5",
+      },
+      {
         eval_run_id: "0195aef7-96fe-7d60-a2e6-5a6ea990c425",
         variant_name: "initial_prompt_gpt4o_mini",
       },
@@ -52,8 +56,8 @@ describe("getEvalResults", () => {
       5,
       0,
     );
-    // Verify we get the expected number of results (20 based on the error output)
-    expect(results.length).toBe(20);
+    // Verify we get the expected number of results (10 = 5 datapoints * 2 metrics)
+    expect(results.length).toBe(10);
 
     // Check that each result has the expected structure
     results.forEach((result) => {
@@ -106,7 +110,7 @@ describe("getEvalResults", () => {
       6,
       0,
     );
-    expect(results.length).toBe(48); // 6 datapoints * 2 eval runs * 2 metrics
+    expect(results.length).toBe(24); // 6 datapoints * 2 eval runs * 2 metrics
     // Verify that we have both metrics in the results
     const metricNames = new Set(results.map((r) => r.metric_name));
     expect(
@@ -122,6 +126,65 @@ describe("getEvalResults", () => {
     // Verify that the number of distinct datapoint ids is 6
     const datapointIds = new Set(results.map((r) => r.datapoint_id));
     expect(datapointIds.size).toBe(6);
+  });
+
+  test("should return correct results for ragged haiku eval", async () => {
+    const results = await getEvalResults(
+      "foo",
+      "write_haiku",
+      "chat",
+      [
+        "tensorzero::eval_name::haiku::evaluator_name::topic_starts_with_f",
+        "tensorzero::eval_name::haiku::evaluator_name::exact_match",
+      ],
+      [
+        "0195aef7-96fe-7d60-a2e6-5a6ea990c425",
+        "0195c498-1cbe-7ac0-b5b2-5856741f5890",
+      ],
+      5,
+      0,
+    );
+    // Verify we get the expected number of results (18)
+    // 18 is because the most recent datapoint is skipped because it is after all the eval runs
+    // and the second most recent datapoint is only used in one of the eval runs
+    // so it's 5 datapoints * 2 metrics * 2 eval runs - 1 skipped datapoint for 1 eval run * 2 metrics
+    expect(results.length).toBe(18);
+
+    // Check that each result has the expected structure
+    results.forEach((result) => {
+      expect(result).toHaveProperty("datapoint_id");
+      expect(result).toHaveProperty("eval_run_id");
+      expect(result).toHaveProperty("input");
+      expect(result).toHaveProperty("generated_output");
+      expect(result).toHaveProperty("reference_output");
+      expect(result).toHaveProperty("metric_name");
+      expect(result).toHaveProperty("metric_value");
+    });
+
+    // Verify the eval_run_id is consistent across all results
+    expect(
+      results.every(
+        (r) =>
+          r.eval_run_id === "0195aef7-96fe-7d60-a2e6-5a6ea990c425" ||
+          r.eval_run_id === "0195c498-1cbe-7ac0-b5b2-5856741f5890",
+      ),
+    ).toBe(true);
+
+    // Verify we have both metric types in the results
+    const metricNames = new Set(results.map((r) => r.metric_name));
+    expect(
+      metricNames.has(
+        "tensorzero::eval_name::haiku::evaluator_name::exact_match",
+      ),
+    ).toBe(true);
+    expect(
+      metricNames.has(
+        "tensorzero::eval_name::haiku::evaluator_name::topic_starts_with_f",
+      ),
+    ).toBe(true);
+    // Verify that the number of distinct datapoint ids is 5
+    const datapointIds = new Set(results.map((r) => r.datapoint_id));
+    expect(datapointIds.size).toBe(5);
   });
 });
 
@@ -144,7 +207,7 @@ describe("getEvalStatistics", () => {
     expect(statistics[0].metric_name).toBe(
       "tensorzero::eval_name::haiku::evaluator_name::exact_match",
     );
-    expect(statistics[0].datapoint_count).toBe(150);
+    expect(statistics[0].datapoint_count).toBe(75);
     expect(statistics[0].mean_metric).toBe(0);
     expect(statistics[0].stderr_metric).toBe(0);
     expect(statistics[1].eval_run_id).toBe(
@@ -153,7 +216,7 @@ describe("getEvalStatistics", () => {
     expect(statistics[1].metric_name).toBe(
       "tensorzero::eval_name::haiku::evaluator_name::topic_starts_with_f",
     );
-    expect(statistics[1].datapoint_count).toBe(150);
+    expect(statistics[1].datapoint_count).toBe(75);
     expect(statistics[1].mean_metric).toBeCloseTo(0.066667);
     expect(statistics[1].stderr_metric).toBeCloseTo(0.02428);
   });
@@ -179,18 +242,18 @@ describe("getEvalStatistics", () => {
     expect(statistics[0].metric_name).toBe(
       "tensorzero::eval_name::entity_extraction::evaluator_name::count_sports",
     );
-    expect(statistics[0].datapoint_count).toBe(82);
+    expect(statistics[0].datapoint_count).toBe(41);
     expect(statistics[0].mean_metric).toBeCloseTo(0.7805);
-    expect(statistics[0].stderr_metric).toBeCloseTo(0.046);
+    expect(statistics[0].stderr_metric).toBeCloseTo(0.065);
     expect(statistics[1].eval_run_id).toBe(
       "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
     );
     expect(statistics[1].metric_name).toBe(
       "tensorzero::eval_name::entity_extraction::evaluator_name::count_sports",
     );
-    expect(statistics[1].datapoint_count).toBe(82);
+    expect(statistics[1].datapoint_count).toBe(41);
     expect(statistics[1].mean_metric).toBeCloseTo(0.8048);
-    expect(statistics[1].stderr_metric).toBeCloseTo(0.046);
+    expect(statistics[1].stderr_metric).toBeCloseTo(0.0627);
 
     expect(statistics[2].eval_run_id).toBe(
       "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
@@ -198,9 +261,9 @@ describe("getEvalStatistics", () => {
     expect(statistics[2].metric_name).toBe(
       "tensorzero::eval_name::entity_extraction::evaluator_name::exact_match",
     );
-    expect(statistics[2].datapoint_count).toBe(82);
+    expect(statistics[2].datapoint_count).toBe(41);
     expect(statistics[2].mean_metric).toBeCloseTo(0.22);
-    expect(statistics[2].stderr_metric).toBeCloseTo(0.046);
+    expect(statistics[2].stderr_metric).toBeCloseTo(0.0654);
 
     expect(statistics[3].eval_run_id).toBe(
       "0195aef7-ec99-7312-924f-32b71c3496ee",
@@ -208,9 +271,9 @@ describe("getEvalStatistics", () => {
     expect(statistics[3].metric_name).toBe(
       "tensorzero::eval_name::entity_extraction::evaluator_name::exact_match",
     );
-    expect(statistics[3].datapoint_count).toBe(82);
+    expect(statistics[3].datapoint_count).toBe(41);
     expect(statistics[3].mean_metric).toBeCloseTo(0.54);
-    expect(statistics[3].stderr_metric).toBeCloseTo(0.0554);
+    expect(statistics[3].stderr_metric).toBeCloseTo(0.0788);
   });
 });
 
@@ -222,6 +285,7 @@ describe("countDatapointsForEval", () => {
       "chat",
       ["0195aef7-96fe-7d60-a2e6-5a6ea990c425"],
     );
+    // This should not include data that is after the eval run
     expect(datapoints).toBe(75);
   });
 
