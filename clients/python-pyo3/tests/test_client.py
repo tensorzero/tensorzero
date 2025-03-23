@@ -224,7 +224,7 @@ async def test_async_basic_inference(async_client):
 async def test_async_client_build_http_sync():
     async with AsyncTensorZeroGateway.build_http(
         gateway_url="http://localhost:3000",
-        use_async=False,
+        async_setup=False,
     ) as client:
         input = {
             "system": {"assistant_name": "Alfred Pennyworth"},
@@ -260,7 +260,7 @@ async def test_async_client_build_embedded_sync():
     async with AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
         clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero-python-e2e",
-        use_async=False,
+        async_setup=False,
     ) as client:
         input = {
             "system": {"assistant_name": "Alfred Pennyworth"},
