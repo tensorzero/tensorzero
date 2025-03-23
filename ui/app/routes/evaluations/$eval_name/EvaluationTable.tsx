@@ -266,7 +266,10 @@ export function EvaluationTable({
       }
     });
 
-    return Array.from(datapoints.values());
+    // Sort datapoints by ID in descending order
+    return Array.from(datapoints.values()).sort((a, b) =>
+      b.id.localeCompare(a.id),
+    );
   }, [eval_results]);
 
   // Organize results by datapoint and run ID

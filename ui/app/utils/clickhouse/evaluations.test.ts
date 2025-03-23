@@ -6,12 +6,14 @@ import {
   getEvalStatistics,
 } from "./evaluations.server";
 
-// TODO: add fixtures and tests that handle joins that are not as clean and contain missing data.
-
 describe("getEvalRunIds", () => {
   test("should return correct run ids for entity_extraction eval", async () => {
     const runIds = await getEvalRunIds("entity_extraction");
     expect(runIds).toMatchObject([
+      {
+        eval_run_id: "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
+        variant_name: "llama_8b_initial_prompt",
+      },
       {
         eval_run_id: "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
         variant_name: "gpt4o_mini_initial_prompt",
@@ -94,7 +96,9 @@ describe("getEvalResults", () => {
     expect(datapointIds.size).toBe(5);
   });
 
-  test("should return correct results for entity_extraction eval", async () => {
+  test("should return correct results for entity_extraction eval that skips a staled datapoint", async () => {
+    // There is a datapoint that was inserted and deleted before the last eval run after the first two.
+    // We test here that it is not included and the data is not ragged.
     const results = await getEvalResults(
       "foo",
       "extract_entities",
@@ -104,13 +108,14 @@ describe("getEvalResults", () => {
         "tensorzero::eval_name::entity_extraction::evaluator_name::count_sports",
       ],
       [
+        "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
         "0195aef7-ec99-7312-924f-32b71c3496ee",
         "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
       ],
       6,
       0,
     );
-    expect(results.length).toBe(24); // 6 datapoints * 2 eval runs * 2 metrics
+    expect(results.length).toBe(36); // 6 datapoints * 3 eval runs * 2 metrics
     // Verify that we have both metrics in the results
     const metricNames = new Set(results.map((r) => r.metric_name));
     expect(
