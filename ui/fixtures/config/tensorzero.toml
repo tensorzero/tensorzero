@@ -89,6 +89,12 @@ model = "anthropic::claude-3-5-haiku-20241022"
 system_template = "functions/write_haiku/initial_prompt/system_template.minijinja"
 user_template = "functions/write_haiku/initial_prompt/user_template.minijinja"
 
+[functions.write_haiku.variants.better_prompt_haiku_3_5]
+type = "chat_completion"
+model = "anthropic::claude-3-5-haiku-20241022"
+system_template = "functions/write_haiku/better_prompt/system_template.minijinja"
+user_template = "functions/write_haiku/better_prompt/user_template.minijinja"
+
 [functions.generate_secret]
 type = "json"
 output_schema = "functions/generate_secret/output_schema.json"
