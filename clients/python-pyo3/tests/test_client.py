@@ -2403,6 +2403,7 @@ def test_content_block_text_init_validation():
     ):
         Text(type="text")
 
+    # Test providing both text and arguments fails
     with pytest.raises(
         ValueError, match=r"Only one of `text` or `arguments` must be provided."
     ):
