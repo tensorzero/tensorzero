@@ -599,7 +599,6 @@ const EvaluatorProperties = ({
               evalRunIds[index].eval_run_id,
               evalRunIds,
             );
-            console.log(stat);
 
             return (
               <div
