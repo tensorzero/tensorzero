@@ -3,7 +3,7 @@ from tensorzero import TensorZeroGateway
 with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
     response = client.inference(
         model_name="openai::gpt-4o-mini",
-        # & many more e.g. "anthropic::claude-3-7-sonnet-20240229",
+        # Try other providers easily: "anthropic::claude-3-7-sonnet-20240229",
         input={
             "messages": [
                 {
