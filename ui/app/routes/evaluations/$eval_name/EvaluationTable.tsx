@@ -626,7 +626,7 @@ const EvaluatorProperties = ({
               <div
                 key={stat.eval_run_id}
                 className={`mt-1 flex items-center justify-center gap-1.5 ${
-                  failed ? "text-red-500" : ""
+                  failed ? "text-red-700" : ""
                 }`}
               >
                 <div
