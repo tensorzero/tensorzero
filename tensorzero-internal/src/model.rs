@@ -8,6 +8,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use std::{env, fs};
 use strum::VariantNames;
+use tensorzero_derive::TensorZeroDeserialize;
 #[allow(unused_imports)]
 use tracing::{span, warn, Instrument, Level};
 use url::Url;
@@ -512,7 +513,7 @@ pub enum ProviderConfig {
 /// This is necessary because we want to load environment variables as we deserialize
 /// and we need to be able to deserialize the correct one based on the "type" field.
 /// Use the ProviderConfig struct for all post-initialization logic.
-#[derive(Deserialize, VariantNames)]
+#[derive(TensorZeroDeserialize, VariantNames)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
