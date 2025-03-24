@@ -58,7 +58,7 @@ impl Migration for Migration0020<'_> {
             return Ok(true);
         }
         let inference_by_id_engine = get_table_engine(self.clickhouse, "InferenceById").await?;
-        if inference_by_id_engine != "ReplacingMergeTree" {
+        if !inference_by_id_engine.contains("ReplacingMergeTree") {
             // Table was created by an older migration. We should drop and recreate
             return Ok(true);
         }
@@ -69,7 +69,7 @@ impl Migration for Migration0020<'_> {
         }
         let inference_by_episode_id_engine =
             get_table_engine(self.clickhouse, "InferenceByEpisodeId").await?;
-        if inference_by_episode_id_engine != "ReplacingMergeTree" {
+        if !inference_by_episode_id_engine.contains("ReplacingMergeTree") {
             // Table was created by an older migration. We should drop and recreate
             return Ok(true);
         }
