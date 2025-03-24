@@ -218,9 +218,9 @@ mod tests {
 
     use futures::{stream, StreamExt};
 
-    use crate::{
-        inference::types::{extra_body::FilteredInferenceExtraBody, ContentBlockChunk, TextChunk},
-        variant::chat_completion::{ExtraBodyConfig, ExtraBodyReplacement},
+    use crate::inference::types::{
+        extra_body::{ExtraBodyConfig, ExtraBodyReplacement, FilteredInferenceExtraBody},
+        ContentBlockChunk, TextChunk,
     };
 
     use super::*;

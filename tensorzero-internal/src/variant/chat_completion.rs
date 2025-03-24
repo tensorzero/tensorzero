@@ -219,7 +219,7 @@ impl ChatCompletionConfig {
                 let inference_extra_body = inference_config
                     .extra_body
                     .clone()
-                    .filter(inference_config.variant_name.as_deref());
+                    .filter(inference_config.variant_name);
                 FullExtraBodyConfig {
                     extra_body,
                     inference_extra_body,
