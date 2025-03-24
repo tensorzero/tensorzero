@@ -124,16 +124,6 @@ impl Migration for Migration0020<'_> {
     async fn apply(&self) -> Result<(), Error> {
         // Only gets used when we are not doing a clean start
         let view_offset = Duration::from_secs(15);
-        let view_timestamp = (std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseMigration {
-                    id: MIGRATION_ID.to_string(),
-                    message: e.to_string(),
-                })
-            })?
-            + view_offset)
-            .as_secs();
 
         // Check if the InferenceById table exists
         let inference_by_id_exists =
@@ -217,6 +207,16 @@ impl Migration for Migration0020<'_> {
             )
         );"#;
         let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let view_timestamp = (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseMigration {
+                    id: MIGRATION_ID.to_string(),
+                    message: e.to_string(),
+                })
+            })?
+            + view_offset)
+            .as_secs();
 
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let view_where_clause = if !self.clean_start {
