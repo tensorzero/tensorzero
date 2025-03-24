@@ -55,7 +55,7 @@ export default function BasicInfo({
             icon={functionIconConfig.icon}
             iconBg={functionIconConfig.iconBg}
             label={inference.function_name}
-            secondaryLabel={inference.function_type}
+            secondaryLabel={`· ${inference.function_type}`}
             link={`/observability/functions/${inference.function_name}`}
             font="mono"
           />
@@ -67,7 +67,7 @@ export default function BasicInfo({
         <BasicInfoItemContent>
           <Chip
             label={inference.variant_name}
-            secondaryLabel={variantType}
+            secondaryLabel={`· ${variantType}`}
             link={`/observability/functions/${inference.function_name}/variants/${inference.variant_name}`}
             font="mono"
           />
@@ -99,6 +99,11 @@ export default function BasicInfo({
               label={`${inferenceUsage?.output_tokens ?? ""} tok`}
               tooltip="Output Tokens"
             />
+            <Chip
+              icon={<Timer className="text-fg-tertiary" />}
+              label={`${inference.processing_time_ms} ms`}
+              tooltip="Processing Time"
+            />
           </div>
         </BasicInfoItemContent>
       </BasicInfoItem>
@@ -113,7 +118,7 @@ export default function BasicInfo({
           />
         </BasicInfoItemContent>
       </BasicInfoItem>
-
+      {/*
       <BasicInfoItem>
         <BasicInfoItemTitle>Processing Time</BasicInfoItemTitle>
         <BasicInfoItemContent>
@@ -123,6 +128,7 @@ export default function BasicInfo({
           />
         </BasicInfoItemContent>
       </BasicInfoItem>
+      */}
     </BasicInfoLayout>
   );
 }

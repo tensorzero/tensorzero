@@ -26,6 +26,7 @@ export default [
     "datasets/:dataset_name/datapoint/:id",
     "routes/datasets/$dataset_name/datapoint/$id/route.tsx",
   ),
+  route("evaluations/:eval_name", "routes/evaluations/$eval_name/route.tsx"),
   route(
     "observability/inferences",
     "routes/observability/inferences/route.tsx",

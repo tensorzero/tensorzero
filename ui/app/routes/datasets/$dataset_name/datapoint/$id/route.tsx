@@ -1,9 +1,10 @@
 import { useFetcher } from "react-router";
 import { data, isRouteErrorResponse, redirect } from "react-router";
+import { v7 as uuid } from "uuid";
 import BasicInfo from "./DatapointBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/Output";
-import { useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useConfig } from "~/context/config";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { VariantResponseModal } from "./VariantResponseModal";
@@ -14,7 +15,7 @@ import {
   type ParsedDatasetRow,
 } from "~/utils/clickhouse/datasets";
 import {
-  deleteDatapoint as deleteDatapointServer,
+  staleDatapoint,
   getDatasetCounts,
 } from "~/utils/clickhouse/datasets.server";
 import { tensorZeroClient } from "~/utils/tensorzero.server";
@@ -94,18 +95,25 @@ export async function action({ request }: ActionFunctionArgs) {
     auxiliary: formData.get("auxiliary"),
     is_deleted: formData.get("is_deleted") === "true",
     updated_at: formData.get("updated_at"),
+    staled_at: null,
   };
+
   const cleanedData = Object.fromEntries(
     Object.entries(rawData).filter(([, value]) => value !== undefined),
   );
-  const action = formData.get("action");
   const parsedFormData: ParsedDatasetRow =
     ParsedDatasetRowSchema.parse(cleanedData);
   const config = await getConfig();
   const functionConfig = config.functions[parsedFormData.function_name];
   const functionType = functionConfig?.type;
+  // await deleteDatapointServer(parsedFormData);
+  const action = formData.get("action");
   if (action === "delete") {
-    await deleteDatapointServer(parsedFormData);
+    await staleDatapoint(
+      parsedFormData.dataset_name,
+      parsedFormData.id,
+      functionType,
+    );
     const datasetCounts = await getDatasetCounts();
     const datasetCount = datasetCounts.find(
       (count) => count.dataset_name === parsedFormData.dataset_name,
@@ -123,9 +131,9 @@ export async function action({ request }: ActionFunctionArgs) {
     );
 
     try {
-      await tensorZeroClient.updateDatapoint(
+      const { id } = await tensorZeroClient.updateDatapoint(
         parsedFormData.dataset_name,
-        parsedFormData.id,
+        uuid(),
         {
           function_name: parsedFormData.function_name,
           input: transformedInput,
@@ -148,7 +156,15 @@ export async function action({ request }: ActionFunctionArgs) {
             : {}),
         },
       );
-      return { success: true };
+      await staleDatapoint(
+        parsedFormData.dataset_name,
+        parsedFormData.id,
+        functionType,
+      );
+
+      return redirect(
+        `/datasets/${parsedFormData.dataset_name}/datapoint/${id}`,
+      );
     } catch (error) {
       console.error("Error updating datapoint:", error);
       return {
@@ -188,12 +204,24 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
+  const originalInput = useMemo(() => datapoint.input, []);
   const [output, setOutput] = useState<typeof datapoint.output>(
     datapoint.output,
   );
+  const originalOutput = useMemo(() => datapoint.output, []);
   const config = useConfig();
   const [isEditing, setIsEditing] = useState(false);
   const [resetKey, setResetKey] = useState(0);
+  const [canSave, setCanSave] = useState(false);
+  useEffect(() => {
+    // Use JSON.stringify to compare object values rather than references
+    const inputChanged =
+      JSON.stringify(input) !== JSON.stringify(originalInput);
+    const outputChanged =
+      JSON.stringify(output) !== JSON.stringify(originalOutput);
+
+    setCanSave(isEditing && (inputChanged || outputChanged));
+  }, [isEditing, input, output, originalInput, originalOutput]);
 
   const toggleEditing = () => setIsEditing(!isEditing);
 
@@ -265,74 +293,73 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <div className="container mx-auto px-4 pb-8">
-      <PageLayout>
-        <PageHeader heading="Datapoint" name={datapoint.id} />
-        {saveError && (
-          <div className="mt-2 rounded-md bg-red-100 px-4 py-3 text-red-800">
-            <p className="font-medium">Error saving datapoint</p>
-            <p>{saveError}</p>
-          </div>
-        )}
+    <PageLayout>
+      <PageHeader label="Datapoint" name={datapoint.id} />
+      {saveError && (
+        <div className="mt-2 rounded-md bg-red-100 px-4 py-3 text-red-800">
+          <p className="font-medium">Error saving datapoint</p>
+          <p>{saveError}</p>
+        </div>
+      )}
 
-        <SectionsGroup>
-          <SectionLayout>
-            <BasicInfo datapoint={datapoint} />
-          </SectionLayout>
+      <SectionsGroup>
+        <SectionLayout>
+          <BasicInfo datapoint={datapoint} />
+        </SectionLayout>
 
-          <SectionLayout>
-            <DatapointActions
-              variants={variants}
-              onVariantSelect={onVariantSelect}
-              variantInferenceIsLoading={variantInferenceIsLoading}
-              onDelete={handleDelete}
-              isDeleting={fetcher.state === "submitting" && !saveError}
-              toggleEditing={toggleEditing}
-              isEditing={isEditing}
-              onSave={handleSave}
-              onReset={handleReset}
-              showTryWithVariant={
-                datapoint.function_name !== "tensorzero::default"
-              }
-            />
-          </SectionLayout>
-
-          <SectionLayout>
-            <SectionHeader heading="Input" />
-            <Input
-              key={`input-${resetKey}`}
-              input={input}
-              isEditing={isEditing}
-              onSystemChange={handleSystemChange}
-              onMessagesChange={handleMessagesChange}
-            />
-          </SectionLayout>
-
-          {output && (
-            <SectionLayout>
-              <SectionHeader heading="Output" />
-              <Output
-                key={`output-${resetKey}`}
-                output={output}
-                isEditing={isEditing}
-                onOutputChange={handleOutputChange}
-              />
-            </SectionLayout>
-          )}
-        </SectionsGroup>
-
-        {selectedVariant && (
-          <VariantResponseModal
-            isOpen={isModalOpen}
-            isLoading={variantInferenceIsLoading}
-            setIsLoading={setVariantInferenceIsLoading}
-            onClose={handleModalClose}
-            datapoint={datapoint}
-            selectedVariant={selectedVariant}
+        <SectionLayout>
+          <DatapointActions
+            variants={variants}
+            onVariantSelect={onVariantSelect}
+            variantInferenceIsLoading={variantInferenceIsLoading}
+            onDelete={handleDelete}
+            isDeleting={fetcher.state === "submitting" && !saveError}
+            toggleEditing={toggleEditing}
+            isEditing={isEditing}
+            canSave={canSave}
+            onSave={handleSave}
+            onReset={handleReset}
+            showTryWithVariant={
+              datapoint.function_name !== "tensorzero::default"
+            }
           />
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Input" />
+          <Input
+            key={`input-${resetKey}`}
+            input={input}
+            isEditing={isEditing}
+            onSystemChange={handleSystemChange}
+            onMessagesChange={handleMessagesChange}
+          />
+        </SectionLayout>
+
+        {output && (
+          <SectionLayout>
+            <SectionHeader heading="Output" />
+            <Output
+              key={`output-${resetKey}`}
+              output={output}
+              isEditing={isEditing}
+              onOutputChange={handleOutputChange}
+            />
+          </SectionLayout>
         )}
-      </PageLayout>
-    </div>
+      </SectionsGroup>
+
+      {selectedVariant && (
+        <VariantResponseModal
+          isOpen={isModalOpen}
+          isLoading={variantInferenceIsLoading}
+          setIsLoading={setVariantInferenceIsLoading}
+          onClose={handleModalClose}
+          datapoint={datapoint}
+          selectedVariant={selectedVariant}
+        />
+      )}
+    </PageLayout>
   );
 }
 

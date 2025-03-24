@@ -64,4 +64,6 @@ WORKDIR /app
 
 EXPOSE 4000
 
+ENV HOST=0.0.0.0
+
 CMD ["pnpm", "run", "start"]

@@ -21,15 +21,21 @@ uv run pytest
 
 import base64
 import json
-from os import path
+import os
 from time import time
 from uuid import UUID
 
 import pytest
 import pytest_asyncio
+import tensorzero
 from openai import AsyncOpenAI, BadRequestError
 from pydantic import BaseModel, ValidationError
 from tensorzero.util import uuid7
+
+TEST_CONFIG_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "../../../tensorzero-internal/tests/e2e/tensorzero.toml",
+)
 
 
 @pytest_asyncio.fixture
@@ -863,7 +869,7 @@ async def test_async_multi_block_image_url(async_client):
 
 @pytest.mark.asyncio
 async def test_async_multi_block_image_base64(async_client):
-    basepath = path.dirname(__file__)
+    basepath = os.path.dirname(__file__)
     with open(
         f"{basepath}/../../../tensorzero-internal/tests/e2e/providers/ferris.png", "rb"
     ) as f:
@@ -966,3 +972,83 @@ async def test_async_multi_turn_parallel_tool_use(async_client):
 
     assert "70" in assistant_message.content
     assert "30" in assistant_message.content
+
+
+@pytest.mark.asyncio
+async def test_patch_openai_client_with_async_client_async_setup_true():
+    """Tests that tensorzero.patch_openai_client works with AsyncOpenAI client."""
+    client = AsyncOpenAI(api_key="donotuse")
+
+    # Patch the client
+    patched_client = await tensorzero.patch_openai_client(
+        client,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
+        config_file="../../examples/quickstart/config/tensorzero.toml",
+        async_setup=True,
+    )
+
+    messages = [
+        {"role": "user", "content": "What is the capital of Japan?"},
+    ]
+
+    result = await patched_client.chat.completions.create(
+        messages=messages,
+        model="tensorzero::function_name::generate_haiku",
+        temperature=0.4,
+        extra_body={"tensorzero::episode_id": str(uuid7())},
+    )
+
+    # Verify IDs are valid UUIDs
+    UUID(result.id)  # Will raise ValueError if invalid
+    UUID(result.episode_id)  # Will raise ValueError if invalid
+    assert "Tokyo" in result.choices[0].message.content
+    assert result.usage.prompt_tokens > 0
+    assert result.usage.completion_tokens > 0
+    assert result.usage.total_tokens > 0
+    assert result.choices[0].finish_reason == "stop"
+    assert (
+        result.model
+        == "tensorzero::function_name::generate_haiku::variant_name::gpt_4o_mini"
+    )
+
+    tensorzero.close_patched_openai_client_gateway(patched_client)
+
+
+@pytest.mark.asyncio
+async def test_patch_openai_client_with_async_client_async_setup_false():
+    """Tests that tensorzero.patch_openai_client works with AsyncOpenAI client using sync setup."""
+    client = AsyncOpenAI(api_key="donotuse")
+
+    # Patch the client with sync setup
+    patched_client = tensorzero.patch_openai_client(
+        client,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
+        config_file="../../examples/quickstart/config/tensorzero.toml",
+        async_setup=False,
+    )
+
+    messages = [
+        {"role": "user", "content": "What is the capital of Japan?"},
+    ]
+
+    result = await patched_client.chat.completions.create(
+        messages=messages,
+        model="tensorzero::function_name::generate_haiku",
+        temperature=0.4,
+        extra_body={"tensorzero::episode_id": str(uuid7())},
+    )
+
+    # Verify IDs are valid UUIDs
+    UUID(result.id)  # Will raise ValueError if invalid
+    UUID(result.episode_id)  # Will raise ValueError if invalid
+    assert "Tokyo" in result.choices[0].message.content
+    assert result.usage.prompt_tokens > 0
+    assert result.usage.completion_tokens > 0
+    assert result.usage.total_tokens > 0
+    assert result.choices[0].finish_reason == "stop"
+    assert (
+        result.model
+        == "tensorzero::function_name::generate_haiku::variant_name::gpt_4o_mini"
+    )
+
+    tensorzero.close_patched_openai_client_gateway(patched_client)

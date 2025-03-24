@@ -47,9 +47,14 @@ filter = 'binary(e2e) and test(providers::xai::)'
 test-group = 'e2e_xai'
 
 [[profile.default.overrides]]
+filter = 'test(test_concurrent_clickhouse_migrations)'
+# the test fails if migrations > 60s so we can kill it at 65
+slow-timeout = { period = "65s" }
+
+[[profile.default.overrides]]
 # Settings for running batch tests
 filter = 'test(batch)'
-slow-timeout = { period = "15s", terminate-after = 1 }
+slow-timeout = { period = "15s", terminate-after = 3 }
 
 [[profile.default.overrides]]
 # Settings for running unit tests

@@ -18,6 +18,8 @@ pub mod migration_0016;
 pub mod migration_0017;
 pub mod migration_0018;
 pub mod migration_0019;
+pub mod migration_0020;
+pub mod migration_0021;
 
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails
@@ -107,6 +109,28 @@ async fn get_column_type(
     }
 }
 
+async fn get_default_expression(
+    clickhouse: &ClickHouseConnectionInfo,
+    table: &str,
+    column: &str,
+    migration_id: &str,
+) -> Result<String, Error> {
+    let query = format!(
+        "SELECT default_expression FROM system.columns WHERE database='{}' AND table='{}' AND name='{}'",
+        clickhouse.database(),
+        table,
+        column
+    );
+    match clickhouse.run_query(query, None).await {
+        Err(e) => Err(ErrorDetails::ClickHouseMigration {
+            id: migration_id.to_string(),
+            message: e.to_string(),
+        }
+        .into()),
+        Ok(response) => Ok(response.trim().to_string()),
+    }
+}
+
 async fn table_is_nonempty(
     clickhouse: &ClickHouseConnectionInfo,
     table: &str,
@@ -120,4 +144,17 @@ async fn table_is_nonempty(
             message: e.to_string(),
         })
     })? > 0)
+}
+
+async fn get_table_engine(
+    clickhouse: &ClickHouseConnectionInfo,
+    table: &str,
+) -> Result<String, Error> {
+    let query = format!(
+        "SELECT engine FROM system.tables WHERE database='{}' AND name='{}'",
+        clickhouse.database(),
+        table
+    );
+    let result = clickhouse.run_query(query, None).await?;
+    Ok(result.trim().to_string())
 }

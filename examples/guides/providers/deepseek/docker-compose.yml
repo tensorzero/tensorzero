@@ -6,6 +6,7 @@ services:
     image: tensorzero/gateway
     volumes:
       - ./config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:?Environment variable DEEPSEEK_API_KEY must be set.}
     ports:

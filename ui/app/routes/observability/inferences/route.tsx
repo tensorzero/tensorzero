@@ -49,17 +49,15 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   if (inferences.length === 0) {
     return (
-      <div className="container mx-auto px-4 pb-8">
-        <PageLayout>
-          <PageHeader heading="Inferences" count={totalInferences} />
-          <SectionLayout>
-            <InferenceSearchBar />
-            <div className="py-8 text-center text-gray-500">
-              No inferences found
-            </div>
-          </SectionLayout>
-        </PageLayout>
-      </div>
+      <PageLayout>
+        <PageHeader heading="Inferences" count={totalInferences} />
+        <SectionLayout>
+          <InferenceSearchBar />
+          <div className="py-8 text-center text-gray-500">
+            No inferences found
+          </div>
+        </SectionLayout>
+      </PageLayout>
     );
   }
 
@@ -84,21 +82,19 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     !bounds?.first_id || bounds.first_id === bottomInference.id;
 
   return (
-    <div className="container mx-auto px-4 pb-8">
-      <PageLayout>
-        <PageHeader heading="Inferences" count={totalInferences} />
-        <SectionLayout>
-          <InferenceSearchBar />
-          <InferencesTable inferences={inferences} />
-          <PageButtons
-            onPreviousPage={handlePreviousPage}
-            onNextPage={handleNextPage}
-            disablePrevious={disablePrevious}
-            disableNext={disableNext}
-          />
-        </SectionLayout>
-      </PageLayout>
-    </div>
+    <PageLayout>
+      <PageHeader heading="Inferences" count={totalInferences} />
+      <SectionLayout>
+        <InferenceSearchBar />
+        <InferencesTable inferences={inferences} />
+        <PageButtons
+          onPreviousPage={handlePreviousPage}
+          onNextPage={handleNextPage}
+          disablePrevious={disablePrevious}
+          disableNext={disableNext}
+        />
+      </SectionLayout>
+    </PageLayout>
   );
 }
 

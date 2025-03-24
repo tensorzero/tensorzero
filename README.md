@@ -289,7 +289,22 @@ Boost performance by dynamically updating your prompts with relevant examples, c
 
 Optimize your prompts programmatically using research-driven optimization techniques.
 
-Today we provide a sample **[integration with DSPy](https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy)**.
+<table>
+  <tr></tr> <!-- flip highlight order -->
+  <tr>
+    <td width="50%" align="center" valign="middle"><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations#best-of-n-sampling">MIPROv2</a></b></td>
+    <td width="50%" align="center" valign="middle"><b><a href="https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy">DSPy Integration</a></b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle">
+      TensorZero implements MIPROv2, an automated prompt engineering algorithm that jointly optimizes instructions and in-context examples for your prompts.
+    </td>
+    <td width="50%" align="center" valign="middle">
+      TensorZero comes with several optimization recipes, but you can also easily create your own.
+      This example shows to optimize a TensorZero function using an arbitrary tool — here, DSPy, a popular library for automated prompt engineering.
+    </td>
+  </tr>
+</table>
 
 _More coming soon..._
 

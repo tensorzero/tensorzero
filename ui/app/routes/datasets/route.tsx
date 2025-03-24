@@ -35,20 +35,18 @@ export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   return (
-    <div className="container mx-auto px-4 pb-8">
-      <PageLayout>
-        <PageHeader heading="Datasets" count={counts.length} />
-        <SectionLayout>
-          <DatasetTable counts={counts} />
-          <PageButtons
-            onPreviousPage={handlePreviousPage}
-            onNextPage={handleNextPage}
-            disablePrevious={offset === 0}
-            disableNext={offset + pageSize >= counts.length}
-          />
-        </SectionLayout>
-      </PageLayout>
-    </div>
+    <PageLayout>
+      <PageHeader heading="Datasets" count={counts.length} />
+      <SectionLayout>
+        <DatasetTable counts={counts} />
+        <PageButtons
+          onPreviousPage={handlePreviousPage}
+          onNextPage={handleNextPage}
+          disablePrevious={offset === 0}
+          disableNext={offset + pageSize >= counts.length}
+        />
+      </SectionLayout>
+    </PageLayout>
   );
 }
 

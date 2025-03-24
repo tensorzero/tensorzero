@@ -134,7 +134,7 @@ async fn query_inference_for_datapoint(
   -- Discriminator itself
   i.function_type
 
-FROM InferenceById i
+FROM InferenceById i FINAL
 LEFT JOIN ChatInference c
   ON i.id_uint = toUInt128(c.id)
 LEFT JOIN JsonInference j
@@ -312,17 +312,26 @@ pub async fn update_datapoint_handler(
                     .map(|x| x.into())
                     .unwrap_or_default(),
             );
-            let validated_output = validate_parse_demonstration(
-                &function_config,
-                &chat.output,
-                dynamic_demonstration_info,
-            )
-            .await?;
 
-            let DemonstrationOutput::Chat(output) = validated_output else {
-                return Err(Error::new(ErrorDetails::InternalError {
-                    message: "Expected chat output from validate_parse_demonstration".to_string(),
-                }));
+            // Only validate and parse output if it exists
+            let output = if let Some(output) = &chat.output {
+                let validated_output = validate_parse_demonstration(
+                    &function_config,
+                    output,
+                    dynamic_demonstration_info,
+                )
+                .await?;
+
+                let DemonstrationOutput::Chat(output) = validated_output else {
+                    return Err(Error::new(ErrorDetails::InternalError {
+                        message: "Expected chat output from validate_parse_demonstration"
+                            .to_string(),
+                    }));
+                };
+
+                Some(output)
+            } else {
+                None
             };
 
             let datapoint = ChatInferenceDatapoint {
@@ -331,7 +340,7 @@ pub async fn update_datapoint_handler(
                 id: path_params.id,
                 episode_id: None,
                 input: resolved_input,
-                output: Some(output),
+                output,
                 tool_params: chat.tool_params,
                 tags: chat.tags,
                 auxiliary: chat.auxiliary,
@@ -351,30 +360,44 @@ pub async fn update_datapoint_handler(
                 })?;
             let resolved_input = json.input.clone().resolve(&fetch_context).await?;
             function_config.validate_input(&json.input)?;
-            let dynamic_demonstration_info = DynamicDemonstrationInfo::Json(json.output_schema);
-            let validated_json = validate_parse_demonstration(
-                &function_config,
-                &json.output,
-                dynamic_demonstration_info,
-            )
-            .await?;
-            let DemonstrationOutput::Json(json_out) = validated_json else {
-                return Err(Error::new(ErrorDetails::InternalError {
-                    message: "Expected JSON output from validate_parse_demonstration".to_string(),
-                }));
+            let dynamic_demonstration_info =
+                DynamicDemonstrationInfo::Json(json.output_schema.clone());
+
+            // Determine output based on whether json.output is None
+            let output = if let Some(output_value) = &json.output {
+                let validated_json = validate_parse_demonstration(
+                    &function_config,
+                    output_value,
+                    dynamic_demonstration_info,
+                )
+                .await?;
+
+                let DemonstrationOutput::Json(json_out) = validated_json else {
+                    return Err(Error::new(ErrorDetails::InternalError {
+                        message: "Expected JSON output from validate_parse_demonstration"
+                            .to_string(),
+                    }));
+                };
+
+                let json_out: JsonInferenceOutput =
+                    serde_json::from_value(json_out).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!("Failed to deserialize validated JSON output: {}", e),
+                        })
+                    })?;
+
+                Some(json_out)
+            } else {
+                None
             };
-            let json_out: JsonInferenceOutput = serde_json::from_value(json_out).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Failed to deserialize validated JSON output: {}", e),
-                })
-            })?;
+
             let datapoint = JsonInferenceDatapoint {
                 dataset_name: path_params.dataset,
                 function_name: json.function_name,
                 id: path_params.id,
                 episode_id: None,
                 input: resolved_input,
-                output: Some(json_out),
+                output,
                 // We currently don't support creating synthetic datapoints with 'output_schema'
                 output_schema: serde_json::Value::Object(Default::default()),
                 tags: json.tags,
@@ -638,12 +661,33 @@ impl From<ClickHouseDatapoint> for Datapoint {
     }
 }
 
+/// If the input is None then we should return None
+/// If the input is Value::Null we should return None
+/// If the input is some other Value::* we should return it.
+fn deserialize_optional_json_value<'de, D>(
+    deserializer: D,
+) -> Result<Option<serde_json::Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
+    match opt {
+        None => Ok(None),
+        Some(value) => match value {
+            serde_json::Value::Null => Ok(None),
+            _ => Ok(Some(value)),
+        },
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SyntheticChatInferenceDatapoint {
     pub function_name: String,
     pub input: Input,
-    pub output: serde_json::Value,
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_optional_json_value")]
+    pub output: Option<serde_json::Value>,
     #[serde(default)]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(default)]
@@ -657,7 +701,9 @@ pub struct SyntheticChatInferenceDatapoint {
 pub struct SyntheticJsonInferenceDatapoint {
     pub function_name: String,
     pub input: Input,
-    pub output: serde_json::Value,
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_optional_json_value")]
+    pub output: Option<serde_json::Value>,
     pub output_schema: serde_json::Value,
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
@@ -681,5 +727,118 @@ fn get_possibly_default_function(
         })))
     } else {
         config.get_function(function_name).cloned()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use serde_json::json;
+
+    #[test]
+    fn test_synthetic_chat_datapoint_with_none_output() {
+        let json_str = r#"{
+            "function_name": "test_function",
+            "input": {"system": {"assistant_name": "Test"}, "messages": []},
+            "output": null,
+            "tool_params": null,
+            "tags": null,
+            "auxiliary": ""
+        }"#;
+
+        let datapoint: SyntheticChatInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        assert_eq!(datapoint.function_name, "test_function");
+        assert_eq!(datapoint.output, None);
+        assert_eq!(datapoint.tool_params, None);
+        assert_eq!(datapoint.tags, None);
+        assert_eq!(datapoint.auxiliary, "");
+    }
+
+    #[test]
+    fn test_synthetic_chat_datapoint_with_some_output() {
+        let json_str = r#"{
+            "function_name": "test_function",
+            "input": {"system": {"assistant_name": "Test"}, "messages": []},
+            "output": [{"type": "text", "value": "Hello"}],
+            "tool_params": {"tools_available": [], "tool_choice": "auto", "parallel_tool_calls": false},
+            "tags": {"source": "test"},
+            "auxiliary": "extra data"
+        }"#;
+
+        let datapoint: SyntheticChatInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        assert_eq!(datapoint.function_name, "test_function");
+        assert!(datapoint.output.is_some());
+        assert!(datapoint.tool_params.is_some());
+        assert_eq!(
+            datapoint.tags,
+            Some(HashMap::from([("source".to_string(), "test".to_string())]))
+        );
+        assert_eq!(datapoint.auxiliary, "extra data");
+    }
+
+    #[test]
+    fn test_synthetic_json_datapoint_with_none_output() {
+        let json_str = r#"{
+            "function_name": "test_json_function",
+            "input": {"system": {"assistant_name": "Test"}, "messages": []},
+            "output": null,
+            "output_schema": {},
+            "tags": null,
+            "auxiliary": ""
+        }"#;
+
+        let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        assert_eq!(datapoint.function_name, "test_json_function");
+        assert_eq!(datapoint.output, None);
+        assert_eq!(datapoint.output_schema, json!({}));
+        assert_eq!(datapoint.tags, None);
+        assert_eq!(datapoint.auxiliary, "");
+    }
+
+    #[test]
+    fn test_synthetic_json_datapoint_with_some_output() {
+        let json_str = r#"{
+            "function_name": "test_json_function",
+            "input": {"system": {"assistant_name": "Test"}, "messages": []},
+            "output": {"answer": "Hello"},
+            "output_schema": {"type": "object", "properties": {"answer": {"type": "string"}}},
+            "tags": {"source": "test"},
+            "auxiliary": "extra data"
+        }"#;
+
+        let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        assert_eq!(datapoint.function_name, "test_json_function");
+        assert!(datapoint.output.is_some());
+        assert_eq!(datapoint.output.as_ref().unwrap()["answer"], "Hello");
+        assert_eq!(
+            datapoint.tags,
+            Some(HashMap::from([("source".to_string(), "test".to_string())]))
+        );
+        assert_eq!(datapoint.auxiliary, "extra data");
+    }
+
+    #[test]
+    fn test_synthetic_json_datapoint_with_missing_output() {
+        let json_str = r#"{
+            "function_name": "test_json_function",
+            "input": {"system": {"assistant_name": "Test"}, "messages": []},
+            "output_schema": {"type": "object", "properties": {"answer": {"type": "string"}}},
+            "tags": {"source": "test"},
+            "auxiliary": "extra data"
+        }"#;
+
+        let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        assert_eq!(datapoint.function_name, "test_json_function");
+        assert_eq!(datapoint.output, None);
+        assert_eq!(
+            datapoint.output_schema,
+            json!({"type": "object", "properties": {"answer": {"type": "string"}}})
+        );
+        assert_eq!(
+            datapoint.tags,
+            Some(HashMap::from([("source".to_string(), "test".to_string())]))
+        );
+        assert_eq!(datapoint.auxiliary, "extra data");
     }
 }

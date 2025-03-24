@@ -13,6 +13,7 @@ interface DatapointActionsProps {
   isDeleting: boolean;
   toggleEditing: () => void;
   onSave: () => void;
+  canSave: boolean;
   isEditing: boolean;
   onReset: () => void;
   showTryWithVariant: boolean;
@@ -27,6 +28,7 @@ export function DatapointActions({
   isDeleting,
   toggleEditing,
   onSave,
+  canSave,
   isEditing,
   onReset,
   showTryWithVariant,
@@ -47,7 +49,7 @@ export function DatapointActions({
       )}
       {isEditing ? (
         <>
-          <SaveButton onClick={onSave} />
+          <SaveButton disabled={!canSave} onClick={onSave} />
           <CancelButton onClick={handleCancel} />
         </>
       ) : (

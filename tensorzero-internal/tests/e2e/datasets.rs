@@ -416,7 +416,7 @@ async fn test_datapoint_insert_synthetic_json() {
 
     // Force deduplication to run
     clickhouse
-        .run_query("OPTIMIZE TABLE ChatInferenceDatapoint".to_string(), None)
+        .run_query("OPTIMIZE TABLE JsonInferenceDatapoint".to_string(), None)
         .await
         .unwrap();
 
@@ -464,7 +464,7 @@ async fn test_datapoint_insert_synthetic_json() {
 }
 
 #[tokio::test]
-async fn test_datapoint_insert_invalid_input_synthetic_json() {
+async fn test_datapoint_insert_invalid_input_synthetic_chat() {
     let client = Client::new();
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
@@ -474,10 +474,9 @@ async fn test_datapoint_insert_invalid_input_synthetic_json() {
             "/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
-            "function_name": "json_success",
+            "function_name": "variant_failover",
             "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
             "output": "Not a json object",
-            "output_schema": {},
         }))
         .send()
         .await
@@ -499,7 +498,7 @@ async fn test_datapoint_insert_invalid_input_synthetic_json() {
 }
 
 #[tokio::test]
-async fn test_datapoint_insert_invalid_input_synthetic_chat() {
+async fn test_datapoint_insert_invalid_input_synthetic_json() {
     let client = Client::new();
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
@@ -509,9 +508,10 @@ async fn test_datapoint_insert_invalid_input_synthetic_chat() {
             "/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
-            "function_name": "variant_failover",
+            "function_name": "json_success",
             "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
             "output": "Not a json object",
+            "output_schema": {},
         }))
         .send()
         .await
@@ -1409,164 +1409,252 @@ async fn test_datapoint_missing_demonstration() {
     );
 }
 
-/*
 #[tokio::test]
-async fn e2e_test_demonstration_feedback_dynamic_tool() {
+async fn test_datapoint_insert_missing_output_chat() {
+    let clickhouse = get_clickhouse().await;
     let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
 
-    // Run inference (standard, no dryrun) to get an inference_id
-    let inference_payload = json!({
-        "function_name": "weather_helper",
-        "input": {
-            "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": "What is the weather in Tokyo?"}]
-        },
-        "stream": false,
-        "additional_tools": [
-            {
-                "name": "get_humidity",
-                "description": "Get the current humidity in a given location",
-                "parameters": json!({
-                    "$schema": "http://json-schema.org/draft-07/schema#",
-                    "type": "object",
-                    "properties": {
-                        "location": {"type": "string"}
-                    },
-                    "required": ["location"],
-                    "additionalProperties": false
-                })
-            }
-        ]
-    });
-
-    let response = client
-        .post(get_gateway_endpoint("/inference"))
-        .json(&inference_payload)
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&json!({
+            "function_name": "basic_test",
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            // output field is deliberately omitted
+        }))
         .send()
         .await
         .unwrap();
 
-    assert!(response.status().is_success());
-    let response_json = response.json::<Value>().await.unwrap();
-    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
-    let inference_id = Uuid::parse_str(inference_id).unwrap();
-
-    // No sleeping, we should throttle in the gateway
-    // Test demonstration feedback on Inference (string shortcut)
-    let payload = json!({
-        "inference_id": inference_id,
-        "metric_name": "demonstration",
-        "value": "sunny",
-    });
-    let response = client
-        .post(get_gateway_endpoint("/feedback"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-    let feedback_id = response_json.get("feedback_id").unwrap();
-    assert!(feedback_id.is_string());
-    let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
-
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
-        .await
-        .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
-    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
-    assert_eq!(retrieved_inference_id_uuid, inference_id);
-    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
-    let expected_value =
-        serde_json::to_string(&json!([{"type": "text", "text": "sunny" }])).unwrap();
-    assert_eq!(retrieved_value, expected_value);
-
-    // Try it for an episode (should 400)
-    let episode_id = Uuid::now_v7();
-    let payload =
-        json!({"episode_id": episode_id, "metric_name": "demonstration", "value": "do this!"});
-    let response = client
-        .post(get_gateway_endpoint("/feedback"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let response_json = response.json::<Value>().await.unwrap();
-    let message = response_json.get("error").unwrap().as_str().unwrap();
-    assert_eq!(
-        message,
-        "Correct ID was not provided for feedback level \"inference\"."
+    let status = resp.status();
+    assert!(
+        status.is_success(),
+        "Expected successful response, got: {}",
+        status
     );
 
-    // Try a tool call demonstration
-    // This should fail because the name is incorrect
-    let tool_call = json!({"type": "tool_call", "name": "tool_name", "arguments": "tool_input"});
-    let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
-    let response = client
-        .post(get_gateway_endpoint("/feedback"))
-        .json(&payload)
-        .send()
-        .await
+    let resp_json = resp.json::<Value>().await.unwrap();
+    let id: Uuid = resp_json
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let response_json = response.json::<Value>().await.unwrap();
-    let error_message = response_json.get("error").unwrap().as_str().unwrap();
-    assert_eq!(error_message, "Demonstration contains invalid tool name");
+    assert_eq!(id, datapoint_id);
 
-    // Try a tool call demonstration with the dynamic tool name and incorrect args
-    let tool_call = json!({"type": "tool_call", "name": "get_humidity", "arguments": "tool_input"});
-    let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
-    let response = client
-        .post(get_gateway_endpoint("/feedback"))
-        .json(&payload)
-        .send()
+    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let response_json = response.json::<Value>().await.unwrap();
-    let error_message = response_json.get("error").unwrap().as_str().unwrap();
-    assert_eq!(
-        error_message,
-        "Demonstration contains invalid tool call arguments"
-    );
 
-    // Try a tool call demonstration with the dynamic tool name and correct args
-    let tool_call =
-        json!({"type": "tool_call", "name": "get_humidity", "arguments": {"location": "Tokyo"}});
-    let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
-    let response = client
-        .post(get_gateway_endpoint("/feedback"))
-        .json(&payload)
-        .send()
-        .await
+    datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("updated_at")
         .unwrap();
-    let response_json = response.json::<Value>().await.unwrap();
-    let feedback_id = response_json.get("feedback_id").unwrap();
-    assert!(feedback_id.is_string());
-    let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
-    sleep(Duration::from_millis(200)).await;
 
-    // Check ClickHouse
-    let clickhouse = get_clickhouse().await;
-    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
-        .await
-        .unwrap();
-    let id = result.get("id").unwrap().as_str().unwrap();
-    let id_uuid = Uuid::parse_str(id).unwrap();
-    assert_eq!(id_uuid, feedback_id);
-    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
-    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
-    assert_eq!(retrieved_inference_id_uuid, inference_id);
-    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
-    let retrieved_value = serde_json::from_str::<Value>(retrieved_value).unwrap();
-    let expected_value = json!([{"type": "tool_call", "name": "get_humidity", "arguments": {"location": "Tokyo"}, "raw_name": "get_humidity", "raw_arguments": "{\"location\":\"Tokyo\"}", "id": "" }]);
-    assert_eq!(retrieved_value, expected_value);
+    let expected = json!({
+      "dataset_name": dataset_name,
+      "function_name": "basic_test",
+      "id": id.to_string(),
+      "episode_id": null,
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"My synthetic input\"}]}]}",
+      "output": null,
+      "tool_params": "",
+      "tags": {},
+      "auxiliary": "",
+      "is_deleted": false
+    });
+    assert_eq!(datapoint, expected);
 }
-*/
+
+#[tokio::test]
+async fn test_datapoint_insert_null_output_chat() {
+    let clickhouse = get_clickhouse().await;
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&json!({
+            "function_name": "basic_test",
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+            "output": null, // explicitly null output
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    assert!(
+        status.is_success(),
+        "Expected successful response, got: {}",
+        status
+    );
+
+    let resp_json = resp.json::<Value>().await.unwrap();
+    let id: Uuid = resp_json
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(id, datapoint_id);
+
+    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
+        .await
+        .unwrap();
+
+    datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("updated_at")
+        .unwrap();
+
+    let expected = json!({
+      "dataset_name": dataset_name,
+      "function_name": "basic_test",
+      "id": id.to_string(),
+      "episode_id": null,
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"My synthetic input\"}]}]}",
+      "output": null,
+      "tool_params": "",
+      "tags": {},
+      "auxiliary": "",
+      "is_deleted": false
+    });
+    assert_eq!(datapoint, expected);
+}
+
+#[tokio::test]
+async fn test_datapoint_insert_missing_output_json() {
+    let clickhouse = get_clickhouse().await;
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&json!({
+            "function_name": "json_success",
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+            "output_schema": {},
+            // output field is deliberately omitted
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    assert!(
+        status.is_success(),
+        "Expected successful response, got: {}",
+        status
+    );
+
+    let resp_json = resp.json::<Value>().await.unwrap();
+    let id: Uuid = resp_json
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(id, datapoint_id);
+
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
+        .await
+        .unwrap();
+
+    datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("updated_at")
+        .unwrap();
+
+    let expected = json!({
+      "dataset_name": dataset_name,
+      "function_name": "json_success",
+      "id": id,
+      "episode_id": null,
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"US\"}}]}]}",
+      "output": null,
+      "output_schema": "{}",
+      "tags": {},
+      "auxiliary": "",
+      "is_deleted": false
+    });
+    assert_eq!(datapoint, expected);
+}
+
+#[tokio::test]
+async fn test_datapoint_insert_null_output_json() {
+    let clickhouse = get_clickhouse().await;
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&json!({
+            "function_name": "json_success",
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+            "output": null, // explicitly null output
+            "output_schema": {},
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    assert!(
+        status.is_success(),
+        "Expected successful response, got: {}",
+        status
+    );
+
+    let resp_json = resp.json::<Value>().await.unwrap();
+    let id: Uuid = resp_json
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(id, datapoint_id);
+
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, id)
+        .await
+        .unwrap();
+
+    datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("updated_at")
+        .unwrap();
+
+    let expected = json!({
+      "dataset_name": dataset_name,
+      "function_name": "json_success",
+      "id": id,
+      "episode_id": null,
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"US\"}}]}]}",
+      "output": null,
+      "output_schema": "{}",
+      "tags": {},
+      "auxiliary": "",
+      "is_deleted": false
+    });
+    assert_eq!(datapoint, expected);
+}

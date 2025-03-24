@@ -99,16 +99,12 @@ export default function SupervisedFineTuning({
   const config = useConfig();
   if (loaderData.status === "error") {
     return (
-      <div className="container mx-auto px-4 pb-8">
-        <PageLayout>
-          <PageHeader heading="Supervised Fine-Tuning" />
-          <SectionLayout>
-            <div className="text-sm text-red-500">
-              Error: {loaderData.error}
-            </div>
-          </SectionLayout>
-        </PageLayout>
-      </div>
+      <PageLayout>
+        <PageHeader heading="Supervised Fine-Tuning" />
+        <SectionLayout>
+          <div className="text-sm text-red-500">Error: {loaderData.error}</div>
+        </SectionLayout>
+      </PageLayout>
     );
   }
   const status = loaderData;
@@ -140,21 +136,19 @@ export default function SupervisedFineTuning({
   }
 
   return (
-    <div className="container mx-auto px-4 pb-8">
-      <PageLayout>
-        <PageHeader heading="Supervised Fine-Tuning" />
-        <SectionLayout>
-          {status.status === "idle" && (
-            <SFTForm
-              config={config}
-              submissionPhase={submissionPhase}
-              setSubmissionPhase={setSubmissionPhase}
-            />
-          )}
-          <FineTuningStatus status={status} />
-          <SFTResult finalResult={finalResult} />
-        </SectionLayout>
-      </PageLayout>
-    </div>
+    <PageLayout>
+      <PageHeader heading="Supervised Fine-Tuning" />
+      <SectionLayout>
+        {status.status === "idle" && (
+          <SFTForm
+            config={config}
+            submissionPhase={submissionPhase}
+            setSubmissionPhase={setSubmissionPhase}
+          />
+        )}
+        <FineTuningStatus status={status} />
+        <SFTResult finalResult={finalResult} />
+      </SectionLayout>
+    </PageLayout>
   );
 }

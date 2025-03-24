@@ -129,6 +129,7 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
                     &variant,
                     eval_run_id_clone,
                     &datapoint,
+                    &eval_name,
                     &function_config,
                 )
                 .await?,
@@ -268,6 +269,7 @@ async fn infer_datapoint(
     variant_name: &str,
     eval_run_id: Uuid,
     datapoint: &Datapoint,
+    eval_name: &str,
     function_config: &FunctionConfig,
 ) -> Result<InferenceResponse> {
     let input = resolved_input_to_input(datapoint.input().clone()).await?;
@@ -293,10 +295,17 @@ async fn infer_datapoint(
         function_name: Some(function_name.to_string()),
         variant_name: Some(variant_name.to_string()),
         input,
-        tags: HashMap::from([(
-            "tensorzero::eval_run_id".to_string(),
-            eval_run_id.to_string(),
-        )]),
+        tags: HashMap::from([
+            (
+                "tensorzero::eval_run_id".to_string(),
+                eval_run_id.to_string(),
+            ),
+            (
+                "tensorzero::datapoint_id".to_string(),
+                datapoint.id().to_string(),
+            ),
+            ("tensorzero::eval_name".to_string(), eval_name.to_string()),
+        ]),
         dynamic_tool_params,
         output_schema: output_schema.cloned(),
         credentials: HashMap::new(),

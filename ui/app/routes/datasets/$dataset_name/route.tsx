@@ -52,21 +52,19 @@ export default function DatasetDetailPage({
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   return (
-    <div className="container mx-auto px-4 pb-8">
-      <PageLayout>
-        <PageHeader heading="Dataset" name={count_info.dataset_name} />
-        <SectionLayout>
-          <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
-          <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
-          <PageButtons
-            onPreviousPage={handlePreviousPage}
-            onNextPage={handleNextPage}
-            disablePrevious={offset === 0}
-            disableNext={offset + pageSize >= count_info.count}
-          />
-        </SectionLayout>
-      </PageLayout>
-    </div>
+    <PageLayout>
+      <PageHeader heading="Dataset" name={count_info.dataset_name} />
+      <SectionLayout>
+        <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
+        <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
+        <PageButtons
+          onPreviousPage={handlePreviousPage}
+          onNextPage={handleNextPage}
+          disablePrevious={offset === 0}
+          disableNext={offset + pageSize >= count_info.count}
+        />
+      </SectionLayout>
+    </PageLayout>
   );
 }
 

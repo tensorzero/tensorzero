@@ -34,6 +34,7 @@ import {
   SectionsGroup,
   SectionHeader,
 } from "~/components/layout/PageLayout";
+import { getFunctionTypeIcon } from "~/utils/icon";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -188,58 +189,61 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   };
 
   return (
-    <div className="container mx-auto px-4 pb-8">
-      <PageLayout>
-        <PageHeader heading="Function" name={function_name} />
+    <PageLayout>
+      <PageHeader
+        name={function_name}
+        label={`${function_config.type} · Function`}
+        icon={getFunctionTypeIcon(function_config.type).icon}
+        iconBg={getFunctionTypeIcon(function_config.type).iconBg}
+      >
+        {function_config.type === "chat" && (
+          <BasicInfo functionConfig={function_config} />
+        )}
+      </PageHeader>
 
-        <SectionsGroup>
-          <SectionLayout>
-            <BasicInfo functionConfig={function_config} />
-          </SectionLayout>
+      <SectionsGroup>
+        <SectionLayout>
+          <SectionHeader heading="Schema" />
+          <FunctionSchema functionConfig={function_config} />
+        </SectionLayout>
 
-          <SectionLayout>
-            <SectionHeader heading="Schema" />
-            <FunctionSchema functionConfig={function_config} />
-          </SectionLayout>
+        <SectionLayout>
+          <SectionHeader heading="Variants" />
+          <FunctionVariantTable
+            variant_counts={variant_counts}
+            function_name={function_name}
+          />
+        </SectionLayout>
 
-          <SectionLayout>
-            <SectionHeader heading="Variants" />
-            <FunctionVariantTable
-              variant_counts={variant_counts}
-              function_name={function_name}
+        <SectionLayout>
+          <SectionHeader heading="Metric" />
+          <MetricSelector
+            metricsWithFeedback={metricsWithFeedback}
+            selectedMetric={metric_name || ""}
+            onMetricChange={handleMetricChange}
+          />
+          {variant_performances && (
+            <VariantPerformance
+              variant_performances={variant_performances}
+              metric_name={metric_name}
+              time_granularity={time_granularity}
+              onTimeGranularityChange={handleTimeGranularityChange}
             />
-          </SectionLayout>
+          )}
+        </SectionLayout>
 
-          <SectionLayout>
-            <SectionHeader heading="Metric" />
-            <MetricSelector
-              metricsWithFeedback={metricsWithFeedback}
-              selectedMetric={metric_name || ""}
-              onMetricChange={handleMetricChange}
-            />
-            {variant_performances && (
-              <VariantPerformance
-                variant_performances={variant_performances}
-                metric_name={metric_name}
-                time_granularity={time_granularity}
-                onTimeGranularityChange={handleTimeGranularityChange}
-              />
-            )}
-          </SectionLayout>
-
-          <SectionLayout>
-            <SectionHeader heading="Inferences" count={num_inferences} />
-            <FunctionInferenceTable inferences={inferences} />
-            <PageButtons
-              onPreviousPage={handlePreviousInferencePage}
-              onNextPage={handleNextInferencePage}
-              disablePrevious={disablePreviousInferencePage}
-              disableNext={disableNextInferencePage}
-            />
-          </SectionLayout>
-        </SectionsGroup>
-      </PageLayout>
-    </div>
+        <SectionLayout>
+          <SectionHeader heading="Inferences" count={num_inferences} />
+          <FunctionInferenceTable inferences={inferences} />
+          <PageButtons
+            onPreviousPage={handlePreviousInferencePage}
+            onNextPage={handleNextInferencePage}
+            disablePrevious={disablePreviousInferencePage}
+            disableNext={disableNextInferencePage}
+          />
+        </SectionLayout>
+      </SectionsGroup>
+    </PageLayout>
   );
 }
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

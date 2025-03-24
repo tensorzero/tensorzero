@@ -6,29 +6,14 @@ import {
   BasicInfoItemContent,
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
-import { getFunctionTypeIcon } from "~/utils/icon";
 
 interface BasicInfoProps {
   functionConfig: FunctionConfig;
 }
 
 export default function BasicInfo({ functionConfig }: BasicInfoProps) {
-  // Get function icon and background
-  const functionIconConfig = getFunctionTypeIcon(functionConfig.type);
-
   return (
     <BasicInfoLayout>
-      <BasicInfoItem>
-        <BasicInfoItemTitle>Type</BasicInfoItemTitle>
-        <BasicInfoItemContent>
-          <Chip
-            icon={functionIconConfig.icon}
-            iconBg={functionIconConfig.iconBg}
-            label={functionConfig.type}
-          />
-        </BasicInfoItemContent>
-      </BasicInfoItem>
-
       {/* Fields specific to chat type */}
       {functionConfig.type === "chat" && (
         <>

@@ -43,9 +43,9 @@ export const Chip: React.FC<ChipProps> = ({
           {icon}
         </div>
       )}
-      <span>{label}</span>
+      <span className="text-fg-primary">{label}</span>
       {secondaryLabel && (
-        <span className="text-fg-tertiary">{secondaryLabel}</span>
+        <span className="pl-0.5 text-fg-tertiary">{secondaryLabel}</span>
       )}
     </>
   );

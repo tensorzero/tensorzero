@@ -24,6 +24,8 @@ use tensorzero_internal::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0017::Migration0017;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0018::Migration0018;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0019::Migration0019;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0020::Migration0020;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0021::Migration0021;
 use tensorzero_internal::clickhouse::migration_manager::{self};
 use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
@@ -111,10 +113,6 @@ async fn test_clickhouse_migration_manager() {
         Box::new(Migration0011 {
             clickhouse: &clickhouse,
         }),
-        Box::new(Migration0013 {
-            clickhouse: &clickhouse,
-            clean_start: true,
-        }),
         Box::new(Migration0015 {
             clickhouse: &clickhouse,
         }),
@@ -129,6 +127,15 @@ async fn test_clickhouse_migration_manager() {
         }),
         Box::new(Migration0019 {
             clickhouse: &clickhouse,
+        }),
+        Box::new(Migration0020 {
+            clickhouse: &clickhouse,
+            clean_start: true,
+        }),
+        // NOTE: This migration is currently feature flagged.
+        Box::new(Migration0021 {
+            clickhouse: &clickhouse,
+            clean_start: true,
         }),
     ];
 

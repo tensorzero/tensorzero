@@ -20,14 +20,12 @@ export default function FunctionsPage({ loaderData }: Route.ComponentProps) {
   const totalFunctions = Object.keys(functions).length;
 
   return (
-    <div className="container mx-auto px-4 pb-8">
-      <PageLayout>
-        <PageHeader heading="Functions" count={totalFunctions} />
-        <SectionLayout>
-          <FunctionsTable functions={functions} countsInfo={countsInfo} />
-        </SectionLayout>
-      </PageLayout>
-    </div>
+    <PageLayout>
+      <PageHeader heading="Functions" count={totalFunctions} />
+      <SectionLayout>
+        <FunctionsTable functions={functions} countsInfo={countsInfo} />
+      </SectionLayout>
+    </PageLayout>
   );
 }
 
