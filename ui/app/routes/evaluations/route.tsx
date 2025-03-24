@@ -1,5 +1,5 @@
 import type { Route } from "./+types/route";
-import { isRouteErrorResponse, useNavigate } from "react-router";
+import { isRouteErrorResponse, redirect, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
@@ -15,6 +15,7 @@ import EvalRunsTable from "./EvalRunsTable";
 import { useState } from "react";
 import { EvalsActions } from "./EvalsActions";
 import LaunchEvalModal from "./LaunchEvalModal";
+import { runEval } from "~/utils/evals.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const totalEvalRuns = await countTotalEvalRuns();
@@ -44,8 +45,15 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const eval_name = formData.get("eval_name");
   const variant_name = formData.get("variant_name");
-
-  return null;
+  const concurrency_limit = formData.get("concurrency_limit");
+  const eval_start_info = await runEval(
+    eval_name as string,
+    variant_name as string,
+    parseInt(concurrency_limit as string),
+  );
+  return redirect(
+    `/evaluations/${eval_name}?eval_run_ids=${eval_start_info.eval_run_id}`,
+  );
 }
 
 export default function EvalSummaryPage({ loaderData }: Route.ComponentProps) {
