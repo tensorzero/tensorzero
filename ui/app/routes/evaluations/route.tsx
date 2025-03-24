@@ -12,6 +12,9 @@ import {
 } from "~/utils/clickhouse/evaluations.server";
 import { getConfig } from "~/utils/config/index.server";
 import EvalRunsTable from "./EvalRunsTable";
+import { useState } from "react";
+import { EvalsActions } from "./EvalsActions";
+import LaunchEvalModal from "./LaunchEvalModal";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const totalEvalRuns = await countTotalEvalRuns();
@@ -37,6 +40,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const eval_name = formData.get("eval_name");
+  const variant_name = formData.get("variant_name");
+
+  return null;
+}
+
 export default function EvalSummaryPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const { totalEvalRuns, evalRunsWithDataset, offset, pageSize } = loaderData;
@@ -51,11 +62,13 @@ export default function EvalSummaryPage({ loaderData }: Route.ComponentProps) {
     searchParams.set("offset", String(offset - pageSize));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
+  const [launchEvalModalIsOpen, setLaunchEvalModalIsOpen] = useState(false);
 
   return (
     <PageLayout>
       <PageHeader heading="Evaluation Runs" count={totalEvalRuns} />
       <SectionLayout>
+        <EvalsActions onNewRun={() => setLaunchEvalModalIsOpen(true)} />
         <EvalRunsTable evalRuns={evalRunsWithDataset} />
         <PageButtons
           onPreviousPage={handlePreviousPage}
@@ -64,6 +77,10 @@ export default function EvalSummaryPage({ loaderData }: Route.ComponentProps) {
           disableNext={offset + pageSize >= totalEvalRuns}
         />
       </SectionLayout>
+      <LaunchEvalModal
+        isOpen={launchEvalModalIsOpen}
+        onClose={() => setLaunchEvalModalIsOpen(false)}
+      />
     </PageLayout>
   );
 }

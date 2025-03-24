@@ -69,13 +69,13 @@ export function VariantSelector({ available_run_ids }: VariantSelectorProps) {
           <DropdownMenuTrigger asChild>
             <Button
               variant="outline"
-              className="flex w-56 items-center justify-between gap-2"
+              className="flex w-96 items-center justify-between gap-2"
             >
               <span>Select run ID...</span>
               <ChevronDown className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuContent align="start" className="w-96">
             <DropdownMenuLabel>Select Run IDs</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {available_run_ids.map((info) => {
