@@ -5,7 +5,10 @@ use serde_json::{map::Entry, Map, Value};
 
 use crate::{
     error::{Error, ErrorDetails},
-    inference::types::{FullExtraBodyConfig, InferenceExtraBody, ProviderInferenceResponseChunk},
+    inference::types::{
+        extra_body::{FullExtraBodyConfig, InferenceExtraBody},
+        ProviderInferenceResponseChunk,
+    },
     model::{fully_qualified_name, ModelProviderRequestInfo},
 };
 

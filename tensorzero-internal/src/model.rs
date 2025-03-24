@@ -29,12 +29,12 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
+use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::{
     current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
 use crate::model_table::{BaseModelTable, ShorthandModelConfig};
-use crate::variant::chat_completion::ExtraBodyConfig;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},

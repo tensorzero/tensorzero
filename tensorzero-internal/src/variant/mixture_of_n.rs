@@ -9,10 +9,11 @@ use tokio::time::{timeout, Duration};
 use crate::config_parser::PathWithContents;
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
+use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Usage,
 };
-use crate::inference::types::{FullExtraBodyConfig, ResolvedInput};
 use crate::model::ModelTable;
 use crate::{
     endpoints::inference::InferenceParams,

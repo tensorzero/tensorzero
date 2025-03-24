@@ -13,11 +13,12 @@ use crate::config_parser::{LoadableConfig, PathWithContents};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
+use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
 };
-use crate::inference::types::{ContentBlockOutput, FullExtraBodyConfig, ResolvedInput};
+use crate::inference::types::{ContentBlockOutput, ResolvedInput};
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::model::ModelTable;
 use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};

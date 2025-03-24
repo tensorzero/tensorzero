@@ -9,8 +9,8 @@ use crate::config_parser::LoadableConfig;
 use crate::config_parser::PathWithContents;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
+use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
 use crate::inference::types::ContentBlock;
-use crate::inference::types::FullExtraBodyConfig;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::{
@@ -29,7 +29,6 @@ use crate::{
     minijinja_util::TemplateConfig,
 };
 
-use super::chat_completion::ExtraBodyConfig;
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
     InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, RetryConfig, Variant,

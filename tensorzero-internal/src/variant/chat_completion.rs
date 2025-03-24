@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -8,13 +8,13 @@ use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
+use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
     ModelInferenceRequest, RequestMessage, Role,
 };
 use crate::inference::types::{
-    FullExtraBodyConfig, InferenceResult, ResolvedInput, ResolvedInputMessage,
-    ResolvedInputMessageContent,
+    InferenceResult, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
 };
 use crate::jsonschema_util::JSONSchemaFromPath;
 use crate::minijinja_util::TemplateConfig;
@@ -25,18 +25,6 @@ use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
     InferModelRequestArgs, InferenceConfig, ModelUsedInfo, RetryConfig, Variant,
 };
-
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(transparent)]
-pub struct ExtraBodyConfig {
-    pub data: Vec<ExtraBodyReplacement>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct ExtraBodyReplacement {
-    pub pointer: String,
-    pub value: Value,
-}
 
 #[derive(Debug, Default)]
 pub struct ChatCompletionConfig {

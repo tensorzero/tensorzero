@@ -18,8 +18,8 @@ use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
+use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
-use crate::inference::types::FullExtraBodyConfig;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,

@@ -30,7 +30,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::FullExtraBodyConfig;
+use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, FunctionType, Latency, ModelInferenceRequest,

@@ -1,7 +1,7 @@
 use crate::inference::types::batch::deserialize_json_string;
 use crate::inference::types::batch::deserialize_optional_json_string;
 use derive_builder::Builder;
-use extra_body::FilteredInferenceExtraBody;
+use extra_body::FullExtraBodyConfig;
 use extra_body::UnfilteredInferenceExtraBody;
 use futures::stream::Peekable;
 use futures::Stream;
@@ -24,7 +24,6 @@ use std::{
 use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
-use crate::variant::chat_completion::ExtraBodyConfig;
 use crate::{cache::CacheData, config_parser::ObjectStoreInfo};
 use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{
@@ -81,36 +80,6 @@ impl Input {
             system: self.system,
             messages,
         })
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(untagged)]
-pub enum InferenceExtraBody {
-    Provider {
-        model_provider_name: String,
-        pointer: String,
-        value: serde_json::Value,
-    },
-    Variant {
-        variant_name: String,
-        pointer: String,
-        value: serde_json::Value,
-    },
-}
-
-impl InferenceExtraBody {
-    pub fn should_apply_variant(&self, variant_name: Option<&str>) -> bool {
-        match (self, variant_name) {
-            (InferenceExtraBody::Provider { .. }, _) => true,
-            (
-                InferenceExtraBody::Variant {
-                    variant_name: v, ..
-                },
-                Some(expected_name),
-            ) => v == expected_name,
-            (InferenceExtraBody::Variant { .. }, None) => false,
-        }
     }
 }
 
@@ -388,12 +357,6 @@ pub enum ModelInferenceRequestJsonMode {
     Off,
     On,
     Strict,
-}
-
-#[derive(Builder, Clone, Debug, Default, PartialEq, Serialize)]
-pub struct FullExtraBodyConfig {
-    pub extra_body: ExtraBodyConfig,
-    pub inference_extra_body: FilteredInferenceExtraBody,
 }
 
 /// Top-level TensorZero type for an inference request to a particular model.
