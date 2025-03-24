@@ -546,7 +546,7 @@ const EvaluatorHeader = ({
       <Tooltip>
         <TooltipTrigger asChild>
           <div className="cursor-help">
-            <div>{evaluator_name}</div>
+            <div className="font-mono">{evaluator_name}</div>
             <EvaluatorProperties
               metricConfig={metricProperties}
               summaryStats={summaryStats}
