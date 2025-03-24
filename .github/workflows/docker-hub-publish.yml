@@ -116,10 +116,7 @@ jobs:
         with:
           images: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=tag
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
