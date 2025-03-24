@@ -30,7 +30,6 @@ services:
       - ./config:/app/config:ro
     environment:
       - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
-      - TENSORZERO_FF_DANGEROUS_MIGRATION_STALING=1
     env_file:
       - ${ENV_FILE:-../.env}
     ports:
