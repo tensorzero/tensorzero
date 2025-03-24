@@ -280,8 +280,10 @@ jobs:
 
   clickhouse-tests-cloud:
     runs-on: ubuntu-latest
-    # Only run for branches on the main repo, where we have secrets available
-    if: github.event.repository.owner.name == 'tensorzero'
+    # Skip this job for PRs from forks, since we don't have secrets available.
+    if: |
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: dtolnay/rust-toolchain@stable
