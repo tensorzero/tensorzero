@@ -1,61 +1,69 @@
-import {
-  queryInferenceTable,
-  queryInferenceTableBounds,
-  countInferencesByFunction,
-} from "~/utils/clickhouse/inference";
 import type { Route } from "./+types/route";
-import { data, isRouteErrorResponse, useNavigate } from "react-router";
+import { isRouteErrorResponse, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import {
   PageHeader,
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { countTotalEvalRuns } from "~/utils/clickhouse/evaluations.server";
+import {
+  countTotalEvalRuns,
+  getEvalRunInfo,
+} from "~/utils/clickhouse/evaluations.server";
 import InferenceSearchBar from "../observability/inferences/InferenceSearchBar";
+import { getConfig } from "~/utils/config/index.server";
+import EvalRunsTable from "./EvalRunsTable";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const totalEvalRuns = await countTotalEvalRuns();
+  const url = new URL(request.url);
+  const searchParams = new URLSearchParams(url.search);
+  const offset = parseInt(searchParams.get("offset") || "0");
+  const pageSize = parseInt(searchParams.get("pageSize") || "15");
+  const evalRuns = await getEvalRunInfo(pageSize, offset);
+  const config = await getConfig();
+  const evalRunsWithDataset = evalRuns.map((runInfo) => {
+    const dataset = config.evals[runInfo.eval_name].dataset_name;
+    return {
+      ...runInfo,
+      dataset,
+    };
+  });
+
   return {
     totalEvalRuns,
+    evalRunsWithDataset,
+    offset,
+    pageSize,
   };
 }
 
 export default function EvalSummaryPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const { totalEvalRuns } = loaderData;
-
-  const topInference = inferences[0];
-  const bottomInference = inferences[inferences.length - 1];
+  const { totalEvalRuns, evalRunsWithDataset, offset, pageSize } = loaderData;
 
   const handleNextPage = () => {
-    navigate(`?before=${bottomInference.id}&pageSize=${pageSize}`, {
-      preventScrollReset: true,
-    });
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("offset", String(offset + pageSize));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-
   const handlePreviousPage = () => {
-    navigate(`?after=${topInference.id}&pageSize=${pageSize}`, {
-      preventScrollReset: true,
-    });
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("offset", String(offset - pageSize));
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-
-  const disablePrevious =
-    !bounds?.last_id || bounds.last_id === topInference.id;
-  const disableNext =
-    !bounds?.first_id || bounds.first_id === bottomInference.id;
 
   return (
     <PageLayout>
       <PageHeader heading="Evaluation Runs" count={totalEvalRuns} />
       <SectionLayout>
         <InferenceSearchBar />
-        <InferencesTable inferences={inferences} />
+        <EvalRunsTable evalRuns={evalRunsWithDataset} />
         <PageButtons
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
-          disablePrevious={disablePrevious}
-          disableNext={disableNext}
+          disablePrevious={offset <= 0}
+          disableNext={offset + pageSize >= totalEvalRuns}
         />
       </SectionLayout>
     </PageLayout>

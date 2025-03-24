@@ -119,3 +119,14 @@ export const evalInfoResultSchema = z.object({
 });
 
 export type EvalInfoResult = z.infer<typeof evalInfoResultSchema>;
+
+export const EvalRunInfoSchema = z.object({
+  eval_run_id: z.string().uuid(),
+  eval_name: z.string(),
+  function_name: z.string(),
+  variant_name: z.string(),
+  last_inference_timestamp: z.string().datetime(),
+  dataset: z.string(),
+});
+
+export type EvalRunInfo = z.infer<typeof EvalRunInfoSchema>;

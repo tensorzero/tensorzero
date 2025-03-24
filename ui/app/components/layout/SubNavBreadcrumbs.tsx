@@ -144,7 +144,7 @@ export function SubNavBreadcrumbs() {
         const category =
           segment === "supervised-fine-tuning"
             ? "optimization"
-            : segment === "datasets"
+            : segment === "datasets" || segment === "evaluations"
               ? ""
               : "observability";
         breadcrumbs.push({

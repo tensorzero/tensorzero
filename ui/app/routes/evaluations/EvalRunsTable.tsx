@@ -1,5 +1,4 @@
 import { Link } from "react-router";
-import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
 import {
   Table,
   TableBody,
@@ -11,76 +10,88 @@ import {
 import { formatDate } from "~/utils/date";
 import { FunctionLink } from "~/components/function/FunctionLink";
 import { VariantLink } from "~/components/function/variant/VariantLink";
+import type { EvalRunInfo } from "~/utils/clickhouse/evaluations";
 
 export default function EvalRunsTable({
-  inferences,
+  evalRuns,
 }: {
-  inferences: InferenceByIdRow[];
+  evalRuns: EvalRunInfo[];
 }) {
   return (
     <div>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Inference ID</TableHead>
-            <TableHead>Episode ID</TableHead>
+            <TableHead>Run ID</TableHead>
+            <TableHead>Name</TableHead>
+            <TableHead>Dataset</TableHead>
             <TableHead>Function</TableHead>
             <TableHead>Variant</TableHead>
-            <TableHead>Time</TableHead>
+            <TableHead>Last Updated</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {inferences.length === 0 ? (
+          {evalRuns.length === 0 ? (
             <TableRow className="hover:bg-bg-primary">
               <TableCell
                 colSpan={5}
                 className="px-3 py-8 text-center text-fg-muted"
               >
-                No inferences found
+                No evaluation runs found
               </TableCell>
             </TableRow>
           ) : (
-            inferences.map((inference) => (
-              <TableRow key={inference.id} id={inference.id}>
+            evalRuns.map((evalRun) => (
+              <TableRow key={evalRun.eval_run_id} id={evalRun.eval_run_id}>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/observability/inferences/${inference.id}`}
+                    to={`/evaluations/${evalRun.eval_name}?eval_run_ids=${evalRun.eval_run_id}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {inference.id}
+                      {evalRun.eval_run_id}
                     </code>
                   </Link>
                 </TableCell>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/observability/episodes/${inference.episode_id}`}
+                    to={`/evaluations/${evalRun.eval_name}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {inference.episode_id}
+                      {evalRun.eval_name}
                     </code>
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <FunctionLink functionName={inference.function_name}>
+                  <Link
+                    to={`/datasets/${evalRun.dataset}`}
+                    className="block no-underline"
+                  >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {inference.function_name}
+                      {evalRun.dataset}
+                    </code>
+                  </Link>
+                </TableCell>
+                <TableCell>
+                  <FunctionLink functionName={evalRun.function_name}>
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                      {evalRun.function_name}
                     </code>
                   </FunctionLink>
                 </TableCell>
                 <TableCell>
                   <VariantLink
-                    variantName={inference.variant_name}
-                    functionName={inference.function_name}
+                    variantName={evalRun.variant_name}
+                    functionName={evalRun.function_name}
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {inference.variant_name}
+                      {evalRun.variant_name}
                     </code>
                   </VariantLink>
                 </TableCell>
                 <TableCell>
-                  {formatDate(new Date(inference.timestamp))}
+                  {formatDate(new Date(evalRun.last_inference_timestamp))}
                 </TableCell>
               </TableRow>
             ))

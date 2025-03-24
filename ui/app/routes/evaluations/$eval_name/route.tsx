@@ -146,7 +146,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
           <PageButtons
             onPreviousPage={handlePreviousPage}
             onNextPage={handleNextPage}
-            disablePrevious={offset === 0}
+            disablePrevious={offset <= 0}
             disableNext={offset + pageSize >= total_datapoints}
           />
           {!has_selected_runs && (
