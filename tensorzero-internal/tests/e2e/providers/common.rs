@@ -1215,12 +1215,12 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     assert_eq!(id, inference_id);
 
     assert_eq!(extra_body[1]["variant_name"], "my_wrong_variant");
-    let mut stripped_extra_body = extra_body.clone();
-    stripped_extra_body.as_array_mut().unwrap().remove(1);
     let clickhouse_extra_body = chat_result.get("extra_body").unwrap().as_str().unwrap();
     let clickhouse_extra_body: serde_json::Value =
         serde_json::from_str(clickhouse_extra_body).unwrap();
-    assert_eq!(stripped_extra_body, clickhouse_extra_body);
+    // We store the *original* inference-level extra_body in clickhouse, without any filtering
+    // This allows us to later re-run the inference with a different variant.
+    assert_eq!(extra_body, clickhouse_extra_body);
 
     // Check the ModelInference Table. We don't check the ChatInference table, since we only care about the contents
     // of the raw request sent to the model provider.
