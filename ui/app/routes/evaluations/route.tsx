@@ -10,7 +10,6 @@ import {
   countTotalEvalRuns,
   getEvalRunInfo,
 } from "~/utils/clickhouse/evaluations.server";
-import InferenceSearchBar from "../observability/inferences/InferenceSearchBar";
 import { getConfig } from "~/utils/config/index.server";
 import EvalRunsTable from "./EvalRunsTable";
 
@@ -57,7 +56,6 @@ export default function EvalSummaryPage({ loaderData }: Route.ComponentProps) {
     <PageLayout>
       <PageHeader heading="Evaluation Runs" count={totalEvalRuns} />
       <SectionLayout>
-        <InferenceSearchBar />
         <EvalRunsTable evalRuns={evalRunsWithDataset} />
         <PageButtons
           onPreviousPage={handlePreviousPage}
