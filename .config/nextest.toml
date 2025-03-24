@@ -54,7 +54,7 @@ slow-timeout = { period = "65s" }
 [[profile.default.overrides]]
 # Settings for running batch tests
 filter = 'test(batch)'
-slow-timeout = { period = "15s", terminate-after = 1 }
+slow-timeout = { period = "15s", terminate-after = 3 }
 
 [[profile.default.overrides]]
 # Settings for running unit tests

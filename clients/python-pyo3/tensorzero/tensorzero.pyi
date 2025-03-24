@@ -173,14 +173,14 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         gateway_url: str,
         timeout: Optional[float] = None,
         verbose_errors: bool = False,
-        use_async: bool = True,
+        async_setup: bool = True,
     ) -> "AsyncTensorZeroGateway":
         """
         Initialize the TensorZero client, using the HTTP gateway.
         :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
         :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
         :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
-        :param use_async (Optional): If True, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and return an `AsyncTensorZeroGateway` directly.
+        :param async_setup (Optional): If True, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and return an `AsyncTensorZeroGateway` directly.
         :return: An `AsyncTensorZeroGateway` instance configured to use the HTTP gateway.
         """
 
@@ -191,7 +191,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         config_file: Optional[str] = None,
         clickhouse_url: Optional[str] = None,
         timeout: Optional[float] = None,
-        use_async: bool = True,
+        async_setup: bool = True,
     ) -> "AsyncTensorZeroGateway":
         """
         Build an AsyncTensorZeroGateway instance.
@@ -199,7 +199,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param config_file: (Optional) The path to the TensorZero configuration file.
         :param clickhouse_url: (Optional) The URL of the ClickHouse database.
         :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
-        :param use_async (Optional): If True, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and return an `AsyncTensorZeroGateway` directly.
+        :param async_setup (Optional): If True, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and return an `AsyncTensorZeroGateway` directly.
         """
 
     async def inference(  # type: ignore[override]
