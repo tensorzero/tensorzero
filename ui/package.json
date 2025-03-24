@@ -64,7 +64,8 @@
     "@typescript-eslint/eslint-plugin": "^8.22.0",
     "@typescript-eslint/parser": "^8.22.0",
     "autoprefixer": "^10.4.20",
-    "eslint": "^9.21.0",
+    "esbuild": "^0.25.1",
+    "eslint": "^9.23.0",
     "postcss": "^8.5.1",
     "prettier": "^3.4.2",
     "prettier-plugin-tailwindcss": "^0.6.11",
@@ -76,5 +77,10 @@
   },
   "overrides": {
     "react-is": "^19.0.0-rc-69d4b800-20241021"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
