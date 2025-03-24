@@ -593,21 +593,38 @@ const EvaluatorProperties = ({
   evalRunIds: EvaluationRunInfo[];
   evaluatorConfig: EvaluatorConfig;
 }) => {
-  const failed = isCutoffFailed(summaryStats[0].mean_metric, evaluatorConfig);
+  const [searchParams] = useSearchParams();
+  const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
+  const selectedRunIds = selectedRunIdsParam
+    ? selectedRunIdsParam.split(",")
+    : [];
+
+  const failed = isCutoffFailed(summaryStats[0]?.mean_metric, evaluatorConfig);
+
+  // Create a map of stats by run ID for easy lookup
+  const statsByRunId = new Map(
+    summaryStats.map((stat) => [stat.eval_run_id, stat]),
+  );
+
+  // Filter and sort stats according to the order in URL parameters
+  const orderedStats = selectedRunIds
+    .filter((runId) => statsByRunId.has(runId))
+    .map((runId) => statsByRunId.get(runId)!);
+
   return (
     <div className="mt-2 flex flex-col items-center gap-1">
-      {summaryStats && (
+      {orderedStats.length > 0 && (
         <div className="mt-2 text-center text-xs text-muted-foreground">
-          {summaryStats.map((stat, index) => {
-            // Get the variant color for the circle
+          {orderedStats.map((stat) => {
+            // Get the variant color for the circle using the run ID from the stat
             const variantColorClass = getVariantColor(
-              evalRunIds[index].eval_run_id,
+              stat.eval_run_id,
               evalRunIds,
             );
 
             return (
               <div
-                key={index}
+                key={stat.eval_run_id}
                 className={`mt-1 flex items-center justify-center gap-1.5 ${
                   failed ? "text-red-500" : ""
                 }`}
