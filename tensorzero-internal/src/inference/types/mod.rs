@@ -1343,7 +1343,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         templates,
         tool_config,
         cached,
-        extra_body: filtered_extra_body,
+        extra_body,
     } = args;
 
     // NOTE: We will eventually need this to be per-inference-response-type and sensitive to the type of variant and function being called.
@@ -1560,8 +1560,7 @@ pub async fn collect_chunks(args: CollectChunksArgs<'_, '_>) -> Result<Inference
         tool_config,
         templates,
         dynamic_output_schema: dynamic_output_schema.as_ref(),
-        // TODO: get the real extra_body
-        extra_body: filtered_extra_body,
+        extra_body,
         extra_cache_key: None,
     };
     function
