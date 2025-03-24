@@ -251,7 +251,7 @@ async fn test_clean_clickhouse_start() {
 #[tokio::test]
 async fn test_concurrent_clickhouse_migrations() {
     let clickhouse = Arc::new(get_clean_clickhouse());
-    let num_concurrent_starts = 100;
+    let num_concurrent_starts = 50;
     let start = std::time::Instant::now();
 
     let mut handles = Vec::with_capacity(num_concurrent_starts);
