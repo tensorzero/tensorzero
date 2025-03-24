@@ -8,7 +8,7 @@ RUN npm install -g pnpm
 
 FROM base AS development-dependencies-env
 
-COPY ./package.json pnpm-lock.yaml /app/
+COPY ./ui/package.json ./ui/pnpm-lock.yaml /app/
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ RUN pnpm install --frozen-lockfile
 
 FROM base AS production-dependencies-env
 
-COPY ./package.json pnpm-lock.yaml /app/
+COPY ./ui/package.json ./ui/pnpm-lock.yaml /app/
 
 WORKDIR /app
 
@@ -28,7 +28,7 @@ RUN pnpm install --frozen-lockfile --prod
 
 FROM rust:latest AS minijinja-build-env
 
-COPY ./app/utils/minijinja /minijinja/
+COPY ./ui/app/utils/minijinja /minijinja/
 
 WORKDIR /minijinja
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
@@ -38,7 +38,7 @@ RUN wasm-pack build --features console_error_panic_hook
 
 FROM rust:latest AS evals-build-env
 
-COPY .. /tensorzero
+COPY . /tensorzero
 
 WORKDIR /tensorzero
 
@@ -50,14 +50,14 @@ RUN --mount=type=cache,id=tensorzero-evals-release,sharing=shared,target=/usr/lo
     --mount=type=cache,id=tensorzero-evals-release,sharing=shared,target=/usr/local/cargo/git \
     --mount=type=cache,id=tensorzero-evals-release,sharing=locked,target=/src/target \
     cargo build --release -p evals $CARGO_BUILD_FLAGS && \
-    cp -r /src/target/release /release
+    cp -r /tensorzero/target/release /release
 
 
 # ========== build-env ==========
 
 FROM base AS build-env
 
-COPY . /app/
+COPY ./ui /app/
 COPY --from=minijinja-build-env /minijinja/pkg /app/app/utils/minijinja/pkg
 COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 
@@ -73,11 +73,13 @@ RUN adduser -D -s /bin/sh ui
 
 USER ui
 
-COPY ./package.json pnpm-lock.yaml /app/
+COPY ./ui/package.json ./ui/pnpm-lock.yaml /app/
 
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
 
 COPY --from=build-env /app/build /app/build
+
+COPY --from=evals-build-env /release/evals /usr/local/bin/evals
 
 WORKDIR /app
 
