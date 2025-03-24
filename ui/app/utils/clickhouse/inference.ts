@@ -108,7 +108,7 @@ export async function queryInferenceTable(params: {
         episode_id,
         function_type,
         formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-      FROM InferenceById
+      FROM InferenceById FINAL
       ${combinedWhere}
       ORDER BY id_uint DESC
       LIMIT {page_size:UInt32}
@@ -123,7 +123,7 @@ export async function queryInferenceTable(params: {
         episode_id,
         function_type,
         formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-      FROM InferenceById
+      FROM InferenceById FINAL
       ${combinedWhere}
       ORDER BY id_uint DESC
       LIMIT {page_size:UInt32}
@@ -148,7 +148,7 @@ export async function queryInferenceTable(params: {
           episode_id,
           function_type,
           formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-        FROM InferenceById
+        FROM InferenceById FINAL
         ${combinedWhere}
         ORDER BY id_uint ASC
         LIMIT {page_size:UInt32}
@@ -184,9 +184,9 @@ export async function queryInferenceTableBounds(params?: {
 
   const query = `
   SELECT
-    (SELECT uint_to_uuid(id_uint) FROM InferenceById WHERE id_uint = (SELECT MIN(id_uint) FROM InferenceById ${whereClause})) AS first_id,
-    (SELECT uint_to_uuid(id_uint) FROM InferenceById WHERE id_uint = (SELECT MAX(id_uint) FROM InferenceById ${whereClause})) AS last_id
-  FROM InferenceById
+    (SELECT uint_to_uuid(id_uint) FROM InferenceById FINAL WHERE id_uint = (SELECT MIN(id_uint) FROM InferenceById FINAL ${whereClause})) AS first_id,
+    (SELECT uint_to_uuid(id_uint) FROM InferenceById FINAL WHERE id_uint = (SELECT MAX(id_uint) FROM InferenceById FINAL ${whereClause})) AS last_id
+  FROM InferenceById FINAL
   LIMIT 1
   `;
 
@@ -257,7 +257,7 @@ export async function queryEpisodeTable(params: {
         formatDateTime(min(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
         formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
         uint_to_uuid(max(id_uint)) as last_inference_id
-      FROM InferenceByEpisodeId
+      FROM InferenceByEpisodeId FINAL
       GROUP BY episode_id
       ORDER BY toUInt128(last_inference_id) DESC
       LIMIT {page_size:UInt32}
@@ -270,7 +270,7 @@ export async function queryEpisodeTable(params: {
         formatDateTime(min(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
         formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
         uint_to_uuid(max(id_uint)) as last_inference_id
-      FROM InferenceByEpisodeId
+      FROM InferenceByEpisodeId FINAL
       GROUP BY episode_id
       HAVING toUInt128(last_inference_id) < toUInt128(toUUID({before:String}))
       ORDER BY toUInt128(last_inference_id) DESC
@@ -294,7 +294,7 @@ export async function queryEpisodeTable(params: {
           formatDateTime(max(UUIDv7ToDateTime(uint_to_uuid(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
           uint_to_uuid(max(id_uint)) as last_inference_id,
           max(id_uint) as last_inference_id_uint
-        FROM InferenceByEpisodeId
+        FROM InferenceByEpisodeId FINAL
         GROUP BY episode_id
         HAVING last_inference_id_uint > toUInt128(toUUID({after:String}))
         ORDER BY last_inference_id_uint ASC
@@ -332,9 +332,9 @@ export async function queryEpisodeTable(params: {
 export async function queryEpisodeTableBounds(): Promise<TableBounds> {
   const query = `
     SELECT
-     (SELECT uint_to_uuid(id_uint) FROM InferenceByEpisodeId WHERE id_uint = (SELECT MIN(id_uint) FROM InferenceByEpisodeId)) AS first_id,
-     (SELECT uint_to_uuid(id_uint) FROM InferenceByEpisodeId WHERE id_uint = (SELECT MAX(id_uint) FROM InferenceByEpisodeId)) AS last_id
-    FROM InferenceByEpisodeId
+     (SELECT uint_to_uuid(id_uint) FROM InferenceByEpisodeId FINAL WHERE id_uint = (SELECT MIN(id_uint) FROM InferenceByEpisodeId FINAL)) AS first_id,
+     (SELECT uint_to_uuid(id_uint) FROM InferenceByEpisodeId FINAL WHERE id_uint = (SELECT MAX(id_uint) FROM InferenceByEpisodeId FINAL)) AS last_id
+    FROM InferenceByEpisodeId FINAL
     LIMIT 1
   `;
   try {
@@ -476,7 +476,7 @@ export async function countInferencesForVariant(
 export async function countInferencesForEpisode(
   episode_id: string,
 ): Promise<number> {
-  const query = `SELECT COUNT() AS count FROM InferenceByEpisodeId WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))`;
+  const query = `SELECT COUNT() AS count FROM InferenceByEpisodeId FINAL WHERE episode_id_uint = toUInt128(toUUID({episode_id:String}))`;
   const resultSet = await clickhouseClient.query({
     query,
     format: "JSONEachRow",
@@ -628,7 +628,7 @@ export async function queryInferenceById(
         variant_name,
         episode_id,
         function_type
-    FROM InferenceById
+    FROM InferenceById FINAL
     WHERE id_uint = toUInt128({id:UUID})
 )
 SELECT

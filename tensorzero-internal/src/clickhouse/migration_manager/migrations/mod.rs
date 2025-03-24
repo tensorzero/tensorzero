@@ -18,6 +18,7 @@ pub mod migration_0016;
 pub mod migration_0017;
 pub mod migration_0018;
 pub mod migration_0020;
+pub mod migration_0021;
 
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails
@@ -142,4 +143,17 @@ async fn table_is_nonempty(
             message: e.to_string(),
         })
     })? > 0)
+}
+
+async fn get_table_engine(
+    clickhouse: &ClickHouseConnectionInfo,
+    table: &str,
+) -> Result<String, Error> {
+    let query = format!(
+        "SELECT engine FROM system.tables WHERE database='{}' AND name='{}'",
+        clickhouse.database(),
+        table
+    );
+    let result = clickhouse.run_query(query, None).await?;
+    Ok(result.trim().to_string())
 }
