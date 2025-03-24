@@ -53,7 +53,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: tensorzero-${{ matrix.container.name }}
+          images: ${{ matrix.container.name }}
 
       - name: Build and push Docker image
         id: push
@@ -65,7 +65,7 @@ jobs:
           push: true
           provenance: mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: ${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.container.name }}
+          tags: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Export digest
@@ -114,19 +114,16 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.container.name }}
+          images: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=tag
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.container.name }}@sha256:%s ' *)
+            $(printf '${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.DOCKERHUB_USER }}/tensorzero-${{ matrix.container.name }}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}:${{ steps.meta.outputs.version }}
