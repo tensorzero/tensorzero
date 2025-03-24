@@ -1,4 +1,6 @@
 target
+target-rust-analyzer
+**/target-rust-analyzer
 **/target
 **/build
 **/dist
