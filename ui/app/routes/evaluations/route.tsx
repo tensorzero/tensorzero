@@ -4,36 +4,26 @@ import {
   countInferencesByFunction,
 } from "~/utils/clickhouse/inference";
 import type { Route } from "./+types/route";
-import InferencesTable from "./InferencesTable";
 import { data, isRouteErrorResponse, useNavigate } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
-import InferenceSearchBar from "./InferenceSearchBar";
 import {
   PageHeader,
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { countTotalEvalRuns } from "~/utils/clickhouse/evaluations.server";
+import InferenceSearchBar from "../observability/inferences/InferenceSearchBar";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  return null;
+  const totalEvalRuns = await countTotalEvalRuns();
+  return {
+    totalEvalRuns,
+  };
 }
 
 export default function EvalSummaryPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
-
-  if (inferences.length === 0) {
-    return (
-      <PageLayout>
-        <PageHeader heading="Inferences" count={totalInferences} />
-        <SectionLayout>
-          <InferenceSearchBar />
-          <div className="py-8 text-center text-gray-500">
-            No inferences found
-          </div>
-        </SectionLayout>
-      </PageLayout>
-    );
-  }
+  const { totalEvalRuns } = loaderData;
 
   const topInference = inferences[0];
   const bottomInference = inferences[inferences.length - 1];
@@ -57,7 +47,7 @@ export default function EvalSummaryPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader heading="Evaluations" count={totalInferences} />
+      <PageHeader heading="Evaluation Runs" count={totalEvalRuns} />
       <SectionLayout>
         <InferenceSearchBar />
         <InferencesTable inferences={inferences} />

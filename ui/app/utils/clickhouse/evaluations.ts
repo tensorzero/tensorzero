@@ -109,3 +109,13 @@ export function getEvaluatorMetricName(
 ): string {
   return `tensorzero::eval_name::${evalName}::evaluator_name::${evaluatorName}`;
 }
+
+export const evalInfoResultSchema = z.object({
+  eval_run_id: z.string().uuid(),
+  eval_name: z.string(),
+  function_name: z.string(),
+  variant_name: z.string(),
+  last_inference_timestamp: z.string().datetime(),
+});
+
+export type EvalInfoResult = z.infer<typeof evalInfoResultSchema>;

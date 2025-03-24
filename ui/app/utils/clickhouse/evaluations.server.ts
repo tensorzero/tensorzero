@@ -6,6 +6,8 @@ import {
   type EvaluationRunInfo,
   type EvaluationStatistics,
   parseEvaluationResult,
+  type EvalInfoResult,
+  evalInfoResultSchema,
 } from "./evaluations";
 import { getStaledWindowQuery, uuidv7ToTimestamp } from "./helpers";
 
@@ -14,6 +16,8 @@ export async function getEvalRunIds(
   limit: number = 100,
   offset: number = 0,
 ): Promise<EvaluationRunInfo[]> {
+  // This query is not efficient since it is joining on the inference id.
+  // We should eventually rewrite this with some kind of MV for performance reasons.
   const query = `
     SELECT DISTINCT run_tag.value as eval_run_id, run_tag.variant_name as variant_name
     FROM TagInference AS name_tag
@@ -234,4 +238,50 @@ export async function countDatapointsForEval(
   });
   const rows = await result.json<{ count: number }>();
   return rows[0].count;
+}
+
+export async function countTotalEvalRuns() {
+  const query = `
+    SELECT toUInt32(uniqExact(value)) as count FROM TagInference WHERE key = 'tensorzero::eval_run_id'
+  `;
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+  });
+  const rows = await result.json<{ count: number }>();
+  return rows[0].count;
+}
+
+export async function getEvalRunInfo(limit: number = 100, offset: number = 0) {
+  const query = `
+    SELECT
+    t1.value AS eval_run_id,
+    t2.value AS eval_name,
+    t1.function_name,
+    t1.variant_name,
+    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(toUInt128(t1.inference_id)))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
+FROM tensorzero_ui_fixtures.TagInference t1
+JOIN tensorzero_ui_fixtures.TagInference t2
+    ON t1.inference_id = t2.inference_id
+WHERE t1.key = 'tensorzero::eval_run_id'
+  AND t2.key = 'tensorzero::eval_name'
+GROUP BY
+    t1.value,
+    t2.value,
+      t1.function_name,
+      t1.variant_name
+    ORDER BY toUInt128(toUUID(t1.value)) DESC
+    LIMIT {limit:UInt32}
+    OFFSET {offset:UInt32}
+  `;
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: {
+      limit: limit,
+      offset: offset,
+    },
+  });
+  const rows = await result.json<EvalInfoResult>();
+  return rows.map((row) => evalInfoResultSchema.parse(row));
 }

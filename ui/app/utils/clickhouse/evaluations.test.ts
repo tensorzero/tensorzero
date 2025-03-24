@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
   countDatapointsForEval,
+  countTotalEvalRuns,
   getEvalResults,
   getEvalRunIds,
+  getEvalRunInfo,
   getEvalStatistics,
 } from "./evaluations.server";
 
@@ -306,5 +308,76 @@ describe("countDatapointsForEval", () => {
       ],
     );
     expect(datapoints).toBe(41);
+  });
+});
+
+describe("countTotalEvalRuns", () => {
+  test("should return correct number of eval runs", async () => {
+    const runs = await countTotalEvalRuns();
+    expect(runs).toBe(6);
+  });
+});
+
+describe("getEvalRunInfo", () => {
+  test("should return correct eval run info", async () => {
+    const runs = await getEvalRunInfo();
+
+    // Check the total number of runs
+    expect(runs.length).toBe(6);
+
+    // Check structure and content of the first row
+    expect(runs[0]).toMatchObject({
+      eval_run_id: "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
+      eval_name: "entity_extraction",
+      function_name: "extract_entities",
+      variant_name: "llama_8b_initial_prompt",
+      last_inference_timestamp: "2025-03-23T21:56:17Z",
+    });
+
+    // Check structure and content of another row
+    expect(runs[2]).toMatchObject({
+      eval_run_id: "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
+      eval_name: "entity_extraction",
+      function_name: "extract_entities",
+      variant_name: "gpt4o_mini_initial_prompt",
+    });
+
+    // Verify that all items have the expected properties
+    runs.forEach((run) => {
+      expect(run).toHaveProperty("eval_run_id");
+      expect(run).toHaveProperty("eval_name");
+      expect(run).toHaveProperty("function_name");
+      expect(run).toHaveProperty("variant_name");
+      expect(run).toHaveProperty("last_inference_timestamp");
+
+      // Check data types
+      expect(typeof run.eval_run_id).toBe("string");
+      expect(typeof run.eval_name).toBe("string");
+      expect(typeof run.function_name).toBe("string");
+      expect(typeof run.variant_name).toBe("string");
+      expect(typeof run.last_inference_timestamp).toBe("string");
+    });
+
+    // Verify that the runs are sorted by eval_run_id in descending order
+    // This verifies the ORDER BY clause is working
+    expect(runs[0].eval_run_id > runs[1].eval_run_id).toBe(true);
+
+    // Check for specific eval_names in the dataset
+    const evalNames = runs.map((run) => run.eval_name);
+    expect(evalNames).toContain("entity_extraction");
+    expect(evalNames).toContain("haiku");
+
+    // Check for specific function_names in the dataset
+    const functionNames = runs.map((run) => run.function_name);
+    expect(functionNames).toContain("extract_entities");
+    expect(functionNames).toContain("write_haiku");
+
+    // Check the last run in the result
+    expect(runs[5]).toMatchObject({
+      eval_run_id: "0195aef6-4ed4-7710-ae62-abb10744f153",
+      eval_name: "haiku",
+      function_name: "write_haiku",
+      variant_name: "initial_prompt_haiku_3_5",
+    });
   });
 });
