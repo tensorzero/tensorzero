@@ -83,7 +83,8 @@ async fn test_datapoint_insert_synthetic_chat() {
       "tool_params": "",
       "tags": {},
       "auxiliary": "",
-      "is_deleted": false
+      "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 }
@@ -274,7 +275,8 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
       "tool_params": "{\"tools_available\":[{\"description\":\"Get the current temperature in a given location\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The location to get the temperature for (e.g. \\\"New York\\\")\"},\"units\":{\"type\":\"string\",\"description\":\"The units to get the temperature in (must be \\\"fahrenheit\\\" or \\\"celsius\\\")\",\"enum\":[\"fahrenheit\",\"celsius\"]}},\"required\":[\"location\"],\"additionalProperties\":false},\"name\":\"get_temperature\",\"strict\":false}],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}",
       "tags": {},
       "auxiliary": "",
-      "is_deleted": false
+      "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 }
@@ -349,7 +351,8 @@ async fn test_datapoint_insert_synthetic_json() {
       "output_schema": "{}",
       "tags": {},
       "auxiliary": "",
-      "is_deleted": false
+      "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 
@@ -458,7 +461,8 @@ async fn test_datapoint_insert_synthetic_json() {
       "output_schema": "{}",
       "tags": {},
       "auxiliary": "",
-      "is_deleted": false
+      "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 }
@@ -708,7 +712,8 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "tool_params": "",
       "tags": {},
       "auxiliary": "{}",
-      "is_deleted": false
+      "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 
@@ -763,7 +768,8 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "tool_params": "",
       "tags": {},
       "auxiliary": "{}",
-      "is_deleted": true
+      "is_deleted": true,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
     assert_ne!(
@@ -882,7 +888,8 @@ async fn test_datapoint_insert_output_none_chat() {
       "tool_params": "",
       "tags": {},
       "auxiliary": "{}",
-      "is_deleted": false
+      "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 }
@@ -990,7 +997,8 @@ async fn test_datapoint_insert_output_demonstration_chat() {
       "tool_params": "",
       "tags": {},
       "auxiliary": "{}",
-      "is_deleted": false
+      "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 }
@@ -1077,6 +1085,7 @@ async fn test_datapoint_insert_output_inherit_json() {
       "tags": {},
       "auxiliary": "{}",
       "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 
@@ -1131,7 +1140,8 @@ async fn test_datapoint_insert_output_inherit_json() {
       "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
       "auxiliary": "{}",
-      "is_deleted": true
+      "is_deleted": true,
+      "staled_at": null
     });
     assert_eq!(
         datapoint,
@@ -1227,6 +1237,7 @@ async fn test_datapoint_insert_output_none_json() {
       "tags": {},
       "auxiliary": "{}",
       "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 }
@@ -1335,6 +1346,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
       "tags": {},
       "auxiliary": "{}",
       "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 }
@@ -1466,7 +1478,8 @@ async fn test_datapoint_insert_missing_output_chat() {
       "tool_params": "",
       "tags": {},
       "auxiliary": "",
-      "is_deleted": false
+      "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 }
@@ -1528,7 +1541,8 @@ async fn test_datapoint_insert_null_output_chat() {
       "tool_params": "",
       "tags": {},
       "auxiliary": "",
-      "is_deleted": false
+      "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 }
@@ -1591,7 +1605,8 @@ async fn test_datapoint_insert_missing_output_json() {
       "output_schema": "{}",
       "tags": {},
       "auxiliary": "",
-      "is_deleted": false
+      "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 }
@@ -1654,7 +1669,8 @@ async fn test_datapoint_insert_null_output_json() {
       "output_schema": "{}",
       "tags": {},
       "auxiliary": "",
-      "is_deleted": false
+      "is_deleted": false,
+      "staled_at": null
     });
     assert_eq!(datapoint, expected);
 }
