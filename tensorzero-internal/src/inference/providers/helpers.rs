@@ -50,8 +50,8 @@ pub fn inject_extra_body(
     {
         match extra_body {
             InferenceExtraBody::Variant {
-                // We already filtered out mismatched `variant_name` entries
-                // before calling `inject_extra_body`
+                // We're iterating over a 'FilteredInferenceExtraBody', so we've already removed any non-matching variant names.
+                // Any remaining `InferenceExtraBody::Variant` values should be applied to the current request
                 variant_name: _,
                 pointer,
                 value,
