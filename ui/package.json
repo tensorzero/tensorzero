@@ -64,6 +64,7 @@
     "@typescript-eslint/eslint-plugin": "^8.22.0",
     "@typescript-eslint/parser": "^8.22.0",
     "autoprefixer": "^10.4.20",
+    "esbuild": "^0.25.1",
     "eslint": "^9.21.0",
     "postcss": "^8.5.1",
     "prettier": "^3.4.2",
