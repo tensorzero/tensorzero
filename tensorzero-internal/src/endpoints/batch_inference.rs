@@ -864,7 +864,7 @@ pub async fn write_completed_batch_inference<'a>(
                 episode_id,
             },
             // Not currently supported as a batch inference parameter
-            filtered_extra_body: Default::default(),
+            extra_body: Default::default(),
             extra_cache_key: None,
         };
         let inference_result = function

@@ -530,7 +530,7 @@ impl FuserConfig {
                 self.inner.frequency_penalty,
             );
 
-        if !inference_config.filtered_extra_body.data.is_empty() {
+        if !inference_config.extra_body.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
                 message:
                     "Inference-level `extra_body` is not yet supported for mixture_of_n variant"
@@ -1064,7 +1064,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: Some(""),
-            filtered_extra_body: Default::default(),
+            extra_body: Default::default(),
             extra_cache_key: None,
         };
 

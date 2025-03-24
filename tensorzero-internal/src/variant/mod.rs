@@ -18,7 +18,7 @@ use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
-use crate::inference::types::extra_body::FilteredInferenceExtraBody;
+use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::FullExtraBodyConfig;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
@@ -67,7 +67,7 @@ pub struct InferenceConfig<'a, 'request> {
     pub function_name: &'request str,
     pub variant_name: Option<&'request str>,
     pub ids: InferenceIds,
-    pub filtered_extra_body: FilteredInferenceExtraBody,
+    pub extra_body: UnfilteredInferenceExtraBody,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
@@ -108,7 +108,7 @@ impl<'a> BatchInferenceConfig<'a> {
                     episode_id: *episode_id,
                 },
                 // Not yet supported for batch inference requests
-                filtered_extra_body: Default::default(),
+                extra_body: Default::default(),
                 extra_cache_key: None,
             },
         )
@@ -657,7 +657,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            filtered_extra_body: Default::default(),
+            extra_body: Default::default(),
             extra_cache_key: None,
         };
 
@@ -789,7 +789,7 @@ mod tests {
             function_name: "test_function",
             variant_name: Some("test_variant"),
             dynamic_output_schema: Some(&dynamic_output_schema),
-            filtered_extra_body: Default::default(),
+            extra_body: Default::default(),
             extra_cache_key: None,
         };
         let json_mode = JsonMode::ImplicitTool;
@@ -880,7 +880,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            filtered_extra_body: Default::default(),
+            extra_body: Default::default(),
             extra_cache_key: None,
         };
 
@@ -1148,7 +1148,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            filtered_extra_body: Default::default(),
+            extra_body: Default::default(),
             extra_cache_key: None,
         };
 

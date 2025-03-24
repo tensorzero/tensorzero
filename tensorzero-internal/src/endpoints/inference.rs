@@ -27,9 +27,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::function::{sample_variant, FunctionConfigChat};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
-use crate::inference::types::extra_body::{
-    FilteredInferenceExtraBody, UnfilteredInferenceExtraBody,
-};
+use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::resolved_input::ImageWithPath;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::{
@@ -127,7 +125,7 @@ struct InferenceMetadata {
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
     #[allow(dead_code)] // We may start exposing this in the response
     pub cached: bool,
-    pub extra_body: FilteredInferenceExtraBody,
+    pub extra_body: UnfilteredInferenceExtraBody,
 }
 
 pub type InferenceCredentials = HashMap<String, SecretString>;
@@ -294,7 +292,7 @@ pub async fn inference(
             episode_id,
         },
         extra_cache_key: None,
-        filtered_extra_body: FilteredInferenceExtraBody::default(),
+        extra_body: Default::default(),
     };
     let inference_clients = InferenceClients {
         http_client,
@@ -326,7 +324,7 @@ pub async fn inference(
         let variant_inference_params = params.params.clone();
 
         inference_config.variant_name = Some(variant_name);
-        inference_config.filtered_extra_body = params.extra_body.clone().filter(variant_name);
+        inference_config.extra_body = params.extra_body.clone();
         if stream {
             let result = variant
                 .infer_stream(
@@ -354,7 +352,7 @@ pub async fn inference(
                 }
             };
 
-            let extra_body = inference_config.filtered_extra_body.clone();
+            let extra_body = inference_config.extra_body.clone();
 
             // Create InferenceMetadata for a streaming inference
             let inference_metadata = InferenceMetadata {
@@ -415,7 +413,7 @@ pub async fn inference(
 
             if !dryrun {
                 // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
-                let extra_body = inference_config.filtered_extra_body.clone();
+                let extra_body = inference_config.extra_body.clone();
                 let result_to_write = result.clone();
                 let write_metadata = InferenceDatabaseInsertMetadata {
                     function_name: function_name.to_string(),
@@ -597,7 +595,7 @@ fn create_stream(
                     templates,
                     tool_config: tool_config.as_ref(),
                     cached,
-                    filtered_extra_body: extra_body.clone(),
+                    extra_body: extra_body.clone(),
                 };
                 let inference_response: Result<InferenceResult, Error> =
                     collect_chunks(collect_chunks_args).await;
@@ -689,7 +687,7 @@ pub struct InferenceDatabaseInsertMetadata {
     pub tool_config: Option<ToolCallConfig>,
     pub processing_time: Option<Duration>,
     pub tags: HashMap<String, String>,
-    pub extra_body: FilteredInferenceExtraBody,
+    pub extra_body: UnfilteredInferenceExtraBody,
 }
 
 async fn write_image(

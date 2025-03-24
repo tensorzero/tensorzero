@@ -43,7 +43,11 @@ pub fn inject_extra_body(
     let expected_provider_name = fully_qualified_name(model_name, &model_provider.provider_name);
 
     // Finally, write the inference-level extra_body information. This can overwrite values set from the config-level extra_body.
-    for extra_body in config.as_ref().iter().flat_map(|c| &c.inference_extra_body) {
+    for extra_body in config
+        .as_ref()
+        .iter()
+        .flat_map(|c| &c.inference_extra_body.data)
+    {
         match extra_body {
             InferenceExtraBody::Variant {
                 // We already filtered out mismatched `variant_name` entries
@@ -212,7 +216,7 @@ mod tests {
     use futures::{stream, StreamExt};
 
     use crate::{
-        inference::types::{ContentBlockChunk, TextChunk},
+        inference::types::{extra_body::FilteredInferenceExtraBody, ContentBlockChunk, TextChunk},
         variant::chat_completion::{ExtraBodyConfig, ExtraBodyReplacement},
     };
 
@@ -299,11 +303,13 @@ mod tests {
         inject_extra_body(
             &Some(FullExtraBodyConfig {
                 extra_body: ExtraBodyConfig { data: vec![] },
-                inference_extra_body: vec![InferenceExtraBody::Provider {
-                    model_provider_name: "wrong_provider".to_string(),
-                    pointer: "/my_key".to_string(),
-                    value: "My Value".to_string().into(),
-                }],
+                inference_extra_body: FilteredInferenceExtraBody {
+                    data: vec![InferenceExtraBody::Provider {
+                        model_provider_name: "wrong_provider".to_string(),
+                        pointer: "/my_key".to_string(),
+                        value: "My Value".to_string().into(),
+                    }],
+                },
             }),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
@@ -359,13 +365,13 @@ mod tests {
                         },
                     ],
                 },
-                inference_extra_body: vec![InferenceExtraBody::Provider {
+                inference_extra_body: FilteredInferenceExtraBody { data: vec![InferenceExtraBody::Provider {
                     model_provider_name:
                         "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
                             .to_string(),
                     pointer: "/generationConfig/valueFromInference".to_string(),
                     value: "inferenceValue".to_string().into(),
-                }],
+                }]},
             }),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
@@ -418,13 +424,13 @@ mod tests {
                         },
                     ],
                 },
-                inference_extra_body: vec![InferenceExtraBody::Provider {
+                inference_extra_body: FilteredInferenceExtraBody { data: vec![InferenceExtraBody::Provider {
                     model_provider_name:
                         "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
                             .to_string(),
                     pointer: "/multiOverride".to_string(),
                     value: Value::String("from inference".to_string()),
-                }],
+                }]},
             }),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),

@@ -507,7 +507,7 @@ impl DiclConfig {
                 self.presence_penalty,
                 self.frequency_penalty,
             );
-        if !inference_config.filtered_extra_body.data.is_empty() {
+        if !inference_config.extra_body.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
                 message: "Inference-level `extra_body` is not yet supported for dynamic_in_content_learning variant"
                     .to_string(),

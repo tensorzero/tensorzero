@@ -660,7 +660,7 @@ impl EvaluatorConfig {
             JsonMode::ImplicitTool => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
             _ => None,
         };
-        if !inference_config.filtered_extra_body.data.is_empty() {
+        if !inference_config.extra_body.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
                 message: "Inference-level `extra_body` is not yet supported for best_of_n variant"
                     .to_string(),
@@ -1233,7 +1233,7 @@ mod tests {
             dynamic_output_schema: None,
             function_name: "",
             variant_name: Some(""),
-            filtered_extra_body: Default::default(),
+            extra_body: Default::default(),
             extra_cache_key: None,
         };
 
