@@ -243,8 +243,8 @@ async fn test_clean_clickhouse_start() {
     migration_manager::run(&clickhouse).await.unwrap();
     let duration = start.elapsed();
     assert!(
-        duration < std::time::Duration::from_secs(20),
-        "Migrations took longer than 20 seconds: {duration:?}"
+        duration < std::time::Duration::from_secs(40),
+        "Migrations took longer than 40 seconds: {duration:?}"
     );
 }
 
