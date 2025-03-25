@@ -1,4 +1,4 @@
-# Rust-based TensorZero Python Client
+# TensorZero Python Client
 
 **[Website](https://www.tensorzero.com/)** ·
 **[Docs](https://www.tensorzero.com/docs)** ·
@@ -6,11 +6,11 @@
 **[Slack](https://www.tensorzero.com/slack)** ·
 **[Discord](https://www.tensorzero.com/discord)**
 
-**[Quick Start (5min)](https://www.tensorzero.com/docs/gateway/tutorial)** ·
+**[Quick Start (5min)](https://www.tensorzero.com/docs/quickstart)** ·
 **[Comprehensive Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)** ·
 **[Deployment Guide](https://www.tensorzero.com/docs/gateway/deployment)** ·
-**[API Reference](https://www.tensorzero.com/docs/gateway/api-reference)** ·
-**[Configuration Reference](https://www.tensorzero.com/docs/gateway/deployment)**
+**[API Reference](https://www.tensorzero.com/docs/gateway/api-reference/inference)** ·
+**[Configuration Reference](https://www.tensorzero.com/docs/gateway/configuration-reference)**
 
 The `tensorzero` package provides a Python client for the TensorZero Gateway.
 This client allows you to easily make inference requests and assign feedback to them via the gateway.
@@ -30,7 +30,8 @@ pip install tensorzero
 The TensorZero client offers synchronous (`TensorZeroGateway`) and asynchronous (`AsyncTensorZeroGateway`) variants.
 Additionally, the client can launch an embedded (in-memory) gateway (`build_embedded`) or connect to an external HTTP gateway (`build_http`) - both of these methods return a gateway instance.
 
-Note: The asynchronous client returns a `Future` when you call `build_http` or `build_embedded`, so you must `await` it.
+By default, the asynchronous client returns a `Future` when you call `build_http` or `build_embedded`, so you must `await` it.
+If you prefer to avoid the `await`, you can set `async_setup=False` to initialize the client in a blocking way.
 
 #### Synchronous HTTP Gateway
 
@@ -51,7 +52,8 @@ from tensorzero import AsyncTensorZeroGateway
 
 async def run():
     async with await AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000"
+        gateway_url="http://localhost:3000",
+        # async_setup=False  # optional: skip the `await` and run `build_http` synchronously (blocking)
     ) as client:
         # ...
 
@@ -84,6 +86,7 @@ async def run():
     async with await AsyncTensorZeroGateway.build_embedded(
         config_file="/path/to/tensorzero.toml",
         clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero"
+        # async_setup=False  # optional: skip the `await` and run `build_embedded` synchronously (blocking)
     ) as client:
         # ...
 

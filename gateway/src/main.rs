@@ -32,6 +32,11 @@ struct Args {
     #[arg(long)]
     default_config: bool,
 
+    // Hidden flag used by our `Dockerfile` to warn users who have not overridden the default CMD
+    #[arg(long)]
+    #[clap(hide = true)]
+    warn_default_cmd: bool,
+
     /// Deprecated: use `--config-file` instead
     tensorzero_toml: Option<PathBuf>,
 }
@@ -42,6 +47,10 @@ async fn main() {
     observability::setup_logs(true);
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
     let args = Args::parse();
+
+    if args.warn_default_cmd {
+        tracing::warn!("Deprecation warning: Running gateway from Docker container without overriding default CMD. Please override the command to either '--config-file path/to/tensorzero.toml' or '--default-config'.");
+    }
 
     if args.tensorzero_toml.is_some() && args.config_file.is_some() {
         tracing::error!("Cannot specify both `--config-file` and a positional path argument");
