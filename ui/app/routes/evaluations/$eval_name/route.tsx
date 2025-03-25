@@ -17,8 +17,8 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
-import { useNavigate, useRevalidator } from "react-router";
-import React from "react";
+import { useNavigate } from "react-router";
+import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -137,28 +137,8 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
-  // If the most recent eval inference date is less than 1 minute ago, revalidate every 5 seconds
-  const revalidator = useRevalidator();
-  React.useEffect(() => {
-    // Set up an interval that checks the condition and revalidates if needed
-    const intervalId = setInterval(() => {
-      const now = new Date();
-      const differenceInMs =
-        now.getTime() - mostRecentEvalInferenceDate.getTime();
-      const differenceInMinutes = differenceInMs / (1000 * 60);
-
-      if (differenceInMinutes < 1) {
-        revalidator.revalidate();
-      } else {
-        // Stop the interval once the data is older than 1 minute
-        clearInterval(intervalId);
-      }
-    }, 5000); // 5 seconds
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [mostRecentEvalInferenceDate, revalidator]);
+  // Auto-refresh logic moved to a custom hook
+  const isAutoRefreshing = useAutoRefresh(mostRecentEvalInferenceDate);
 
   return (
     <PageLayout>
@@ -166,7 +146,11 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
 
       <SectionsGroup>
         <SectionLayout>
-          <SectionHeader heading="Results" />
+          <div className="flex items-center justify-between">
+            <SectionHeader heading="Results" />
+            <AutoRefreshIndicator isActive={isAutoRefreshing} />
+          </div>
+
           <EvaluationTable
             eval_name={eval_name}
             available_eval_run_ids={available_eval_run_ids}
