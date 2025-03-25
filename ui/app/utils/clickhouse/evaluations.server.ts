@@ -285,3 +285,36 @@ GROUP BY
   const rows = await result.json<EvalInfoResult>();
   return rows.map((row) => evalInfoResultSchema.parse(row));
 }
+
+/*
+Returns the most recent inference date for a given eval run id.
+If any of the eval run ids point to a date that is newer than the data then we return that date instead.
+*/
+export async function getMostRecentEvalInferenceDate(
+  eval_run_ids: string[],
+): Promise<Date> {
+  const query = `
+  SELECT
+    formatDateTime(max(UUIDv7ToDateTime(inference_id)), '%Y-%m-%dT%H:%i:%SZ') as last_inference_timestamp
+  FROM TagInference
+  WHERE key = 'tensorzero::eval_run_id'
+    AND value IN ({eval_run_ids:Array(String)})
+  `;
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: {
+      eval_run_ids: eval_run_ids,
+    },
+  });
+  const eval_run_timestamps = eval_run_ids.map((id) => uuidv7ToTimestamp(id));
+  const rows = await result.json<{ last_inference_timestamp: string }>();
+  const last_inference_timestamp = new Date(rows[0].last_inference_timestamp);
+  const most_recent_timestamp = eval_run_timestamps.reduce((max, current) => {
+    return current > max ? current : max;
+  }, new Date("1970-01-01T00:00:00Z"));
+  if (last_inference_timestamp > most_recent_timestamp) {
+    return last_inference_timestamp;
+  }
+  return most_recent_timestamp;
+}

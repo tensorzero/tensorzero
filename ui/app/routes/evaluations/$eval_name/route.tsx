@@ -5,6 +5,7 @@ import {
   getEvalResults,
   getEvalRunIds,
   countDatapointsForEval,
+  getMostRecentEvalInferenceDate,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import { EvaluationTable } from "./EvaluationTable";
@@ -16,7 +17,8 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
-import { useNavigate } from "react-router";
+import { useNavigate, useRevalidator } from "react-router";
+import React from "react";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -39,8 +41,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     getEvaluatorMetricName(params.eval_name, evaluatorName),
   );
 
-  // Set up all three promises to run concurrently
+  // Set up all promises to run concurrently
   const evalRunIdsPromise = getEvalRunIds(params.eval_name);
+  const mostRecentEvalInferenceDatePromise = getMostRecentEvalInferenceDate(
+    selected_eval_run_ids_array,
+  );
 
   // Create placeholder promises for results and statistics that will be used conditionally
   const resultsPromise =
@@ -82,11 +87,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     eval_results,
     eval_statistics,
     total_datapoints,
+    mostRecentEvalInferenceDate,
   ] = await Promise.all([
     evalRunIdsPromise,
     resultsPromise,
     statisticsPromise,
     total_datapoints_promise,
+    mostRecentEvalInferenceDatePromise,
   ]);
 
   return {
@@ -100,6 +107,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     total_datapoints,
     evaluator_names,
     metric_names,
+    mostRecentEvalInferenceDate,
   };
 }
 
@@ -115,6 +123,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     total_datapoints,
     evaluator_names,
     metric_names,
+    mostRecentEvalInferenceDate,
   } = loaderData;
   const navigate = useNavigate();
   const handleNextPage = () => {
@@ -127,6 +136,29 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     searchParams.set("offset", String(offset - pageSize));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
+
+  // If the most recent eval inference date is less than 1 minute ago, revalidate every 5 seconds
+  const revalidator = useRevalidator();
+  React.useEffect(() => {
+    // Set up an interval that checks the condition and revalidates if needed
+    const intervalId = setInterval(() => {
+      const now = new Date();
+      const differenceInMs =
+        now.getTime() - mostRecentEvalInferenceDate.getTime();
+      const differenceInMinutes = differenceInMs / (1000 * 60);
+
+      if (differenceInMinutes < 1) {
+        revalidator.revalidate();
+      } else {
+        // Stop the interval once the data is older than 1 minute
+        clearInterval(intervalId);
+      }
+    }, 5000); // 5 seconds
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [mostRecentEvalInferenceDate, revalidator]);
 
   return (
     <PageLayout>

@@ -6,6 +6,7 @@ import {
   getEvalRunIds,
   getEvalRunInfo,
   getEvalStatistics,
+  getMostRecentEvalInferenceDate,
 } from "./evaluations.server";
 
 describe("getEvalRunIds", () => {
@@ -379,5 +380,29 @@ describe("getEvalRunInfo", () => {
       function_name: "write_haiku",
       variant_name: "initial_prompt_haiku_3_5",
     });
+  });
+});
+
+describe("getMostRecentEvalInferenceDate", () => {
+  test("should return correct last inference timestamp", async () => {
+    const timestamp = await getMostRecentEvalInferenceDate([
+      "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
+    ]);
+    expect(timestamp).toEqual(new Date("2025-03-23T21:56:27Z"));
+  });
+
+  test("should return run timestamp if no inference id is found", async () => {
+    const timestamp = await getMostRecentEvalInferenceDate([
+      "0195c501-8e6b-76f2-aa2c-ffffffffffff",
+    ]);
+    expect(timestamp).toEqual(new Date("2025-03-23T21:56:08.427Z"));
+  });
+
+  test("handles multiple eval run ids", async () => {
+    const timestamp = await getMostRecentEvalInferenceDate([
+      "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
+      "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
+    ]);
+    expect(timestamp).toEqual(new Date("2025-03-23T21:56:27Z"));
   });
 });
