@@ -2052,7 +2052,8 @@ async def test_patch_sync_openai_client_async_setup():
 
 def test_patch_openai_client_no_config():
     client = OpenAI()
-    tensorzero.patch_openai_client(client, async_setup=False)
+    with pytest.warns(UserWarning, match="No config file provided"):
+        tensorzero.patch_openai_client(client, async_setup=False)
     response = client.chat.completions.create(
         model="tensorzero::model_name::dummy::json",
         messages=[
