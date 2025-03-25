@@ -262,7 +262,7 @@ jobs:
       #   run: examples/production-deployment/run.sh
 
       #  - name: Take down docker compose for production deployment tests
-      #   run: |
+      #  run: |
       #     docker compose -f examples/production-deployment/docker-compose.yml down
       #     docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml down
 
