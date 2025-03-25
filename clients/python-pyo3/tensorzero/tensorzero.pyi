@@ -24,7 +24,7 @@ class BaseTensorZeroGateway:
 
 @final
 class TensorZeroGateway(BaseTensorZeroGateway):
-    def __init__(self, base_url: str, *, timeout: Optional[float] = None):
+    def __init__(self, base_url: str, *, timeout: Optional[float] = None) -> None:
         """
         Initialize the TensorZero client.
 
@@ -159,7 +159,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
 @final
 class AsyncTensorZeroGateway(BaseTensorZeroGateway):
-    def __init__(self, base_url: str, *, timeout: Optional[float] = None):
+    def __init__(self, base_url: str, *, timeout: Optional[float] = None) -> None:
         """
         Initialize the TensorZero client.
 

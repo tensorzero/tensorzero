@@ -83,7 +83,7 @@ async def _async_attach_fields(client: T, awaitable: t.Awaitable[t.Any]) -> T:
 class ATTENTION_TENSORZERO_PLEASE_AWAIT_RESULT_OF_PATCH_OPENAI_CLIENT(httpx.URL):
     # This is called by httpx when making a request (to join the base url with the path)
     # We throw an error to try to produce a nicer message for the user
-    def copy_with(self, *args, **kwargs):
+    def copy_with(self, *args: t.Any, **kwargs: t.Any):
         raise RuntimeError(
             "TensorZero: Please await the result of `tensorzero.patch_openai_client` before using the client."
         )
@@ -109,7 +109,7 @@ def patch_openai_client(
     *,
     config_file: t.Optional[str] = None,
     clickhouse_url: t.Optional[str] = None,
-    async_setup=True,
+    async_setup: bool = True,
 ) -> t.Union[T, t.Awaitable[T]]:
     """
     Starts a new TensorZero gateway, and patching the provided OpenAI client to use it
