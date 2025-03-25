@@ -294,7 +294,6 @@ jobs:
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> .env
           echo "TENSORZERO_GATEWAY_URL=http://localhost:3000" >> .env
-          echo "TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml" >> .env
           docker compose -f fixtures/docker-compose.yml -f fixtures/docker-compose.ui.yml --project-name tensorzero-ui up -d --build --force-recreate
 
       - name: Run ui tests
@@ -304,9 +303,6 @@ jobs:
       - name: Install playwright dependencies
         working-directory: ui
         run: pnpm exec playwright install
-
-      - name: Debugging with ssh
-        uses: lhotari/action-upterm@v1
 
       - name: Run ui e2e tests
         working-directory: ui
