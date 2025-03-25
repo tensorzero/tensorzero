@@ -294,6 +294,7 @@ jobs:
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> .env
           echo "TENSORZERO_GATEWAY_URL=http://localhost:3000" >> .env
+          echo "TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.toml"
           docker compose -f fixtures/docker-compose.yml -f fixtures/docker-compose.ui.yml up -d --build --force-recreate
 
       - name: Run ui tests
