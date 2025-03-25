@@ -1,0 +1,2110 @@
+"short_cache_key","long_cache_key","timestamp","output","raw_request","raw_response","is_deleted","input_tokens","output_tokens","finish_reason"
+4614730347132235598,"4e2f0803cdd00a40564399216ec323f08fcd61c3de2db78b644290c07e0df595","2025-03-25 23:31:54","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses a baseball game where a player named Brown threw pitches and achieved a win, which is clearly related to sports, specifically baseball. Therefore, it is appropriate to assign a score of 1.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""Brown threw 119 pitches and won for the third time in as many starts against the Reds this season .\""}]}]}\n\n# Generated Output\n\n{\""person\"":[],\""organization\"":[],\""location\"":[\""Reds\""],\""miscellaneous\"":[\""119 pitches\"",\""third time\"",\""as many starts\"",\""this season\""]}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82LlbTt6lESi3iIeqaLeV45SkBF"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945513,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses a baseball game where a player named Brown threw pitches and achieved a win, which is clearly related to sports, specifically baseball. Therefore, it is appropriate to assign a score of 1.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 166,
+    ""completion_tokens"": 51,
+    ""total_tokens"": 217,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,166,51,"stop"
+16659272563412089686,"56bb96be21a031e74e787b74e85511cf580ff445e7349798a9d4e1a6f38e335c","2025-03-25 23:31:54","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses a baseball game where a player named Brown threw pitches and won against the Reds, which is clearly related to sports, specifically baseball.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""Brown threw 119 pitches and won for the third time in as many starts against the Reds this season .\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [\""Brown\""],\n    \""organization\"": [\""Reds\""],\n    \""location\"": [],\n    \""miscellaneous\"": [\""119 pitches\"", \""third time\"", \""as many starts\"", \""this season\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82MXSDa9rfDyAKb40LHlk9fo7Qm"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945514,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses a baseball game where a player named Brown threw pitches and won against the Reds, which is clearly related to sports, specifically baseball.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 180,
+    ""completion_tokens"": 39,
+    ""total_tokens"": 219,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,180,39,"stop"
+3683727679761814785,"01157ab9ce3a1f33de2ec934698452847d71359d128f7c718c1234b1a786e3c1","2025-03-25 23:31:55","[{""type"":""text"",""text"":""{\""thinking\"":\""The input content does not mention any specific sports or athletic activities. It only refers to 'times in seconds', which could relate to various contexts, not exclusively sports. Therefore, it does not qualify as sports-related content.\"",\""score\"":0.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""times in seconds ) :\""}]}]}\n\n# Generated Output\n\n{\""person\"":[],\""organization\"":[],\""location\"":[],\""miscellaneous\"":[\""times\"",\""seconds\""]}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82MIqtEFUwvuppApL7nShQkOc8W"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945514,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The input content does not mention any specific sports or athletic activities. It only refers to 'times in seconds', which could relate to various contexts, not exclusively sports. Therefore, it does not qualify as sports-related content.\"",\""score\"":0.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 138,
+    ""completion_tokens"": 54,
+    ""total_tokens"": 192,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,138,54,"stop"
+4841630175663156413,"bdec3622feec3043b1c7e5199a8fbfa5d16b100f40a63691d7ddb33340abb7fc","2025-03-25 23:31:55","[{""type"":""text"",""text"":""{\""thinking\"":\""The input content mentions a location (AL-RAM, West Bank) and a date (1996-08-30), but there is no indication of any sports-related activity or event. Therefore, it does not relate to sports.\"",\""score\"":0.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""AL-RAM , West Bank 1996-08-30\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""AL-RAM\"", \""West Bank\""],\n    \""miscellaneous\"": [\""1996-08-30\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82MUSvehebQmC2ItSXtvsTGDN3e"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945514,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The input content mentions a location (AL-RAM, West Bank) and a date (1996-08-30), but there is no indication of any sports-related activity or event. Therefore, it does not relate to sports.\"",\""score\"":0.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 166,
+    ""completion_tokens"": 57,
+    ""total_tokens"": 223,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,166,57,"stop"
+581899304356069195,"4bbf309355521308eaa5c42a687711e2093c88f6369c51d6b9de0131a2e3ef07","2025-03-25 23:31:50","[{""type"":""text"",""text"":""{\""thinking\"":\""The input mentions 'Detroit' which is a city known for its sports teams, such as the Detroit Tigers (MLB), Detroit Lions (NFL), and Detroit Pistons (NBA). The date '1996-08-31' could potentially relate to a significant sports event or game that took place in Detroit on that date. Therefore, the content is related to sports.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""DETROIT 1996-08-31\""}]}]}\n\n# Generated Output\n\n{\""person\"":[],\""organization\"":[],\""location\"":[\""Detroit\""],\""miscellaneous\"":[\""1996-08-31\""]}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82HvSmO8gjXDukPlIzNqwEWxibh"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945509,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The input mentions 'Detroit' which is a city known for its sports teams, such as the Detroit Tigers (MLB), Detroit Lions (NFL), and Detroit Pistons (NBA). The date '1996-08-31' could potentially relate to a significant sports event or game that took place in Detroit on that date. Therefore, the content is related to sports.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 148,
+    ""completion_tokens"": 85,
+    ""total_tokens"": 233,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,148,85,"stop"
+1154794393723792354,"e2eb84fa61a70610c8b61fdfbc98d255488fe0dafd9d98d94132b22ead80d3b5","2025-03-25 23:31:48","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses a statement made by U.S. captain Billie Jean King regarding a commitment to win a Cup, which indicates a connection to sports, specifically tennis. The mention of 'court' and 'Cup' further reinforces this association with competitive sports.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""\\\"" Last year we stood on the court after we had lost and we put out hands together and made it our committment to bring back the Cup , \\\"" U.S. captain Billie Jean King said at the draw . \\\""\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [\""Billie Jean King\""],\n    \""organization\"": [],\n    \""location\"": [\""U.S.\""],\n    \""miscellaneous\"": [\""Cup\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82FgcXvnxfH6AN713isBOBUQqhn"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945507,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses a statement made by U.S. captain Billie Jean King regarding a commitment to win a Cup, which indicates a connection to sports, specifically tennis. The mention of 'court' and 'Cup' further reinforces this association with competitive sports.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 194,
+    ""completion_tokens"": 60,
+    ""total_tokens"": 254,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,194,60,"stop"
+1993616194952026697,"49da94de5dbfaa1b08d424214778b8b0229e38d5423fc34ef5599a4fe9b9afad","2025-03-25 23:31:47","[{""type"":""text"",""text"":""{\""thinking\"":\""The content provided discusses a statement made by a U.N. relief official regarding the presence of Iraqi troops, which is related to military and geopolitical issues rather than sports. Therefore, it does not pertain to sports in any way.\"",\""score\"":0.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""We have in no way seen any Iraqi troops in the city or in its approaches , \\\"" a U.N. relief official told Reuters .\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [\""U.N. relief official\""],\n    \""organization\"": [\""U.N.\"", \""Reuters\""],\n    \""location\"": [\""Iraq\"", \""city\""],\n    \""miscellaneous\"": []\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82Epu2tTWvBcoCAPsBzPm9GM82X"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945506,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content provided discusses a statement made by a U.N. relief official regarding the presence of Iraqi troops, which is related to military and geopolitical issues rather than sports. Therefore, it does not pertain to sports in any way.\"",\""score\"":0.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 183,
+    ""completion_tokens"": 56,
+    ""total_tokens"": 239,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,183,56,"stop"
+2266385633057829093,"e5f075b6b9d1731faf68234fffa9b501b41427ae3ba6ec54e38aaffd63249bc4","2025-03-25 23:31:53","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses a conversation about needing a player named Monica to win, which indicates a context related to sports, likely a team sport where winning is a goal. Therefore, it is related to sports.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""\\\"" I told Monica we need her if we want to win , \\\"" King said .\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [\""Monica\"", \""King\""],\n    \""organization\"": [],\n    \""location\"": [],\n    \""miscellaneous\"": []\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82KVWZ1gmCDWaVY8v7JpJ6E2Eyz"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945512,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses a conversation about needing a player named Monica to win, which indicates a context related to sports, likely a team sport where winning is a goal. Therefore, it is related to sports.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 161,
+    ""completion_tokens"": 50,
+    ""total_tokens"": 211,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,161,50,"stop"
+3197441726259683958,"7662b82b4f985f2c991da135e21367b79a78df84a7f29d92ffa74f3d94bdf5e3","2025-03-25 23:31:48","[{""type"":""text"",""text"":""{\""thinking\"":\""The content 'Southend 1 Swindon 3' refers to a score in a sports match, likely a football game, indicating that Southend lost to Swindon. This is clearly related to sports as it discusses the outcome of a sporting event.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""Southend 1 Swindon 3\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""Southend\"", \""Swindon\""],\n    \""miscellaneous\"": [\""1\"", \""3\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82FfPqgMWXAizChjijyb7SRxt4w"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945507,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content 'Southend 1 Swindon 3' refers to a score in a sports match, likely a football game, indicating that Southend lost to Swindon. This is clearly related to sports as it discusses the outcome of a sporting event.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 160,
+    ""completion_tokens"": 63,
+    ""total_tokens"": 223,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,160,63,"stop"
+3897708799898337162,"8abfdaa7807117366b019846717d341cea7422f03537c2f8b4dfa08075fca02e","2025-03-25 23:31:41","[{""type"":""text"",""text"":""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""Southend\"", \""Swindon\""],\n    \""miscellaneous\"": [\""1\"", \""3\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""Southend 1 Swindon 3""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF828tjrN7wZwzcn1F409r52tz0DX"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945500,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""Southend\"", \""Swindon\""],\n    \""miscellaneous\"": [\""1\"", \""3\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 206,
+    ""completion_tokens"": 37,
+    ""total_tokens"": 243,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,206,37,"stop"
+3973852268383398039,"9768df6e95f525376f9f5ab7bb0133106d8c5f721e7a86be1543ceb8bdc78d1e","2025-03-25 23:31:41","[{""type"":""text"",""text"":""{\n    \""person\"": [\""Harrison\"", \""Edwards\""],\n    \""organization\"": [],\n    \""location\"": [\""Sarajevo\""],\n    \""miscellaneous\"": [\""ATHLETICS\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""ATHLETICS - HARRISON , EDWARDS TO MEET IN SARAJEVO .""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF828Gk8MSSD3a9Cnirtog7iajNUB"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945500,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [\""Harrison\"", \""Edwards\""],\n    \""organization\"": [],\n    \""location\"": [\""Sarajevo\""],\n    \""miscellaneous\"": [\""ATHLETICS\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 217,
+    ""completion_tokens"": 39,
+    ""total_tokens"": 256,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,217,39,"stop"
+4100457534238937993,"89d3e2f866c0e738f08e9ba057ad8a792532b9b5465a2a8e35df24de8c7462c4","2025-03-25 23:31:45","[{""type"":""text"",""text"":""{\""person\"":[],\""organization\"":[],\""location\"":[],\""miscellaneous\"":[\""times\"",\""seconds\""]}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""times in seconds ) :""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82DCTMI9lZc4d6qr6ZpaLihbHPf"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945505,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""person\"":[],\""organization\"":[],\""location\"":[],\""miscellaneous\"":[\""times\"",\""seconds\""]}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 202,
+    ""completion_tokens"": 19,
+    ""total_tokens"": 221,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,202,19,"stop"
+4200338545634500931,"43e1ec24a7994a3a2841935b4a0b8dd347f49f86e54e605af94d4f84e3a641b3","2025-03-25 23:31:48","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses an athletics event featuring two individuals, Harrison and Edwards, meeting in Sarajevo. Since athletics is a sport, this content is clearly related to sports.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""ATHLETICS - HARRISON , EDWARDS TO MEET IN SARAJEVO .\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [\""Harrison\"", \""Edwards\""],\n    \""organization\"": [],\n    \""location\"": [\""Sarajevo\""],\n    \""miscellaneous\"": [\""ATHLETICS\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82FJEbcgLtR5wlUj7J8U9jYLXv1"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945507,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses an athletics event featuring two individuals, Harrison and Edwards, meeting in Sarajevo. Since athletics is a sport, this content is clearly related to sports.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 173,
+    ""completion_tokens"": 42,
+    ""total_tokens"": 215,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,173,42,"stop"
+4283903126225077067,"4bc3d43a327b733bd3fadb73df04a36e32bd9081ede6421dfbf086c0f5b250b6","2025-03-25 23:31:42","[{""type"":""text"",""text"":""{\n    \""person\"": [],\n    \""organization\"": [\""Yugoslav league\""],\n    \""location\"": [\""Yugoslavia\""],\n    \""miscellaneous\"": [\""results\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""Results of Yugoslav league""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF8299ggJVkOQmAG8bIu8X6e5ZAkb"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945501,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [],\n    \""organization\"": [\""Yugoslav league\""],\n    \""location\"": [\""Yugoslavia\""],\n    \""miscellaneous\"": [\""results\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 202,
+    ""completion_tokens"": 36,
+    ""total_tokens"": 238,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,202,36,"stop"
+4654417678860980451,"e390ce0038d09740060d6c73607198af513df2bea26069f82d97591a20a44155","2025-03-25 23:31:44","[{""type"":""text"",""text"":""{\""person\"":[],\""organization\"":[],\""location\"":[\""East Stirling\""],\""miscellaneous\"":[\""3\"",\""0\"",\""2\"",\""1\"",\""3\"",\""4\"",\""2\""]}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""East Stirling 3 0 2 1 3 4 2""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82BcQTm474h6KyMpMwXoQJwWK3g"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945503,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""person\"":[],\""organization\"":[],\""location\"":[\""East Stirling\""],\""miscellaneous\"":[\""3\"",\""0\"",\""2\"",\""1\"",\""3\"",\""4\"",\""2\""]}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 214,
+    ""completion_tokens"": 33,
+    ""total_tokens"": 247,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_b8bc95a0ac""
+}
+",false,214,33,"stop"
+5177105094971903366,"864daa86a7c5d847da1b5210bd5959b5c340bbfec348fc2460d55bbd0a2c7c81","2025-03-25 23:31:40","[{""type"":""text"",""text"":""{\n    \""person\"": [],\n    \""organization\"": [\""Mexican army\""],\n    \""location\"": [\""Michoacan\""],\n    \""miscellaneous\"": [\""report\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""Mexican army attacked in Michoacan state - report .""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF827wfRabYGDJbf6IWy1Jytzlq3u"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945499,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [],\n    \""organization\"": [\""Mexican army\""],\n    \""location\"": [\""Michoacan\""],\n    \""miscellaneous\"": [\""report\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 209,
+    ""completion_tokens"": 34,
+    ""total_tokens"": 243,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,209,34,"stop"
+5319239417597211519,"7f33235911bcd149f966d1cbe7ed7385dffc07f708840b5fdd3124c78e21db4e","2025-03-25 23:31:51","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses a tennis match result involving two players, which is clearly related to sports. Therefore, it deserves a score of 1.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""Mark Philippoussis ( Australia ) beat Andrei Olhovskiy ( Russia ) 6 - 3 6-4 6-2\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [\""Mark Philippoussis\"", \""Andrei Olhovskiy\""],\n    \""organization\"": [],\n    \""location\"": [\""Australia\"", \""Russia\""],\n    \""miscellaneous\"": []\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82JaUfLxuLdDFlHRXYFHEjIY6jM"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945511,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses a tennis match result involving two players, which is clearly related to sports. Therefore, it deserves a score of 1.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 186,
+    ""completion_tokens"": 38,
+    ""total_tokens"": 224,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,186,38,"stop"
+5558277150365101046,"f6abae869ef7224de7c706c2dbe6d4200cae498e9dcd34e91ee94313146c499e","2025-03-25 23:31:43","[{""type"":""text"",""text"":""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""Brechin\""],\n    \""miscellaneous\"": [\""3\"", \""0\"", \""2\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""Brechin 3 0 3 0 2 2 3""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82ASXtR7fCgMhbhhvoLXjq2dkNT"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945502,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""Brechin\""],\n    \""miscellaneous\"": [\""3\"", \""0\"", \""2\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 213,
+    ""completion_tokens"": 35,
+    ""total_tokens"": 248,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,213,35,"stop"
+6029315546555019596,"4cf1267f8b6eac539fd2229c7e1567aad449c8b032200a6e278704dafbd4e1e3","2025-03-25 23:31:45","[{""type"":""text"",""text"":""{\n    \""person\"": [\""Monica\"", \""King\""],\n    \""organization\"": [],\n    \""location\"": [],\n    \""miscellaneous\"": []\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""\"" I told Monica we need her if we want to win , \"" King said .""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82BMnCPT9FDfcXNuscGHKkgwVuG"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945503,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [\""Monica\"", \""King\""],\n    \""organization\"": [],\n    \""location\"": [],\n    \""miscellaneous\"": []\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 214,
+    ""completion_tokens"": 30,
+    ""total_tokens"": 244,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_b8bc95a0ac""
+}
+",false,214,30,"stop"
+6111979078200495196,"5c8cc2c6961cd254b0df05b6e1e46dd66b10d18241f14bfbf6e6d66baf3c30c1","2025-03-25 23:31:47","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses a tennis match result, which is a clear indication of a sports-related topic. It mentions players, their nationalities, and the scores of the match, all of which are relevant to sports.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""Sjeng Schalken ( Netherlands ) beat David Rikl ( Czech Republic ) 6 - 2 6-4 6-4\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [\""Sjeng Schalken\"", \""David Rikl\""],\n    \""organization\"": [],\n    \""location\"": [\""Netherlands\"", \""Czech Republic\""],\n    \""miscellaneous\"": [\""6 - 2\"", \""6-4\"", \""6-4\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82F4gH4sk2K7gAO81An93dzCl8E"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945507,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses a tennis match result, which is a clear indication of a sports-related topic. It mentions players, their nationalities, and the scores of the match, all of which are relevant to sports.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 201,
+    ""completion_tokens"": 52,
+    ""total_tokens"": 253,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,201,52,"stop"
+6776425772004220640,"e01e1d2b56b30a5e894347a936b87eb7612e5d6bbc95e07526b6c9f6138372ac","2025-03-25 23:31:41","[{""type"":""text"",""text"":""{\n    \""person\"": [\""Oksana Grichina\""],\n    \""organization\"": [],\n    \""location\"": [\""Russia\""],\n    \""miscellaneous\"": [\""36.242\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""6. Oksana Grichina ( Russia ) 36.242""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF828k4ya2vr8kDNLNUpVNw5rc7Fz"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945500,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [\""Oksana Grichina\""],\n    \""organization\"": [],\n    \""location\"": [\""Russia\""],\n    \""miscellaneous\"": [\""36.242\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 212,
+    ""completion_tokens"": 37,
+    ""total_tokens"": 249,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,212,37,"stop"
+6974346322368130500,"c4ed4d4d07dbc96081195bf223489770600395154e752efd6eb2eb6b1173ffec","2025-03-25 23:31:47","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses a baseball player, Gonzalez, hitting his 40th home run and extending his hitting streak, which are both sports-related topics. Therefore, the content is clearly related to sports.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""One out later , Gonzalez smacked his 40th homer , extending his hitting streak to 20 games .\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [\""Gonzalez\""],\n    \""organization\"": [],\n    \""location\"": [],\n    \""miscellaneous\"": [\""40th homer\"", \""20 games\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82E5YY4AWBE7yZ9zNyGrI7ehR4N"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945506,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses a baseball player, Gonzalez, hitting his 40th home run and extending his hitting streak, which are both sports-related topics. Therefore, the content is clearly related to sports.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 172,
+    ""completion_tokens"": 49,
+    ""total_tokens"": 221,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,172,49,"stop"
+7131475562716209182,"1e2014783d17f862e0ca1f78c864b0fb540c7330e9165a9f1f14864bf3fb09f0","2025-03-25 23:31:40","[{""type"":""text"",""text"":""{\n    \""person\"": [\""U.N. relief official\""],\n    \""organization\"": [\""U.N.\"", \""Reuters\""],\n    \""location\"": [\""Iraq\"", \""city\""],\n    \""miscellaneous\"": []\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""We have in no way seen any Iraqi troops in the city or in its approaches , \"" a U.N. relief official told Reuters .""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF827B7yPlCKCDzxDZUx9y7aKKXkv"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945499,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [\""U.N. relief official\""],\n    \""organization\"": [\""U.N.\"", \""Reuters\""],\n    \""location\"": [\""Iraq\"", \""city\""],\n    \""miscellaneous\"": []\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 224,
+    ""completion_tokens"": 42,
+    ""total_tokens"": 266,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,224,42,"stop"
+7368400050900928365,"6d87eb8cced04166a6978c909c3ff0d77e603e762a82c8eec1c4176fd1af3335","2025-03-25 23:31:43","[{""type"":""text"",""text"":""{\n    \""person\"": [\""Mark Philippoussis\"", \""Andrei Olhovskiy\""],\n    \""organization\"": [],\n    \""location\"": [\""Australia\"", \""Russia\""],\n    \""miscellaneous\"": []\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""Mark Philippoussis ( Australia ) beat Andrei Olhovskiy ( Russia ) 6 - 3 6-4 6-2""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82A5uZ2qzo4zvbcn0hC6m0MmWg5"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945502,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [\""Mark Philippoussis\"", \""Andrei Olhovskiy\""],\n    \""organization\"": [],\n    \""location\"": [\""Australia\"", \""Russia\""],\n    \""miscellaneous\"": []\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 227,
+    ""completion_tokens"": 42,
+    ""total_tokens"": 269,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,227,42,"stop"
+8107944528633453601,"21dcc44f9734857037263c36aecf2010941b3d206b6c13fb8f821f17eff54882","2025-03-25 23:31:40","[{""type"":""text"",""text"":""{\n    \""person\"": [\""Gonzalez\""],\n    \""organization\"": [],\n    \""location\"": [],\n    \""miscellaneous\"": [\""40th homer\"", \""20 games\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""One out later , Gonzalez smacked his 40th homer , extending his hitting streak to 20 games .""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF827XF8epNwDxRp0paXofj9GxVo3"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945499,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [\""Gonzalez\""],\n    \""organization\"": [],\n    \""location\"": [],\n    \""miscellaneous\"": [\""40th homer\"", \""20 games\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 219,
+    ""completion_tokens"": 36,
+    ""total_tokens"": 255,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,219,36,"stop"
+8182299136118357313,"41fd516eb65d8d71c28e206f27e54806b3cad4c331e8bceb456d51a3a7e9e824","2025-03-25 23:31:52","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses a competitive event where Natalia Karimova from Russia beat Yvonne McGregor, indicating a sports context, likely related to racing or athletics. Therefore, it is directly related to sports.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""Natalia Karimova ( Russia ) 3:40.036 beat Yvonne McGregor\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [\""Natalia Karimova\"", \""Yvonne McGregor\""],\n    \""organization\"": [],\n    \""location\"": [\""Russia\""],\n    \""miscellaneous\"": []\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82JAmwq5EIpunRhEJKYeWReZX5P"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945511,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses a competitive event where Natalia Karimova from Russia beat Yvonne McGregor, indicating a sports context, likely related to racing or athletics. Therefore, it is directly related to sports.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 169,
+    ""completion_tokens"": 49,
+    ""total_tokens"": 218,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,169,49,"stop"
+9506512731305946067,"d32b3822f6eaed832caa8ac9a5114a3e053d84580c394b89542e6291b52631db","2025-03-25 23:31:42","[{""type"":""text"",""text"":""{\""person\"":[],\""organization\"":[],\""location\"":[],\""miscellaneous\"":[\""Division three\""]}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""Division three""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82AE5obxFIodgACpeE1vhnEUmlU"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945502,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""person\"":[],\""organization\"":[],\""location\"":[],\""miscellaneous\"":[\""Division three\""]}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 199,
+    ""completion_tokens"": 18,
+    ""total_tokens"": 217,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,199,18,"stop"
+9673253858574636758,"d696841e224d3e860b3a76b10223240a368b28184d2cf4948a4f2b3a305607ee","2025-03-25 23:31:40","[{""type"":""text"",""text"":""{\n    \""person\"": [\""Billie Jean King\""],\n    \""organization\"": [],\n    \""location\"": [\""U.S.\""],\n    \""miscellaneous\"": [\""Cup\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""\"" Last year we stood on the court after we had lost and we put out hands together and made it our committment to bring back the Cup , \"" U.S. captain Billie Jean King said at the draw . \""""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF828DwJqvVp0Rv4VJ6K7UvxSppeY"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945500,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [\""Billie Jean King\""],\n    \""organization\"": [],\n    \""location\"": [\""U.S.\""],\n    \""miscellaneous\"": [\""Cup\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 242,
+    ""completion_tokens"": 35,
+    ""total_tokens"": 277,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,242,35,"stop"
+9959908690637059320,"f874bf2c2fb4388aaf0f24723a5d0f2c0f723b5dcc0e4b5f6ac5bb2ae92e7de0","2025-03-25 23:31:53","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses injuries of players and their impact on a national team's participation in a World Cup qualifier, which is a sports event. Therefore, it is clearly related to sports.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""Adams and Platt are both injured and will miss England 's opening World Cup qualifier against Moldova on Sunday .\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [\""Adams\"", \""Platt\""],\n    \""organization\"": [\""World Cup\""],\n    \""location\"": [\""England\"", \""Moldova\""],\n    \""miscellaneous\"": [\""opening qualifier\"", \""Sunday\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82LEAY1g1joWt1zm0Fl2SUaFkEg"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945513,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses injuries of players and their impact on a national team's participation in a World Cup qualifier, which is a sports event. Therefore, it is clearly related to sports.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 184,
+    ""completion_tokens"": 45,
+    ""total_tokens"": 229,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,184,45,"stop"
+9975503103980330605,"6dde8d78381b708ad714309e2d224717d81155872999a2b047a0649d3f5457b7","2025-03-25 23:31:41","[{""type"":""text"",""text"":""{\n    \""person\"": [\""Natalia Karimova\"", \""Yvonne McGregor\""],\n    \""organization\"": [],\n    \""location\"": [\""Russia\""],\n    \""miscellaneous\"": []\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""Natalia Karimova ( Russia ) 3:40.036 beat Yvonne McGregor""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF829f1pOfag6A3bTIlvFOtiyf2lZ"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945501,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [\""Natalia Karimova\"", \""Yvonne McGregor\""],\n    \""organization\"": [],\n    \""location\"": [\""Russia\""],\n    \""miscellaneous\"": []\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 215,
+    ""completion_tokens"": 37,
+    ""total_tokens"": 252,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,215,37,"stop"
+10011037814661291569,"319ee307da59ee8a34dbc1e88946cf478da75b05b68f84888a2a3f69efe98555","2025-03-25 23:31:46","[{""type"":""text"",""text"":""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""AL-RAM\"", \""West Bank\""],\n    \""miscellaneous\"": [\""1996-08-30\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""AL-RAM , West Bank 1996-08-30""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82DsEXjM4THsSkphQDOhTvyAP4d"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945505,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""AL-RAM\"", \""West Bank\""],\n    \""miscellaneous\"": [\""1996-08-30\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 210,
+    ""completion_tokens"": 39,
+    ""total_tokens"": 249,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_b8bc95a0ac""
+}
+",false,210,39,"stop"
+10105688927304405620,"74d29382899e3e8cb41b15bb768b7f52f1c4fab0c5859f9dd04a80ce4677c757","2025-03-25 23:31:45","[{""type"":""text"",""text"":""{\n    \""person\"": [\""Adams\"", \""Platt\""],\n    \""organization\"": [\""World Cup\""],\n    \""location\"": [\""England\"", \""Moldova\""],\n    \""miscellaneous\"": [\""opening qualifier\"", \""Sunday\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""Adams and Platt are both injured and will miss England 's opening World Cup qualifier against Moldova on Sunday .""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82C7kr0UWo397SHEW4fVcsyx3ar"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945504,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [\""Adams\"", \""Platt\""],\n    \""organization\"": [\""World Cup\""],\n    \""location\"": [\""England\"", \""Moldova\""],\n    \""miscellaneous\"": [\""opening qualifier\"", \""Sunday\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 220,
+    ""completion_tokens"": 47,
+    ""total_tokens"": 267,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,220,47,"stop"
+10258711367862041886,"1ebdadd6a2435e8eb35b69b09ccecfcb417e61e99451636ad21f2d1985e2db25","2025-03-25 23:31:52","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses economic data and interest rates, which are related to finance and economics rather than sports. There are no references to sports events, teams, or athletes.\"",\""score\"":0.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""GERMANY - Bunds extended losses , flirting with session lows after falling victim to sharply higher U.S. economic data which revived fears that interest rates may soon turn higher .\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""GERMANY\""],\n    \""miscellaneous\"": [\""Bunds\"", \""U.S.\"", \""economic data\"", \""interest rates\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82KEIc3UEJmx2pqQznfGJKwu8V5"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945512,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses economic data and interest rates, which are related to finance and economics rather than sports. There are no references to sports events, teams, or athletes.\"",\""score\"":0.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 192,
+    ""completion_tokens"": 43,
+    ""total_tokens"": 235,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,192,43,"stop"
+10688154219117414198,"3607164fa2f35394618f1bfd4a2aa793b2d00cb39d39e2c8bf54c730268dc35f","2025-03-25 23:31:40","[{""type"":""text"",""text"":""{\""person\"":[],\""organization\"":[],\""location\"":[],\""miscellaneous\"":[\""rates\""]}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""The rates are :""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF828Z4gkZOxLGqfUp7lEkQUwIBxE"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945500,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""person\"":[],\""organization\"":[],\""location\"":[],\""miscellaneous\"":[\""rates\""]}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 201,
+    ""completion_tokens"": 17,
+    ""total_tokens"": 218,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,201,17,"stop"
+10884468241157529722,"7a20376b32660d976bfb97861240c2ac530a06ce9991b003ae6c54810609eb01","2025-03-25 23:31:47","[{""type"":""text"",""text"":""{\""thinking\"":\""The input content does not mention any sports-related topics, events, or terminology. It only refers to 'rates', which is too vague and does not imply any connection to sports.\"",\""score\"":0.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""The rates are :\""}]}]}\n\n# Generated Output\n\n{\""person\"":[],\""organization\"":[],\""location\"":[],\""miscellaneous\"":[\""rates\""]}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82Eynz17QnekxsA2RbaxujBtdkV"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945506,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The input content does not mention any sports-related topics, events, or terminology. It only refers to 'rates', which is too vague and does not imply any connection to sports.\"",\""score\"":0.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 135,
+    ""completion_tokens"": 46,
+    ""total_tokens"": 181,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,135,46,"stop"
+11348179891075110960,"3058c3567cd57c9d4cac371edc30aec7ae1051b8272722e860a00fbe687f23f4","2025-03-25 23:31:49","[{""type"":""text"",""text"":""{\""thinking\"":\""The input content refers to the results of a sports league, specifically the Yugoslav league, which is related to sports events and competitions. Therefore, it is appropriate to assign a score of 1.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""Results of Yugoslav league\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [],\n    \""organization\"": [\""Yugoslav league\""],\n    \""location\"": [\""Yugoslavia\""],\n    \""miscellaneous\"": [\""results\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82GKBzVxITYolsrQh6C1V6cCla1"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945508,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The input content refers to the results of a sports league, specifically the Yugoslav league, which is related to sports events and competitions. Therefore, it is appropriate to assign a score of 1.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 155,
+    ""completion_tokens"": 50,
+    ""total_tokens"": 205,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,155,50,"stop"
+11371556447995206600,"c89b0e2257e2cf9d1929fbcf0e924f2c30905d1c2da03b7d93a66b304f120e23","2025-03-25 23:31:46","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses a military attack, which is related to military actions rather than sports. Therefore, it does not pertain to sports in any way.\"",\""score\"":0.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""Mexican army attacked in Michoacan state - report .\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [],\n    \""organization\"": [\""Mexican army\""],\n    \""location\"": [\""Michoacan\""],\n    \""miscellaneous\"": [\""report\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82D894Oxu3JRWtMW90iTKHtsssS"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945505,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses a military attack, which is related to military actions rather than sports. Therefore, it does not pertain to sports in any way.\"",\""score\"":0.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 160,
+    ""completion_tokens"": 40,
+    ""total_tokens"": 200,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,160,40,"stop"
+11851333469024110376,"2847e1bfff6478a4f42038a2f87513d708f3f46121a93b196ebef2998573fd2b","2025-03-25 23:31:51","[{""type"":""text"",""text"":""{\""thinking\"":\""The term 'Division three' typically refers to a level of competition in sports, particularly in college athletics or amateur leagues. This indicates a connection to sports, as divisions are commonly used to categorize teams based on skill level or size. Therefore, the content is related to sports.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""Division three\""}]}]}\n\n# Generated Output\n\n{\""person\"":[],\""organization\"":[],\""location\"":[],\""miscellaneous\"":[\""Division three\""]}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82IfcfsWmVZnFc9WEuCT7381GCf"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945510,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The term 'Division three' typically refers to a level of competition in sports, particularly in college athletics or amateur leagues. This indicates a connection to sports, as divisions are commonly used to categorize teams based on skill level or size. Therefore, the content is related to sports.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 134,
+    ""completion_tokens"": 65,
+    ""total_tokens"": 199,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,134,65,"stop"
+13269042547207666991,"2f7ddbefe41b25b86a9b383a6fbb202034d225fa0a8da7053947c10b47f73d0d","2025-03-25 23:31:45","[{""type"":""text"",""text"":""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""Jerusalem\""],\n    \""miscellaneous\"": [\""Arab-Israeli peace talks\"", \""peace process\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""\"" All concerned must avoid taking any course of action that could pose an obstacle to the peace process and which could make a peaceful solution difficult , \"" he said , as news came of a renewed breakdown in Arab-Israeli peace talks in Jerusalem .""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82DPs4r1OKnNZaoWt7fNbKGhB42"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945505,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""Jerusalem\""],\n    \""miscellaneous\"": [\""Arab-Israeli peace talks\"", \""peace process\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 246,
+    ""completion_tokens"": 38,
+    ""total_tokens"": 284,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,246,38,"stop"
+13682991837611683614,"1eef69a994c0e3bda5aa358182c01295021962406cd911d8828cc83a7fff0b08","2025-03-25 23:31:52","[{""type"":""text"",""text"":""{\""thinking\"":\""The content includes a reference to 'Brechin', which is likely a location associated with sports, particularly football (soccer) given the numerical values that resemble scores or statistics. The numbers could represent match results or player statistics, which are common in sports discussions. Therefore, the content is related to sports.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""Brechin 3 0 3 0 2 2 3\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""Brechin\""],\n    \""miscellaneous\"": [\""3\"", \""0\"", \""2\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82JwNuBN7RjvhVVprxJvsI6ihN7"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945511,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content includes a reference to 'Brechin', which is likely a location associated with sports, particularly football (soccer) given the numerical values that resemble scores or statistics. The numbers could represent match results or player statistics, which are common in sports discussions. Therefore, the content is related to sports.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 165,
+    ""completion_tokens"": 71,
+    ""total_tokens"": 236,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,165,71,"stop"
+13716360685521801037,"4d0fa9ff5e4d5abe70d7282d3750b2a3782f04281efc680604e9ecd6dd5f475d","2025-03-25 23:31:46","[{""type"":""text"",""text"":""{\n    \""person\"": [\""Brown\""],\n    \""organization\"": [\""Reds\""],\n    \""location\"": [],\n    \""miscellaneous\"": [\""119 pitches\"", \""third time\"", \""as many starts\"", \""this season\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""Brown threw 119 pitches and won for the third time in as many starts against the Reds this season .""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82D9GEtb2FDY182eExGw6httRrL"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945505,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [\""Brown\""],\n    \""organization\"": [\""Reds\""],\n    \""location\"": [],\n    \""miscellaneous\"": [\""119 pitches\"", \""third time\"", \""as many starts\"", \""this season\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 218,
+    ""completion_tokens"": 45,
+    ""total_tokens"": 263,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,218,45,"stop"
+13882867556230476627,"53b3e9e07cdaa9c005a9ceb35401913076d157083101b0754a710a4ab697751d","2025-03-25 23:31:43","[{""type"":""text"",""text"":""{\""person\"":[\""Ian Woosnam\""],\""organization\"":[],\""location\"":[],\""miscellaneous\"":[\""287\"",\""70\"",\""76\"",\""71\""]}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""287 Ian Woosnam 70 76 71 70""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82BcfJeF8v8aBOeXjRV9A0Ww6m4"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945503,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""person\"":[\""Ian Woosnam\""],\""organization\"":[],\""location\"":[],\""miscellaneous\"":[\""287\"",\""70\"",\""76\"",\""71\""]}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 210,
+    ""completion_tokens"": 28,
+    ""total_tokens"": 238,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_b8bc95a0ac""
+}
+",false,210,28,"stop"
+14466102375005206103,"57b69e2277ebc1c893ba3a8ffac3c089ebd72b569bc1478e291e0608fd8631a9","2025-03-25 23:31:43","[{""type"":""text"",""text"":""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""GERMANY\""],\n    \""miscellaneous\"": [\""Bunds\"", \""U.S.\"", \""economic data\"", \""interest rates\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""GERMANY - Bunds extended losses , flirting with session lows after falling victim to sharply higher U.S. economic data which revived fears that interest rates may soon turn higher .""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82ATVJJHxJM5JOgVkysS0Jldd4E"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945502,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""GERMANY\""],\n    \""miscellaneous\"": [\""Bunds\"", \""U.S.\"", \""economic data\"", \""interest rates\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 232,
+    ""completion_tokens"": 43,
+    ""total_tokens"": 275,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,232,43,"stop"
+14662744508764004568,"d82030b571887ccbf118284121e4be7c241977bc83a7027f1562a91954ce7db2","2025-03-25 23:31:52","[{""type"":""text"",""text"":""{\""thinking\"":\""The input mentions Ian Woosnam, who is a professional golfer, and includes scores that are likely related to a golf tournament. This indicates a clear connection to sports, specifically golf.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""287 Ian Woosnam 70 76 71 70\""}]}]}\n\n# Generated Output\n\n{\""person\"":[\""Ian Woosnam\""],\""organization\"":[],\""location\"":[],\""miscellaneous\"":[\""287\"",\""70\"",\""76\"",\""71\""]}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82JSf1Ew7s3Vea2ZQYA64q4Uv8F"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945511,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The input mentions Ian Woosnam, who is a professional golfer, and includes scores that are likely related to a golf tournament. This indicates a clear connection to sports, specifically golf.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 155,
+    ""completion_tokens"": 47,
+    ""total_tokens"": 202,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,155,47,"stop"
+14990992922147447330,"2262fe12a3b40ad0af61fcf93e1b15ef51eb727151187dc8515fa70766fc16f7","2025-03-25 23:31:51","[{""type"":""text"",""text"":""{\""thinking\"":\""The content mentions a specific individual, Mauricio Gugelmin, who is associated with a racing team (Reynard Ford Cosworth) and a time (54.762), which suggests a context related to motorsports. Therefore, it is related to sports.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""9. Mauricio Gugelmin ( Brazil ) , Reynard Ford Cosworth , 54.762\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [\""Mauricio Gugelmin\""],\n    \""organization\"": [\""Reynard Ford Cosworth\""],\n    \""location\"": [\""Brazil\""],\n    \""miscellaneous\"": [\""54.762\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82IZrXKlPQV67XfzN9TzHNdolor"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945510,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content mentions a specific individual, Mauricio Gugelmin, who is associated with a racing team (Reynard Ford Cosworth) and a time (54.762), which suggests a context related to motorsports. Therefore, it is related to sports.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 177,
+    ""completion_tokens"": 62,
+    ""total_tokens"": 239,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,177,62,"stop"
+15165370699573934876,"1cbb383b4d3876d230aba02666993c2f26a5be374a6a2a6ca666e1d60ab20bcb","2025-03-25 23:31:42","[{""type"":""text"",""text"":""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""Austria\"", \""Scotland\""],\n    \""miscellaneous\"": [\""World Cup Qualifier\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""SOCCER - AUSTRIA DOMINATE SCOTLAND IN WORLD CUP QUALIFIER .""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF829I7p8gqAMwc2hrzuKGlmvCVe1"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945501,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""Austria\"", \""Scotland\""],\n    \""miscellaneous\"": [\""World Cup Qualifier\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 216,
+    ""completion_tokens"": 36,
+    ""total_tokens"": 252,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,216,36,"stop"
+16044387274110850871,"37d72c10381da9de76b057293c315cf8c4e9f02209daf4e8db5616b54d82f83f","2025-03-25 23:31:50","[{""type"":""text"",""text"":""{\""thinking\"":\""The input mentions Oksana Grichina, who is likely an athlete, and includes a numerical value that could represent a score or time in a sports context. This indicates a connection to sports, as it suggests performance metrics typically associated with athletic competitions.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""6. Oksana Grichina ( Russia ) 36.242\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [\""Oksana Grichina\""],\n    \""organization\"": [],\n    \""location\"": [\""Russia\""],\n    \""miscellaneous\"": [\""36.242\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82G1Wy4DabiOtXT6s9wWVQsZwG3"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945508,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The input mentions Oksana Grichina, who is likely an athlete, and includes a numerical value that could represent a score or time in a sports context. This indicates a connection to sports, as it suggests performance metrics typically associated with athletic competitions.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 166,
+    ""completion_tokens"": 61,
+    ""total_tokens"": 227,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,166,61,"stop"
+16465849374882889902,"ae80fb42c47282e41170de46b3aaa8559c4f9eea6a36db4536ce3e9ea9c260b0","2025-03-25 23:31:42","[{""type"":""text"",""text"":""{\n    \""person\"": [\""Mauricio Gugelmin\""],\n    \""organization\"": [\""Reynard Ford Cosworth\""],\n    \""location\"": [\""Brazil\""],\n    \""miscellaneous\"": [\""54.762\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""9. Mauricio Gugelmin ( Brazil ) , Reynard Ford Cosworth , 54.762""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF829OgdCnvM8doy4DTxkSgbwzyam"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945501,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [\""Mauricio Gugelmin\""],\n    \""organization\"": [\""Reynard Ford Cosworth\""],\n    \""location\"": [\""Brazil\""],\n    \""miscellaneous\"": [\""54.762\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 217,
+    ""completion_tokens"": 43,
+    ""total_tokens"": 260,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_b8bc95a0ac""
+}
+",false,217,43,"stop"
+16766298251355422436,"e4fe4a8e6ddbade870b3ec5b9721d3c5e44544c6ff253bbef30e40603d4d953f","2025-03-25 23:31:44","[{""type"":""text"",""text"":""{\n    \""person\"": [],\n    \""organization\"": [\""Fed\""],\n    \""location\"": [\""Wall Street\""],\n    \""miscellaneous\"": [\""central bank\"", \""rates\"", \""inflation\"", \""stock\"", \""bond\"", \""prices\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""The reports fanned worries on Wall Street that the Fed , the nation 's central bank , would raise rates next month in a bid to ward off inflation , driving stock and bond prices sharply lower for a second day running .""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82BP9OOsn0pLIe1o93vEK8CBZfC"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945503,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [],\n    \""organization\"": [\""Fed\""],\n    \""location\"": [\""Wall Street\""],\n    \""miscellaneous\"": [\""central bank\"", \""rates\"", \""inflation\"", \""stock\"", \""bond\"", \""prices\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 242,
+    ""completion_tokens"": 48,
+    ""total_tokens"": 290,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,242,48,"stop"
+17283611419024645011,"935bd95a03b9dbefc7448744975e837c432469eb7fd274084a15e4a99d5aacec","2025-03-25 23:31:40","[{""type"":""text"",""text"":""{\n    \""person\"": [\""Sjeng Schalken\"", \""David Rikl\""],\n    \""organization\"": [],\n    \""location\"": [\""Netherlands\"", \""Czech Republic\""],\n    \""miscellaneous\"": [\""6 - 2\"", \""6-4\"", \""6-4\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""Sjeng Schalken ( Netherlands ) beat David Rikl ( Czech Republic ) 6 - 2 6-4 6-4""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF827meNeQyG2BfTBl89dFywIKOEw"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945499,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [\""Sjeng Schalken\"", \""David Rikl\""],\n    \""organization\"": [],\n    \""location\"": [\""Netherlands\"", \""Czech Republic\""],\n    \""miscellaneous\"": [\""6 - 2\"", \""6-4\"", \""6-4\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 226,
+    ""completion_tokens"": 58,
+    ""total_tokens"": 284,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,226,58,"stop"
+17589049708548925977,"192abfe684db18f4145bf9396c2f241dc3de7e9412c55c2fbfd43c60c2f651f1","2025-03-25 23:31:43","[{""type"":""text"",""text"":""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""town\""],\n    \""miscellaneous\"": [\""separatists\""]\n}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""But on Saturday the people gathered just outside the town seemed to be united in favour of the separatists .""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF82Asr52qeBrCakcqTAjupDfsKA2"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945502,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""town\""],\n    \""miscellaneous\"": [\""separatists\""]\n}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 218,
+    ""completion_tokens"": 31,
+    ""total_tokens"": 249,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,218,31,"stop"
+18131404614832775659,"eb61fcd16eb09ffbf69319baf581e36f3a6f263e7276202fd4c0d346c4625305","2025-03-25 23:31:49","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses a soccer match between Austria and Scotland, specifically mentioning a World Cup qualifier, which is a sporting event. Therefore, it is clearly related to sports.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""SOCCER - AUSTRIA DOMINATE SCOTLAND IN WORLD CUP QUALIFIER .\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""Austria\"", \""Scotland\""],\n    \""miscellaneous\"": [\""World Cup Qualifier\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82GMq0S8CLsZgE15MH0OjgGqADv"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945508,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses a soccer match between Austria and Scotland, specifically mentioning a World Cup qualifier, which is a sporting event. Therefore, it is clearly related to sports.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 169,
+    ""completion_tokens"": 43,
+    ""total_tokens"": 212,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,169,43,"stop"
+18247847382848940924,"7cab407283603dfdf2c8ada4be0d5be22010c0bbdfd5d580df44747bc0a9a694","2025-03-25 23:31:52","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses a gathering of people in favor of separatists, which does not relate to sports. It focuses on a political or social event rather than any athletic activity or sports-related topic.\"",\""score\"":0.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""But on Saturday the people gathered just outside the town seemed to be united in favour of the separatists .\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""town\""],\n    \""miscellaneous\"": [\""separatists\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82JRe16QHk3TgEdOXf3FwDYGABP"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945511,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses a gathering of people in favor of separatists, which does not relate to sports. It focuses on a political or social event rather than any athletic activity or sports-related topic.\"",\""score\"":0.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 166,
+    ""completion_tokens"": 48,
+    ""total_tokens"": 214,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,166,48,"stop"
+18385482715865316311,"d77b3c9f1e5b26ffbc0ccd0760358e256677786f9c8a272d5364dfa68375d68e","2025-03-25 23:31:42","[{""type"":""text"",""text"":""{\""person\"":[],\""organization\"":[],\""location\"":[\""Detroit\""],\""miscellaneous\"":[\""1996-08-31\""]}""}]","{""messages"":[{""role"":""system"",""content"":""You are an assistant that is performing a named entity recognition task.\nYour job is to extract entities from a given text.\n\nThe entities you are extracting are:\n- people\n- organizations\n- locations\n- miscellaneous other entities\n\nPlease return the entities in the following JSON format:\n\n{\n    \""person\"": [\""person1\"", \""person2\"", ...],\n    \""organization\"": [\""organization1\"", \""organization2\"", ...],\n    \""location\"": [\""location1\"", \""location2\"", ...],\n    \""miscellaneous\"": [\""miscellaneous1\"", \""miscellaneous2\"", ...]\n}""},{""role"":""user"",""content"":""DETROIT 1996-08-31""}],""model"":""gpt-4o-mini-2024-07-18"",""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""properties"":{""person"":{""type"":""array"",""items"":{""type"":""string""}},""organization"":{""type"":""array"",""items"":{""type"":""string""}},""location"":{""type"":""array"",""items"":{""type"":""string""}},""miscellaneous"":{""type"":""array"",""items"":{""type"":""string""}}},""required"":[""person"",""organization"",""location"",""miscellaneous""],""additionalProperties"":false}}}}","{
+  ""id"": ""chatcmpl-BF829jd32jFv2HnZUkN2prYwNY8X7"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945501,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""person\"":[],\""organization\"":[],\""location\"":[\""Detroit\""],\""miscellaneous\"":[\""1996-08-31\""]}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 207,
+    ""completion_tokens"": 24,
+    ""total_tokens"": 231,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,207,24,"stop"
+18416686893925408144,"901d047c273795ffce8eae3bb9af7b6661b6c9ab8540ccc9dcb0351fe01b54a4","2025-03-25 23:31:53","[{""type"":""text"",""text"":""{\""thinking\"":\""The content mentions 'East Stirling', which is likely a reference to a sports team or club, and the numbers following it could represent scores or statistics related to games played. This indicates a connection to sports, specifically football or soccer, where such formats are common. Therefore, the content is related to sports.\"",\""score\"":1.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""East Stirling 3 0 2 1 3 4 2\""}]}]}\n\n# Generated Output\n\n{\""person\"":[],\""organization\"":[],\""location\"":[\""East Stirling\""],\""miscellaneous\"":[\""3\"",\""0\"",\""2\"",\""1\"",\""3\"",\""4\"",\""2\""]}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82KE9PQakJnLgwQZahfrRbZG2rN"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945512,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content mentions 'East Stirling', which is likely a reference to a sports team or club, and the numbers following it could represent scores or statistics related to games played. This indicates a connection to sports, specifically football or soccer, where such formats are common. Therefore, the content is related to sports.\"",\""score\"":1.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 164,
+    ""completion_tokens"": 72,
+    ""total_tokens"": 236,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,164,72,"stop"
+18421789455432109323,"0b4d112ae857a7ffa3693f9955fb1277b7ddfa7e6c677fed97673c20532bb956","2025-03-25 23:31:53","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses economic factors such as the Federal Reserve's potential actions regarding interest rates and their impact on financial markets, specifically Wall Street. However, it does not mention any sports-related topics, events, or terminology. Therefore, it is not related to sports.\"",\""score\"":0.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""The reports fanned worries on Wall Street that the Fed , the nation 's central bank , would raise rates next month in a bid to ward off inflation , driving stock and bond prices sharply lower for a second day running .\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [],\n    \""organization\"": [\""Fed\""],\n    \""location\"": [\""Wall Street\""],\n    \""miscellaneous\"": [\""central bank\"", \""rates\"", \""inflation\"", \""stock\"", \""bond\"", \""prices\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82KRj3V3dIFOuwi6x0ztXnFAmha"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945512,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses economic factors such as the Federal Reserve's potential actions regarding interest rates and their impact on financial markets, specifically Wall Street. However, it does not mention any sports-related topics, events, or terminology. Therefore, it is not related to sports.\"",\""score\"":0.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 207,
+    ""completion_tokens"": 62,
+    ""total_tokens"": 269,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,207,62,"stop"
+9206359914504929924,"8442769a908fc37f220a5cbdab74fccc0931a2c92dc98771dbf8287af8b76b4a","2025-03-25 23:31:54","[{""type"":""text"",""text"":""{\""thinking\"":\""The content discusses a political situation regarding peace talks, specifically the Arab-Israeli peace process, which is not related to sports. Therefore, the score is 0.\"",\""score\"":0.0}""}]","{""messages"":[{""role"":""system"",""content"":""The score is 1 if the input content is related to sports and 0 otherwise. Please return it as a float.\n""},{""role"":""user"",""content"":""# Input\n\n{\""messages\"":[{\""role\"":\""user\"",\""content\"":[{\""type\"":\""text\"",\""value\"":\""\\\"" All concerned must avoid taking any course of action that could pose an obstacle to the peace process and which could make a peaceful solution difficult , \\\"" he said , as news came of a renewed breakdown in Arab-Israeli peace talks in Jerusalem .\""}]}]}\n\n# Generated Output\n\n{\n    \""person\"": [],\n    \""organization\"": [],\n    \""location\"": [\""Jerusalem\""],\n    \""miscellaneous\"": [\""Arab-Israeli peace talks\"", \""peace process\""]\n}""}],""model"":""gpt-4o-mini-2024-07-18"",""temperature"":0.10000000149011612,""stream"":false,""response_format"":{""type"":""json_schema"",""json_schema"":{""name"":""response"",""strict"":true,""schema"":{""$schema"":""http://json-schema.org/draft-07/schema#"",""type"":""object"",""required"":[""thinking"",""score""],""additionalProperties"":false,""properties"":{""thinking"":{""type"":""string"",""description"":""The reasoning or thought process behind the judgment""},""score"":{""type"":""number"",""description"":""The score assigned as a number""}}}}}}","{
+  ""id"": ""chatcmpl-BF82MWnTVUrEYttlTK7vss5KprYLY"",
+  ""object"": ""chat.completion"",
+  ""created"": 1742945514,
+  ""model"": ""gpt-4o-mini-2024-07-18"",
+  ""choices"": [
+    {
+      ""index"": 0,
+      ""message"": {
+        ""role"": ""assistant"",
+        ""content"": ""{\""thinking\"":\""The content discusses a political situation regarding peace talks, specifically the Arab-Israeli peace process, which is not related to sports. Therefore, the score is 0.\"",\""score\"":0.0}"",
+        ""refusal"": null,
+        ""annotations"": []
+      },
+      ""logprobs"": null,
+      ""finish_reason"": ""stop""
+    }
+  ],
+  ""usage"": {
+    ""prompt_tokens"": 201,
+    ""completion_tokens"": 44,
+    ""total_tokens"": 245,
+    ""prompt_tokens_details"": {
+      ""cached_tokens"": 0,
+      ""audio_tokens"": 0
+    },
+    ""completion_tokens_details"": {
+      ""reasoning_tokens"": 0,
+      ""audio_tokens"": 0,
+      ""accepted_prediction_tokens"": 0,
+      ""rejected_prediction_tokens"": 0
+    }
+  },
+  ""service_tier"": ""default"",
+  ""system_fingerprint"": ""fp_27322b4e16""
+}
+",false,201,44,"stop"

@@ -10,4 +10,5 @@ clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO ChatInferenceDatapoint FORMAT CSV" < chat_inference_dataset_examples.csv
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO JsonInferenceDatapoint FORMAT CSV" < json_inference_dataset_examples.csv
 clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO TagInference FORMAT CSV" < tag_inference_examples.csv
+clickhouse-client --host $CLICKHOUSE_HOST --user chuser --password chpassword --database tensorzero_ui_fixtures --query "INSERT INTO ModelInferenceCache FORMAT CSV" < model_inference_cache_examples.csv
 echo "Fixtures loaded; this container will now exit with status 0"
