@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test("should show the episode detail page", async ({ page }) => {
   await page.goto(
-    "/observability/episodes/0195c501-d7c4-7b50-a856-02a9f00144bf",
+    "/observability/episodes/0195aef8-3eaa-7dc2-9376-8de1d8c6536b",
   );
   // The function name should be visible
   await expect(

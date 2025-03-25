@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test("should show the datapoint detail page", async ({ page }) => {
   await page.goto(
-    "/datasets/foo/datapoint/0195c49a-e011-7f60-a3a9-8c7f8fba2730",
+    "/datasets/foo/datapoint/0193930b-6da0-7fa2-be87-9603d2bde664",
   );
   await expect(page.getByText("Input")).toBeVisible();
 

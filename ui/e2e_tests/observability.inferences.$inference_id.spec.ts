@@ -2,11 +2,11 @@ import { test, expect } from "@playwright/test";
 
 test("should show the inference detail page", async ({ page }) => {
   await page.goto(
-    "/observability/inferences/0195c501-d7c4-7b50-a856-029315411fb8",
+    "/observability/inferences/0195aef8-3eaa-7dc2-9376-8dde217649e8",
   );
   // The episode ID should be visible
   await expect(
-    page.getByText("0195c501-d7c4-7b50-a856-02a9f00144bf"),
+    page.getByText("0195aef8-3eaa-7dc2-9376-8de1d8c6536b"),
   ).toBeVisible();
 
   // Assert that "error" is not in the page

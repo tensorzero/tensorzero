@@ -72,10 +72,12 @@ export default defineConfig({
     // },
   ],
 
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    command: "pnpm run dev",
-    url: "http://localhost:5173",
-    reuseExistingServer: !process.env.CI,
-  },
+  /* Run your local dev server before starting the tests if not in CI */
+  webServer: process.env.TENSORZERO_CI
+    ? undefined
+    : {
+        command: "pnpm run dev",
+        url: "http://localhost:5173",
+        reuseExistingServer: !process.env.CI,
+      },
 });
