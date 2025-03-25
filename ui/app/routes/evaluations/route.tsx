@@ -46,11 +46,17 @@ export async function action({ request }: Route.ActionArgs) {
   const eval_name = formData.get("eval_name");
   const variant_name = formData.get("variant_name");
   const concurrency_limit = formData.get("concurrency_limit");
-  const eval_start_info = await runEval(
-    eval_name as string,
-    variant_name as string,
-    parseInt(concurrency_limit as string),
-  );
+  let eval_start_info;
+  try {
+    eval_start_info = await runEval(
+      eval_name as string,
+      variant_name as string,
+      parseInt(concurrency_limit as string),
+    );
+  } catch (error) {
+    console.error("Error starting evaluation:", error);
+    throw new Response("Failed to start eval", { status: 500 });
+  }
   return redirect(
     `/evaluations/${eval_name}?eval_run_ids=${eval_start_info.eval_run_id}`,
   );
