@@ -633,9 +633,14 @@ const EvaluatorProperties = ({
                   className={`h-2 w-2 rounded-full ${variantColorClass} flex-shrink-0`}
                 ></div>
                 <span>
-                  {formatSummaryValue(stat.mean_metric, metricConfig)} ±{" "}
-                  {formatSummaryValue(stat.stderr_metric, metricConfig)} (n=
-                  {stat.datapoint_count})
+                  {formatSummaryValue(stat.mean_metric, metricConfig)}
+                  {stat.stderr_metric ? (
+                    <>
+                      {" "}
+                      ± {formatSummaryValue(stat.stderr_metric, metricConfig)}
+                    </>
+                  ) : null}{" "}
+                  (n={stat.datapoint_count})
                 </span>
               </div>
             );
