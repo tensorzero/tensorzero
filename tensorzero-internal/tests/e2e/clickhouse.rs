@@ -132,7 +132,6 @@ async fn test_clickhouse_migration_manager() {
             clickhouse: &clickhouse,
             clean_start: true,
         }),
-        // NOTE: This migration is currently feature flagged.
         Box::new(Migration0021 {
             clickhouse: &clickhouse,
             clean_start: true,
