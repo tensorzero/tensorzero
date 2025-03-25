@@ -282,6 +282,10 @@ jobs:
         working-directory: ui
         run: pnpm run typecheck
 
+      - name: Build ui container
+        working-directory: ui
+        run: docker build -t tensorzero/ui .
+
       - name: Start services for ui tests
         working-directory: ui
         run: |
