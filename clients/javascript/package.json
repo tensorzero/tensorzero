@@ -1,0 +1,41 @@
+{
+  "name": "tensorzero",
+  "version": "0.1.0",
+  "description": "JavaScript client for TensorZero - Next-generation LLM gateway and optimization platform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tensorzero/tensorzero.git"
+  },
+  "author": "TensorZero",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/tensorzero/tensorzero/issues"
+  },
+  "homepage": "https://www.tensorzero.com",
+  "dependencies": {
+    "axios": "^1.6.7",
+    "form-data": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.16",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.2.5",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.3.3"
+  }
+} 
