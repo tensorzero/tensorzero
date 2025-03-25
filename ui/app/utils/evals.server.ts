@@ -26,18 +26,18 @@ export function runEval(
   const evalsPath = getEvalsPath();
   const gatewayURL = getGatewayURL();
   // Construct the command to run the evals binary
-  // Example: evals --gateway-url http://localhost:3000 -n entity_extraction -v llama_8b_initial_prompt -c 10
+  // Example: evals --gateway-url http://localhost:3000 --name entity_extraction --variant llama_8b_initial_prompt --concurrency 10 --format jsonl
   const command = [
     evalsPath,
     "--gateway-url",
     gatewayURL,
     "--config-file",
     getConfigPath(),
-    "-n",
+    "--name",
     evalName,
-    "-v",
+    "--variant",
     variantName,
-    "-c",
+    "--concurrency",
     concurrency.toString(),
     "--format",
     "jsonl",
