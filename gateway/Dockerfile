@@ -38,4 +38,4 @@ EXPOSE 3000
 
 ENTRYPOINT ["gateway"]
 
-CMD ["--config-file", "config/tensorzero.toml"]
+CMD ["--warn-default-cmd", "--config-file", "config/tensorzero.toml"]
