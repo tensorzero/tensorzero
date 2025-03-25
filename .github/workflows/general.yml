@@ -281,9 +281,11 @@ jobs:
   clickhouse-tests-cloud:
     runs-on: ubuntu-latest
     # Skip this job for PRs from forks, since we don't have secrets available.
+    # Dependabot PRs also don't have secrets available
     if: |
-      github.event_name != 'pull_request' ||
+      (github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == 'tensorzero/tensorzero'
+      ) && github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: dtolnay/rust-toolchain@stable
