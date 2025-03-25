@@ -296,6 +296,10 @@ jobs:
         working-directory: ui
         run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test
 
+      - name: Install playwright dependencies
+        working-directory: ui
+        run: pnpm exec playwright install
+
       - name: Run ui e2e tests
         working-directory: ui
         run: TENSORZERO_CI=1 pnpm test-e2e
