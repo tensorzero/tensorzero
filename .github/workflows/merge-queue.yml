@@ -281,18 +281,47 @@ jobs:
         working-directory: ui
         run: pnpm run typecheck
 
+      - name: Build ui container
+        working-directory: ui
+        run: docker build -t tensorzero/ui .
+
       - name: Start services for ui tests
         working-directory: ui
         run: |
           echo "OPENAI_API_KEY=not_used" >> .env
           echo "FIREWORKS_API_KEY=not_used" >> .env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> .env
-          docker compose -f fixtures/docker-compose.yml up -d --build --force-recreate
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> .env
+          echo "TENSORZERO_GATEWAY_URL=http://localhost:3000" >> .env
+          docker compose -f fixtures/docker-compose.yml -f fixtures/docker-compose.ui.yml --project-name tensorzero-ui up -d --build --force-recreate
 
       - name: Run ui tests
         working-directory: ui
         run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test
+
+      - name: Install playwright dependencies
+        working-directory: ui
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run ui e2e tests
+        working-directory: ui
+        run: TENSORZERO_CI=1 pnpm test-e2e
+        continue-on-error: true
+        id: e2e_tests
+
+      - name: Upload Playwright artifacts
+        if: steps.e2e_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            ui/playwright-report/
+            ui/test-results/
+          retention-days: 7
+
+      - name: Exit if tests failed
+        if: steps.e2e_tests.outcome == 'failure'
+        run: exit 1
 
       - name: Take down ui tests
         working-directory: ui
