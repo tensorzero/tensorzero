@@ -1,9 +1,12 @@
 from tensorzero import TensorZeroGateway
 
-with TensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
+with TensorZeroGateway.build_embedded(
+    clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero",
+    # optional: config_file="path/to/tensorzero.toml",
+) as client:
     response = client.inference(
         model_name="openai::gpt-4o-mini",
-        # Try other providers easily: "anthropic::claude-3-7-sonnet-20240229"
+        # Try other providers easily: "anthropic::claude-3-7-sonnet-20250219"
         input={
             "messages": [
                 {
