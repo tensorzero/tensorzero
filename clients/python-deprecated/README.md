@@ -1,4 +1,4 @@
-# TensorZero Python Client
+# TensorZero Python Client (Deprecated)
 
 **[Website](https://www.tensorzero.com/)** ·
 **[Docs](https://www.tensorzero.com/docs)** ·
@@ -6,11 +6,11 @@
 **[Slack](https://www.tensorzero.com/slack)** ·
 **[Discord](https://www.tensorzero.com/discord)**
 
-**[Quick Start (5min)](https://www.tensorzero.com/docs/gateway/tutorial)** ·
+**[Quick Start (5min)](https://www.tensorzero.com/docs/quickstart)** ·
 **[Comprehensive Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)** ·
 **[Deployment Guide](https://www.tensorzero.com/docs/gateway/deployment)** ·
-**[API Reference](https://www.tensorzero.com/docs/gateway/api-reference)** ·
-**[Configuration Reference](https://www.tensorzero.com/docs/gateway/deployment)**
+**[API Reference](https://www.tensorzero.com/docs/gateway/api-reference/inference)** ·
+**[Configuration Reference](https://www.tensorzero.com/docs/gateway/configuration-reference)**
 
 The `tensorzero` package provides an async Python client for the TensorZero Gateway.
 This client allows you to easily make inference requests and assign feedback to them via the gateway.
