@@ -219,7 +219,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        clickhouse_version: 
+        clickhouse_version:
           - tag: "24.12-alpine"
             prefix: "24.12"
           - tag: "25.2-alpine"
@@ -367,4 +367,4 @@ jobs:
 
       - name: Run ui tests
         working-directory: ui
-        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test
+        run: OPENAI_API_KEY=not_used TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test
