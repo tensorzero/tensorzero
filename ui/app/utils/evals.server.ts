@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
+import { getConfigPath } from "./config/index.server";
 /**
  * Get the path to the evals binary from environment variables.
  * Defaults to 'evals' if not specified.
@@ -30,16 +31,17 @@ export function runEval(
     evalsPath,
     "--gateway-url",
     gatewayURL,
+    "--config-file",
+    getConfigPath(),
     "-n",
     evalName,
     "-v",
     variantName,
     "-c",
     concurrency.toString(),
+    "--format",
+    "jsonl",
   ];
-  console.log(
-    `Running eval ${evalName} with variant ${variantName} and concurrency ${concurrency}`,
-  );
 
   return new Promise<EvalStartInfo>((resolve, reject) => {
     const child = spawn(command[0], command.slice(1));
@@ -53,7 +55,7 @@ export function runEval(
         const lines = output.split("\n");
         firstLine = lines[0];
         dataReceived = true;
-        resolve(evalStartInfoSchema.parse(firstLine));
+        resolve(evalStartInfoSchema.parse(JSON.parse(firstLine)));
       }
     });
 
