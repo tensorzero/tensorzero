@@ -454,9 +454,17 @@ export function EvaluationTable({
 
                   return (
                     <React.Fragment key={datapoint.id}>
+                      {/* If there are multiple variants, we need to add a border to the last row only.
+                          In the single-variant case the length should be 1 so every row will have a border.
+                      */}
                       {filteredVariants.map(([runId, data], index) => (
                         <TableRow
                           key={`input-${datapoint.id}-variant-${runId}`}
+                          className={
+                            index !== filteredVariants.length - 1
+                              ? "border-b-0"
+                              : ""
+                          }
                         >
                           {/* Input cell - only for the first variant row */}
                           {index === 0 && (
@@ -597,14 +605,14 @@ const EvaluatorHeader = ({
                 {metricProperties.optimize}
               </span>
             </div>
-            {evaluatorConfig.cutoff ? (
+            {evaluatorConfig.cutoff !== null && (
               <div>
                 <span className="font-medium">Cutoff:</span>
                 <span className="ml-2 font-medium">
                   {evaluatorConfig.cutoff}
                 </span>
               </div>
-            ) : null}
+            )}
           </div>
         </TooltipContent>
       </Tooltip>
