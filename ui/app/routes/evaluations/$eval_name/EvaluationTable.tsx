@@ -37,7 +37,7 @@ import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import type { MetricConfig } from "~/utils/config/metric";
-import type { EvaluatorConfig } from "~/utils/config/evals";
+import { getOptimize, type EvaluatorConfig } from "~/utils/config/evals";
 
 // Enhanced TruncatedText component that can handle complex structures
 const TruncatedContent = ({
@@ -339,15 +339,18 @@ export function EvaluationTable({
   ): React.ReactNode => {
     if (metricType === "boolean") {
       const boolValue = value === "true" || value === "1";
-      const icon = boolValue ? (
-        <Check className="mr-1 h-3 w-3 flex-shrink-0" />
-      ) : (
+      const optimize = getOptimize(evaluatorConfig);
+      const failed =
+        (!boolValue && optimize === "max") || (boolValue && optimize === "min");
+      const icon = failed ? (
         <X className="mr-1 h-3 w-3 flex-shrink-0" />
+      ) : (
+        <Check className="mr-1 h-3 w-3 flex-shrink-0" />
       );
 
       return (
         <span
-          className={`flex items-center whitespace-nowrap ${boolValue ? "text-green-700" : "text-red-700"}`}
+          className={`flex items-center whitespace-nowrap ${failed ? "text-red-700" : "text-gray-700"}`}
         >
           {icon}
           {boolValue ? "True" : "False"}
@@ -698,20 +701,18 @@ const formatSummaryValue = (value: number, metricConfig: MetricConfig) => {
   return value;
 };
 
-const isCutoffFailed = (value: number, evaluatorConfig: EvaluatorConfig) => {
-  switch (evaluatorConfig.type) {
-    case "exact_match":
-      return evaluatorConfig.cutoff ? value < evaluatorConfig.cutoff : false;
-    case "llm_judge":
-      switch (evaluatorConfig.optimize) {
-        case "min":
-          return evaluatorConfig.cutoff
-            ? value > evaluatorConfig.cutoff
-            : false;
-        case "max":
-          return evaluatorConfig.cutoff
-            ? value < evaluatorConfig.cutoff
-            : false;
-      }
+const isCutoffFailed = (
+  value: number | boolean,
+  evaluatorConfig: EvaluatorConfig,
+) => {
+  const numericValue = typeof value === "number" ? value : value ? 1 : 0;
+  const optimize = getOptimize(evaluatorConfig);
+  if (evaluatorConfig.cutoff === undefined) {
+    return false;
+  }
+  if (optimize === "max") {
+    return numericValue < evaluatorConfig.cutoff;
+  } else {
+    return numericValue > evaluatorConfig.cutoff;
   }
 };

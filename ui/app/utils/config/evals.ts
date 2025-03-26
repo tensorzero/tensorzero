@@ -38,3 +38,12 @@ export const EvalConfigSchema = z.object({
   function_name: z.string(),
 });
 export type EvalConfig = z.infer<typeof EvalConfigSchema>;
+
+export const getOptimize = (evaluatorConfig: EvaluatorConfig) => {
+  switch (evaluatorConfig.type) {
+    case "exact_match":
+      return "max";
+    case "llm_judge":
+      return evaluatorConfig.optimize;
+  }
+};
