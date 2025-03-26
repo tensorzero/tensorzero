@@ -531,7 +531,7 @@ mod tests {
                         seed: None,
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             );
@@ -648,7 +648,7 @@ mod tests {
                         seed: None,
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             );
@@ -797,7 +797,7 @@ mod tests {
                         seed: None,
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             );
@@ -820,7 +820,7 @@ mod tests {
                         seed: None,
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             );
@@ -931,7 +931,7 @@ mod tests {
                         seed: None,
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             );

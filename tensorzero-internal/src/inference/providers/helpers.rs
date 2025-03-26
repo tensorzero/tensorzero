@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub fn inject_extra_body(
-    config: &Option<FullExtraBodyConfig>,
+    config: &FullExtraBodyConfig,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
     model_name: &str,
     body: &mut serde_json::Value,
@@ -27,30 +27,23 @@ pub fn inject_extra_body(
     // Write the variant extra_body first, then the model_provider extra_body.
     // This way, the model_provider extra_body will overwrite any keys in the
     // variant extra_body.
-    for extra_body in [
-        config.as_ref().map(|c| &c.extra_body),
-        model_provider.extra_body.as_ref(),
-    ]
-    .into_iter()
-    .flatten()
+    for replacement in config
+        .extra_body
+        .iter()
+        .flat_map(|c| &c.data)
+        .chain(model_provider.extra_body.iter().flat_map(|c| &c.data))
     {
-        for replacement in &extra_body.data {
-            write_json_pointer_with_parent_creation(
-                body,
-                &replacement.pointer,
-                replacement.value.clone(),
-            )?;
-        }
+        write_json_pointer_with_parent_creation(
+            body,
+            &replacement.pointer,
+            replacement.value.clone(),
+        )?;
     }
 
     let expected_provider_name = fully_qualified_name(model_name, &model_provider.provider_name);
 
     // Finally, write the inference-level extra_body information. This can overwrite values set from the config-level extra_body.
-    for extra_body in config
-        .as_ref()
-        .iter()
-        .flat_map(|c| &c.inference_extra_body.data)
-    {
+    for extra_body in &config.inference_extra_body.data {
         match extra_body {
             InferenceExtraBody::Variant {
                 // We're iterating over a 'FilteredInferenceExtraBody', so we've already removed any non-matching variant names.
@@ -288,10 +281,10 @@ mod tests {
     fn test_inject_nothing() {
         let mut body = serde_json::json!({});
         inject_extra_body(
-            &None,
+            &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
-                extra_body: None,
+                extra_body: Default::default(),
             },
             "dummy_model",
             &mut body,
@@ -304,8 +297,8 @@ mod tests {
     fn test_inject_no_matches() {
         let mut body = serde_json::json!({});
         inject_extra_body(
-            &Some(FullExtraBodyConfig {
-                extra_body: ExtraBodyConfig { data: vec![] },
+            &FullExtraBodyConfig {
+                extra_body: Some(ExtraBodyConfig { data: vec![] }),
                 inference_extra_body: FilteredInferenceExtraBody {
                     data: vec![InferenceExtraBody::Provider {
                         model_provider_name: "wrong_provider".to_string(),
@@ -313,10 +306,10 @@ mod tests {
                         value: "My Value".to_string().into(),
                     }],
                 },
-            }),
+            },
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
-                extra_body: None,
+                extra_body: Default::default(),
             },
             "dummy_model",
             &mut body,
@@ -328,10 +321,10 @@ mod tests {
     #[test]
     fn test_inject_to_non_map() {
         let err = inject_extra_body(
-            &None,
+            &Default::default(),
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
-                extra_body: None,
+                extra_body: Default::default(),
             },
             "dummy_model",
             &mut serde_json::Value::String("test".to_string()),
@@ -353,8 +346,8 @@ mod tests {
             }
         });
         inject_extra_body(
-            &Some(FullExtraBodyConfig {
-                extra_body: ExtraBodyConfig {
+            &FullExtraBodyConfig {
+                extra_body: Some(ExtraBodyConfig {
                     data: vec![
                         ExtraBodyReplacement {
                             pointer: "/generationConfig".to_string(),
@@ -367,7 +360,7 @@ mod tests {
                             value: serde_json::json!(0.123),
                         },
                     ],
-                },
+                }),
                 inference_extra_body: FilteredInferenceExtraBody {
                     data: vec![InferenceExtraBody::Provider {
                         model_provider_name:
@@ -377,10 +370,10 @@ mod tests {
                         value: "inferenceValue".to_string().into(),
                     }],
                 },
-            }),
+            },
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
-                extra_body: None,
+                extra_body: Default::default(),
             },
             "dummy_model",
             &mut body,
@@ -412,8 +405,8 @@ mod tests {
             }
         });
         inject_extra_body(
-            &Some(FullExtraBodyConfig {
-                extra_body: ExtraBodyConfig {
+            &FullExtraBodyConfig {
+                extra_body: Some(ExtraBodyConfig {
                     data: vec![
                         ExtraBodyReplacement {
                             pointer: "/generationConfig/otherNestedKey".to_string(),
@@ -428,7 +421,7 @@ mod tests {
                             value: Value::String("from variant".to_string()),
                         },
                     ],
-                },
+                }),
                 inference_extra_body: FilteredInferenceExtraBody {
                     data: vec![InferenceExtraBody::Provider {
                         model_provider_name:
@@ -438,7 +431,7 @@ mod tests {
                         value: Value::String("from inference".to_string()),
                     }],
                 },
-            }),
+            },
             ModelProviderRequestInfo {
                 provider_name: "dummy_provider".into(),
                 extra_body: Some(ExtraBodyConfig {

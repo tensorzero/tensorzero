@@ -67,11 +67,11 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
         .call1(py, (json_str.into_pyobject(py)?,))
 }
 
-// Converts a Python dictionary to json with `json.dumps`,
+// Converts a Python dictionary/list to json with `json.dumps`,
 /// then deserializes to a Rust type via serde
-pub fn deserialize_from_pydict<'a, T: serde::de::DeserializeOwned>(
+pub fn deserialize_from_pyobj<'a, T: serde::de::DeserializeOwned>(
     py: Python<'a>,
-    dict: &Bound<'a, PyAny>,
+    obj: &Bound<'a, PyAny>,
 ) -> PyResult<T> {
     let self_module = PyModule::import(py, "tensorzero.types")?;
     let to_dict_encoder: Bound<'_, PyAny> = self_module.getattr("ToDictEncoder")?;
@@ -81,7 +81,7 @@ pub fn deserialize_from_pydict<'a, T: serde::de::DeserializeOwned>(
     let json_str_obj = JSON_DUMPS
         .get(py)
         .expect("JSON_DUMPS was not initialized")
-        .call(py, (dict,), Some(&kwargs))?;
+        .call(py, (obj,), Some(&kwargs))?;
     let json_str: Cow<'_, str> = json_str_obj.extract(py)?;
     let val = serde_json::from_str::<T>(json_str.as_ref());
     match val {
@@ -131,7 +131,7 @@ pub fn parse_tool(py: Python<'_>, key_vals: HashMap<String, Bound<'_, PyAny>>) -
     } else {
         false
     };
-    let tool_params: serde_json::Value = deserialize_from_pydict(py, params)?;
+    let tool_params: serde_json::Value = deserialize_from_pyobj(py, params)?;
     Ok(Tool {
         name: name.extract()?,
         description: description.extract()?,

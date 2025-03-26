@@ -539,6 +539,10 @@ impl FuserConfig {
             }
             .into());
         }
+        let extra_body = FullExtraBodyConfig {
+            extra_body: self.inner.extra_body.clone(),
+            inference_extra_body: Default::default(),
+        };
         let model_inference_request = prepare_model_inference_request(
             messages,
             system,
@@ -547,13 +551,7 @@ impl FuserConfig {
             false,
             inference_params,
             self.inner.json_mode,
-            self.inner
-                .extra_body
-                .clone()
-                .map(|extra_body| FullExtraBodyConfig {
-                    extra_body,
-                    inference_extra_body: Default::default(),
-                }),
+            extra_body,
         )?;
         Ok((model_inference_request, included_indices))
     }
@@ -1033,7 +1031,7 @@ mod tests {
                             model_name: "json".into(),
                             ..Default::default()
                         }),
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 )]),
             },
@@ -1127,7 +1125,7 @@ mod tests {
                                 model_name: "error".into(),
                                 ..Default::default()
                             }),
-                            extra_body: None,
+                            extra_body: Default::default(),
                         },
                     )]),
                 },
@@ -1191,7 +1189,7 @@ mod tests {
                                 model_name: "regular".into(),
                                 ..Default::default()
                             }),
-                            extra_body: None,
+                            extra_body: Default::default(),
                         },
                     )]),
                 },
