@@ -15,12 +15,10 @@ use crate::{
     },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
+    inference::types::extra_body::ExtraBodyConfig,
     jsonschema_util::JSONSchemaFromPath,
     tool::create_implicit_tool_call_config,
-    variant::{
-        chat_completion::{ChatCompletionConfig, ExtraBodyConfig},
-        JsonMode, RetryConfig, VariantConfig,
-    },
+    variant::{chat_completion::ChatCompletionConfig, JsonMode, RetryConfig, VariantConfig},
 };
 
 pub const LLM_JUDGE_USER_SCHEMA_TEXT: &str = include_str!("llm_judge_user_schema.json");

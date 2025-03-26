@@ -30,12 +30,12 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
+use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::{
     current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
 use crate::model_table::{BaseModelTable, ShorthandModelConfig};
-use crate::variant::chat_completion::ExtraBodyConfig;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -477,6 +477,7 @@ pub struct ModelProvider {
 impl From<&ModelProvider> for ModelProviderRequestInfo {
     fn from(val: &ModelProvider) -> Self {
         ModelProviderRequestInfo {
+            provider_name: val.name.clone(),
             extra_body: val.extra_body.clone(),
         }
     }
@@ -484,6 +485,7 @@ impl From<&ModelProvider> for ModelProviderRequestInfo {
 
 #[derive(Clone, Debug)]
 pub struct ModelProviderRequestInfo {
+    pub provider_name: Arc<str>,
     pub extra_body: Option<ExtraBodyConfig>,
 }
 

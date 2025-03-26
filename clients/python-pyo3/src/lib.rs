@@ -26,9 +26,10 @@ use python_helpers::{
 };
 use tensorzero_internal::gateway_util::ShutdownHandle;
 use tensorzero_rust::{
-    err_to_http, CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode,
-    ClientInferenceParams, ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, Input, TensorZeroError, Tool,
+    err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
+    ClientBuilderMode, ClientInferenceParams, ClientSecretString, DynamicToolParams,
+    FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, Input, TensorZeroError,
+    Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -42,7 +43,7 @@ pub(crate) static TENSORZERO_INTERNAL_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCel
 
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    tensorzero_rust::observability::setup_logs(false);
+    tensorzero_rust::observability::setup_logs(false, LogFormat::Pretty);
     m.add_class::<BaseTensorZeroGateway>()?;
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
@@ -87,6 +88,7 @@ fn _start_http_gateway(
     clickhouse_url: Option<String>,
     async_setup: bool,
 ) -> PyResult<Bound<'_, PyAny>> {
+    warn_no_config(py, config_file.as_deref())?;
     let gateway_fut = async move {
         let (addr, handle) = tensorzero_internal::gateway_util::start_openai_compatible_gateway(
             config_file,
@@ -402,6 +404,7 @@ impl BaseTensorZeroGateway {
             output_schema,
             // This is currently unsupported in the Python client
             include_original_response: false,
+            extra_body: Default::default(),
         })
     }
 }

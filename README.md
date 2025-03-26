@@ -125,6 +125,7 @@ from tensorzero import TensorZeroGateway  # or AsyncTensorZeroGateway
 with TensorZeroGateway.build_embedded(clickhouse_url="...", config_file="...") as client:
     response = client.inference(
         model_name="openai::gpt-4o-mini",
+        # Try other providers easily: "anthropic::claude-3-7-sonnet-20250219"
         input={
             "messages": [
                 {
@@ -164,6 +165,7 @@ patch_openai_client(
 
 response = client.chat.completions.create(
     model="tensorzero::model_name::openai::gpt-4o-mini",
+    # Try other providers easily: "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219"
     messages=[
         {
             "role": "user",
@@ -196,6 +198,7 @@ const client = new OpenAI({
 
 const response = await client.chat.completions.create({
   model: "tensorzero::model_name::openai::gpt-4o-mini",
+  // Try other providers easily: "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219"
   messages: [
     {
       role: "user",

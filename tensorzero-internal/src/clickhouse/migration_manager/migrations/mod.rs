@@ -17,6 +17,7 @@ pub mod migration_0015;
 pub mod migration_0016;
 pub mod migration_0017;
 pub mod migration_0018;
+pub mod migration_0019;
 pub mod migration_0020;
 pub mod migration_0021;
 

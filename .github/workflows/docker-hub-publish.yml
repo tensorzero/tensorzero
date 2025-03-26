@@ -67,6 +67,7 @@ jobs:
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
           labels: ${{ steps.meta.outputs.labels }}
+          sbom: true
 
       - name: Export digest
         run: |
