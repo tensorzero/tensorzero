@@ -2289,6 +2289,7 @@ json_mode = "strict"
 type = "chat_completion"
 model = "dummy::error"
 system_template = "../../fixtures/config/functions/extract_entities/initial_prompt/system_template.minijinja"
+json_mode = "strict"
 
 [functions.mixture_of_n_json_repeated]
 type = "json"

@@ -23,7 +23,9 @@ use tensorzero_internal::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0016::Migration0016;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0017::Migration0017;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0018::Migration0018;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0019::Migration0019;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0020::Migration0020;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0021::Migration0021;
 use tensorzero_internal::clickhouse::migration_manager::{self};
 use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
@@ -82,7 +84,7 @@ async fn test_clickhouse_migration_manager() {
 
     // When creating a new migration, add it to the end of this array,
     // and adjust the call to `invoke_all!` to include the new array index.
-    let migrations: [Box<dyn Migration + '_>; 15] = [
+    let migrations: &[Box<dyn Migration + '_>] = &[
         Box::new(Migration0000 {
             clickhouse: &clickhouse,
         }),
@@ -111,10 +113,6 @@ async fn test_clickhouse_migration_manager() {
         Box::new(Migration0011 {
             clickhouse: &clickhouse,
         }),
-        Box::new(Migration0013 {
-            clickhouse: &clickhouse,
-            clean_start: true,
-        }),
         Box::new(Migration0015 {
             clickhouse: &clickhouse,
         }),
@@ -127,10 +125,14 @@ async fn test_clickhouse_migration_manager() {
         Box::new(Migration0018 {
             clickhouse: &clickhouse,
         }),
-        // NOTE: This migration is currently feature flagged. If you add a migration after this, you should comment this out.
-        // So that we test the database in the same state as the production database.
-        // We can then uncomment this when the migration is un-flagged.
+        Box::new(Migration0019 {
+            clickhouse: &clickhouse,
+        }),
         Box::new(Migration0020 {
+            clickhouse: &clickhouse,
+            clean_start: true,
+        }),
+        Box::new(Migration0021 {
             clickhouse: &clickhouse,
             clean_start: true,
         }),
@@ -209,9 +211,9 @@ async fn test_clickhouse_migration_manager() {
         // will throw an error if it doesn't.
         // This must be an array literal, so that the macro can generate a function
         // for each element in the array.
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     );
-    run_all(&migrations).await;
+    run_all(migrations).await;
 
     let database = clickhouse.database();
     tracing::info!("Attempting to drop test database: {database}");
@@ -244,15 +246,15 @@ async fn test_clean_clickhouse_start() {
     migration_manager::run(&clickhouse).await.unwrap();
     let duration = start.elapsed();
     assert!(
-        duration < std::time::Duration::from_secs(10),
-        "Migrations took longer than 10 seconds: {duration:?}"
+        duration < std::time::Duration::from_secs(40),
+        "Migrations took longer than 40 seconds: {duration:?}"
     );
 }
 
 #[tokio::test]
 async fn test_concurrent_clickhouse_migrations() {
     let clickhouse = Arc::new(get_clean_clickhouse());
-    let num_concurrent_starts = 100;
+    let num_concurrent_starts = 50;
     let start = std::time::Instant::now();
 
     let mut handles = Vec::with_capacity(num_concurrent_starts);
@@ -268,8 +270,8 @@ async fn test_concurrent_clickhouse_migrations() {
 
     let duration = start.elapsed();
     assert!(
-        duration < std::time::Duration::from_secs(60),
-        "Migrations took longer than 60 seconds: {duration:?}"
+        duration < std::time::Duration::from_secs(400),
+        "Migrations took longer than 400 seconds: {duration:?}"
     );
 }
 

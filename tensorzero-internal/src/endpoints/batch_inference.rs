@@ -863,6 +863,8 @@ pub async fn write_completed_batch_inference<'a>(
                 inference_id,
                 episode_id,
             },
+            // Not currently supported as a batch inference parameter
+            extra_body: Default::default(),
             extra_cache_key: None,
         };
         let inference_result = function
@@ -889,6 +891,8 @@ pub async fn write_completed_batch_inference<'a>(
             tool_config,
             processing_time: None,
             tags: HashMap::new(),
+            // Not currently supported as a batch inference parameter
+            extra_body: Default::default(),
         };
         model_inference_rows_to_write.extend(inference_result.get_serialized_model_inferences());
         match inference_result {
@@ -1011,7 +1015,7 @@ pub async fn get_completed_batch_inference_response(
                 let query = format!(
                     "WITH inf_lookup AS (
                         SELECT episode_id
-                        FROM InferenceById
+                        FROM InferenceById FINAL
                         WHERE id_uint = toUInt128(toUUID('{}'))
                     )
                     SELECT
@@ -1106,7 +1110,7 @@ pub async fn get_completed_batch_inference_response(
                 let query = format!(
                     "WITH inf_lookup AS (
                         SELECT episode_id
-                        FROM InferenceById
+                        FROM InferenceById FINAL
                         WHERE id_uint = toUInt128(toUUID('{}'))
                     )
                     SELECT

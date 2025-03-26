@@ -219,7 +219,7 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
 }
 
 #[tokio::test]
-async fn e2e_test_inference_chat_strip_unknown_block_stream() {
+async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": Uuid::now_v7(),
@@ -2473,7 +2473,7 @@ async fn test_inference_invalid_params() {
 }
 
 #[tokio::test]
-async fn test_embedded_gateway_no_config() {
+async fn test_dummy_only_embedded_gateway_no_config() {
     let client = make_embedded_gateway_no_config().await;
     let response = client
         .inference(ClientInferenceParams {
@@ -2514,7 +2514,7 @@ async fn test_embedded_gateway_no_config() {
 }
 
 #[tokio::test]
-async fn test_inference_invalid_default_function_arg() {
+async fn test_dummy_only_inference_invalid_default_function_arg() {
     // We cannot provide both `function_name` and `model_name`
     let func_and_model = json!({
         "function_name": "basic_test",

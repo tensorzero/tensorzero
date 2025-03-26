@@ -134,7 +134,7 @@ async fn query_inference_for_datapoint(
   -- Discriminator itself
   i.function_type
 
-FROM InferenceById i
+FROM InferenceById i FINAL
 LEFT JOIN ChatInference c
   ON i.id_uint = toUInt128(c.id)
 LEFT JOIN JsonInference j

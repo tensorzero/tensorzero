@@ -30,6 +30,7 @@ use crate::endpoints::inference::{
 };
 use crate::error::{Error, ErrorDetails};
 use crate::gateway_util::{AppState, AppStateData, StructuredJson};
+use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::{
     current_timestamp, ContentBlockChatOutput, ContentBlockChunk, FinishReason, Image, ImageKind,
     Input, InputMessage, InputMessageContent, Role, TextKind, Usage,
@@ -55,6 +56,15 @@ pub async fn inference_handler(
     headers: HeaderMap,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
+    if !openai_compatible_params.unknown_fields.is_empty() {
+        tracing::warn!(
+            "Ignoring unknown fields in OpenAI-compatible request: {:?}",
+            openai_compatible_params
+                .unknown_fields
+                .keys()
+                .collect::<Vec<_>>()
+        );
+    }
     let params = Params::try_from_openai(headers, openai_compatible_params)?;
 
     // The prefix for the response's `model` field depends on the inference target
@@ -229,6 +239,8 @@ pub struct OpenAICompatibleParams {
     tensorzero_dryrun: Option<bool>,
     #[serde(rename = "tensorzero::episode_id")]
     tensorzero_episode_id: Option<Uuid>,
+    #[serde(flatten)]
+    unknown_fields: HashMap<String, Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -461,6 +473,8 @@ impl Params {
             tags: HashMap::new(),
             // OpenAI compatible endpoint does not support 'include_original_response'
             include_original_response: false,
+            // OpenAI compatible endpoint does not support 'extra_body'
+            extra_body: UnfilteredInferenceExtraBody::default(),
         })
     }
 }
@@ -1030,6 +1044,7 @@ mod tests {
                 tensorzero_episode_id: None,
                 tensorzero_variant_name: None,
                 tensorzero_dryrun: None,
+                unknown_fields: Default::default(),
             },
         )
         .unwrap();

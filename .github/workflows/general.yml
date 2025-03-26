@@ -211,6 +211,126 @@ jobs:
         working-directory: ui
         run: pnpm run typecheck
 
+
+  clickhouse-tests:
+    # We don't run many tests here, so use a normal runner with Github Actions caching
+    # to avoid unnecessarily using Namespace credits (it should still always finish before
+    # the main 'validate' job)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        clickhouse_version:
+          - tag: "24.12-alpine"
+            prefix: "24.12"
+          - tag: "25.2-alpine"
+            prefix: "25.2"
+          - tag: "latest-alpine"
+            prefix: ""
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        with:
+          tool: cargo-nextest
+
+      - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
+        run: |
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
+
+      - name: Launch ClickHouse container for E2E tests
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml up clickhouse --wait
+
+      # Make an HTTP request to ClickHouse and check that the version matches '${{ matrix.clickhouse_version }}'
+      - name: Check ClickHouse version
+        run: |
+          CLICKHOUSE_VERSION=$(curl -s "http://localhost:8123/query?user=chuser&password=chpassword" --data-binary "SELECT version()")
+          echo "Detected ClickHouse version: $CLICKHOUSE_VERSION"
+          echo "$CLICKHOUSE_VERSION" | grep -q "${{ matrix.clickhouse_version.prefix }}" || echo "WARNING: ClickHouse version does not match expected ${{ matrix.clickhouse_version.prefix }}"
+
+      # We run this as a separate step so that we can see live build logs
+      # (and fail the job immediately if the build fails)
+      - name: Build the gateway for E2E tests
+        run: cargo build-e2e
+
+      - name: Launch the gateway for E2E tests
+        run: |
+          cargo run-e2e > e2e_logs.txt 2>&1 &
+            count=0
+            max_attempts=10
+            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+              echo "Waiting for gateway to be healthy..."
+              sleep 1
+              count=$((count + 1))
+              if [ $count -ge $max_attempts ]; then
+                echo "Gateway failed to become healthy after $max_attempts attempts"
+                exit 1
+              fi
+            done
+          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
+
+      - name: Test (Rust)
+        run: cargo test-e2e-no-creds
+
+      - name: Print e2e logs
+        if: always()
+        run: cat e2e_logs.txt
+
+  clickhouse-tests-cloud:
+    runs-on: ubuntu-latest
+    # Skip this job for PRs from forks, since we don't have secrets available.
+    # Dependabot PRs also don't have secrets available
+    if: |
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == 'tensorzero/tensorzero'
+      ) && github.actor != 'dependabot[bot]'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        with:
+          tool: cargo-nextest
+
+      - name: Wake up ClickHouse cloud
+        run: |
+          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES'
+
+      - name: Set up TENSORZERO_CLICKHOUSE_URL
+        run: |
+          echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
+
+      # We run this as a separate step so that we can see live build logs
+      # (and fail the job immediately if the build fails)
+      - name: Build the gateway for E2E tests
+        run: cargo build-e2e
+
+      - name: Launch the gateway for E2E tests
+        run: |
+          cargo run-e2e > e2e_logs.txt 2>&1 &
+            count=0
+            max_attempts=10
+            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+              echo "Waiting for gateway to be healthy..."
+              sleep 1
+              count=$((count + 1))
+              if [ $count -ge $max_attempts ]; then
+                echo "Gateway failed to become healthy after $max_attempts attempts"
+                exit 1
+              fi
+            done
+          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
+
+      - name: Test (Rust)
+        run: cargo test-e2e-no-creds
+
+      - name: Print e2e logs
+        if: always()
+        run: cat e2e_logs.txt
+
   ui-tests:
     runs-on: ubuntu-latest
     strategy:
@@ -249,4 +369,4 @@ jobs:
 
       - name: Run ui tests
         working-directory: ui
-        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test
+        run: OPENAI_API_KEY=not_used TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test

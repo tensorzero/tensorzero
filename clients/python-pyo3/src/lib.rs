@@ -26,9 +26,10 @@ use python_helpers::{
 };
 use tensorzero_internal::gateway_util::ShutdownHandle;
 use tensorzero_rust::{
-    err_to_http, CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode,
-    ClientInferenceParams, ClientSecretString, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, Input, TensorZeroError, Tool,
+    err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
+    ClientBuilderMode, ClientInferenceParams, ClientSecretString, DynamicToolParams,
+    FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, Input, TensorZeroError,
+    Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -42,7 +43,7 @@ pub(crate) static TENSORZERO_INTERNAL_ERROR: GILOnceCell<Py<PyAny>> = GILOnceCel
 
 #[pymodule]
 fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    tensorzero_rust::observability::setup_logs(false);
+    tensorzero_rust::observability::setup_logs(false, LogFormat::Pretty);
     m.add_class::<BaseTensorZeroGateway>()?;
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
@@ -87,6 +88,7 @@ fn _start_http_gateway(
     clickhouse_url: Option<String>,
     async_setup: bool,
 ) -> PyResult<Bound<'_, PyAny>> {
+    warn_no_config(py, config_file.as_deref())?;
     let gateway_fut = async move {
         let (addr, handle) = tensorzero_internal::gateway_util::start_openai_compatible_gateway(
             config_file,
@@ -402,6 +404,7 @@ impl BaseTensorZeroGateway {
             output_schema,
             // This is currently unsupported in the Python client
             include_original_response: false,
+            extra_body: Default::default(),
         })
     }
 }
@@ -677,19 +680,19 @@ impl AsyncTensorZeroGateway {
     }
 
     #[classmethod]
-    #[pyo3(signature = (*, gateway_url, timeout=None, verbose_errors=false, use_async=true))]
+    #[pyo3(signature = (*, gateway_url, timeout=None, verbose_errors=false, async_setup=true))]
     /// Initialize the TensorZero client, using the HTTP gateway.
     /// :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
     /// :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
-    /// :param use_async: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
+    /// :param async_setup: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
     /// :return: An `AsyncTensorZeroGateway` instance configured to use the HTTP gateway.
     fn build_http(
         cls: &Bound<'_, PyType>,
         gateway_url: &str,
         timeout: Option<f64>,
         verbose_errors: bool,
-        use_async: bool,
+        async_setup: bool,
     ) -> PyResult<Py<PyAny>> {
         let gateway_url = gateway_url.to_string();
         let build_gateway = move |py: Python<'_>| {
@@ -697,7 +700,7 @@ impl AsyncTensorZeroGateway {
             let instance = PyClassInitializer::from(client).add_subclass(AsyncTensorZeroGateway {});
             Ok(Py::new(py, instance)?.into_any())
         };
-        if use_async {
+        if async_setup {
             // This doesn't actually do anything async at the moment, but we run
             // 'build_gateway' inside the future so that any exception is thrown by the future
             Ok(
@@ -750,22 +753,22 @@ impl AsyncTensorZeroGateway {
     // as `AsyncTensorZeroGateway` would be completely async *except* for this one method
     // (which potentially takes a very long time due to running DB migrations).
     #[classmethod]
-    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, timeout=None, use_async=true))]
+    #[pyo3(signature = (*, config_file=None, clickhouse_url=None, timeout=None, async_setup=true))]
     /// Initialize the TensorZero client, using an embedded gateway.
     /// This connects to ClickHouse (if provided) and runs DB migrations.
     ///
     /// :param config_file: The path to the TensorZero configuration file. Example: "tensorzero.toml"
     /// :param clickhouse_url: The URL of the ClickHouse instance to use for the gateway. If observability is disabled in the config, this can be `None`
     /// :param timeout: The timeout for embedded gateway request processing, in seconds. If this timeout is hit, any in-progress LLM requests may be aborted. If not provided, no timeout will be set.
-    /// :param use_async: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
-    /// :return: A `Future` that resolves to an `AsyncTensorZeroGateway` instance configured to use an embedded gateway (or an `AsyncTensorZeroGateway` if `use_async=False`).
+    /// :param async_setup: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
+    /// :return: A `Future` that resolves to an `AsyncTensorZeroGateway` instance configured to use an embedded gateway (or an `AsyncTensorZeroGateway` if `async_setup=False`).
     fn build_embedded(
         // This is a classmethod, so it receives the class object as a parameter.
         cls: &Bound<'_, PyType>,
         config_file: Option<&str>,
         clickhouse_url: Option<String>,
         timeout: Option<f64>,
-        use_async: bool,
+        async_setup: bool,
     ) -> PyResult<Py<PyAny>> {
         warn_no_config(cls.py(), config_file)?;
         let timeout = timeout
@@ -802,7 +805,7 @@ impl AsyncTensorZeroGateway {
                 Py::new(py, instance)
             })
         };
-        if use_async {
+        if async_setup {
             // See `AsyncStreamWrapper::__anext__` for more details about `future_into_py`
             Ok(pyo3_async_runtimes::tokio::future_into_py(cls.py(), fut)?.unbind())
         } else {
