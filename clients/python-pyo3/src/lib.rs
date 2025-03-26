@@ -87,6 +87,7 @@ fn _start_http_gateway(
     clickhouse_url: Option<String>,
     async_setup: bool,
 ) -> PyResult<Bound<'_, PyAny>> {
+    warn_no_config(py, config_file.as_deref())?;
     let gateway_fut = async move {
         let (addr, handle) = tensorzero_internal::gateway_util::start_openai_compatible_gateway(
             config_file,
