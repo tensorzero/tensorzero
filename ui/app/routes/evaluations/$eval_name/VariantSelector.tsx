@@ -6,7 +6,6 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
@@ -21,6 +20,7 @@ import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
 
 interface VariantSelectorProps {
   available_run_ids: EvaluationRunInfo[];
+  mostRecentEvalInferenceDates: Map<string, Date>;
 }
 
 // Helper function to get the last 6 digits of a UUID
@@ -28,7 +28,10 @@ export function getLastUuidSegment(uuid: string): string {
   return uuid.slice(-6);
 }
 
-export function VariantSelector({ available_run_ids }: VariantSelectorProps) {
+export function VariantSelector({
+  available_run_ids,
+  mostRecentEvalInferenceDates,
+}: VariantSelectorProps) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
@@ -63,20 +66,17 @@ export function VariantSelector({ available_run_ids }: VariantSelectorProps) {
   return (
     <div className="mb-6">
       <div className="flex flex-col space-y-2">
-        <h2 className="text-lg font-semibold">Compare Variants</h2>
-
         <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
           <DropdownMenuTrigger asChild>
             <Button
               variant="outline"
               className="flex w-96 items-center justify-between gap-2"
             >
-              <span>Select run ID...</span>
+              <span>Select evaluation runs to compare...</span>
               <ChevronDown className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-96">
-            <DropdownMenuLabel>Select Run IDs</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {available_run_ids.map((info) => {
               const isSelected = selectedRunIds.includes(info.eval_run_id);
@@ -138,7 +138,12 @@ export function VariantSelector({ available_run_ids }: VariantSelectorProps) {
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="p-2">
-                  <p className="text-xs">Run ID: {runId}</p>
+                  <p className="text-xs">
+                    Run ID: {runId}
+                    <br />
+                    Last Updated:{" "}
+                    {mostRecentEvalInferenceDates.get(runId)?.toLocaleString()}
+                  </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

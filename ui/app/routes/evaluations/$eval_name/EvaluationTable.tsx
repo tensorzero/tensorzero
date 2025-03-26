@@ -233,8 +233,8 @@ interface EvaluationTableProps {
   eval_results: ParsedEvaluationResult[];
   eval_statistics: EvaluationStatistics[];
   evaluator_names: string[];
-  metric_names: string[];
   eval_name: string;
+  mostRecentEvalInferenceDates: Map<string, Date>;
 }
 
 export function EvaluationTable({
@@ -242,8 +242,8 @@ export function EvaluationTable({
   eval_results,
   eval_statistics,
   evaluator_names,
-  metric_names,
   eval_name,
+  mostRecentEvalInferenceDates,
 }: EvaluationTableProps) {
   const [searchParams] = useSearchParams();
   const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
@@ -335,6 +335,7 @@ export function EvaluationTable({
   const formatMetricValue = (
     value: string,
     metricType: string,
+    evaluatorConfig: EvaluatorConfig,
   ): React.ReactNode => {
     if (metricType === "boolean") {
       const boolValue = value === "true" || value === "1";
@@ -356,8 +357,14 @@ export function EvaluationTable({
       // Try to parse as number
       const numValue = parseFloat(value);
       if (!isNaN(numValue)) {
+        // Check if value fails the cutoff criteria
+        const failsCutoff = isCutoffFailed(numValue, evaluatorConfig);
         return (
-          <span className="whitespace-nowrap text-gray-700">{numValue}</span>
+          <span
+            className={`whitespace-nowrap ${failsCutoff ? "text-red-700" : "text-gray-700"}`}
+          >
+            {numValue}
+          </span>
         );
       }
 
@@ -370,7 +377,10 @@ export function EvaluationTable({
   return (
     <div>
       {/* Variant selector */}
-      <VariantSelector available_run_ids={available_eval_run_ids} />
+      <VariantSelector
+        available_run_ids={available_eval_run_ids}
+        mostRecentEvalInferenceDates={mostRecentEvalInferenceDates}
+      />
 
       {selectedRunIds.length > 0 && (
         <div className="overflow-x-auto">
@@ -496,18 +506,30 @@ export function EvaluationTable({
                           </TableCell>
 
                           {/* Metrics cells */}
-                          {metric_names.map((metric) => {
-                            const metricValue = data.metrics.get(metric);
-                            const metricType = config.metrics[metric].type;
+                          {evaluator_names.map((evaluator_name) => {
+                            const metric_name = getEvaluatorMetricName(
+                              eval_name,
+                              evaluator_name,
+                            );
+                            const metricValue = data.metrics.get(metric_name);
+                            const metricType = config.metrics[metric_name].type;
+                            const evaluatorConfig =
+                              config.evals[eval_name].evaluators[
+                                evaluator_name
+                              ];
 
                             return (
                               <TableCell
-                                key={metric}
+                                key={metric_name}
                                 className="h-[52px] text-center align-middle"
                               >
                                 <div className="flex h-full items-center justify-center">
                                   {metricValue
-                                    ? formatMetricValue(metricValue, metricType)
+                                    ? formatMetricValue(
+                                        metricValue,
+                                        metricType,
+                                        evaluatorConfig,
+                                      )
                                     : "-"}
                                 </div>
                               </TableCell>
@@ -575,14 +597,14 @@ const EvaluatorHeader = ({
                 {metricProperties.optimize}
               </span>
             </div>
-            {evaluatorConfig.cutoff !== null && (
+            {evaluatorConfig.cutoff ? (
               <div>
                 <span className="font-medium">Cutoff:</span>
                 <span className="ml-2 font-medium">
                   {evaluatorConfig.cutoff}
                 </span>
               </div>
-            )}
+            ) : null}
           </div>
         </TooltipContent>
       </Tooltip>

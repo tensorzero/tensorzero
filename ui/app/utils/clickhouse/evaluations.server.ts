@@ -287,18 +287,22 @@ GROUP BY
 }
 
 /*
-Returns the most recent inference date for a given eval run id.
-If any of the eval run ids point to a date that is newer than the data then we return that date instead.
+Returns a map of eval run ids to their most recent inference dates.
+For each eval run id, returns the maximum of:
+1. The timestamp from the eval run id itself (derived from UUIDv7)
+2. The timestamp of the most recent inference associated with that eval run id
 */
 export async function getMostRecentEvalInferenceDate(
   eval_run_ids: string[],
-): Promise<Date> {
+): Promise<Map<string, Date>> {
   const query = `
   SELECT
+    value as eval_run_id,
     formatDateTime(max(UUIDv7ToDateTime(inference_id)), '%Y-%m-%dT%H:%i:%SZ') as last_inference_timestamp
   FROM TagInference
   WHERE key = 'tensorzero::eval_run_id'
     AND value IN ({eval_run_ids:Array(String)})
+  GROUP BY value
   `;
   const result = await clickhouseClient.query({
     query,
@@ -307,14 +311,34 @@ export async function getMostRecentEvalInferenceDate(
       eval_run_ids: eval_run_ids,
     },
   });
-  const eval_run_timestamps = eval_run_ids.map((id) => uuidv7ToTimestamp(id));
-  const rows = await result.json<{ last_inference_timestamp: string }>();
-  const last_inference_timestamp = new Date(rows[0].last_inference_timestamp);
-  const most_recent_timestamp = eval_run_timestamps.reduce((max, current) => {
-    return current > max ? current : max;
-  }, new Date("1970-01-01T00:00:00Z"));
-  if (last_inference_timestamp > most_recent_timestamp) {
-    return last_inference_timestamp;
-  }
-  return most_recent_timestamp;
+
+  const rows = await result.json<{
+    eval_run_id: string;
+    last_inference_timestamp: string;
+  }>();
+
+  // Create a map of eval_run_id to its last inference timestamp
+  const inferenceTimestampMap = new Map<string, Date>();
+  rows.forEach((row) => {
+    inferenceTimestampMap.set(
+      row.eval_run_id,
+      new Date(row.last_inference_timestamp),
+    );
+  });
+
+  // For each eval_run_id, determine the max of its UUID timestamp and its last inference timestamp
+  // This handles the case where the eval run id is newer than the last inference timestamp
+  // Only possible if there are no inferences for that eval run id yet (we should still return the eval run id timestamp)
+  const resultMap = new Map<string, Date>();
+  eval_run_ids.forEach((id) => {
+    const uuidTimestamp = uuidv7ToTimestamp(id);
+    const inferenceTimestamp =
+      inferenceTimestampMap.get(id) || new Date("1970-01-01T00:00:00Z");
+    resultMap.set(
+      id,
+      uuidTimestamp > inferenceTimestamp ? uuidTimestamp : inferenceTimestamp,
+    );
+  });
+
+  return resultMap;
 }

@@ -87,7 +87,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     eval_results,
     eval_statistics,
     total_datapoints,
-    mostRecentEvalInferenceDate,
+    mostRecentEvalInferenceDates,
   ] = await Promise.all([
     evalRunIdsPromise,
     resultsPromise,
@@ -106,8 +106,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     pageSize,
     total_datapoints,
     evaluator_names,
-    metric_names,
-    mostRecentEvalInferenceDate,
+    mostRecentEvalInferenceDates,
   };
 }
 
@@ -122,8 +121,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     pageSize,
     total_datapoints,
     evaluator_names,
-    metric_names,
-    mostRecentEvalInferenceDate,
+    mostRecentEvalInferenceDates,
   } = loaderData;
   const navigate = useNavigate();
   const handleNextPage = () => {
@@ -137,7 +135,11 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
-  // Auto-refresh logic moved to a custom hook
+  // Get the most recent inference date from the map
+  const mostRecentEvalInferenceDate = Array.from(
+    mostRecentEvalInferenceDates.values(),
+  ).reduce((max, current) => (current > max ? current : max), new Date(0));
+  // Use that time for auto-refreshing
   const isAutoRefreshing = useAutoRefresh(mostRecentEvalInferenceDate);
 
   return (
@@ -157,7 +159,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             eval_results={eval_results}
             eval_statistics={eval_statistics}
             evaluator_names={evaluator_names}
-            metric_names={metric_names}
+            mostRecentEvalInferenceDates={mostRecentEvalInferenceDates}
           />
           <PageButtons
             onPreviousPage={handlePreviousPage}
