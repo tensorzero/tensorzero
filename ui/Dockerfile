@@ -1,6 +1,6 @@
 # ========== base ==========
 
-FROM node:20-alpine AS base
+FROM node:23-bookworm-slim AS base
 
 RUN npm install -g pnpm
 
@@ -69,7 +69,7 @@ RUN pnpm run build
 
 FROM base AS ui
 
-RUN adduser -D -s /bin/sh ui
+RUN useradd -m -s /bin/sh ui
 
 USER ui
 

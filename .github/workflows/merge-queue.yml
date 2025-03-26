@@ -247,8 +247,8 @@ jobs:
         working-directory: ui/app/utils/minijinja
         run: wasm-pack test --node --features console_error_panic_hook
 
-      - name: Build Docker container for production deployment tests
-        run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
+      # - name: Build Docker container for production deployment tests
+      #   run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
 
       # - name: Set up .env file for production deployment tests
       #   run: |
