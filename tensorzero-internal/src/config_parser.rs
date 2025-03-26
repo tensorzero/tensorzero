@@ -610,8 +610,6 @@ impl TryFrom<toml::Table> for UninitializedConfig {
     type Error = Error;
 
     fn try_from(table: toml::Table) -> Result<Self, Self::Error> {
-        // NOTE: We'd like to use `serde_path_to_error` here but it has a bug with enums:
-        //       https://github.com/dtolnay/path-to-error/issues/1
         match serde_path_to_error::deserialize(table) {
             Ok(config) => Ok(config),
             Err(e) => {

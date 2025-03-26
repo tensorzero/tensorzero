@@ -20,6 +20,8 @@ struct TagData {
 /// and collect all *other* `#[serde]` attributes from the enum.
 /// We forward everything except `#[serde(tag = "...")]` to the new enum,
 /// so that options like `#[serde(default)]` work correctly.
+/// Note that `#[serde(tag = "...")]` must be a standalone attribute,
+/// and not part of another attribute like `#[serde(rename_all = "snake_case", tag = "...")]`.
 fn extract_tag(input: &DeriveInput) -> Result<TagData, syn::Error> {
     // We want to forward Serde attributes to the new enum, so that things like
     // `#[serde(default)]` work correctly.
@@ -50,8 +52,8 @@ fn extract_tag(input: &DeriveInput) -> Result<TagData, syn::Error> {
                 }
             });
             if nested_tag.is_some() {
-                // We could handle this case by splitting the attribute into two separate attributes,
-                // but let's just reject it to keep our macro from getting too complicated.
+                // We reject code like `#[serde(rename_all = "snake_case", tag = "...")]` to simplify our
+                // macro implementation
                 if nested.len() != 1 {
                     return Err(syn::Error::new_spanned(
                         attr,
@@ -195,7 +197,7 @@ pub fn tensorzero_derive(input: TokenStream) -> TokenStream {
                 });
                 // Deserialize the modified value into our copied enum type,
                 // which uses an externally-tagged representation.
-                let val: #new_ident = ::serde_path_to_error::deserialize(modified.clone()).map_err(|e| {
+                let val: #new_ident = ::serde_path_to_error::deserialize(modified).map_err(|e| {
                     // On error, extract the path, skipping the first component (the outer tag field).'
                     // Ideally, we would build up a Vec containing all of the error path components,
                     // but this would a custom top-level deserializer and/or some tricky thread-local variables.
