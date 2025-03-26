@@ -15,19 +15,36 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('TensorZeroGateway', () => {
   let client: TensorZeroGateway;
+  let mockAxiosInstance: jest.Mocked<typeof axios>;
 
   beforeEach(() => {
     // Reset all mocks before each test
     jest.clearAllMocks();
+    
+    // Create a mock for the axios instance returned by axios.create
+    mockAxiosInstance = {
+      post: jest.fn(),
+      get: jest.fn(),
+      delete: jest.fn(),
+      put: jest.fn(),
+      patch: jest.fn(),
+      request: jest.fn(),
+      defaults: {},
+      interceptors: {
+        request: { use: jest.fn(), eject: jest.fn(), clear: jest.fn() },
+        response: { use: jest.fn(), eject: jest.fn(), clear: jest.fn() },
+      },
+      getUri: jest.fn()
+    } as unknown as jest.Mocked<typeof axios>;
+    
+    // Set up the mock implementation for axios.create
+    mockedAxios.create.mockReturnValue(mockAxiosInstance);
     
     // Create a new client instance for each test
     client = new TensorZeroGateway({
       gatewayUrl: 'http://localhost:3000',
       apiKey: 'test-api-key',
     });
-    
-    // Setup the axios create mock
-    mockedAxios.create.mockReturnValue(mockedAxios as any);
   });
 
   describe('inference', () => {
@@ -52,8 +69,8 @@ describe('TensorZeroGateway', () => {
         created_at: new Date().toISOString(),
       };
       
-      // Setup the mock implementation
-      mockedAxios.post.mockResolvedValueOnce({ data: mockResponse });
+      // Setup the mock implementation for the axios instance
+      mockAxiosInstance.post.mockResolvedValueOnce({ data: mockResponse });
       
       // Create request parameters
       const request: InferenceRequest = {
@@ -72,7 +89,7 @@ describe('TensorZeroGateway', () => {
       expect(response).toEqual(mockResponse);
       
       // Verify the request
-      expect(mockedAxios.post).toHaveBeenCalledWith('/inference', {
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/inference', {
         model_name: 'openai::gpt-4o-mini',
         input: {
           messages: [
@@ -88,17 +105,19 @@ describe('TensorZeroGateway', () => {
     
     it('should properly handle errors', async () => {
       // Setup the mock implementation to throw an error
-      const errorMessage = 'API Error';
-      mockedAxios.isAxiosError.mockReturnValueOnce(true);
-      mockedAxios.post.mockRejectedValueOnce({
+      const axiosError = {
         isAxiosError: true,
-        message: errorMessage,
+        message: 'API Error',
         response: {
           data: {
             error: 'Invalid input',
           },
         },
-      });
+      };
+      
+      // Configure the mock
+      mockAxiosInstance.post.mockRejectedValueOnce(axiosError);
+      mockedAxios.isAxiosError.mockReturnValueOnce(true);
       
       // Create request parameters
       const request: InferenceRequest = {
@@ -127,7 +146,7 @@ describe('TensorZeroGateway', () => {
       };
       
       // Setup the mock implementation
-      mockedAxios.post.mockResolvedValueOnce({ data: mockResponse });
+      mockAxiosInstance.post.mockResolvedValueOnce({ data: mockResponse });
       
       // Create request parameters
       const request: FeedbackRequest = {
@@ -143,7 +162,7 @@ describe('TensorZeroGateway', () => {
       expect(response).toEqual(mockResponse);
       
       // Verify the request
-      expect(mockedAxios.post).toHaveBeenCalledWith('/feedback', {
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/feedback', {
         metric_name: 'thumbs_up',
         inference_id: 'inference-test-id',
         value: true,

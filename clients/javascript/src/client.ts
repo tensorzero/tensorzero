@@ -9,6 +9,11 @@ import {
   FeedbackResponse,
 } from './types';
 
+// Define an interface for the error response
+interface TensorZeroErrorResponse {
+  error?: string;
+}
+
 /**
  * TensorZero JavaScript client implementation
  */
@@ -55,7 +60,8 @@ export class TensorZeroGateway {
       return response.data;
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        throw new Error(`TensorZero Gateway error: ${(error as AxiosError).response?.data?.error || (error as AxiosError).message}`);
+        const axiosError = error as AxiosError<TensorZeroErrorResponse>;
+        throw new Error(`TensorZero Gateway error: ${axiosError.response?.data?.error || axiosError.message}`);
       }
       throw error;
     }
@@ -86,7 +92,8 @@ export class TensorZeroGateway {
       return this.parseSSEStream(stream);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        throw new Error(`TensorZero Gateway error: ${(error as AxiosError).response?.data?.error || (error as AxiosError).message}`);
+        const axiosError = error as AxiosError<TensorZeroErrorResponse>;
+        throw new Error(`TensorZero Gateway error: ${axiosError.response?.data?.error || axiosError.message}`);
       }
       throw error;
     }
@@ -109,7 +116,8 @@ export class TensorZeroGateway {
       return response.data;
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        throw new Error(`TensorZero Gateway error: ${(error as AxiosError).response?.data?.error || (error as AxiosError).message}`);
+        const axiosError = error as AxiosError<TensorZeroErrorResponse>;
+        throw new Error(`TensorZero Gateway error: ${axiosError.response?.data?.error || axiosError.message}`);
       }
       throw error;
     }
