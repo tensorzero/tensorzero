@@ -68,10 +68,14 @@ const TruncatedContent = ({
             side="right"
             align="start"
             sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-md overflow-auto shadow-lg"
+            className="tooltip-scrollable max-h-[60vh] max-w-md overflow-auto shadow-sm"
             avoidCollisions={true}
           >
-            <pre className="whitespace-pre-wrap text-xs">{content}</pre>
+            <div className="flex h-full w-full items-center justify-center p-4">
+              <pre className="w-full whitespace-pre-wrap text-xs">
+                {content}
+              </pre>
+            </div>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -95,10 +99,10 @@ const TruncatedContent = ({
             side="right"
             align="start"
             sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto p-4 shadow-lg"
+            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto shadow-sm"
             avoidCollisions={true}
           >
-            <div className="w-full origin-top-left scale-90 transform">
+            <div className="flex h-full w-full items-center justify-center p-4">
               <InputComponent input={content as Input} />
             </div>
           </TooltipContent>
@@ -126,10 +130,10 @@ const TruncatedContent = ({
             side="right"
             align="start"
             sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto p-4 shadow-lg"
+            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto shadow-sm"
             avoidCollisions={true}
           >
-            <div className="w-full origin-top-left scale-90 transform">
+            <div className="flex h-full w-full items-center justify-center p-4">
               <OutputComponent
                 output={content as JsonInferenceOutput | ContentBlockOutput[]}
               />
