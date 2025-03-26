@@ -404,6 +404,7 @@ impl BaseTensorZeroGateway {
             output_schema,
             // This is currently unsupported in the Python client
             include_original_response: false,
+            extra_body: Default::default(),
         })
     }
 }
