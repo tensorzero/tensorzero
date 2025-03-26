@@ -279,9 +279,22 @@ export function content_block_to_openai_message(
         content: content.result,
       };
     case "image":
-      throw new Error(
-        "Image content is not supported for OpenAI fine-tuning. We have an open issue for this feature at https://github.com/tensorzero/tensorzero/issues/1132.",
-      );
+      // For fine-tuning, we need to ensure the image URL is accessible
+      const imageUrl = content.image.url;
+      if (!imageUrl) {
+        throw new Error("Image URL is required for fine-tuning");
+      }
+      return {
+        role: role as OpenAIRole,
+        content: [{
+          type: "image_url",
+          image_url: {
+            url: imageUrl,
+          },
+        }],
+      };
+    default:
+      throw new Error(`Unsupported content type: ${(content as any).type}`);
   }
 }
 

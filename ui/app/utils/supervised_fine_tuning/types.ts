@@ -4,7 +4,12 @@ export type OpenAIRole = (typeof OPENAI_ROLES)[number];
 
 export type OpenAIMessage = {
   role: OpenAIRole;
-  content?: string;
+  content?: string | Array<{
+    type: "image_url";
+    image_url: {
+      url: string;
+    };
+  }>;
   name?: string;
   function_call?: {
     name: string;
