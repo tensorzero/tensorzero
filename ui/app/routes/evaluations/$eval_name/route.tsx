@@ -19,6 +19,8 @@ import {
 import PageButtons from "~/components/utils/PageButtons";
 import { useNavigate } from "react-router";
 import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
+import BasicInfo from "./EvaluationBasicInfo";
+import { useConfig } from "~/context/config";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -142,9 +144,14 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   // Use that time for auto-refreshing
   const isAutoRefreshing = useAutoRefresh(mostRecentEvalInferenceDate);
 
+  const config = useConfig();
+  const eval_config = config.evals[eval_name];
+
   return (
     <PageLayout>
-      <PageHeader heading="Evaluation" name={eval_name} />
+      <PageHeader heading="Evaluation" name={eval_name}>
+        <BasicInfo eval_config={eval_config} />
+      </PageHeader>
 
       <SectionsGroup>
         <SectionLayout>

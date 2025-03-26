@@ -14,12 +14,13 @@ export function NewRunButton({
 }: NewRunButtonProps) {
   return (
     <Button
-      variant="ghost"
+      variant="outline"
+      size="sm"
       onClick={onClick}
       className={className}
       disabled={disabled}
     >
-      <Plus className="mr-2 h-4 w-4" />
+      <Plus className="mr-2 h-4 w-4 text-fg-tertiary" />
       New Run
     </Button>
   );
