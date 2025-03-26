@@ -4,7 +4,6 @@ import { Button } from "~/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -31,6 +30,11 @@ function EvalForm() {
 
   return (
     <fetcher.Form method="post">
+      <div className="mt-4">
+        <label htmlFor="eval_name" className="mb-1 block text-sm font-medium">
+          Evaluation
+        </label>
+      </div>
       <Select
         name="eval_name"
         onValueChange={(value) => setSelectedEvalName(value)}
@@ -46,6 +50,14 @@ function EvalForm() {
           ))}
         </SelectContent>
       </Select>
+      <div className="mt-4">
+        <label
+          htmlFor="variant_name"
+          className="mb-1 block text-sm font-medium"
+        >
+          Variant
+        </label>
+      </div>
       <Select name="variant_name" disabled={!selectedEvalName}>
         <SelectTrigger>
           <SelectValue placeholder="Select a variant" />
@@ -80,12 +92,14 @@ function EvalForm() {
           name="concurrency_limit"
           min="1"
           defaultValue="5"
-          className="w-full rounded-md border border-input bg-background px-3 py-2"
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           required
         />
       </div>
       <DialogFooter>
-        <Button type="submit">Launch</Button>
+        <Button className="mt-2" type="submit">
+          Launch
+        </Button>
       </DialogFooter>
     </fetcher.Form>
   );
@@ -101,7 +115,6 @@ export default function LaunchEvalModal({
         <DialogHeader>
           <DialogTitle>Launch Eval</DialogTitle>
         </DialogHeader>
-        <DialogDescription>Launch a new evaluation run.</DialogDescription>
 
         <EvalForm />
       </DialogContent>
