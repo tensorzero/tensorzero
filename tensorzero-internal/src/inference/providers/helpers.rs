@@ -5,14 +5,17 @@ use serde_json::{map::Entry, Map, Value};
 
 use crate::{
     error::{Error, ErrorDetails},
-    inference::types::ProviderInferenceResponseChunk,
-    model::ModelProviderRequestInfo,
-    variant::chat_completion::ExtraBodyConfig,
+    inference::types::{
+        extra_body::{FullExtraBodyConfig, InferenceExtraBody},
+        ProviderInferenceResponseChunk,
+    },
+    model::{fully_qualified_name, ModelProviderRequestInfo},
 };
 
 pub fn inject_extra_body(
-    config: Option<&ExtraBodyConfig>,
+    config: &Option<FullExtraBodyConfig>,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
+    model_name: &str,
     body: &mut serde_json::Value,
 ) -> Result<(), Error> {
     if !body.is_object() {
@@ -24,9 +27,12 @@ pub fn inject_extra_body(
     // Write the variant extra_body first, then the model_provider extra_body.
     // This way, the model_provider extra_body will overwrite any keys in the
     // variant extra_body.
-    for extra_body in [config, model_provider.extra_body.as_ref()]
-        .into_iter()
-        .flatten()
+    for extra_body in [
+        config.as_ref().map(|c| &c.extra_body),
+        model_provider.extra_body.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
     {
         for replacement in &extra_body.data {
             write_json_pointer_with_parent_creation(
@@ -34,6 +40,36 @@ pub fn inject_extra_body(
                 &replacement.pointer,
                 replacement.value.clone(),
             )?;
+        }
+    }
+
+    let expected_provider_name = fully_qualified_name(model_name, &model_provider.provider_name);
+
+    // Finally, write the inference-level extra_body information. This can overwrite values set from the config-level extra_body.
+    for extra_body in config
+        .as_ref()
+        .iter()
+        .flat_map(|c| &c.inference_extra_body.data)
+    {
+        match extra_body {
+            InferenceExtraBody::Variant {
+                // We're iterating over a 'FilteredInferenceExtraBody', so we've already removed any non-matching variant names.
+                // Any remaining `InferenceExtraBody::Variant` values should be applied to the current request
+                variant_name: _,
+                pointer,
+                value,
+            } => {
+                write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
+            }
+            InferenceExtraBody::Provider {
+                model_provider_name,
+                pointer,
+                value,
+            } => {
+                if *model_provider_name == expected_provider_name {
+                    write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
+                }
+            }
         }
     }
     Ok(())
@@ -182,9 +218,9 @@ mod tests {
 
     use futures::{stream, StreamExt};
 
-    use crate::{
-        inference::types::{ContentBlockChunk, TextChunk},
-        variant::chat_completion::ExtraBodyReplacement,
+    use crate::inference::types::{
+        extra_body::{ExtraBodyConfig, ExtraBodyReplacement, FilteredInferenceExtraBody},
+        ContentBlockChunk, TextChunk,
     };
 
     use super::*;
@@ -252,8 +288,37 @@ mod tests {
     fn test_inject_nothing() {
         let mut body = serde_json::json!({});
         inject_extra_body(
-            None,
-            ModelProviderRequestInfo { extra_body: None },
+            &None,
+            ModelProviderRequestInfo {
+                provider_name: "dummy_provider".into(),
+                extra_body: None,
+            },
+            "dummy_model",
+            &mut body,
+        )
+        .unwrap();
+        assert_eq!(body, serde_json::json!({}));
+    }
+
+    #[test]
+    fn test_inject_no_matches() {
+        let mut body = serde_json::json!({});
+        inject_extra_body(
+            &Some(FullExtraBodyConfig {
+                extra_body: ExtraBodyConfig { data: vec![] },
+                inference_extra_body: FilteredInferenceExtraBody {
+                    data: vec![InferenceExtraBody::Provider {
+                        model_provider_name: "wrong_provider".to_string(),
+                        pointer: "/my_key".to_string(),
+                        value: "My Value".to_string().into(),
+                    }],
+                },
+            }),
+            ModelProviderRequestInfo {
+                provider_name: "dummy_provider".into(),
+                extra_body: None,
+            },
+            "dummy_model",
             &mut body,
         )
         .unwrap();
@@ -263,8 +328,12 @@ mod tests {
     #[test]
     fn test_inject_to_non_map() {
         let err = inject_extra_body(
-            None,
-            ModelProviderRequestInfo { extra_body: None },
+            &None,
+            ModelProviderRequestInfo {
+                provider_name: "dummy_provider".into(),
+                extra_body: None,
+            },
+            "dummy_model",
             &mut serde_json::Value::String("test".to_string()),
         )
         .unwrap_err()
@@ -284,21 +353,36 @@ mod tests {
             }
         });
         inject_extra_body(
-            Some(&ExtraBodyConfig {
-                data: vec![
-                    ExtraBodyReplacement {
-                        pointer: "/generationConfig".to_string(),
-                        value: serde_json::json!({
-                            "otherNestedKey": "otherNestedValue"
-                        }),
-                    },
-                    ExtraBodyReplacement {
-                        pointer: "/generationConfig/temperature".to_string(),
-                        value: serde_json::json!(0.123),
-                    },
-                ],
+            &Some(FullExtraBodyConfig {
+                extra_body: ExtraBodyConfig {
+                    data: vec![
+                        ExtraBodyReplacement {
+                            pointer: "/generationConfig".to_string(),
+                            value: serde_json::json!({
+                                "otherNestedKey": "otherNestedValue"
+                            }),
+                        },
+                        ExtraBodyReplacement {
+                            pointer: "/generationConfig/temperature".to_string(),
+                            value: serde_json::json!(0.123),
+                        },
+                    ],
+                },
+                inference_extra_body: FilteredInferenceExtraBody {
+                    data: vec![InferenceExtraBody::Provider {
+                        model_provider_name:
+                            "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
+                                .to_string(),
+                        pointer: "/generationConfig/valueFromInference".to_string(),
+                        value: "inferenceValue".to_string().into(),
+                    }],
+                },
             }),
-            ModelProviderRequestInfo { extra_body: None },
+            ModelProviderRequestInfo {
+                provider_name: "dummy_provider".into(),
+                extra_body: None,
+            },
+            "dummy_model",
             &mut body,
         )
         .unwrap();
@@ -308,17 +392,19 @@ mod tests {
                 "otherKey": "otherValue",
                 "generationConfig": {
                     "otherNestedKey": "otherNestedValue",
-                    "temperature": 0.123
+                    "temperature": 0.123,
+                    "valueFromInference": "inferenceValue"
                 }
             })
         );
     }
 
     // Tests that we inject fields in the correct order when `extra_body`
-    // is set at both the variant and model provider level. Keys set in the
-    // model provider should override keys set in the variant
+    // is set at both the variant and model provider level,
+    // and `inference_extra_body` is provided.
+    // The correct priority is inference -> model provider -> variant.
     #[test]
-    fn test_inject_both() {
+    fn test_inject_all() {
         let mut body = serde_json::json!({
             "otherKey": "otherValue",
             "generationConfig": {
@@ -326,19 +412,35 @@ mod tests {
             }
         });
         inject_extra_body(
-            Some(&ExtraBodyConfig {
-                data: vec![
-                    ExtraBodyReplacement {
-                        pointer: "/generationConfig/otherNestedKey".to_string(),
-                        value: Value::String("otherNestedValue".to_string()),
-                    },
-                    ExtraBodyReplacement {
-                        pointer: "/variantKey".to_string(),
-                        value: Value::String("variantValue".to_string()),
-                    },
-                ],
+            &Some(FullExtraBodyConfig {
+                extra_body: ExtraBodyConfig {
+                    data: vec![
+                        ExtraBodyReplacement {
+                            pointer: "/generationConfig/otherNestedKey".to_string(),
+                            value: Value::String("otherNestedValue".to_string()),
+                        },
+                        ExtraBodyReplacement {
+                            pointer: "/variantKey".to_string(),
+                            value: Value::String("variantValue".to_string()),
+                        },
+                        ExtraBodyReplacement {
+                            pointer: "/multiOverride".to_string(),
+                            value: Value::String("from variant".to_string()),
+                        },
+                    ],
+                },
+                inference_extra_body: FilteredInferenceExtraBody {
+                    data: vec![InferenceExtraBody::Provider {
+                        model_provider_name:
+                            "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
+                                .to_string(),
+                        pointer: "/multiOverride".to_string(),
+                        value: Value::String("from inference".to_string()),
+                    }],
+                },
             }),
             ModelProviderRequestInfo {
+                provider_name: "dummy_provider".into(),
                 extra_body: Some(ExtraBodyConfig {
                     data: vec![
                         ExtraBodyReplacement {
@@ -349,9 +451,14 @@ mod tests {
                             pointer: "/modelProviderKey".to_string(),
                             value: Value::String("modelProviderValue".to_string()),
                         },
+                        ExtraBodyReplacement {
+                            pointer: "/multiOverride".to_string(),
+                            value: Value::String("from model provider".to_string()),
+                        },
                     ],
                 }),
             },
+            "dummy_model",
             &mut body,
         )
         .unwrap();
@@ -361,6 +468,7 @@ mod tests {
                 "otherKey": "otherValue",
                 "modelProviderKey": "modelProviderValue",
                 "variantKey": "modelProviderOverride",
+                "multiOverride": "from inference",
                 "generationConfig": {
                     "temperature": 123,
                     "otherNestedKey": "otherNestedValue"
