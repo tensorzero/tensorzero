@@ -212,8 +212,12 @@ const VariantCircle = ({
           <div className={`${colorClass} h-4 w-4 cursor-help rounded-full`} />
         </TooltipTrigger>
         <TooltipContent side="top" className="p-2">
-          <p className="text-xs">Variant: {variantName}</p>
-          <p className="text-xs">Run ID: {runId}</p>
+          <p className="text-xs">
+            Variant: <span className="font-mono">{variantName}</span>
+          </p>
+          <p className="text-xs">
+            Run ID: <span className="font-mono">{runId}</span>
+          </p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
