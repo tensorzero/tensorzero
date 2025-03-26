@@ -15,6 +15,7 @@ tracing-subscriber = { version = "0.3.18", features = [
 tokio = { workspace = true }
 mimalloc = "0.1.44"
 clap = { workspace = true }
+serde = { workspace = true }
 
 [lints]
 workspace = true

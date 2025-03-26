@@ -1,9 +1,9 @@
 from typing import (
     Any,
-    AsyncGenerator,
+    AsyncIterator,
     Awaitable,
     Dict,
-    Generator,
+    Iterator,
     List,
     Literal,
     Optional,
@@ -11,6 +11,8 @@ from typing import (
     final,
 )
 from uuid import UUID
+
+import uuid_utils
 
 from tensorzero import (
     FeedbackResponse,
@@ -24,7 +26,7 @@ class BaseTensorZeroGateway:
 
 @final
 class TensorZeroGateway(BaseTensorZeroGateway):
-    def __init__(self, base_url: str, *, timeout: Optional[float] = None):
+    def __init__(self, base_url: str, *, timeout: Optional[float] = None) -> None:
         """
         Initialize the TensorZero client.
 
@@ -66,10 +68,10 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     def inference(
         self,
         *,
-        input: InferenceInput,
+        input: InferenceInput | Dict[str, Any],
         function_name: Optional[str] = None,
         model_name: Optional[str] = None,
-        episode_id: Optional[UUID] = None,
+        episode_id: Optional[str | UUID | uuid_utils.UUID] = None,
         stream: Optional[bool] = None,
         params: Optional[Dict[str, Any]] = None,
         variant_name: Optional[str] = None,
@@ -85,7 +87,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         tags: Optional[Dict[str, str]] = None,
         credentials: Optional[Dict[str, str]] = None,
         cache_options: Optional[Dict[str, Any]] = None,
-    ) -> Union[InferenceResponse, Generator[InferenceChunk, None, None]]:
+    ) -> Union[InferenceResponse, Iterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.
 
@@ -114,7 +116,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
         :param tags: If set, adds tags to the inference request.
         :return: If stream is false, returns an InferenceResponse.
-                 If stream is true, returns an async generator that yields InferenceChunks as they come in.
+                 If stream is true, returns an async iterator that yields InferenceChunks as they come in.
         """
 
     def feedback(
@@ -122,8 +124,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         metric_name: str,
         value: Any,
-        inference_id: Optional[UUID] = None,
-        episode_id: Optional[UUID] = None,
+        inference_id: Optional[str | UUID | uuid_utils.UUID] = None,
+        episode_id: Optional[str | UUID | uuid_utils.UUID] = None,
         dryrun: Optional[bool] = None,
         internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
@@ -159,7 +161,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
 @final
 class AsyncTensorZeroGateway(BaseTensorZeroGateway):
-    def __init__(self, base_url: str, *, timeout: Optional[float] = None):
+    def __init__(self, base_url: str, *, timeout: Optional[float] = None) -> None:
         """
         Initialize the TensorZero client.
 
@@ -167,14 +169,14 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         """
 
     @classmethod
-    async def build_http(
+    def build_http(
         cls,
         *,
         gateway_url: str,
         timeout: Optional[float] = None,
         verbose_errors: bool = False,
         async_setup: bool = True,
-    ) -> "AsyncTensorZeroGateway":
+    ) -> Union[Awaitable["AsyncTensorZeroGateway"], "AsyncTensorZeroGateway"]:
         """
         Initialize the TensorZero client, using the HTTP gateway.
         :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
@@ -185,14 +187,14 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         """
 
     @classmethod
-    async def build_embedded(
+    def build_embedded(
         cls,
         *,
         config_file: Optional[str] = None,
         clickhouse_url: Optional[str] = None,
         timeout: Optional[float] = None,
         async_setup: bool = True,
-    ) -> "AsyncTensorZeroGateway":
+    ) -> Union[Awaitable["AsyncTensorZeroGateway"], "AsyncTensorZeroGateway"]:
         """
         Build an AsyncTensorZeroGateway instance.
 
@@ -205,10 +207,10 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     async def inference(  # type: ignore[override]
         self,
         *,
-        input: InferenceInput,
+        input: InferenceInput | Dict[str, Any],
         function_name: Optional[str] = None,
         model_name: Optional[str] = None,
-        episode_id: Optional[UUID] = None,
+        episode_id: Optional[str | UUID | uuid_utils.UUID] = None,
         stream: Optional[bool] = None,
         params: Optional[Dict[str, Any]] = None,
         variant_name: Optional[str] = None,
@@ -224,7 +226,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         tags: Optional[Dict[str, str]] = None,
         credentials: Optional[Dict[str, str]] = None,
         cache_options: Optional[Dict[str, Any]] = None,
-    ) -> Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]:
+    ) -> Union[InferenceResponse, AsyncIterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.
 
@@ -253,7 +255,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
         :param tags: If set, adds tags to the inference request.
         :return: If stream is false, returns an InferenceResponse.
-                 If stream is true, returns an async generator that yields InferenceChunks as they come in.
+                 If stream is true, returns an async iterator that yields InferenceChunks as they come in.
         """
 
     async def feedback(  # type: ignore[override]
@@ -261,8 +263,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         metric_name: str,
         value: Any,
-        inference_id: Optional[UUID] = None,
-        episode_id: Optional[UUID] = None,
+        inference_id: Optional[str | UUID | uuid_utils.UUID] = None,
+        episode_id: Optional[str | UUID | uuid_utils.UUID] = None,
         dryrun: Optional[bool] = None,
         internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
