@@ -17,6 +17,7 @@ import {
 } from "~/components/ui/tooltip";
 import { useSearchParams, useNavigate } from "react-router";
 import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
+import { formatDate } from "~/utils/date";
 
 interface VariantSelectorProps {
   available_run_ids: EvaluationRunInfo[];
@@ -139,10 +140,13 @@ export function VariantSelector({
                 </TooltipTrigger>
                 <TooltipContent side="top" className="p-2">
                   <p className="text-xs">
-                    Run ID: {runId}
+                    Run ID: <span className="font-mono text-xs">{runId}</span>
                     <br />
-                    Last Updated:{" "}
-                    {mostRecentEvalInferenceDates.get(runId)?.toLocaleString()}
+                    {mostRecentEvalInferenceDates.get(runId)
+                      ? `Last Updated: ${formatDate(
+                          mostRecentEvalInferenceDates.get(runId)!,
+                        )}`
+                      : null}
                   </p>
                 </TooltipContent>
               </Tooltip>

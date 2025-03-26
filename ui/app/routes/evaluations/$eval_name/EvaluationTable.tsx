@@ -217,10 +217,10 @@ const VariantCircle = ({
         </TooltipTrigger>
         <TooltipContent side="top" className="p-2">
           <p className="text-xs">
-            Variant: <span className="font-mono">{variantName}</span>
+            Variant: <span className="font-mono text-xs">{variantName}</span>
           </p>
           <p className="text-xs">
-            Run ID: <span className="font-mono">{runId}</span>
+            Run ID: <span className="font-mono text-xs">{runId}</span>
           </p>
         </TooltipContent>
       </Tooltip>
@@ -605,7 +605,7 @@ const EvaluatorHeader = ({
                 {metricProperties.optimize}
               </span>
             </div>
-            {evaluatorConfig.cutoff !== null && (
+            {evaluatorConfig.cutoff !== undefined && (
               <div>
                 <span className="font-medium">Cutoff:</span>
                 <span className="ml-2 font-medium">
