@@ -8,10 +8,10 @@ Desired Metric Properties:
 {{ metric_properties }}
 
 You will receive two inputs:
-1. prediction: The model's predicted answer.
-2. truth: The ground-truth or reference answer.
+1. Prediction: The model's predicted answer.
+2. Ground Truth: The correct or reference answer.
 
-Think step by step about how well `prediction` matches `truth`, according to the task and metric properties above.
+Think step by step about how well "Prediction" matches "Ground Truth", according to the task and metric properties above.
 Respond only with a JSON object in the following format:
 
 {
