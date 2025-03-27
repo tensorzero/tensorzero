@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, X } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -97,6 +97,17 @@ export function VariantSelector({
       // Select all
       updateSelectedRunIds(availableRunInfos);
     }
+  };
+
+  // Function to remove a specific run
+  const removeRun = (runId: string, e: React.MouseEvent) => {
+    // Stop the tooltip from triggering
+    e.stopPropagation();
+
+    const newSelectedRunIdInfos = selectedRunIdInfos.filter(
+      (info) => info.eval_run_id !== runId,
+    );
+    updateSelectedRunIds(newSelectedRunIdInfos);
   };
 
   return (
@@ -208,6 +219,10 @@ export function VariantSelector({
                     <span className="border-l border-white/30 pl-1.5 text-xs opacity-80">
                       {runIdSegment}
                     </span>
+                    <X
+                      className="ml-1 h-3 w-3 cursor-pointer opacity-70 hover:opacity-100"
+                      onClick={(e) => removeRun(runId, e)}
+                    />
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="p-2">
