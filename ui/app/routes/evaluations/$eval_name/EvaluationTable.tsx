@@ -40,6 +40,9 @@ import type { MetricConfig } from "~/utils/config/metric";
 import { getOptimize, type EvaluatorConfig } from "~/utils/config/evals";
 import { useColorAssigner } from "./ColorAssigner";
 import { ColorAssignerProvider } from "./ColorAssigner";
+import MetricValue, {
+  isCutoffFailed,
+} from "~/components/inference/MetricValue";
 
 // Enhanced TruncatedText component that can handle complex structures
 const TruncatedContent = ({
@@ -656,69 +659,4 @@ const formatSummaryValue = (value: number, metricConfig: MetricConfig) => {
     return value.toFixed(2);
   }
   return value;
-};
-
-const isCutoffFailed = (
-  value: number | boolean,
-  evaluatorConfig: EvaluatorConfig,
-) => {
-  const numericValue = typeof value === "number" ? value : value ? 1 : 0;
-  const optimize = getOptimize(evaluatorConfig);
-  if (evaluatorConfig.cutoff === undefined) {
-    return false;
-  }
-  if (optimize === "max") {
-    return numericValue < evaluatorConfig.cutoff;
-  } else {
-    return numericValue > evaluatorConfig.cutoff;
-  }
-};
-
-// Format metric value display component
-const MetricValue = ({
-  value,
-  metricType,
-  evaluatorConfig,
-}: {
-  value: string;
-  metricType: string;
-  evaluatorConfig: EvaluatorConfig;
-}): React.ReactElement => {
-  if (metricType === "boolean") {
-    const boolValue = value === "true" || value === "1";
-    const optimize = getOptimize(evaluatorConfig);
-    const failed =
-      (!boolValue && optimize === "max") || (boolValue && optimize === "min");
-    const icon = failed ? (
-      <X className="mr-1 h-3 w-3 flex-shrink-0" />
-    ) : (
-      <Check className="mr-1 h-3 w-3 flex-shrink-0" />
-    );
-
-    return (
-      <span
-        className={`flex items-center whitespace-nowrap ${failed ? "text-red-700" : "text-gray-700"}`}
-      >
-        {icon}
-        {boolValue ? "True" : "False"}
-      </span>
-    );
-  } else {
-    // Try to parse as number
-    const numValue = parseFloat(value);
-    if (!isNaN(numValue)) {
-      // Check if value fails the cutoff criteria
-      const failsCutoff = isCutoffFailed(numValue, evaluatorConfig);
-      return (
-        <span
-          className={`whitespace-nowrap ${failsCutoff ? "text-red-700" : "text-gray-700"}`}
-        >
-          {numValue}
-        </span>
-      );
-    }
-
-    // Default case: return as string
-    return <span className="whitespace-nowrap">{value}</span>;
-  }
 };
