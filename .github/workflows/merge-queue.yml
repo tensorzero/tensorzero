@@ -313,10 +313,10 @@ jobs:
         if: always()
         working-directory: ui
         run: |
-          echo "==== Gateway Logs ===="
-          docker logs fixtures-gateway-1
           echo "==== UI Logs ===="
           docker logs tensorzero-ui
+          echo "==== Gateway Logs ===="
+          docker logs fixtures-gateway-1
 
       - name: Upload Playwright artifacts
         if: steps.e2e_tests.outcome == 'failure'
