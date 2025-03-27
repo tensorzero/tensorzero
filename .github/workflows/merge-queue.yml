@@ -314,7 +314,7 @@ jobs:
         working-directory: ui
         run: |
           echo "==== Gateway Logs ===="
-          docker logs tensorzero-ui_gateway_1
+          docker logs fixtures-gateway-1
           echo "==== UI Logs ===="
           docker logs tensorzero-ui
 
