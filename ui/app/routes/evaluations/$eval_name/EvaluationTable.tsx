@@ -64,7 +64,7 @@ const TruncatedContent = ({
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex cursor-help items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
+            <div className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
               <span className="font-mono text-sm">{truncated}</span>
             </div>
           </TooltipTrigger>
@@ -95,7 +95,7 @@ const TruncatedContent = ({
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex cursor-help items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
+            <div className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
               <span className="font-mono text-sm">{inputSummary}</span>
             </div>
           </TooltipTrigger>
@@ -126,7 +126,7 @@ const TruncatedContent = ({
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="flex cursor-help items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
+            <div className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap">
               <span className="font-mono text-sm">{outputSummary}</span>
             </div>
           </TooltipTrigger>
@@ -420,8 +420,8 @@ export function EvaluationTable({
                             key={`input-${datapoint.id}-variant-${runId}`}
                             className={
                               index !== filteredVariants.length - 1
-                                ? "border-b-0"
-                                : ""
+                                ? "cursor-pointer border-b-0"
+                                : "cursor-pointer"
                             }
                             onClick={() => {
                               const eval_run_ids = selectedRunIds.join(",");

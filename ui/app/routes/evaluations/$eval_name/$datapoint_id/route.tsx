@@ -11,12 +11,22 @@ import { PageLayout } from "~/components/layout/PageLayout";
 import Input from "~/components/inference/Input";
 import { redirect } from "react-router";
 import Output from "~/components/inference/Output";
-import { consolidate_eval_results } from "~/utils/clickhouse/evaluations";
+import {
+  consolidate_eval_results,
+  getEvaluatorMetricName,
+  type ConsolidatedMetric,
+} from "~/utils/clickhouse/evaluations";
 import { useConfig } from "~/context/config";
 import MetricValue from "~/components/evaluations/MetricValue";
-import { getMetricType } from "~/utils/config/evals";
+import { getMetricType, type EvaluatorConfig } from "~/utils/config/evals";
 import EvalRunBadge from "~/components/evaluations/EvalRunBadge";
 import BasicInfo from "./EvaluationDatapointBasicInfo";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -128,41 +138,14 @@ export default function EvaluationDatapointPage({
                   </div>
                   <Output output={result.output} />
                 </div>
-
                 {result.id !== "Reference" &&
                   result.metrics &&
                   result.metrics.length > 0 && (
-                    <div className="mt-3 border-t border-gray-200 pt-2">
-                      <div className="mb-1 text-sm font-medium text-gray-500">
-                        Metrics
-                      </div>
-                      <div className="space-y-1">
-                        {result.metrics.map((metricObj) => {
-                          const value = metricObj.metric_value;
-                          const evaluatorConfig =
-                            eval_config.evaluators[metricObj.evaluator_name];
-
-                          if (!evaluatorConfig) return null;
-
-                          return (
-                            <div
-                              key={metricObj.evaluator_name}
-                              className="flex items-center gap-2"
-                            >
-                              <span className="text-sm text-gray-600">
-                                {metricObj.evaluator_name}:
-                              </span>
-                              <MetricValue
-                                value={String(value)}
-                                metricType={getMetricType(evaluatorConfig)}
-                                evaluatorConfig={evaluatorConfig}
-                                className="text-sm"
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <MetricsDisplay
+                      eval_name={eval_name}
+                      metrics={result.metrics}
+                      evaluatorsConfig={eval_config.evaluators}
+                    />
                   )}
               </div>
             ))}
@@ -172,3 +155,101 @@ export default function EvaluationDatapointPage({
     </PageLayout>
   );
 }
+
+// Component to display metrics for a result
+const MetricsDisplay = ({
+  metrics,
+  eval_name,
+  evaluatorsConfig,
+}: {
+  metrics: ConsolidatedMetric[];
+  eval_name: string;
+  evaluatorsConfig: Record<string, EvaluatorConfig>;
+}) => {
+  return (
+    <div className="mt-3 border-t border-gray-200 pt-2">
+      <div className="space-y-1">
+        {metrics.map((metricObj) => {
+          const evaluatorConfig = evaluatorsConfig[metricObj.evaluator_name];
+          if (!evaluatorConfig) return null;
+
+          return (
+            <MetricRow
+              key={metricObj.evaluator_name}
+              eval_name={eval_name}
+              evaluatorName={metricObj.evaluator_name}
+              metricValue={metricObj.metric_value}
+              evaluatorConfig={evaluatorConfig}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// Component for a single metric row
+const MetricRow = ({
+  evaluatorName,
+  eval_name,
+  metricValue,
+  evaluatorConfig,
+}: {
+  evaluatorName: string;
+  eval_name: string;
+  metricValue: string;
+  evaluatorConfig: EvaluatorConfig;
+}) => {
+  const config = useConfig();
+  const metric_name = getEvaluatorMetricName(eval_name, evaluatorName);
+  const metricProperties = config.metrics[metric_name];
+  if (
+    metricProperties.type === "comment" ||
+    metricProperties.type === "demonstration"
+  ) {
+    return null;
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="cursor-help text-sm text-gray-600">
+              {evaluatorName}:
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="p-3">
+            <div className="space-y-1 text-left text-xs">
+              <div>
+                <span className="font-medium">Type:</span>
+                <span className="ml-2 font-medium">
+                  {metricProperties.type}
+                </span>
+              </div>
+              <div>
+                <span className="font-medium">Optimize:</span>
+                <span className="ml-2 font-medium">
+                  {metricProperties.optimize}
+                </span>
+              </div>
+              {evaluatorConfig.cutoff !== undefined && (
+                <div>
+                  <span className="font-medium">Cutoff:</span>
+                  <span className="ml-2 font-medium">
+                    {evaluatorConfig.cutoff}
+                  </span>
+                </div>
+              )}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <MetricValue
+        value={String(metricValue)}
+        metricType={getMetricType(evaluatorConfig)}
+        evaluatorConfig={evaluatorConfig}
+        className="text-sm"
+      />
+    </div>
+  );
+};
