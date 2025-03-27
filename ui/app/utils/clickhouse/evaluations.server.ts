@@ -414,7 +414,7 @@ export async function getEvalsForDatapoint(
     inference.variant_name as variant_name,
     feedback.metric_name as metric_name,
     feedback.value as metric_value
-  FROM TagInference datapoint_tag
+  FROM TagInference datapoint_tag FINAL
   JOIN {inference_table_name:Identifier} inference
     ON datapoint_tag.inference_id = inference.id
     AND inference.function_name = {function_name:String}
@@ -453,7 +453,6 @@ export async function getEvalsForDatapoint(
     },
   });
   const rows = await result.json<EvaluationResultWithVariant>();
-  console.log(rows);
   const parsed_rows = rows.map((row) => parseEvaluationResultWithVariant(row));
   return parsed_rows;
 }

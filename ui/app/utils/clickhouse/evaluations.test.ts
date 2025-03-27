@@ -563,9 +563,51 @@ describe("getEvalsForDatapoint", () => {
     expect(second_eval.input.messages).toHaveLength(1);
     const second_eval_input = second_eval.input;
     if (second_eval_input.messages[0].content[0].type === "text") {
-      expect(second_eval_input.messages[0].content[0].value).toBe("pegboard");
+      expect(second_eval_input.messages[0].content[0].value).toStrictEqual({
+        topic: "pegboard",
+      });
     } else {
       fail("Second evaluation result is not a text");
     }
+  });
+
+  test("should return correct array for json datapoint", async () => {
+    const evals = await getEvalsForDatapoint(
+      "entity_extraction",
+      "019373bc-e6e0-7e50-8822-af9bacfafe9a", // Real json datapoint
+      ["0195aef7-ec99-7312-924f-32b71c3496ee"],
+    );
+    expect(evals.length).toBe(2);
+
+    // Check first evaluation result
+    const first_eval = evals[0];
+    expect(first_eval.datapoint_id).toBe(
+      "019373bc-e6e0-7e50-8822-af9bacfafe9a",
+    );
+    expect(first_eval.eval_run_id).toBe("0195aef7-ec99-7312-924f-32b71c3496ee");
+    expect(first_eval.variant_name).toBe("gpt4o_initial_prompt");
+    expect(first_eval.metric_name).toBe(
+      "tensorzero::eval_name::entity_extraction::evaluator_name::count_sports",
+    );
+    expect(first_eval.metric_value).toBeDefined();
+
+    // Check that we have JSON input/output fields
+    expect(typeof first_eval.input).toBe("object");
+    expect(typeof first_eval.reference_output).toBe("object");
+    expect(typeof first_eval.generated_output).toBe("object");
+
+    // Check second evaluation result
+    const second_eval = evals[1];
+    expect(second_eval.datapoint_id).toBe(
+      "019373bc-e6e0-7e50-8822-af9bacfafe9a",
+    );
+    expect(second_eval.eval_run_id).toBe(
+      "0195aef7-ec99-7312-924f-32b71c3496ee",
+    );
+    expect(second_eval.variant_name).toBe("gpt4o_initial_prompt");
+    expect(second_eval.metric_name).toBe(
+      "tensorzero::eval_name::entity_extraction::evaluator_name::exact_match",
+    );
+    expect(second_eval.metric_value).toBeDefined();
   });
 });

@@ -33,6 +33,10 @@ export default [
   route("evaluations", "routes/evaluations/route.tsx"),
   route("evaluations/:eval_name", "routes/evaluations/$eval_name/route.tsx"),
   route(
+    "evaluations/:eval_name/:datapoint_id",
+    "routes/evaluations/$eval_name/$datapoint_id/route.tsx",
+  ),
+  route(
     "observability/inferences",
     "routes/observability/inferences/route.tsx",
   ),
