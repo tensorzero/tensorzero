@@ -16,6 +16,7 @@ import { useConfig } from "~/context/config";
 import MetricValue from "~/components/evaluations/MetricValue";
 import { getMetricType } from "~/utils/config/evals";
 import EvalRunBadge from "~/components/evaluations/EvalRunBadge";
+import BasicInfo from "./EvaluationDatapointBasicInfo";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -88,7 +89,9 @@ export default function EvaluationDatapointPage({
 
   return (
     <PageLayout>
-      <PageHeader label="Datapoint" name={datapoint_id} />
+      <PageHeader label="Datapoint" name={datapoint_id}>
+        <BasicInfo eval_name={eval_name} eval_config={eval_config} />
+      </PageHeader>
 
       <SectionsGroup>
         <SectionLayout>
