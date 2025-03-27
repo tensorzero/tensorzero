@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import React from "react";
-import { useSearchParams } from "react-router";
+import { useSearchParams, useNavigate } from "react-router";
 import { Check, X } from "lucide-react";
 
 import {
@@ -372,7 +372,7 @@ export function EvaluationTable({
     }
   };
   const config = useConfig();
-
+  const navigate = useNavigate();
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <div>
@@ -465,6 +465,11 @@ export function EvaluationTable({
                                 ? "border-b-0"
                                 : ""
                             }
+                            onClick={() => {
+                              navigate(
+                                `/evaluations/${eval_name}/${datapoint.id}`,
+                              );
+                            }}
                           >
                             {/* Input cell - only for the first variant row */}
                             {index === 0 && (

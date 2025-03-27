@@ -1,6 +1,14 @@
 import { getEvalsForDatapoint } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/route";
 import { getConfig } from "~/utils/config/index.server";
+import {
+  PageHeader,
+  SectionHeader,
+  SectionLayout,
+  SectionsGroup,
+} from "~/components/layout/PageLayout";
+import { PageLayout } from "~/components/layout/PageLayout";
+import Input from "~/components/inference/Input";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -22,11 +30,26 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return {
     evalResults,
     selected_eval_run_ids_array,
+    eval_name,
+    datapoint_id,
   };
 }
 
 export default function EvaluationDatapointPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { eval_name, datapoint_id } = loaderData;
+  const { evalResults, selected_eval_run_ids_array, eval_name, datapoint_id } =
+    loaderData;
+  return (
+    <PageLayout>
+      <PageHeader label="Datapoint" name={datapoint_id} />
+
+      <SectionsGroup>
+        <SectionLayout>
+          <SectionHeader heading="Input" />
+          <Input input={evalResults[0].input} />
+        </SectionLayout>
+      </SectionsGroup>
+    </PageLayout>
+  );
 }
