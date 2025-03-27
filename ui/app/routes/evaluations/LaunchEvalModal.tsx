@@ -27,6 +27,16 @@ function EvalForm() {
   const config = useConfig();
   const eval_names = Object.keys(config.evals);
   const [selectedEvalName, setSelectedEvalName] = useState<string | null>(null);
+  const [selectedVariantName, setSelectedVariantName] = useState<string | null>(
+    null,
+  );
+  const [concurrencyLimit, setConcurrencyLimit] = useState<string>("5");
+
+  // Check if all fields are filled
+  const isFormValid =
+    selectedEvalName !== null &&
+    selectedVariantName !== null &&
+    concurrencyLimit !== "";
 
   return (
     <fetcher.Form method="post">
@@ -37,7 +47,10 @@ function EvalForm() {
       </div>
       <Select
         name="eval_name"
-        onValueChange={(value) => setSelectedEvalName(value)}
+        onValueChange={(value) => {
+          setSelectedEvalName(value);
+          setSelectedVariantName(null); // Reset variant selection when eval changes
+        }}
       >
         <SelectTrigger>
           <SelectValue placeholder="Select an evaluation" />
@@ -58,7 +71,11 @@ function EvalForm() {
           Variant
         </label>
       </div>
-      <Select name="variant_name" disabled={!selectedEvalName}>
+      <Select
+        name="variant_name"
+        disabled={!selectedEvalName}
+        onValueChange={(value) => setSelectedVariantName(value)}
+      >
         <SelectTrigger>
           <SelectValue placeholder="Select a variant" />
         </SelectTrigger>
@@ -91,13 +108,14 @@ function EvalForm() {
           id="concurrency_limit"
           name="concurrency_limit"
           min="1"
-          defaultValue="5"
+          value={concurrencyLimit}
+          onChange={(e) => setConcurrencyLimit(e.target.value)}
           className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           required
         />
       </div>
       <DialogFooter>
-        <Button className="mt-2" type="submit">
+        <Button className="mt-2" type="submit" disabled={!isFormValid}>
           Launch
         </Button>
       </DialogFooter>

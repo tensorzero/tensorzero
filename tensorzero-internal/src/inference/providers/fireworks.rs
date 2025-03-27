@@ -526,7 +526,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -640,7 +640,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let fireworks_response_with_metadata = FireworksResponseWithMetadata {

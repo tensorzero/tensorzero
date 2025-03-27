@@ -18,7 +18,7 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
-import { VariantSelector, getVariantColor } from "./VariantSelector";
+import { VariantSelector } from "./VariantSelector";
 import type {
   EvaluationRunInfo,
   EvaluationStatistics,
@@ -38,6 +38,8 @@ import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import type { MetricConfig } from "~/utils/config/metric";
 import { getOptimize, type EvaluatorConfig } from "~/utils/config/evals";
+import { useColorAssigner } from "./ColorAssigner";
+import { ColorAssignerProvider } from "./ColorAssigner";
 
 // Enhanced TruncatedText component that can handle complex structures
 const TruncatedContent = ({
@@ -205,7 +207,8 @@ const VariantCircle = ({
   runId: string;
   variantName: string;
 }) => {
-  const colorClass = getVariantColor(runId);
+  const { getColor } = useColorAssigner();
+  const colorClass = getColor(runId);
 
   return (
     <TooltipProvider>
@@ -246,9 +249,6 @@ export function EvaluationTable({
   const selectedRunIds = selected_eval_run_infos.map(
     (info) => info.eval_run_id,
   );
-
-  // Determine if we should show the variant column
-  const showVariantColumn = selectedRunIds.length > 1;
 
   // Get all unique datapoints from the results
   const uniqueDatapoints = useMemo(() => {
@@ -374,184 +374,187 @@ export function EvaluationTable({
   const config = useConfig();
 
   return (
-    <div>
-      {/* Variant selector */}
-      <VariantSelector
-        evalName={eval_name}
-        selectedRunIdInfos={selected_eval_run_infos}
-        mostRecentEvalInferenceDates={mostRecentEvalInferenceDates}
-      />
+    <ColorAssignerProvider selectedRunIds={selectedRunIds}>
+      <div>
+        {/* Variant selector */}
+        <VariantSelector
+          evalName={eval_name}
+          selectedRunIdInfos={selected_eval_run_infos}
+          mostRecentEvalInferenceDates={mostRecentEvalInferenceDates}
+        />
 
-      {selectedRunIds.length > 0 && (
-        <div className="overflow-x-auto">
-          <div className="min-w-max">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="py-2 text-center align-top">
-                    Input
-                  </TableHead>
-                  <TableHead className="py-2 text-center align-top">
-                    Reference Output
-                  </TableHead>
-                  {showVariantColumn && (
+        {selectedRunIds.length > 0 && (
+          <div className="overflow-x-auto">
+            <div className="min-w-max">
+              <Table>
+                <TableHeader>
+                  <TableRow>
                     <TableHead className="py-2 text-center align-top">
-                      {/* Empty header with minimal space */}
+                      Input
                     </TableHead>
-                  )}
-                  <TableHead className="py-2 text-center align-top">
-                    Generated Output
-                  </TableHead>
-                  {/* Dynamic metric columns */}
-                  {evaluator_names.map((evaluator_name) => {
-                    // Get the metric name for this evaluator
-                    const metric_name = getEvaluatorMetricName(
-                      eval_name,
-                      evaluator_name,
-                    );
+                    <TableHead className="py-2 text-center align-top">
+                      Reference Output
+                    </TableHead>
+                    {selectedRunIds.length > 1 && (
+                      <TableHead className="py-2 text-center align-top">
+                        {/* Empty header with minimal space */}
+                      </TableHead>
+                    )}
+                    <TableHead className="py-2 text-center align-top">
+                      Generated Output
+                    </TableHead>
+                    {/* Dynamic metric columns */}
+                    {evaluator_names.map((evaluator_name) => {
+                      // Get the metric name for this evaluator
+                      const metric_name = getEvaluatorMetricName(
+                        eval_name,
+                        evaluator_name,
+                      );
 
-                    // Filter statistics for this specific metric
-                    const filteredStats = eval_statistics.filter(
-                      (stat) => stat.metric_name === metric_name,
-                    );
+                      // Filter statistics for this specific metric
+                      const filteredStats = eval_statistics.filter(
+                        (stat) => stat.metric_name === metric_name,
+                      );
+
+                      return (
+                        <TableHead
+                          key={evaluator_name}
+                          className="py-2 text-center"
+                        >
+                          <EvaluatorHeader
+                            eval_name={eval_name}
+                            evaluator_name={evaluator_name}
+                            summaryStats={filteredStats}
+                          />
+                        </TableHead>
+                      );
+                    })}
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+                  {/* Map through datapoints and variants */}
+                  {uniqueDatapoints.map((datapoint) => {
+                    const variantData = organizedResults.get(datapoint.id);
+                    if (!variantData) return null;
+
+                    const filteredVariants = selectedRunIds
+                      .map((runId) => [runId, variantData.get(runId)])
+                      .filter(([, data]) => data !== undefined) as [
+                      string,
+                      {
+                        generated_output:
+                          | JsonInferenceOutput
+                          | ContentBlockOutput[];
+                        metrics: Map<string, string>;
+                      },
+                    ][];
+
+                    if (filteredVariants.length === 0) return null;
 
                     return (
-                      <TableHead
-                        key={evaluator_name}
-                        className="py-2 text-center"
-                      >
-                        <EvaluatorHeader
-                          eval_name={eval_name}
-                          evaluator_name={evaluator_name}
-                          summaryStats={filteredStats}
-                        />
-                      </TableHead>
-                    );
-                  })}
-                </TableRow>
-              </TableHeader>
+                      <React.Fragment key={datapoint.id}>
+                        {/* If there are multiple variants, we need to add a border to the last row only.
+                            In the single-variant case the length should be 1 so every row will have a border.
+                        */}
+                        {filteredVariants.map(([runId, data], index) => (
+                          <TableRow
+                            key={`input-${datapoint.id}-variant-${runId}`}
+                            className={
+                              index !== filteredVariants.length - 1
+                                ? "border-b-0"
+                                : ""
+                            }
+                          >
+                            {/* Input cell - only for the first variant row */}
+                            {index === 0 && (
+                              <TableCell
+                                rowSpan={filteredVariants.length}
+                                className="max-w-[200px] align-middle"
+                              >
+                                <TruncatedContent
+                                  content={datapoint.input}
+                                  type="input"
+                                />
+                              </TableCell>
+                            )}
 
-              <TableBody>
-                {/* Map through datapoints and variants */}
-                {uniqueDatapoints.map((datapoint) => {
-                  const variantData = organizedResults.get(datapoint.id);
-                  if (!variantData) return null;
+                            {/* Reference Output cell - only for the first variant row */}
+                            {index === 0 && (
+                              <TableCell
+                                rowSpan={filteredVariants.length}
+                                className="max-w-[200px] align-middle"
+                              >
+                                <TruncatedContent
+                                  content={datapoint.reference_output}
+                                  type="output"
+                                />
+                              </TableCell>
+                            )}
 
-                  const filteredVariants = selectedRunIds
-                    .map((runId) => [runId, variantData.get(runId)])
-                    .filter(([, data]) => data !== undefined) as [
-                    string,
-                    {
-                      generated_output:
-                        | JsonInferenceOutput
-                        | ContentBlockOutput[];
-                      metrics: Map<string, string>;
-                    },
-                  ][];
+                            {/* Variant circle - only if multiple variants are selected */}
+                            {selectedRunIds.length > 1 && (
+                              <TableCell className="text-center align-middle">
+                                <VariantCircle
+                                  runId={runId}
+                                  variantName={
+                                    runIdToVariant.get(runId) || "Unknown"
+                                  }
+                                />
+                              </TableCell>
+                            )}
 
-                  if (filteredVariants.length === 0) return null;
-
-                  return (
-                    <React.Fragment key={datapoint.id}>
-                      {/* If there are multiple variants, we need to add a border to the last row only.
-                          In the single-variant case the length should be 1 so every row will have a border.
-                      */}
-                      {filteredVariants.map(([runId, data], index) => (
-                        <TableRow
-                          key={`input-${datapoint.id}-variant-${runId}`}
-                          className={
-                            index !== filteredVariants.length - 1
-                              ? "border-b-0"
-                              : ""
-                          }
-                        >
-                          {/* Input cell - only for the first variant row */}
-                          {index === 0 && (
-                            <TableCell
-                              rowSpan={filteredVariants.length}
-                              className="max-w-[200px] align-middle"
-                            >
+                            {/* Generated output */}
+                            <TableCell className="max-w-[200px] align-middle">
                               <TruncatedContent
-                                content={datapoint.input}
-                                type="input"
-                              />
-                            </TableCell>
-                          )}
-
-                          {/* Reference Output cell - only for the first variant row */}
-                          {index === 0 && (
-                            <TableCell
-                              rowSpan={filteredVariants.length}
-                              className="max-w-[200px] align-middle"
-                            >
-                              <TruncatedContent
-                                content={datapoint.reference_output}
+                                content={data.generated_output}
                                 type="output"
                               />
                             </TableCell>
-                          )}
 
-                          {/* Variant circle - only if multiple variants are selected */}
-                          {showVariantColumn && (
-                            <TableCell className="text-center align-middle">
-                              <VariantCircle
-                                runId={runId}
-                                variantName={
-                                  runIdToVariant.get(runId) || "Unknown"
-                                }
-                              />
-                            </TableCell>
-                          )}
+                            {/* Metrics cells */}
+                            {evaluator_names.map((evaluator_name) => {
+                              const metric_name = getEvaluatorMetricName(
+                                eval_name,
+                                evaluator_name,
+                              );
+                              const metricValue = data.metrics.get(metric_name);
+                              const metricType =
+                                config.metrics[metric_name].type;
+                              const evaluatorConfig =
+                                config.evals[eval_name].evaluators[
+                                  evaluator_name
+                                ];
 
-                          {/* Generated output */}
-                          <TableCell className="max-w-[200px] align-middle">
-                            <TruncatedContent
-                              content={data.generated_output}
-                              type="output"
-                            />
-                          </TableCell>
-
-                          {/* Metrics cells */}
-                          {evaluator_names.map((evaluator_name) => {
-                            const metric_name = getEvaluatorMetricName(
-                              eval_name,
-                              evaluator_name,
-                            );
-                            const metricValue = data.metrics.get(metric_name);
-                            const metricType = config.metrics[metric_name].type;
-                            const evaluatorConfig =
-                              config.evals[eval_name].evaluators[
-                                evaluator_name
-                              ];
-
-                            return (
-                              <TableCell
-                                key={metric_name}
-                                className="h-[52px] text-center align-middle"
-                              >
-                                <div className="flex h-full items-center justify-center">
-                                  {metricValue
-                                    ? formatMetricValue(
-                                        metricValue,
-                                        metricType,
-                                        evaluatorConfig,
-                                      )
-                                    : "-"}
-                                </div>
-                              </TableCell>
-                            );
-                          })}
-                        </TableRow>
-                      ))}
-                    </React.Fragment>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                              return (
+                                <TableCell
+                                  key={metric_name}
+                                  className="h-[52px] text-center align-middle"
+                                >
+                                  <div className="flex h-full items-center justify-center">
+                                    {metricValue
+                                      ? formatMetricValue(
+                                          metricValue,
+                                          metricType,
+                                          evaluatorConfig,
+                                        )
+                                      : "-"}
+                                  </div>
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        ))}
+                      </React.Fragment>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </ColorAssignerProvider>
   );
 }
 
@@ -630,8 +633,6 @@ const EvaluatorProperties = ({
     ? selectedRunIdsParam.split(",")
     : [];
 
-  const failed = isCutoffFailed(summaryStats[0]?.mean_metric, evaluatorConfig);
-
   // Create a map of stats by run ID for easy lookup
   const statsByRunId = new Map(
     summaryStats.map((stat) => [stat.eval_run_id, stat]),
@@ -648,13 +649,18 @@ const EvaluatorProperties = ({
         <div className="mt-2 text-center text-xs text-muted-foreground">
           {orderedStats.map((stat) => {
             // Get the variant color for the circle using the run ID from the stat
-            const variantColorClass = getVariantColor(stat.eval_run_id);
+            const variantColorClass = useColorAssigner().getColor(
+              stat.eval_run_id,
+              false,
+            ); // Pass 'false' to get non-hover version
 
             return (
               <div
                 key={stat.eval_run_id}
                 className={`mt-1 flex items-center justify-center gap-1.5 ${
-                  failed ? "text-red-700" : ""
+                  isCutoffFailed(stat.mean_metric, evaluatorConfig)
+                    ? "text-red-700"
+                    : ""
                 }`}
               >
                 <div

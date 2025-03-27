@@ -1,0 +1,5 @@
+error: TensorZeroDeserialize only supports enums
+ --> tests/ui/struct.rs:2:8
+  |
+2 | struct MyStruct {
+  |        ^^^^^^^^

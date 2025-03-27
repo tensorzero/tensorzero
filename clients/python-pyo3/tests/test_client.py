@@ -54,7 +54,14 @@ from tensorzero import (
     ToolCall,
     ToolResult,
 )
-from tensorzero.types import ChatChunk, JsonChunk, Thought, ToolCallChunk
+from tensorzero.types import (
+    ChatChunk,
+    JsonChunk,
+    ProviderExtraBody,
+    Thought,
+    ToolCallChunk,
+    VariantExtraBody,
+)
 from uuid_utils import uuid7
 
 TEST_CONFIG_FILE = os.path.join(
@@ -1903,6 +1910,67 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
     assert request["variant_name"] == "baz"
     assert request["function_name"] == "basic_test"
     assert request["parallel_tool_calls"]
+
+
+def test_extra_body_raw(sync_client: TensorZeroGateway):
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="openai",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Write me a haiku"}],
+        },
+        extra_body=[
+            {"variant_name": "openai", "pointer": "/max_completion_tokens", "value": 2}
+        ],
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert result.variant_name == "openai"
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+    assert len(content[0].text.split(" ")) <= 2
+    usage = result.usage
+    assert usage.output_tokens == 2
+
+
+def test_extra_body_types(sync_client: TensorZeroGateway):
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="openai",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Write me a haiku starting with the word 'Potato', and output a JSON object with the key 'haiku'",
+                }
+            ],
+        },
+        extra_body=[
+            VariantExtraBody(
+                variant_name="openai",
+                pointer="/response_format",
+                value={"type": "json_object"},
+            ),
+            ProviderExtraBody(
+                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+                pointer="/stop",
+                value="Potato",
+            ),
+        ],
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert result.variant_name == "openai"
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+    assert '"haiku"' in content[0].text
+    assert "Potato" not in content[0].text
 
 
 def test_sync_dynamic_credentials(sync_client: TensorZeroGateway):
