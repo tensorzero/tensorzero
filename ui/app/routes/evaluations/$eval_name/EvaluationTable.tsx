@@ -327,50 +327,6 @@ export function EvaluationTable({
     return map;
   }, [selected_eval_run_infos]);
 
-  // Format metric value for display
-  const formatMetricValue = (
-    value: string,
-    metricType: string,
-    evaluatorConfig: EvaluatorConfig,
-  ): React.ReactNode => {
-    if (metricType === "boolean") {
-      const boolValue = value === "true" || value === "1";
-      const optimize = getOptimize(evaluatorConfig);
-      const failed =
-        (!boolValue && optimize === "max") || (boolValue && optimize === "min");
-      const icon = failed ? (
-        <X className="mr-1 h-3 w-3 flex-shrink-0" />
-      ) : (
-        <Check className="mr-1 h-3 w-3 flex-shrink-0" />
-      );
-
-      return (
-        <span
-          className={`flex items-center whitespace-nowrap ${failed ? "text-red-700" : "text-gray-700"}`}
-        >
-          {icon}
-          {boolValue ? "True" : "False"}
-        </span>
-      );
-    } else {
-      // Try to parse as number
-      const numValue = parseFloat(value);
-      if (!isNaN(numValue)) {
-        // Check if value fails the cutoff criteria
-        const failsCutoff = isCutoffFailed(numValue, evaluatorConfig);
-        return (
-          <span
-            className={`whitespace-nowrap ${failsCutoff ? "text-red-700" : "text-gray-700"}`}
-          >
-            {numValue}
-          </span>
-        );
-      }
-
-      // Default case: return as string
-      return <span className="whitespace-nowrap">{value}</span>;
-    }
-  };
   const config = useConfig();
   const navigate = useNavigate();
   return (
@@ -538,13 +494,15 @@ export function EvaluationTable({
                                   className="h-[52px] text-center align-middle"
                                 >
                                   <div className="flex h-full items-center justify-center">
-                                    {metricValue
-                                      ? formatMetricValue(
-                                          metricValue,
-                                          metricType,
-                                          evaluatorConfig,
-                                        )
-                                      : "-"}
+                                    {metricValue ? (
+                                      <MetricValue
+                                        value={metricValue}
+                                        metricType={metricType}
+                                        evaluatorConfig={evaluatorConfig}
+                                      />
+                                    ) : (
+                                      "-"
+                                    )}
                                   </div>
                                 </TableCell>
                               );
@@ -713,5 +671,54 @@ const isCutoffFailed = (
     return numericValue < evaluatorConfig.cutoff;
   } else {
     return numericValue > evaluatorConfig.cutoff;
+  }
+};
+
+// Format metric value display component
+const MetricValue = ({
+  value,
+  metricType,
+  evaluatorConfig,
+}: {
+  value: string;
+  metricType: string;
+  evaluatorConfig: EvaluatorConfig;
+}): React.ReactElement => {
+  if (metricType === "boolean") {
+    const boolValue = value === "true" || value === "1";
+    const optimize = getOptimize(evaluatorConfig);
+    const failed =
+      (!boolValue && optimize === "max") || (boolValue && optimize === "min");
+    const icon = failed ? (
+      <X className="mr-1 h-3 w-3 flex-shrink-0" />
+    ) : (
+      <Check className="mr-1 h-3 w-3 flex-shrink-0" />
+    );
+
+    return (
+      <span
+        className={`flex items-center whitespace-nowrap ${failed ? "text-red-700" : "text-gray-700"}`}
+      >
+        {icon}
+        {boolValue ? "True" : "False"}
+      </span>
+    );
+  } else {
+    // Try to parse as number
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue)) {
+      // Check if value fails the cutoff criteria
+      const failsCutoff = isCutoffFailed(numValue, evaluatorConfig);
+      return (
+        <span
+          className={`whitespace-nowrap ${failsCutoff ? "text-red-700" : "text-gray-700"}`}
+        >
+          {numValue}
+        </span>
+      );
+    }
+
+    // Default case: return as string
+    return <span className="whitespace-nowrap">{value}</span>;
   }
 };

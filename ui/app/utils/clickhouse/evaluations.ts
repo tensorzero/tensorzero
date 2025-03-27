@@ -195,3 +195,49 @@ export const EvalRunInfoSchema = z.object({
 });
 
 export type EvalRunInfo = z.infer<typeof EvalRunInfoSchema>;
+
+// Define a type for consolidated metrics
+export type ConsolidatedMetric = {
+  metric_name: string;
+  metric_value: string;
+};
+
+// Define a type for consolidated evaluation results
+export type ConsolidatedEvaluationResult = Omit<
+  ParsedEvaluationResultWithVariant,
+  "metric_name" | "metric_value"
+> & {
+  metrics: ConsolidatedMetric[];
+};
+
+export const consolidate_eval_results = (
+  eval_results: ParsedEvaluationResultWithVariant[],
+): ConsolidatedEvaluationResult[] => {
+  // Create a map to store results by datapoint_id and eval_run_id
+  const resultMap = new Map<string, ConsolidatedEvaluationResult>();
+
+  // Process each evaluation result
+  for (const result of eval_results) {
+    const key = `${result.datapoint_id}:${result.eval_run_id}:${result.variant_name}`;
+
+    if (!resultMap.has(key)) {
+      // Create a new consolidated result without metric_name and metric_value
+      const { metric_name, metric_value, ...baseResult } = result;
+
+      resultMap.set(key, {
+        ...baseResult,
+        metrics: [{ metric_name, metric_value }],
+      });
+    } else {
+      // Add this metric to the existing result
+      const existingResult = resultMap.get(key)!;
+      existingResult.metrics.push({
+        metric_name: result.metric_name,
+        metric_value: result.metric_value,
+      });
+    }
+  }
+
+  // Convert the map values to an array and return
+  return Array.from(resultMap.values());
+};
