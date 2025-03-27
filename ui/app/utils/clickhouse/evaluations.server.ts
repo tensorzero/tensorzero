@@ -1,3 +1,4 @@
+import { getConfig } from "../config/index.server";
 import { clickhouseClient } from "./client.server";
 import {
   EvaluationRunInfoSchema,
@@ -8,6 +9,10 @@ import {
   parseEvaluationResult,
   type EvalInfoResult,
   evalInfoResultSchema,
+  getEvaluatorMetricName,
+  type EvaluationResultWithVariant,
+  parseEvaluationResultWithVariant,
+  type ParsedEvaluationResultWithVariant,
 } from "./evaluations";
 import { getStaledWindowQuery, uuidv7ToTimestamp } from "./helpers";
 
@@ -372,4 +377,83 @@ export async function searchEvalRuns(
   });
   const rows = await result.json<EvaluationRunInfo[]>();
   return rows.map((row) => EvaluationRunInfoSchema.parse(row));
+}
+
+export async function getEvalsForDatapoint(
+  eval_name: string,
+  datapoint_id: string,
+  eval_run_ids: string[],
+): Promise<ParsedEvaluationResultWithVariant[]> {
+  const config = await getConfig();
+  const function_name = config.evals[eval_name].function_name;
+  const dataset_name = config.evals[eval_name].dataset_name;
+  if (!function_name) {
+    throw new Error(`Eval ${eval_name} not found in config`);
+  }
+  const function_config = config.functions[function_name];
+  const function_type = function_config.type;
+  const inference_table_name =
+    function_type === "chat" ? "ChatInference" : "JsonInference";
+  const datapoint_table_name =
+    function_type === "chat"
+      ? "ChatInferenceDatapoint"
+      : "JsonInferenceDatapoint";
+
+  const evaluators = config.evals[eval_name].evaluators;
+  const metric_names = Object.keys(evaluators).map((evaluatorName) =>
+    getEvaluatorMetricName(eval_name, evaluatorName),
+  );
+
+  const query = `
+  SELECT
+    inference.input as input,
+    dp.id as datapoint_id,
+    dp.output as reference_output,
+    inference.output as generated_output,
+    inference.tags['tensorzero::eval_run_id'] as eval_run_id,
+    inference.variant_name as variant_name,
+    feedback.metric_name as metric_name,
+    feedback.value as metric_value
+  FROM TagInference datapoint_tag
+  JOIN {inference_table_name:Identifier} inference
+    ON datapoint_tag.inference_id = inference.id
+    AND inference.function_name = {function_name:String}
+    AND inference.variant_name = datapoint_tag.variant_name
+    AND inference.episode_id = datapoint_tag.episode_id
+  JOIN {datapoint_table_name:Identifier} dp
+    ON dp.id = toUUIDOrNull(datapoint_tag.value)
+    AND dp.function_name = {function_name:String}
+    AND dp.dataset_name = {dataset_name:String}
+  LEFT JOIN (
+    SELECT target_id, metric_name, toString(value) as value
+    FROM BooleanMetricFeedback
+    WHERE metric_name IN ({metric_names:Array(String)})
+    UNION ALL
+    SELECT target_id, metric_name, toString(value) as value
+    FROM FloatMetricFeedback
+    WHERE metric_name IN ({metric_names:Array(String)})
+  ) feedback
+    ON feedback.target_id = inference.id
+  WHERE datapoint_tag.key = 'tensorzero::datapoint_id'
+    AND datapoint_tag.value = {datapoint_id:String}
+    AND inference.tags['tensorzero::eval_run_id'] IN ({eval_run_ids:Array(String)})
+  `;
+
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: {
+      function_name,
+      metric_names,
+      datapoint_id,
+      eval_run_ids,
+      inference_table_name,
+      datapoint_table_name,
+      dataset_name,
+    },
+  });
+  const rows = await result.json<EvaluationResultWithVariant>();
+  console.log(rows);
+  const parsed_rows = rows.map((row) => parseEvaluationResultWithVariant(row));
+  return parsed_rows;
 }

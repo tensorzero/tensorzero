@@ -5,10 +5,13 @@ import {
   getEvalResults,
   getEvalRunInfo,
   getEvalRunInfos,
+  getEvalsForDatapoint,
   getEvalStatistics,
   getMostRecentEvalInferenceDate,
   searchEvalRuns,
 } from "./evaluations.server";
+import type { ChatEvaluationResultWithVariant } from "./evaluations";
+import { fail } from "assert";
 
 describe("getEvalRunInfos", () => {
   test("should return correct run infos for specific eval run ids", async () => {
@@ -505,5 +508,64 @@ describe("getMostRecentEvalInferenceDate", () => {
         ],
       ]),
     );
+  });
+});
+
+describe("getEvalsForDatapoint", () => {
+  test("should return empty array for nonexistent datapoint", async () => {
+    const evals = await getEvalsForDatapoint(
+      "haiku",
+      "0195d806-e43d-7f7e-bb05-f6dd0d95846f", // Nonexistent datapoint
+      ["0195aef7-96fe-7d60-a2e6-5a6ea990c425"],
+    );
+    expect(evals).toEqual([]);
+  });
+
+  test("should return correct array for chat datapoint", async () => {
+    const evals = await getEvalsForDatapoint(
+      "haiku",
+      "01936551-ffc8-7372-8991-0a2929d3f5b0", // Real datapoint
+      ["0195aef7-96fe-7d60-a2e6-5a6ea990c425"],
+    );
+    expect(evals.length).toBe(2);
+
+    // Check first evaluation result
+    const first_eval = evals[0] as ChatEvaluationResultWithVariant;
+    expect(first_eval.datapoint_id).toBe(
+      "01936551-ffc8-7372-8991-0a2929d3f5b0",
+    );
+    expect(first_eval.eval_run_id).toBe("0195aef7-96fe-7d60-a2e6-5a6ea990c425");
+    expect(first_eval.variant_name).toBe("initial_prompt_gpt4o_mini");
+    expect(first_eval.metric_name).toBe(
+      "tensorzero::eval_name::haiku::evaluator_name::exact_match",
+    );
+    expect(first_eval.metric_value).toBe("false");
+    expect(first_eval.generated_output).toHaveLength(1);
+    const first_eval_output = first_eval.generated_output[0];
+    if (first_eval_output.type === "text") {
+      expect(first_eval_output.text).toContain("Pegboard, a canvas");
+    } else {
+      fail("First evaluation result is not a text");
+    }
+
+    // Check second evaluation result
+    const second_eval = evals[1] as ChatEvaluationResultWithVariant;
+    expect(second_eval.datapoint_id).toBe(
+      "01936551-ffc8-7372-8991-0a2929d3f5b0",
+    );
+    expect(second_eval.eval_run_id).toBe(
+      "0195aef7-96fe-7d60-a2e6-5a6ea990c425",
+    );
+    expect(second_eval.metric_name).toBe(
+      "tensorzero::eval_name::haiku::evaluator_name::topic_starts_with_f",
+    );
+    expect(second_eval.metric_value).toBe("false");
+    expect(second_eval.input.messages).toHaveLength(1);
+    const second_eval_input = second_eval.input;
+    if (second_eval_input.messages[0].content[0].type === "text") {
+      expect(second_eval_input.messages[0].content[0].value).toBe("pegboard");
+    } else {
+      fail("Second evaluation result is not a text");
+    }
   });
 });

@@ -21,6 +21,14 @@ export const EvaluationResultSchema = z.object({
 
 export type EvaluationResult = z.infer<typeof EvaluationResultSchema>;
 
+export const EvaluationResultWithVariantSchema = EvaluationResultSchema.extend({
+  variant_name: z.string(),
+});
+
+export type EvaluationResultWithVariant = z.infer<
+  typeof EvaluationResultWithVariantSchema
+>;
+
 export const JsonEvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),
   eval_run_id: z.string().uuid(),
@@ -52,6 +60,33 @@ export const ParsedEvaluationResultSchema = z.union([
 
 export type ParsedEvaluationResult = z.infer<
   typeof ParsedEvaluationResultSchema
+>;
+
+export const JsonEvaluationResultWithVariantSchema =
+  JsonEvaluationResultSchema.extend({
+    variant_name: z.string(),
+  });
+
+export type JsonEvaluationResultWithVariant = z.infer<
+  typeof JsonEvaluationResultWithVariantSchema
+>;
+
+export const ChatEvaluationResultWithVariantSchema =
+  ChatEvaluationResultSchema.extend({
+    variant_name: z.string(),
+  });
+
+export type ChatEvaluationResultWithVariant = z.infer<
+  typeof ChatEvaluationResultWithVariantSchema
+>;
+
+export const ParsedEvaluationResultWithVariantSchema = z.union([
+  JsonEvaluationResultWithVariantSchema,
+  ChatEvaluationResultWithVariantSchema,
+]);
+
+export type ParsedEvaluationResultWithVariant = z.infer<
+  typeof ParsedEvaluationResultWithVariantSchema
 >;
 
 export function parseEvaluationResult(
@@ -90,6 +125,36 @@ export function parseEvaluationResult(
     );
     // If structure-based detection fails, try the original parsing as fallback
     return ParsedEvaluationResultSchema.parse(result);
+  }
+}
+
+export function parseEvaluationResultWithVariant(
+  result: EvaluationResultWithVariant,
+): ParsedEvaluationResultWithVariant {
+  try {
+    // Parse using the same logic as parseEvaluationResult
+    const parsedResult = parseEvaluationResult(result);
+
+    // Add the variant_name to the parsed result
+    const parsedResultWithVariant = {
+      ...parsedResult,
+      variant_name: result.variant_name,
+    };
+    return ParsedEvaluationResultWithVariantSchema.parse(
+      parsedResultWithVariant,
+    );
+  } catch (error) {
+    console.warn(
+      "Failed to parse evaluation result with variant using structure-based detection:",
+      error,
+    );
+    // Fallback to direct parsing if needed
+    return ParsedEvaluationResultWithVariantSchema.parse({
+      ...result,
+      input: result.input,
+      generated_output: result.generated_output,
+      reference_output: result.reference_output,
+    });
   }
 }
 
