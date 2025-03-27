@@ -137,6 +137,15 @@ export function SubNavBreadcrumbs() {
           });
           continue;
         }
+
+        // Add handler for datapoint IDs within evaluations
+        if (i > 1 && pathSegments[i - 2] === "evaluations") {
+          breadcrumbs.push({
+            label: `${segment}`,
+            href: `/evaluations/${pathSegments[i - 1]}/${segment}`,
+          });
+          continue;
+        }
       }
 
       // Add standard breadcrumb if not handled by special cases
