@@ -11,7 +11,11 @@ import { PageLayout } from "~/components/layout/PageLayout";
 import Input from "~/components/inference/Input";
 import { redirect } from "react-router";
 import Output from "~/components/inference/Output";
-import { consolidate_eval_results } from "~/utils/clickhouse/evaluations";
+import {
+  consolidate_eval_results,
+  getEvaluatorMetricName,
+} from "~/utils/clickhouse/evaluations";
+import { useConfig } from "~/context/config";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -66,7 +70,16 @@ export default function EvaluationDatapointPage({
     datapoint_id,
   } = loaderData;
   loaderData;
-
+  const config = useConfig();
+  const eval_config = config.evals[eval_name];
+  const metric_name_to_evaluator_config = Object.fromEntries(
+    Object.entries(eval_config.evaluators).map(
+      ([evaluator_name, evaluator_config]) => [
+        getEvaluatorMetricName(eval_name, evaluator_name),
+        evaluator_config,
+      ],
+    ),
+  );
   const outputsToDisplay = [
     {
       id: "Reference",
