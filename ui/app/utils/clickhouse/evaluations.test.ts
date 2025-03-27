@@ -7,6 +7,7 @@ import {
   getEvalRunInfo,
   getEvalStatistics,
   getMostRecentEvalInferenceDate,
+  searchEvalRuns,
 } from "./evaluations.server";
 
 describe("getEvalRunIds", () => {
@@ -44,6 +45,61 @@ describe("getEvalRunIds", () => {
         variant_name: "initial_prompt_haiku_3_5",
       },
     ]);
+  });
+});
+
+describe("searchEvalRuns", () => {
+  test("should return matching run ids when searching by eval_run_id prefix", async () => {
+    const runIds = await searchEvalRuns("entity_extraction", "0195c5");
+    expect(runIds).toMatchObject([
+      {
+        eval_run_id: "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
+        variant_name: "llama_8b_initial_prompt",
+      },
+    ]);
+  });
+
+  test("should return matching run ids when searching by variant_name for models", async () => {
+    const runIds = await searchEvalRuns("entity_extraction", "gpt4o");
+    expect(runIds).toMatchObject([
+      {
+        eval_run_id: "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
+        variant_name: "gpt4o_mini_initial_prompt",
+      },
+      {
+        eval_run_id: "0195aef7-ec99-7312-924f-32b71c3496ee",
+        variant_name: "gpt4o_initial_prompt",
+      },
+    ]);
+  });
+
+  test("should return matching run ids when searching by partial variant_name", async () => {
+    const runIds = await searchEvalRuns("haiku", "initial");
+    expect(runIds).toMatchObject([
+      {
+        eval_run_id: "0195aef7-96fe-7d60-a2e6-5a6ea990c425",
+        variant_name: "initial_prompt_gpt4o_mini",
+      },
+      {
+        eval_run_id: "0195aef6-4ed4-7710-ae62-abb10744f153",
+        variant_name: "initial_prompt_haiku_3_5",
+      },
+    ]);
+  });
+
+  test("should handle case-insensitive search", async () => {
+    const runIds = await searchEvalRuns("entity_extraction", "llama");
+    expect(runIds).toMatchObject([
+      {
+        eval_run_id: "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
+        variant_name: "llama_8b_initial_prompt",
+      },
+    ]);
+  });
+
+  test("should return empty array when no matches found", async () => {
+    const runIds = await searchEvalRuns("entity_extraction", "nonexistent");
+    expect(runIds).toEqual([]);
   });
 });
 
