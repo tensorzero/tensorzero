@@ -9,11 +9,13 @@ import {
 } from "~/components/layout/PageLayout";
 import { PageLayout } from "~/components/layout/PageLayout";
 import Input from "~/components/inference/Input";
+import { redirect } from "react-router";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
   const eval_name = params.eval_name;
   const datapoint_id = params.datapoint_id;
+  const dataset_name = config.evals[eval_name].dataset_name;
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
 
@@ -21,7 +23,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const selected_eval_run_ids_array = selected_eval_run_ids
     ? selected_eval_run_ids.split(",")
     : [];
-
+  if (selected_eval_run_ids_array.length === 0) {
+    return redirect(`/datasets/${dataset_name}/datapoint/${datapoint_id}`);
+  }
   const evalResults = await getEvalsForDatapoint(
     eval_name,
     datapoint_id,

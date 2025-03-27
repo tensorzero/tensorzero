@@ -466,8 +466,9 @@ export function EvaluationTable({
                                 : ""
                             }
                             onClick={() => {
+                              const eval_run_ids = selectedRunIds.join(",");
                               navigate(
-                                `/evaluations/${eval_name}/${datapoint.id}`,
+                                `/evaluations/${eval_name}/${datapoint.id}?eval_run_ids=${eval_run_ids}`,
                               );
                             }}
                           >
