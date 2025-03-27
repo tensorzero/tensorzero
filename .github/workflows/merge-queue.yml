@@ -266,9 +266,9 @@ jobs:
       #     docker compose -f examples/production-deployment/docker-compose.yml down
       #     docker compose -f tensorzero-internal/tests/e2e/docker-compose.yml down
 
-      # - name: Install dependencies
-      #   working-directory: ui
-      #   run: pnpm install --frozen-lockfile
+      - name: Install dependencies
+        working-directory: ui
+        run: pnpm install --frozen-lockfile
 
       # - name: Run ESLint
       #   working-directory: ui
