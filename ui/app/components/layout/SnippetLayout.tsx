@@ -1,6 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { type ReactNode } from "react";
+import { type ReactNode, useState, useRef, useEffect } from "react";
 import { cn } from "~/utils/common";
+import { Button } from "~/components/ui/button";
 
 // Main layout component
 interface SnippetLayoutProps {
@@ -82,20 +83,55 @@ export function SnippetDescription({
 interface SnippetContentProps {
   children: ReactNode;
   className?: string;
+  maxHeight?: number;
 }
 
-export function SnippetContent({ children, className }: SnippetContentProps) {
-  return <div className={cn("space-y-4 p-6 pt-6", className)}>{children}</div>;
-}
+export function SnippetContent({
+  children,
+  className,
+  maxHeight = 600,
+}: SnippetContentProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [needsExpansion, setNeedsExpansion] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
-// Group component
-interface SnippetGroupProps {
-  children: ReactNode;
-  className?: string;
-}
+  // Simple check on initial render and when content changes
+  useEffect(() => {
+    // Reset expanded state when content changes
+    setExpanded(false);
 
-export function SnippetGroup({ children, className }: SnippetGroupProps) {
-  return <div className={cn("space-y-4", className)}>{children}</div>;
+    if (contentRef.current) {
+      // Simple check if content is taller than maxHeight
+      const contentHeight = contentRef.current.scrollHeight;
+      setNeedsExpansion(contentHeight > maxHeight);
+    }
+  }, [children, maxHeight]);
+
+  return (
+    <div className="relative overflow-hidden rounded-b-lg">
+      <div
+        ref={contentRef}
+        style={
+          !expanded && needsExpansion ? { maxHeight: `${maxHeight}px` } : {}
+        }
+        className={cn(
+          "relative space-y-4",
+          !expanded && needsExpansion && "overflow-hidden",
+          className,
+        )}
+      >
+        {children}
+      </div>
+
+      {needsExpansion && !expanded && (
+        <div className="absolute bottom-0 left-0 right-0 flex justify-center bg-gradient-to-t from-bg-primary to-transparent pb-4 pt-16">
+          <Button variant="outline" size="sm" onClick={() => setExpanded(true)}>
+            Show more
+          </Button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Message component
@@ -113,13 +149,15 @@ export interface SnippetTab {
   id: string;
   label: string;
   content?: ReactNode;
+  indicator?: "none" | "empty" | "content" | "fail" | "warning";
 }
 
 interface SnippetTabsProps {
-  tabs?: SnippetTab[];
+  tabs: SnippetTab[];
   defaultTab?: string;
   className?: string;
-  children?: ReactNode;
+  children?: ((activeTab: string) => ReactNode) | ReactNode;
+  onTabChange?: (tabId: string) => void;
 }
 
 export function SnippetTabs({
@@ -127,30 +165,71 @@ export function SnippetTabs({
   defaultTab,
   className,
   children,
+  onTabChange,
 }: SnippetTabsProps) {
-  if ((!tabs || tabs.length === 0) && !children) return null;
+  if (!tabs || tabs.length === 0) return null;
 
-  if (children) {
-    return <div className={cn("w-full", className)}>{children}</div>;
-  }
+  const defaultTabId = defaultTab || tabs[0].id;
+  const [activeTab, setActiveTab] = useState(defaultTabId);
 
-  const defaultTabId = defaultTab || tabs?.[0].id;
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    onTabChange?.(tabId);
+  };
+
+  // Function to get indicator color based on indicator type
+  const getIndicatorColor = (indicator?: string) => {
+    switch (indicator) {
+      case "empty":
+        return "bg-gray-300";
+      case "content":
+        return "bg-green-500";
+      case "fail":
+        return "bg-red-500";
+      case "warning":
+        return "bg-yellow-500";
+      default:
+        return "";
+    }
+  };
 
   return (
-    <Tabs defaultValue={defaultTabId} className={cn("w-full", className)}>
-      <TabsList className="mb-2">
-        {tabs?.map((tab) => (
-          <TabsTrigger key={tab.id} value={tab.id}>
+    <Tabs
+      value={activeTab}
+      onValueChange={handleTabChange}
+      className={cn("w-full", className)}
+    >
+      <TabsList className="flex w-full justify-start rounded-none border-b border-border p-2">
+        {tabs.map((tab) => (
+          <TabsTrigger
+            key={tab.id}
+            value={tab.id}
+            className={cn("flex items-center", tab.indicator && "gap-2")}
+          >
+            {tab.indicator && tab.indicator !== "none" && (
+              <div
+                className={cn(
+                  "h-2 w-2 rounded-full",
+                  getIndicatorColor(tab.indicator),
+                )}
+              />
+            )}
             {tab.label}
           </TabsTrigger>
         ))}
       </TabsList>
 
-      {tabs?.map((tab) => (
-        <TabsContent key={tab.id} value={tab.id}>
-          {tab.content}
+      {typeof children === "function" ? (
+        <TabsContent value={activeTab} className="mt-2">
+          {children(activeTab)}
         </TabsContent>
-      ))}
+      ) : (
+        tabs.map((tab) => (
+          <TabsContent key={tab.id} value={tab.id} className="mt-2">
+            {tab.content}
+          </TabsContent>
+        ))
+      )}
     </Tabs>
   );
 }

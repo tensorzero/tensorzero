@@ -1,14 +1,13 @@
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Copy } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState } from "react";
 import { cn } from "~/utils/common";
 
 // Code content component
 interface CodeMessageProps {
   label?: string;
   content?: string;
-  language?: string;
   showLineNumbers?: boolean;
   forceShowCopyButton?: boolean;
   className?: string;
@@ -19,7 +18,6 @@ export function CodeMessage({
   content,
   showLineNumbers = false,
   forceShowCopyButton = false,
-  language,
   className,
 }: CodeMessageProps) {
   if (!content) return null;

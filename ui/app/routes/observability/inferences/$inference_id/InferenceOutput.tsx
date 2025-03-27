@@ -6,14 +6,14 @@ import {
   SnippetLayout,
   SnippetContent,
   SnippetTabs,
-  SnippetGroup,
   SnippetMessage,
   type SnippetTab,
 } from "~/components/layout/SnippetLayout";
-import { CodeMessage, TextMessage } from "~/components/layout/SnippetContent";
+import { CodeMessage } from "~/components/layout/SnippetContent";
 
 interface OutputProps {
   output: JsonInferenceOutput | ContentBlockOutput[];
+  outputSchema?: any;
 }
 
 function isJsonInferenceOutput(
@@ -45,47 +45,71 @@ function renderContentBlock(block: ContentBlockOutput, index: number) {
   }
 }
 
-export function OutputContent({ output }: OutputProps) {
+export function OutputContent({ output, outputSchema }: OutputProps) {
   if (isJsonInferenceOutput(output)) {
     const tabs: SnippetTab[] = [
       {
+        id: "parsed",
+        label: "Parsed Output",
+        indicator: output.parsed ? "content" : "fail",
+      },
+      {
         id: "raw",
         label: "Raw Output",
-        content: <CodeMessage content={output.raw} showLineNumbers={true} />,
       },
     ];
 
-    if (output.parsed) {
-      tabs.unshift({
-        id: "parsed",
-        label: "Parsed Output",
-        content: (
-          <CodeMessage
-            content={JSON.stringify(output.parsed, null, 2)}
-            showLineNumbers={true}
-          />
-        ),
+    // Add Output Schema tab if available
+    if (outputSchema) {
+      tabs.push({
+        id: "schema",
+        label: "Output Schema",
       });
     }
 
-    return <SnippetTabs tabs={tabs} />;
+    // Set default tab to Parsed if it has content, otherwise Raw
+    const defaultTab = output.parsed ? "parsed" : "raw";
+
+    return (
+      <SnippetTabs tabs={tabs} defaultTab={defaultTab}>
+        {(activeTab) => (
+          <SnippetContent>
+            {activeTab === "parsed" ? (
+              <CodeMessage
+                content={
+                  output.parsed
+                    ? JSON.stringify(output.parsed, null, 2)
+                    : "No parsed output available"
+                }
+                showLineNumbers={true}
+              />
+            ) : activeTab === "raw" ? (
+              <CodeMessage content={output.raw} showLineNumbers={true} />
+            ) : (
+              <CodeMessage
+                content={JSON.stringify(outputSchema, null, 2)}
+                showLineNumbers={true}
+              />
+            )}
+          </SnippetContent>
+        )}
+      </SnippetTabs>
+    );
   }
 
   return (
-    <SnippetGroup>
+    <SnippetContent>
       <SnippetMessage>
         {output.map((block, index) => renderContentBlock(block, index))}
       </SnippetMessage>
-    </SnippetGroup>
+    </SnippetContent>
   );
 }
 
-export default function Output({ output }: OutputProps) {
+export default function Output({ output, outputSchema }: OutputProps) {
   return (
     <SnippetLayout className="w-full">
-      <SnippetContent>
-        <OutputContent output={output} />
-      </SnippetContent>
+      <OutputContent output={output} outputSchema={outputSchema} />
     </SnippetLayout>
   );
 }
