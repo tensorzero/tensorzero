@@ -128,7 +128,7 @@ export function VariantSelector({
           <PopoverContent className="w-96 p-0">
             <Command>
               <CommandInput
-                placeholder="Search evaluation runs..."
+                placeholder="Search by variant name or evaluation run ID..."
                 value={searchValue}
                 onValueChange={setSearchValue}
               />
