@@ -1,0 +1,23 @@
+[functions.poke_battle]
+type = "json"
+user_schema = "functions/poke_battle/user_schema.json"
+output_schema = "functions/poke_battle/output_schema.json"
+
+[functions.poke_battle.variants.simple_variant]
+type = "chat_completion"
+weight = 1.0
+model = "openai"
+user_template = "functions/poke_battle/simple_variant/user.minijinja"
+system_template = "functions/poke_battle/simple_variant/system.minijinja"
+
+[models.openai]
+routing = ["openai_provider"]
+
+[models.openai.providers.openai_provider]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+
+[metrics.poke_battle_win]
+type = "boolean"
+optimize = "max"
+level = "episode"

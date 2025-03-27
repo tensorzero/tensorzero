@@ -1,0 +1,187 @@
+p1 is RandomPlayerAI
+p2 is TensorZeroAI
+|t:|1736812507
+|gametype|singles
+|player|p1|Random Bot||
+|player|p2|TensorZero Bot||
+|teamsize|p1|6
+|teamsize|p2|6
+|gen|7
+|tier|[Gen 7] Custom Game
+|clearpoke
+|poke|p1|Pachirisu, L95, F|item
+|poke|p1|Starmie, L84|item
+|poke|p1|Vigoroth, L88, F|item
+|poke|p1|Salamence, L72, M|item
+|poke|p1|Toxicroak, L84, M|item
+|poke|p1|Venomoth, L82, F|item
+|poke|p2|Camerupt, L88, F|item
+|poke|p2|Chansey, L86, F|item
+|poke|p2|Rampardos, L88, F|item
+|poke|p2|Mismagius, L87, F|item
+|poke|p2|Spinda, L99, M|item
+|poke|p2|Emboar, L85, M|item
+|teampreview
+Making request:  {"request":{"active":[{"moves":[{"move":"Stealth Rock","id":"stealthrock","pp":32,"maxpp":32,"target":"foeSide","disabled":false},{"move":"Will-O-Wisp","id":"willowisp","pp":24,"maxpp":24,"target":"normal","disabled":false},{"move":"Earth Power","id":"earthpower","pp":16,"maxpp":16,"target":"normal","disabled":false},{"move":"Fire Blast","id":"fireblast","pp":8,"maxpp":8,"target":"normal","disabled":false}],"canMegaEvo":true}],"side":{"name":"TensorZero Bot","id":"p2","pokemon":[{"ident":"p2: Camerupt","details":"Camerupt, L88, F","condition":"266/266","active":true,"stats":{"atk":181,"def":173,"spa":235,"spd":182,"spe":121},"moves":["stealthrock","willowisp","earthpower","fireblast"],"baseAbility":"solidrock","item":"cameruptite","pokeball":"pokeball","ability":"solidrock"},{"ident":"p2: Chansey","details":"Chansey, L86, F","condition":"570/570","active":false,"stats":{"atk":13,"def":58,"spa":109,"spd":230,"spe":135},"moves":["toxic","softboiled","seismictoss","aromatherapy"],"baseAbility":"naturalcure","item":"eviolite","pokeball":"pokeball","ability":"naturalcure"},{"ident":"p2: Rampardos","details":"Rampardos, L88, F","condition":"314/314","active":false,"stats":{"atk":341,"def":156,"spa":165,"spd":138,"spe":152},"moves":["headsmash","earthquake","firepunch","rockslide"],"baseAbility":"sheerforce","item":"choicescarf","pokeball":"pokeball","ability":"sheerforce"},{"ident":"p2: Mismagius","details":"Mismagius, L87, F","condition":"246/246","active":false,"stats":{"atk":109,"def":154,"spa":232,"spd":232,"spe":232},"moves":["nastyplot","mysticalfire","shadowball","dazzlinggleam"],"baseAbility":"levitate","item":"lifeorb","pokeball":"pokeball","ability":"levitate"},{"ident":"p2: Spinda","details":"Spinda, L99, M","condition":"279/279","active":false,"stats":{"atk":175,"def":175,"spa":175,"spd":175,"spe":175},"moves":["return102","superpower","thief","suckerpunch"],"baseAbility":"contrary","item":"leftovers","pokeball":"pokeball","ability":"contrary"},{"ident":"p2: Emboar","details":"Emboar, L85, M","condition":"326/326","active":false,"stats":{"atk":258,"def":159,"spa":219,"spd":159,"spe":159},"moves":["headsmash","flareblitz","suckerpunch","superpower"],"baseAbility":"reckless","item":"choiceband","pokeball":"pokeball","ability":"reckless"}]}},"context":["|t:|1736812507","|gametype|singles","|player|p1|Random Bot||","|player|p2|TensorZero Bot||","|teamsize|p1|6","|teamsize|p2|6","|gen|7","|tier|[Gen 7] Custom Game","|clearpoke","|poke|p1|Pachirisu, L95, F|item","|poke|p1|Starmie, L84|item","|poke|p1|Vigoroth, L88, F|item","|poke|p1|Salamence, L72, M|item","|poke|p1|Toxicroak, L84, M|item","|poke|p1|Venomoth, L82, F|item","|poke|p2|Camerupt, L88, F|item","|poke|p2|Chansey, L86, F|item","|poke|p2|Rampardos, L88, F|item","|poke|p2|Mismagius, L87, F|item","|poke|p2|Spinda, L99, M|item","|poke|p2|Emboar, L85, M|item","|teampreview"]}
+|
+|t:|1736812507
+|start
+|switch|p1a: Pachirisu|Pachirisu, L95, F|268/268
+|switch|p2a: Camerupt|Camerupt, L88, F|266/266
+|turn|1
+Got response:  {
+  inference_id: '01946217-bbaa-79f2-aba6-2b7f3d82ffa2',
+  episode_id: '01946217-b2d4-73a0-a0af-d8b7d6b6596d',
+  variant_name: 'simple_variant',
+  output: {
+    raw: '{"action": "move stealthrock"}',
+    parsed: { action: 'move stealthrock' }
+  },
+  usage: { input_tokens: 9602, output_tokens: 12 }
+}
+Set episode id to: 01946217-b2d4-73a0-a0af-d8b7d6b6596d
+Making request:  {"request":{"active":[{"moves":[{"move":"Stealth Rock","id":"stealthrock","pp":31,"maxpp":32,"target":"foeSide","disabled":false},{"move":"Will-O-Wisp","id":"willowisp","pp":24,"maxpp":24,"target":"normal","disabled":false},{"move":"Earth Power","id":"earthpower","pp":16,"maxpp":16,"target":"normal","disabled":false},{"move":"Fire Blast","id":"fireblast","pp":8,"maxpp":8,"target":"normal","disabled":false}],"canMegaEvo":true}],"side":{"name":"TensorZero Bot","id":"p2","pokemon":[{"ident":"p2: Camerupt","details":"Camerupt, L88, F","condition":"266/266","active":true,"stats":{"atk":181,"def":173,"spa":235,"spd":182,"spe":121},"moves":["stealthrock","willowisp","earthpower","fireblast"],"baseAbility":"solidrock","item":"cameruptite","pokeball":"pokeball","ability":"solidrock"},{"ident":"p2: Chansey","details":"Chansey, L86, F","condition":"570/570","active":false,"stats":{"atk":13,"def":58,"spa":109,"spd":230,"spe":135},"moves":["toxic","softboiled","seismictoss","aromatherapy"],"baseAbility":"naturalcure","item":"eviolite","pokeball":"pokeball","ability":"naturalcure"},{"ident":"p2: Rampardos","details":"Rampardos, L88, F","condition":"314/314","active":false,"stats":{"atk":341,"def":156,"spa":165,"spd":138,"spe":152},"moves":["headsmash","earthquake","firepunch","rockslide"],"baseAbility":"sheerforce","item":"choicescarf","pokeball":"pokeball","ability":"sheerforce"},{"ident":"p2: Mismagius","details":"Mismagius, L87, F","condition":"246/246","active":false,"stats":{"atk":109,"def":154,"spa":232,"spd":232,"spe":232},"moves":["nastyplot","mysticalfire","shadowball","dazzlinggleam"],"baseAbility":"levitate","item":"lifeorb","pokeball":"pokeball","ability":"levitate"},{"ident":"p2: Spinda","details":"Spinda, L99, M","condition":"279/279","active":false,"stats":{"atk":175,"def":175,"spa":175,"spd":175,"spe":175},"moves":["return102","superpower","thief","suckerpunch"],"baseAbility":"contrary","item":"leftovers","pokeball":"pokeball","ability":"contrary"},{"ident":"p2: Emboar","details":"Emboar, L85, M","condition":"326/326","active":false,"stats":{"atk":258,"def":159,"spa":219,"spd":159,"spe":159},"moves":["headsmash","flareblitz","suckerpunch","superpower"],"baseAbility":"reckless","item":"choiceband","pokeball":"pokeball","ability":"reckless"}]}},"context":["|t:|1736812507","|gametype|singles","|player|p1|Random Bot||","|player|p2|TensorZero Bot||","|teamsize|p1|6","|teamsize|p2|6","|gen|7","|tier|[Gen 7] Custom Game","|clearpoke","|poke|p1|Pachirisu, L95, F|item","|poke|p1|Starmie, L84|item","|poke|p1|Vigoroth, L88, F|item","|poke|p1|Salamence, L72, M|item","|poke|p1|Toxicroak, L84, M|item","|poke|p1|Venomoth, L82, F|item","|poke|p2|Camerupt, L88, F|item","|poke|p2|Chansey, L86, F|item","|poke|p2|Rampardos, L88, F|item","|poke|p2|Mismagius, L87, F|item","|poke|p2|Spinda, L99, M|item","|poke|p2|Emboar, L85, M|item","|teampreview","|","|t:|1736812507","|start","|switch|p1a: Pachirisu|Pachirisu, L95, F|268/268","|switch|p2a: Camerupt|Camerupt, L88, F|266/266","|turn|1"]}
+|
+|t:|1736812510
+|move|p1a: Pachirisu|Thunderbolt|p2a: Camerupt
+|-immune|p2a: Camerupt
+|move|p2a: Camerupt|Stealth Rock|p1a: Pachirisu
+|-sidestart|p1: Random Bot|move: Stealth Rock
+|
+|upkeep
+|turn|2
+Got response:  {
+  inference_id: '01946217-c2db-7533-9289-84459e53ae13',
+  episode_id: '01946217-b2d4-73a0-a0af-d8b7d6b6596d',
+  variant_name: 'simple_variant',
+  output: {
+    raw: '{"action": "move stealthrock"}',
+    parsed: { action: 'move stealthrock' }
+  },
+  usage: { input_tokens: 9669, output_tokens: 12 }
+}
+Making request:  {"request":{"active":[{"moves":[{"move":"Stealth Rock","id":"stealthrock","pp":30,"maxpp":32,"target":"foeSide","disabled":false},{"move":"Will-O-Wisp","id":"willowisp","pp":24,"maxpp":24,"target":"normal","disabled":false},{"move":"Earth Power","id":"earthpower","pp":16,"maxpp":16,"target":"normal","disabled":false},{"move":"Fire Blast","id":"fireblast","pp":8,"maxpp":8,"target":"normal","disabled":false}],"canMegaEvo":true}],"side":{"name":"TensorZero Bot","id":"p2","pokemon":[{"ident":"p2: Camerupt","details":"Camerupt, L88, F","condition":"266/266","active":true,"stats":{"atk":181,"def":173,"spa":235,"spd":182,"spe":121},"moves":["stealthrock","willowisp","earthpower","fireblast"],"baseAbility":"solidrock","item":"cameruptite","pokeball":"pokeball","ability":"solidrock"},{"ident":"p2: Chansey","details":"Chansey, L86, F","condition":"570/570","active":false,"stats":{"atk":13,"def":58,"spa":109,"spd":230,"spe":135},"moves":["toxic","softboiled","seismictoss","aromatherapy"],"baseAbility":"naturalcure","item":"eviolite","pokeball":"pokeball","ability":"naturalcure"},{"ident":"p2: Rampardos","details":"Rampardos, L88, F","condition":"314/314","active":false,"stats":{"atk":341,"def":156,"spa":165,"spd":138,"spe":152},"moves":["headsmash","earthquake","firepunch","rockslide"],"baseAbility":"sheerforce","item":"choicescarf","pokeball":"pokeball","ability":"sheerforce"},{"ident":"p2: Mismagius","details":"Mismagius, L87, F","condition":"246/246","active":false,"stats":{"atk":109,"def":154,"spa":232,"spd":232,"spe":232},"moves":["nastyplot","mysticalfire","shadowball","dazzlinggleam"],"baseAbility":"levitate","item":"lifeorb","pokeball":"pokeball","ability":"levitate"},{"ident":"p2: Spinda","details":"Spinda, L99, M","condition":"279/279","active":false,"stats":{"atk":175,"def":175,"spa":175,"spd":175,"spe":175},"moves":["return102","superpower","thief","suckerpunch"],"baseAbility":"contrary","item":"leftovers","pokeball":"pokeball","ability":"contrary"},{"ident":"p2: Emboar","details":"Emboar, L85, M","condition":"326/326","active":false,"stats":{"atk":258,"def":159,"spa":219,"spd":159,"spe":159},"moves":["headsmash","flareblitz","suckerpunch","superpower"],"baseAbility":"reckless","item":"choiceband","pokeball":"pokeball","ability":"reckless"}]}},"context":["|t:|1736812507","|gametype|singles","|player|p1|Random Bot||","|player|p2|TensorZero Bot||","|teamsize|p1|6","|teamsize|p2|6","|gen|7","|tier|[Gen 7] Custom Game","|clearpoke","|poke|p1|Pachirisu, L95, F|item","|poke|p1|Starmie, L84|item","|poke|p1|Vigoroth, L88, F|item","|poke|p1|Salamence, L72, M|item","|poke|p1|Toxicroak, L84, M|item","|poke|p1|Venomoth, L82, F|item","|poke|p2|Camerupt, L88, F|item","|poke|p2|Chansey, L86, F|item","|poke|p2|Rampardos, L88, F|item","|poke|p2|Mismagius, L87, F|item","|poke|p2|Spinda, L99, M|item","|poke|p2|Emboar, L85, M|item","|teampreview","|","|t:|1736812507","|start","|switch|p1a: Pachirisu|Pachirisu, L95, F|268/268","|switch|p2a: Camerupt|Camerupt, L88, F|266/266","|turn|1","|","|t:|1736812510","|move|p1a: Pachirisu|Thunderbolt|p2a: Camerupt","|-immune|p2a: Camerupt","|move|p2a: Camerupt|Stealth Rock|p1a: Pachirisu","|-sidestart|p1: Random Bot|move: Stealth Rock","|","|upkeep","|turn|2"]}
+|
+|t:|1736812511
+|move|p1a: Pachirisu|Thunderbolt|p2a: Camerupt
+|-immune|p2a: Camerupt
+|move|p2a: Camerupt|Stealth Rock||[still]
+|-fail|p2a: Camerupt
+|debug|move failed because it did nothing
+|
+|upkeep
+|turn|3
+Got response:  {
+  inference_id: '01946217-c9cc-7470-b0a2-5198d178d6d2',
+  episode_id: '01946217-b2d4-73a0-a0af-d8b7d6b6596d',
+  variant_name: 'simple_variant',
+  output: {
+    raw: '{"action": "move Fire Blast mega"}',
+    parsed: { action: 'move Fire Blast mega' }
+  },
+  usage: { input_tokens: 9764, output_tokens: 14 }
+}
+|
+|t:|1736812513
+|detailschange|p2a: Camerupt|Camerupt-Mega, L88, F
+|-mega|p2a: Camerupt|Camerupt|Cameruptite
+|move|p1a: Pachirisu|U-turn|p2a: Camerupt
+|-resisted|p2a: Camerupt
+|-damage|p2a: Camerupt|250/266
+Making request:  {"request":{"active":[{"moves":[{"move":"Stealth Rock","id":"stealthrock","pp":30,"maxpp":32,"target":"foeSide","disabled":false},{"move":"Will-O-Wisp","id":"willowisp","pp":24,"maxpp":24,"target":"normal","disabled":false},{"move":"Earth Power","id":"earthpower","pp":16,"maxpp":16,"target":"normal","disabled":false},{"move":"Fire Blast","id":"fireblast","pp":7,"maxpp":8,"target":"normal","disabled":false}]}],"side":{"name":"TensorZero Bot","id":"p2","pokemon":[{"ident":"p2: Camerupt","details":"Camerupt-Mega, L88, F","condition":"250/266","active":true,"stats":{"atk":216,"def":226,"spa":305,"spd":235,"spe":85},"moves":["stealthrock","willowisp","earthpower","fireblast"],"baseAbility":"sheerforce","item":"cameruptite","pokeball":"pokeball","ability":"sheerforce"},{"ident":"p2: Chansey","details":"Chansey, L86, F","condition":"570/570","active":false,"stats":{"atk":13,"def":58,"spa":109,"spd":230,"spe":135},"moves":["toxic","softboiled","seismictoss","aromatherapy"],"baseAbility":"naturalcure","item":"eviolite","pokeball":"pokeball","ability":"naturalcure"},{"ident":"p2: Rampardos","details":"Rampardos, L88, F","condition":"314/314","active":false,"stats":{"atk":341,"def":156,"spa":165,"spd":138,"spe":152},"moves":["headsmash","earthquake","firepunch","rockslide"],"baseAbility":"sheerforce","item":"choicescarf","pokeball":"pokeball","ability":"sheerforce"},{"ident":"p2: Mismagius","details":"Mismagius, L87, F","condition":"246/246","active":false,"stats":{"atk":109,"def":154,"spa":232,"spd":232,"spe":232},"moves":["nastyplot","mysticalfire","shadowball","dazzlinggleam"],"baseAbility":"levitate","item":"lifeorb","pokeball":"pokeball","ability":"levitate"},{"ident":"p2: Spinda","details":"Spinda, L99, M","condition":"279/279","active":false,"stats":{"atk":175,"def":175,"spa":175,"spd":175,"spe":175},"moves":["return102","superpower","thief","suckerpunch"],"baseAbility":"contrary","item":"leftovers","pokeball":"pokeball","ability":"contrary"},{"ident":"p2: Emboar","details":"Emboar, L85, M","condition":"326/326","active":false,"stats":{"atk":258,"def":159,"spa":219,"spd":159,"spe":159},"moves":["headsmash","flareblitz","suckerpunch","superpower"],"baseAbility":"reckless","item":"choiceband","pokeball":"pokeball","ability":"reckless"}]}},"context":["|t:|1736812507","|gametype|singles","|player|p1|Random Bot||","|player|p2|TensorZero Bot||","|teamsize|p1|6","|teamsize|p2|6","|gen|7","|tier|[Gen 7] Custom Game","|clearpoke","|poke|p1|Pachirisu, L95, F|item","|poke|p1|Starmie, L84|item","|poke|p1|Vigoroth, L88, F|item","|poke|p1|Salamence, L72, M|item","|poke|p1|Toxicroak, L84, M|item","|poke|p1|Venomoth, L82, F|item","|poke|p2|Camerupt, L88, F|item","|poke|p2|Chansey, L86, F|item","|poke|p2|Rampardos, L88, F|item","|poke|p2|Mismagius, L87, F|item","|poke|p2|Spinda, L99, M|item","|poke|p2|Emboar, L85, M|item","|teampreview","|","|t:|1736812507","|start","|switch|p1a: Pachirisu|Pachirisu, L95, F|268/268","|switch|p2a: Camerupt|Camerupt, L88, F|266/266","|turn|1","|","|t:|1736812510","|move|p1a: Pachirisu|Thunderbolt|p2a: Camerupt","|-immune|p2a: Camerupt","|move|p2a: Camerupt|Stealth Rock|p1a: Pachirisu","|-sidestart|p1: Random Bot|move: Stealth Rock","|","|upkeep","|turn|2","|","|t:|1736812511","|move|p1a: Pachirisu|Thunderbolt|p2a: Camerupt","|-immune|p2a: Camerupt","|move|p2a: Camerupt|Stealth Rock||[still]","|-fail|p2a: Camerupt","|debug|move failed because it did nothing","|","|upkeep","|turn|3","|","|t:|1736812513","|detailschange|p2a: Camerupt|Camerupt-Mega, L88, F","|-mega|p2a: Camerupt|Camerupt|Cameruptite","|move|p1a: Pachirisu|U-turn|p2a: Camerupt","|-resisted|p2a: Camerupt","|-damage|p2a: Camerupt|250/266"]}
+|
+|t:|1736812513
+|switch|p1a: Starmie|Starmie, L84|238/238|[from] U-turn
+|-damage|p1a: Starmie|209/238|[from] Stealth Rock
+|move|p2a: Camerupt|Fire Blast|p1a: Starmie
+|-resisted|p1a: Starmie
+|-damage|p1a: Starmie|83/238
+|
+|-heal|p1a: Starmie|97/238|[from] item: Leftovers
+|upkeep
+|turn|4
+Got response:  {
+  inference_id: '01946217-d00f-7d91-acd7-f056c3c39db5',
+  episode_id: '01946217-b2d4-73a0-a0af-d8b7d6b6596d',
+  variant_name: 'simple_variant',
+  output: {
+    raw: '{"action":"move Fire Blast 1"}',
+    parsed: { action: 'move Fire Blast 1' }
+  },
+  usage: { input_tokens: 9959, output_tokens: 14 }
+}
+Making request:  {"request":{"active":[{"moves":[{"move":"Stealth Rock","id":"stealthrock","pp":30,"maxpp":32,"target":"foeSide","disabled":false},{"move":"Will-O-Wisp","id":"willowisp","pp":24,"maxpp":24,"target":"normal","disabled":false},{"move":"Earth Power","id":"earthpower","pp":16,"maxpp":16,"target":"normal","disabled":false},{"move":"Fire Blast","id":"fireblast","pp":6,"maxpp":8,"target":"normal","disabled":false}]}],"side":{"name":"TensorZero Bot","id":"p2","pokemon":[{"ident":"p2: Camerupt","details":"Camerupt-Mega, L88, F","condition":"250/266","active":true,"stats":{"atk":216,"def":226,"spa":305,"spd":235,"spe":85},"moves":["stealthrock","willowisp","earthpower","fireblast"],"baseAbility":"sheerforce","item":"cameruptite","pokeball":"pokeball","ability":"sheerforce"},{"ident":"p2: Chansey","details":"Chansey, L86, F","condition":"570/570","active":false,"stats":{"atk":13,"def":58,"spa":109,"spd":230,"spe":135},"moves":["toxic","softboiled","seismictoss","aromatherapy"],"baseAbility":"naturalcure","item":"eviolite","pokeball":"pokeball","ability":"naturalcure"},{"ident":"p2: Rampardos","details":"Rampardos, L88, F","condition":"314/314","active":false,"stats":{"atk":341,"def":156,"spa":165,"spd":138,"spe":152},"moves":["headsmash","earthquake","firepunch","rockslide"],"baseAbility":"sheerforce","item":"choicescarf","pokeball":"pokeball","ability":"sheerforce"},{"ident":"p2: Mismagius","details":"Mismagius, L87, F","condition":"246/246","active":false,"stats":{"atk":109,"def":154,"spa":232,"spd":232,"spe":232},"moves":["nastyplot","mysticalfire","shadowball","dazzlinggleam"],"baseAbility":"levitate","item":"lifeorb","pokeball":"pokeball","ability":"levitate"},{"ident":"p2: Spinda","details":"Spinda, L99, M","condition":"279/279","active":false,"stats":{"atk":175,"def":175,"spa":175,"spd":175,"spe":175},"moves":["return102","superpower","thief","suckerpunch"],"baseAbility":"contrary","item":"leftovers","pokeball":"pokeball","ability":"contrary"},{"ident":"p2: Emboar","details":"Emboar, L85, M","condition":"326/326","active":false,"stats":{"atk":258,"def":159,"spa":219,"spd":159,"spe":159},"moves":["headsmash","flareblitz","suckerpunch","superpower"],"baseAbility":"reckless","item":"choiceband","pokeball":"pokeball","ability":"reckless"}]}},"context":["|t:|1736812507","|gametype|singles","|player|p1|Random Bot||","|player|p2|TensorZero Bot||","|teamsize|p1|6","|teamsize|p2|6","|gen|7","|tier|[Gen 7] Custom Game","|clearpoke","|poke|p1|Pachirisu, L95, F|item","|poke|p1|Starmie, L84|item","|poke|p1|Vigoroth, L88, F|item","|poke|p1|Salamence, L72, M|item","|poke|p1|Toxicroak, L84, M|item","|poke|p1|Venomoth, L82, F|item","|poke|p2|Camerupt, L88, F|item","|poke|p2|Chansey, L86, F|item","|poke|p2|Rampardos, L88, F|item","|poke|p2|Mismagius, L87, F|item","|poke|p2|Spinda, L99, M|item","|poke|p2|Emboar, L85, M|item","|teampreview","|","|t:|1736812507","|start","|switch|p1a: Pachirisu|Pachirisu, L95, F|268/268","|switch|p2a: Camerupt|Camerupt, L88, F|266/266","|turn|1","|","|t:|1736812510","|move|p1a: Pachirisu|Thunderbolt|p2a: Camerupt","|-immune|p2a: Camerupt","|move|p2a: Camerupt|Stealth Rock|p1a: Pachirisu","|-sidestart|p1: Random Bot|move: Stealth Rock","|","|upkeep","|turn|2","|","|t:|1736812511","|move|p1a: Pachirisu|Thunderbolt|p2a: Camerupt","|-immune|p2a: Camerupt","|move|p2a: Camerupt|Stealth Rock||[still]","|-fail|p2a: Camerupt","|debug|move failed because it did nothing","|","|upkeep","|turn|3","|","|t:|1736812513","|detailschange|p2a: Camerupt|Camerupt-Mega, L88, F","|-mega|p2a: Camerupt|Camerupt|Cameruptite","|move|p1a: Pachirisu|U-turn|p2a: Camerupt","|-resisted|p2a: Camerupt","|-damage|p2a: Camerupt|250/266","|","|t:|1736812513","|switch|p1a: Starmie|Starmie, L84|238/238|[from] U-turn","|-damage|p1a: Starmie|209/238|[from] Stealth Rock","|move|p2a: Camerupt|Fire Blast|p1a: Starmie","|-resisted|p1a: Starmie","|-damage|p1a: Starmie|83/238","|","|-heal|p1a: Starmie|97/238|[from] item: Leftovers","|upkeep","|turn|4"]}
+|
+|t:|1736812515
+|move|p1a: Starmie|Recover|p1a: Starmie
+|-heal|p1a: Starmie|216/238
+|move|p2a: Camerupt|Fire Blast|p1a: Starmie
+|-resisted|p1a: Starmie
+|-damage|p1a: Starmie|97/238
+|
+|-heal|p1a: Starmie|111/238|[from] item: Leftovers
+|upkeep
+|turn|5
+Got response:  {
+  inference_id: '01946217-d9a6-7bb1-ab3c-09012adbdb1b',
+  episode_id: '01946217-b2d4-73a0-a0af-d8b7d6b6596d',
+  variant_name: 'simple_variant',
+  output: {
+    raw: '{"action": "move Fire Blast"}',
+    parsed: { action: 'move Fire Blast' }
+  },
+  usage: { input_tokens: 10103, output_tokens: 13 }
+}
+Making request:  {"request":{"active":[{"moves":[{"move":"Stealth Rock","id":"stealthrock","pp":30,"maxpp":32,"target":"foeSide","disabled":false},{"move":"Will-O-Wisp","id":"willowisp","pp":24,"maxpp":24,"target":"normal","disabled":false},{"move":"Earth Power","id":"earthpower","pp":16,"maxpp":16,"target":"normal","disabled":false},{"move":"Fire Blast","id":"fireblast","pp":5,"maxpp":8,"target":"normal","disabled":false}]}],"side":{"name":"TensorZero Bot","id":"p2","pokemon":[{"ident":"p2: Camerupt","details":"Camerupt-Mega, L88, F","condition":"169/266","active":true,"stats":{"atk":216,"def":226,"spa":305,"spd":235,"spe":85},"moves":["stealthrock","willowisp","earthpower","fireblast"],"baseAbility":"sheerforce","item":"cameruptite","pokeball":"pokeball","ability":"sheerforce"},{"ident":"p2: Chansey","details":"Chansey, L86, F","condition":"570/570","active":false,"stats":{"atk":13,"def":58,"spa":109,"spd":230,"spe":135},"moves":["toxic","softboiled","seismictoss","aromatherapy"],"baseAbility":"naturalcure","item":"eviolite","pokeball":"pokeball","ability":"naturalcure"},{"ident":"p2: Rampardos","details":"Rampardos, L88, F","condition":"314/314","active":false,"stats":{"atk":341,"def":156,"spa":165,"spd":138,"spe":152},"moves":["headsmash","earthquake","firepunch","rockslide"],"baseAbility":"sheerforce","item":"choicescarf","pokeball":"pokeball","ability":"sheerforce"},{"ident":"p2: Mismagius","details":"Mismagius, L87, F","condition":"246/246","active":false,"stats":{"atk":109,"def":154,"spa":232,"spd":232,"spe":232},"moves":["nastyplot","mysticalfire","shadowball","dazzlinggleam"],"baseAbility":"levitate","item":"lifeorb","pokeball":"pokeball","ability":"levitate"},{"ident":"p2: Spinda","details":"Spinda, L99, M","condition":"279/279","active":false,"stats":{"atk":175,"def":175,"spa":175,"spd":175,"spe":175},"moves":["return102","superpower","thief","suckerpunch"],"baseAbility":"contrary","item":"leftovers","pokeball":"pokeball","ability":"contrary"},{"ident":"p2: Emboar","details":"Emboar, L85, M","condition":"326/326","active":false,"stats":{"atk":258,"def":159,"spa":219,"spd":159,"spe":159},"moves":["headsmash","flareblitz","suckerpunch","superpower"],"baseAbility":"reckless","item":"choiceband","pokeball":"pokeball","ability":"reckless"}]}},"context":["|t:|1736812507","|gametype|singles","|player|p1|Random Bot||","|player|p2|TensorZero Bot||","|teamsize|p1|6","|teamsize|p2|6","|gen|7","|tier|[Gen 7] Custom Game","|clearpoke","|poke|p1|Pachirisu, L95, F|item","|poke|p1|Starmie, L84|item","|poke|p1|Vigoroth, L88, F|item","|poke|p1|Salamence, L72, M|item","|poke|p1|Toxicroak, L84, M|item","|poke|p1|Venomoth, L82, F|item","|poke|p2|Camerupt, L88, F|item","|poke|p2|Chansey, L86, F|item","|poke|p2|Rampardos, L88, F|item","|poke|p2|Mismagius, L87, F|item","|poke|p2|Spinda, L99, M|item","|poke|p2|Emboar, L85, M|item","|teampreview","|","|t:|1736812507","|start","|switch|p1a: Pachirisu|Pachirisu, L95, F|268/268","|switch|p2a: Camerupt|Camerupt, L88, F|266/266","|turn|1","|","|t:|1736812510","|move|p1a: Pachirisu|Thunderbolt|p2a: Camerupt","|-immune|p2a: Camerupt","|move|p2a: Camerupt|Stealth Rock|p1a: Pachirisu","|-sidestart|p1: Random Bot|move: Stealth Rock","|","|upkeep","|turn|2","|","|t:|1736812511","|move|p1a: Pachirisu|Thunderbolt|p2a: Camerupt","|-immune|p2a: Camerupt","|move|p2a: Camerupt|Stealth Rock||[still]","|-fail|p2a: Camerupt","|debug|move failed because it did nothing","|","|upkeep","|turn|3","|","|t:|1736812513","|detailschange|p2a: Camerupt|Camerupt-Mega, L88, F","|-mega|p2a: Camerupt|Camerupt|Cameruptite","|move|p1a: Pachirisu|U-turn|p2a: Camerupt","|-resisted|p2a: Camerupt","|-damage|p2a: Camerupt|250/266","|","|t:|1736812513","|switch|p1a: Starmie|Starmie, L84|238/238|[from] U-turn","|-damage|p1a: Starmie|209/238|[from] Stealth Rock","|move|p2a: Camerupt|Fire Blast|p1a: Starmie","|-resisted|p1a: Starmie","|-damage|p1a: Starmie|83/238","|","|-heal|p1a: Starmie|97/238|[from] item: Leftovers","|upkeep","|turn|4","|","|t:|1736812515","|move|p1a: Starmie|Recover|p1a: Starmie","|-heal|p1a: Starmie|216/238","|move|p2a: Camerupt|Fire Blast|p1a: Starmie","|-resisted|p1a: Starmie","|-damage|p1a: Starmie|97/238","|","|-heal|p1a: Starmie|111/238|[from] item: Leftovers","|upkeep","|turn|5"]}
+|
+|t:|1736812517
+|move|p1a: Starmie|Psyshock|p2a: Camerupt
+|-damage|p2a: Camerupt|169/266
+|move|p2a: Camerupt|Fire Blast|p1a: Starmie|[miss]
+|-miss|p2a: Camerupt|p1a: Starmie
+|
+|-heal|p1a: Starmie|125/238|[from] item: Leftovers
+|upkeep
+|turn|6
+Got response:  {
+  inference_id: '01946217-e0f0-78e3-9ccf-390051ae69b0',
+  episode_id: '01946217-b2d4-73a0-a0af-d8b7d6b6596d',
+  variant_name: 'simple_variant',
+  output: {
+    raw: '{"action":"move Fire Blast"}',
+    parsed: { action: 'move Fire Blast' }
+  },
+  usage: { input_tokens: 10236, output_tokens: 12 }
+}
+Making request:  {"request":{"forceSwitch":[true],"side":{"name":"TensorZero Bot","id":"p2","pokemon":[{"ident":"p2: Camerupt","details":"Camerupt-Mega, L88, F","condition":"0 fnt","active":true,"stats":{"atk":216,"def":226,"spa":305,"spd":235,"spe":85},"moves":["stealthrock","willowisp","earthpower","fireblast"],"baseAbility":"sheerforce","item":"cameruptite","pokeball":"pokeball","ability":"sheerforce"},{"ident":"p2: Chansey","details":"Chansey, L86, F","condition":"570/570","active":false,"stats":{"atk":13,"def":58,"spa":109,"spd":230,"spe":135},"moves":["toxic","softboiled","seismictoss","aromatherapy"],"baseAbility":"naturalcure","item":"eviolite","pokeball":"pokeball","ability":"naturalcure"},{"ident":"p2: Rampardos","details":"Rampardos, L88, F","condition":"314/314","active":false,"stats":{"atk":341,"def":156,"spa":165,"spd":138,"spe":152},"moves":["headsmash","earthquake","firepunch","rockslide"],"baseAbility":"sheerforce","item":"choicescarf","pokeball":"pokeball","ability":"sheerforce"},{"ident":"p2: Mismagius","details":"Mismagius, L87, F","condition":"246/246","active":false,"stats":{"atk":109,"def":154,"spa":232,"spd":232,"spe":232},"moves":["nastyplot","mysticalfire","shadowball","dazzlinggleam"],"baseAbility":"levitate","item":"lifeorb","pokeball":"pokeball","ability":"levitate"},{"ident":"p2: Spinda","details":"Spinda, L99, M","condition":"279/279","active":false,"stats":{"atk":175,"def":175,"spa":175,"spd":175,"spe":175},"moves":["return102","superpower","thief","suckerpunch"],"baseAbility":"contrary","item":"leftovers","pokeball":"pokeball","ability":"contrary"},{"ident":"p2: Emboar","details":"Emboar, L85, M","condition":"326/326","active":false,"stats":{"atk":258,"def":159,"spa":219,"spd":159,"spe":159},"moves":["headsmash","flareblitz","suckerpunch","superpower"],"baseAbility":"reckless","item":"choiceband","pokeball":"pokeball","ability":"reckless"}]},"noCancel":true},"context":["|t:|1736812507","|gametype|singles","|player|p1|Random Bot||","|player|p2|TensorZero Bot||","|teamsize|p1|6","|teamsize|p2|6","|gen|7","|tier|[Gen 7] Custom Game","|clearpoke","|poke|p1|Pachirisu, L95, F|item","|poke|p1|Starmie, L84|item","|poke|p1|Vigoroth, L88, F|item","|poke|p1|Salamence, L72, M|item","|poke|p1|Toxicroak, L84, M|item","|poke|p1|Venomoth, L82, F|item","|poke|p2|Camerupt, L88, F|item","|poke|p2|Chansey, L86, F|item","|poke|p2|Rampardos, L88, F|item","|poke|p2|Mismagius, L87, F|item","|poke|p2|Spinda, L99, M|item","|poke|p2|Emboar, L85, M|item","|teampreview","|","|t:|1736812507","|start","|switch|p1a: Pachirisu|Pachirisu, L95, F|268/268","|switch|p2a: Camerupt|Camerupt, L88, F|266/266","|turn|1","|","|t:|1736812510","|move|p1a: Pachirisu|Thunderbolt|p2a: Camerupt","|-immune|p2a: Camerupt","|move|p2a: Camerupt|Stealth Rock|p1a: Pachirisu","|-sidestart|p1: Random Bot|move: Stealth Rock","|","|upkeep","|turn|2","|","|t:|1736812511","|move|p1a: Pachirisu|Thunderbolt|p2a: Camerupt","|-immune|p2a: Camerupt","|move|p2a: Camerupt|Stealth Rock||[still]","|-fail|p2a: Camerupt","|debug|move failed because it did nothing","|","|upkeep","|turn|3","|","|t:|1736812513","|detailschange|p2a: Camerupt|Camerupt-Mega, L88, F","|-mega|p2a: Camerupt|Camerupt|Cameruptite","|move|p1a: Pachirisu|U-turn|p2a: Camerupt","|-resisted|p2a: Camerupt","|-damage|p2a: Camerupt|250/266","|","|t:|1736812513","|switch|p1a: Starmie|Starmie, L84|238/238|[from] U-turn","|-damage|p1a: Starmie|209/238|[from] Stealth Rock","|move|p2a: Camerupt|Fire Blast|p1a: Starmie","|-resisted|p1a: Starmie","|-damage|p1a: Starmie|83/238","|","|-heal|p1a: Starmie|97/238|[from] item: Leftovers","|upkeep","|turn|4","|","|t:|1736812515","|move|p1a: Starmie|Recover|p1a: Starmie","|-heal|p1a: Starmie|216/238","|move|p2a: Camerupt|Fire Blast|p1a: Starmie","|-resisted|p1a: Starmie","|-damage|p1a: Starmie|97/238","|","|-heal|p1a: Starmie|111/238|[from] item: Leftovers","|upkeep","|turn|5","|","|t:|1736812517","|move|p1a: Starmie|Psyshock|p2a: Camerupt","|-damage|p2a: Camerupt|169/266","|move|p2a: Camerupt|Fire Blast|p1a: Starmie|[miss]","|-miss|p2a: Camerupt|p1a: Starmie","|","|-heal|p1a: Starmie|125/238|[from] item: Leftovers","|upkeep","|turn|6"]}
+|
+|t:|1736812519
+|move|p1a: Starmie|Scald|p2a: Camerupt
+|-supereffective|p2a: Camerupt
+|-damage|p2a: Camerupt|0 fnt
+|faint|p2a: Camerupt
+|
+|-heal|p1a: Starmie|139/238|[from] item: Leftovers
+|upkeep
+Got response:  {
+  inference_id: '01946217-e872-7f90-9574-f1c939c1ddaa',
+  episode_id: '01946217-b2d4-73a0-a0af-d8b7d6b6596d',
+  variant_name: 'simple_variant',
+  output: {
+    raw: '{"action": "switch Chansey"}',
+    parsed: { action: 'switch Chansey' }
+  },
+  usage: { input_tokens: 10251, output_tokens: 12 }
+}
+Making request:  {"request":{"active":[{"moves":[{"move":"Toxic","id":"toxic","pp":16,"maxpp":16,"target":"normal","disabled":false},{"move":"Soft-Boiled","id":"softboiled","pp":16,"maxpp":16,"target":"self","disabled":false},{"move":"Seismic Toss","id":"seismictoss","pp":32,"maxpp":32,"target":"normal","disabled":false},{"move":"Aromatherapy","id":"aromatherapy","pp":8,"maxpp":8,"target":"allyTeam","disabled":false}]}],"side":{"name":"TensorZero Bot","id":"p2","pokemon":[{"ident":"p2: Chansey","details":"Chansey, L86, F","condition":"570/570","active":true,"stats":{"atk":13,"def":58,"spa":109,"spd":230,"spe":135},"moves":["toxic","softboiled","seismictoss","aromatherapy"],"baseAbility":"naturalcure","item":"eviolite","pokeball":"pokeball","ability":"naturalcure"},{"ident":"p2: Camerupt","details":"Camerupt-Mega, L88, F","condition":"0 fnt","active":false,"stats":{"atk":216,"def":226,"spa":305,"spd":235,"spe":85},"moves":["stealthrock","willowisp","earthpower","fireblast"],"baseAbility":"sheerforce","item":"cameruptite","pokeball":"pokeball","ability":"sheerforce"},{"ident":"p2: Rampardos","details":"Rampardos, L88, F","condition":"314/314","active":false,"stats":{"atk":341,"def":156,"spa":165,"spd":138,"spe":152},"moves":["headsmash","earthquake","firepunch","rockslide"],"baseAbility":"sheerforce","item":"choicescarf","pokeball":"pokeball","ability":"sheerforce"},{"ident":"p2: Mismagius","details":"Mismagius, L87, F","condition":"246/246","active":false,"stats":{"atk":109,"def":154,"spa":232,"spd":232,"spe":232},"moves":["nastyplot","mysticalfire","shadowball","dazzlinggleam"],"baseAbility":"levitate","item":"lifeorb","pokeball":"pokeball","ability":"levitate"},{"ident":"p2: Spinda","details":"Spinda, L99, M","condition":"279/279","active":false,"stats":{"atk":175,"def":175,"spa":175,"spd":175,"spe":175},"moves":["return102","superpower","thief","suckerpunch"],"baseAbility":"contrary","item":"leftovers","pokeball":"pokeball","ability":"contrary"},{"ident":"p2: Emboar","details":"Emboar, L85, M","condition":"326/326","active":false,"stats":{"atk":258,"def":159,"spa":219,"spd":159,"spe":159},"moves":["headsmash","flareblitz","suckerpunch","superpower"],"baseAbility":"reckless","item":"choiceband","pokeball":"pokeball","ability":"reckless"}]}},"context":["|t:|1736812507","|gametype|singles","|player|p1|Random Bot||","|player|p2|TensorZero Bot||","|teamsize|p1|6","|teamsize|p2|6","|gen|7","|tier|[Gen 7] Custom Game","|clearpoke","|poke|p1|Pachirisu, L95, F|item","|poke|p1|Starmie, L84|item","|poke|p1|Vigoroth, L88, F|item","|poke|p1|Salamence, L72, M|item","|poke|p1|Toxicroak, L84, M|item","|poke|p1|Venomoth, L82, F|item","|poke|p2|Camerupt, L88, F|item","|poke|p2|Chansey, L86, F|item","|poke|p2|Rampardos, L88, F|item","|poke|p2|Mismagius, L87, F|item","|poke|p2|Spinda, L99, M|item","|poke|p2|Emboar, L85, M|item","|teampreview","|","|t:|1736812507","|start","|switch|p1a: Pachirisu|Pachirisu, L95, F|268/268","|switch|p2a: Camerupt|Camerupt, L88, F|266/266","|turn|1","|","|t:|1736812510","|move|p1a: Pachirisu|Thunderbolt|p2a: Camerupt","|-immune|p2a: Camerupt","|move|p2a: Camerupt|Stealth Rock|p1a: Pachirisu","|-sidestart|p1: Random Bot|move: Stealth Rock","|","|upkeep","|turn|2","|","|t:|1736812511","|move|p1a: Pachirisu|Thunderbolt|p2a: Camerupt","|-immune|p2a: Camerupt","|move|p2a: Camerupt|Stealth Rock||[still]","|-fail|p2a: Camerupt","|debug|move failed because it did nothing","|","|upkeep","|turn|3","|","|t:|1736812513","|detailschange|p2a: Camerupt|Camerupt-Mega, L88, F","|-mega|p2a: Camerupt|Camerupt|Cameruptite","|move|p1a: Pachirisu|U-turn|p2a: Camerupt","|-resisted|p2a: Camerupt","|-damage|p2a: Camerupt|250/266","|","|t:|1736812513","|switch|p1a: Starmie|Starmie, L84|238/238|[from] U-turn","|-damage|p1a: Starmie|209/238|[from] Stealth Rock","|move|p2a: Camerupt|Fire Blast|p1a: Starmie","|-resisted|p1a: Starmie","|-damage|p1a: Starmie|83/238","|","|-heal|p1a: Starmie|97/238|[from] item: Leftovers","|upkeep","|turn|4","|","|t:|1736812515","|move|p1a: Starmie|Recover|p1a: Starmie","|-heal|p1a: Starmie|216/238","|move|p2a: Camerupt|Fire Blast|p1a: Starmie","|-resisted|p1a: Starmie","|-damage|p1a: Starmie|97/238","|","|-heal|p1a: Starmie|111/238|[from] item: Leftovers","|upkeep","|turn|5","|","|t:|1736812517","|move|p1a: Starmie|Psyshock|p2a: Camerupt","|-damage|p2a: Camerupt|169/266","|move|p2a: Camerupt|Fire Blast|p1a: Starmie|[miss]","|-miss|p2a: Camerupt|p1a: Starmie","|","|-heal|p1a: Starmie|125/238|[from] item: Leftovers","|upkeep","|turn|6","|","|t:|1736812519","|move|p1a: Starmie|Scald|p2a: Camerupt","|-supereffective|p2a: Camerupt","|-damage|p2a: Camerupt|0 fnt","|faint|p2a: Camerupt","|","|-heal|p1a: Starmie|139/238|[from] item: Leftovers","|upkeep"]}
+|
+|t:|1736812521
+|switch|p2a: Chansey|Chansey, L86, F|570/570
+|turn|7
+Got response:  {
+  inference_id: '01946217-f140-7632-ba5e-3fe269726003',
+  episode_id: '01946217-b2d4-73a0-a0af-d8b7d6b6596d',
+  variant_name: 'simple_variant',
+  output: { raw: '{"action":"switch 2"}', parsed: { action: 'switch 2' } },
+  usage: { input_tokens: 10469, output_tokens: 11 }
+}
