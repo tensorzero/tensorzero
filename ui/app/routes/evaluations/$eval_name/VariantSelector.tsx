@@ -43,7 +43,6 @@ export function VariantSelector({
     evalName: evalName,
     query: "",
   });
-  console.log(availableRunInfos.data);
 
   // State to track if dropdown is open
   const [isOpen, setIsOpen] = useState(false);
@@ -55,7 +54,6 @@ export function VariantSelector({
       "eval_run_ids",
       runIdInfos.map((info) => info.eval_run_id).join(","),
     );
-    console.log("setting selected run ids", runIdInfos);
     navigate(`?${newParams.toString()}`, { replace: true });
   };
 
