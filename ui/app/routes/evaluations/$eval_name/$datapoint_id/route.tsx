@@ -10,6 +10,7 @@ import {
 import { PageLayout } from "~/components/layout/PageLayout";
 import Input from "~/components/inference/Input";
 import { redirect } from "react-router";
+import Output from "~/components/inference/Output";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -52,6 +53,15 @@ export default function EvaluationDatapointPage({
         <SectionLayout>
           <SectionHeader heading="Input" />
           <Input input={evalResults[0].input} />
+        </SectionLayout>
+        <SectionLayout>
+          <SectionHeader heading="Output" />
+          {evalResults.map((result) => (
+            <div key={result.eval_run_id}>
+              <SectionHeader heading={result.eval_run_id} />
+              <Output output={result.generated_output} />
+            </div>
+          ))}
         </SectionLayout>
       </SectionsGroup>
     </PageLayout>
