@@ -174,7 +174,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader heading="Evaluation" name={eval_name}>
+      <PageHeader label="Evaluation" name={eval_name}>
         <BasicInfo eval_config={eval_config} />
       </PageHeader>
 
