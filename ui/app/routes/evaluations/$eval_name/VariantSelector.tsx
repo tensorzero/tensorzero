@@ -18,10 +18,12 @@ import {
 import { useSearchParams, useNavigate } from "react-router";
 import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
 import { formatDate } from "~/utils/date";
+import { useSearchEvalRunsFetcher } from "~/routes/api/evaluations/search_runs/$eval_name/route";
 
 interface VariantSelectorProps {
-  available_run_ids: EvaluationRunInfo[];
+  evalName: string;
   mostRecentEvalInferenceDates: Map<string, Date>;
+  selectedRunIdInfos: EvaluationRunInfo[];
 }
 
 // Helper function to get the last 6 digits of a UUID
@@ -30,38 +32,65 @@ export function getLastUuidSegment(uuid: string): string {
 }
 
 export function VariantSelector({
-  available_run_ids,
+  evalName,
   mostRecentEvalInferenceDates,
+  selectedRunIdInfos,
 }: VariantSelectorProps) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
-  const selectedRunIds = selectedRunIdsParam
-    ? selectedRunIdsParam.split(",")
-    : [];
+  const selectedRunIds = selectedRunIdInfos.map((info) => info.eval_run_id);
+  const availableRunInfos = useSearchEvalRunsFetcher({
+    evalName: evalName,
+    query: "",
+  });
+  console.log(availableRunInfos.data);
 
   // State to track if dropdown is open
   const [isOpen, setIsOpen] = useState(false);
 
   // Update the URL with the selected run IDs
-  const updateSelectedRunIds = (runIds: string[]) => {
+  const updateSelectedRunIds = (runIdInfos: EvaluationRunInfo[]) => {
     const newParams = new URLSearchParams(searchParams);
-    newParams.set("eval_run_ids", runIds.join(","));
+    newParams.set(
+      "eval_run_ids",
+      runIdInfos.map((info) => info.eval_run_id).join(","),
+    );
+    console.log("setting selected run ids", runIdInfos);
     navigate(`?${newParams.toString()}`, { replace: true });
   };
 
   // Toggle a run selection
   const toggleRun = (runId: string) => {
+    const runInfo = availableRunInfos.data.find(
+      (info) => info.eval_run_id === runId,
+    );
+    if (!runInfo) return;
+
     if (selectedRunIds.includes(runId)) {
-      updateSelectedRunIds(selectedRunIds.filter((id) => id !== runId));
+      // Remove the run
+      const newSelectedRunIdInfos = selectedRunIdInfos.filter(
+        (info) => info.eval_run_id !== runId,
+      );
+      updateSelectedRunIds(newSelectedRunIdInfos);
     } else {
-      updateSelectedRunIds([...selectedRunIds, runId]);
+      // Add the run
+      updateSelectedRunIds([...selectedRunIdInfos, runInfo]);
     }
   };
 
   // Select all runs
   const selectAll = () => {
-    updateSelectedRunIds(available_run_ids.map((info) => info.eval_run_id));
+    const allSelected = availableRunInfos.data.every((info) =>
+      selectedRunIds.includes(info.eval_run_id),
+    );
+
+    if (allSelected) {
+      // Deselect all
+      updateSelectedRunIds([]);
+    } else {
+      // Select all
+      updateSelectedRunIds(availableRunInfos.data);
+    }
   };
 
   return (
@@ -79,12 +108,9 @@ export function VariantSelector({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-96">
             <DropdownMenuSeparator />
-            {available_run_ids.map((info) => {
+            {availableRunInfos.data.map((info) => {
               const isSelected = selectedRunIds.includes(info.eval_run_id);
-              const variantColor = getVariantColorClass(
-                info.eval_run_id,
-                available_run_ids,
-              );
+              const variantColor = getVariantColorClass(info.eval_run_id);
               const runIdSegment = getLastUuidSegment(info.eval_run_id);
 
               return (
@@ -106,7 +132,9 @@ export function VariantSelector({
             })}
             <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem
-              checked={selectedRunIds.length === available_run_ids.length}
+              checked={availableRunInfos.data.every((info) =>
+                selectedRunIds.includes(info.eval_run_id),
+              )}
               onCheckedChange={selectAll}
               className="font-medium"
             >
@@ -118,11 +146,9 @@ export function VariantSelector({
 
       {/* Display selected variants as badges */}
       <div className="mt-3 flex flex-wrap gap-2">
-        {selectedRunIds.map((runId) => {
-          const info = available_run_ids.find((i) => i.eval_run_id === runId);
-          if (!info) return null;
-
-          const variantColor = getVariantColor(runId, available_run_ids);
+        {selectedRunIdInfos.map((info) => {
+          const runId = info.eval_run_id;
+          const variantColor = getVariantColor(runId);
           const runIdSegment = getLastUuidSegment(runId);
 
           return (
@@ -158,16 +184,24 @@ export function VariantSelector({
   );
 }
 
-// Helper function to get the appropriate color class based on variant
-export function getVariantColor(
-  runId: string,
-  allRunIds: EvaluationRunInfo[],
-  isSelected = true,
-) {
-  // Assign a color based on the index in the array
-  const index = allRunIds.findIndex((info) => info.eval_run_id === runId);
+// Helper hash function for consistent coloring
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash = hash & hash;
+  }
+  return hash;
+}
 
-  switch (index % 4) {
+// Get variant color based on runId hash - will produce consistent colors regardless of order
+export function getVariantColor(runId: string, isSelected = true) {
+  // Use a hash of the runId for consistent color assignment
+  // Increase number of possible colors from 4 to 10
+  const colorIndex = Math.abs(hashString(runId)) % 10;
+
+  // Expanded color palette with 10 distinct options
+  switch (colorIndex) {
     case 0:
       return isSelected
         ? "bg-blue-600 hover:bg-blue-700"
@@ -180,6 +214,34 @@ export function getVariantColor(
       return isSelected
         ? "bg-green-600 hover:bg-green-700"
         : "border-green-600 text-green-600 hover:bg-green-50";
+    case 3:
+      return isSelected
+        ? "bg-red-600 hover:bg-red-700"
+        : "border-red-600 text-red-600 hover:bg-red-50";
+    case 4:
+      return isSelected
+        ? "bg-amber-600 hover:bg-amber-700"
+        : "border-amber-600 text-amber-600 hover:bg-amber-50";
+    case 5:
+      return isSelected
+        ? "bg-pink-600 hover:bg-pink-700"
+        : "border-pink-600 text-pink-600 hover:bg-pink-50";
+    case 6:
+      return isSelected
+        ? "bg-teal-600 hover:bg-teal-700"
+        : "border-teal-600 text-teal-600 hover:bg-teal-50";
+    case 7:
+      return isSelected
+        ? "bg-indigo-600 hover:bg-indigo-700"
+        : "border-indigo-600 text-indigo-600 hover:bg-indigo-50";
+    case 8:
+      return isSelected
+        ? "bg-cyan-600 hover:bg-cyan-700"
+        : "border-cyan-600 text-cyan-600 hover:bg-cyan-50";
+    case 9:
+      return isSelected
+        ? "bg-orange-600 hover:bg-orange-700"
+        : "border-orange-600 text-orange-600 hover:bg-orange-50";
     default:
       return isSelected
         ? "bg-gray-600 hover:bg-gray-700"
@@ -188,18 +250,32 @@ export function getVariantColor(
 }
 
 // Helper function to get color class for the small badge in dropdown
-function getVariantColorClass(runId: string, allRunIds: EvaluationRunInfo[]) {
-  // Get the index just like in getVariantColor
-  const index = allRunIds.findIndex((info) => info.eval_run_id === runId);
+function getVariantColorClass(runId: string) {
+  // Use the same hash-based approach for consistency
+  const colorIndex = Math.abs(hashString(runId)) % 10;
 
-  // Return only the background color class
-  switch (index % 4) {
+  // Return only the background color class - expanded to match the colors above
+  switch (colorIndex) {
     case 0:
       return "bg-blue-600";
     case 1:
       return "bg-purple-600";
     case 2:
       return "bg-green-600";
+    case 3:
+      return "bg-red-600";
+    case 4:
+      return "bg-amber-600";
+    case 5:
+      return "bg-pink-600";
+    case 6:
+      return "bg-teal-600";
+    case 7:
+      return "bg-indigo-600";
+    case 8:
+      return "bg-cyan-600";
+    case 9:
+      return "bg-orange-600";
     default:
       return "bg-gray-600";
   }

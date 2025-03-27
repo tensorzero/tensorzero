@@ -201,13 +201,11 @@ function getOutputSummary(
 const VariantCircle = ({
   runId,
   variantName,
-  allRunIds,
 }: {
   runId: string;
   variantName: string;
-  allRunIds: EvaluationRunInfo[];
 }) => {
-  const colorClass = getVariantColor(runId, allRunIds);
+  const colorClass = getVariantColor(runId);
 
   return (
     <TooltipProvider>
@@ -229,7 +227,7 @@ const VariantCircle = ({
 };
 
 interface EvaluationTableProps {
-  available_eval_run_ids: EvaluationRunInfo[];
+  selected_eval_run_infos: EvaluationRunInfo[];
   eval_results: ParsedEvaluationResult[];
   eval_statistics: EvaluationStatistics[];
   evaluator_names: string[];
@@ -238,18 +236,16 @@ interface EvaluationTableProps {
 }
 
 export function EvaluationTable({
-  available_eval_run_ids,
+  selected_eval_run_infos,
   eval_results,
   eval_statistics,
   evaluator_names,
   eval_name,
   mostRecentEvalInferenceDates,
 }: EvaluationTableProps) {
-  const [searchParams] = useSearchParams();
-  const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
-  const selectedRunIds = selectedRunIdsParam
-    ? selectedRunIdsParam.split(",")
-    : [];
+  const selectedRunIds = selected_eval_run_infos.map(
+    (info) => info.eval_run_id,
+  );
 
   // Determine if we should show the variant column
   const showVariantColumn = selectedRunIds.length > 1;
@@ -325,11 +321,11 @@ export function EvaluationTable({
   // Map run ID to variant name
   const runIdToVariant = useMemo(() => {
     const map = new Map<string, string>();
-    available_eval_run_ids.forEach((info) => {
+    selected_eval_run_infos.forEach((info) => {
       map.set(info.eval_run_id, info.variant_name);
     });
     return map;
-  }, [available_eval_run_ids]);
+  }, [selected_eval_run_infos]);
 
   // Format metric value for display
   const formatMetricValue = (
@@ -381,7 +377,8 @@ export function EvaluationTable({
     <div>
       {/* Variant selector */}
       <VariantSelector
-        available_run_ids={available_eval_run_ids}
+        evalName={eval_name}
+        selectedRunIdInfos={selected_eval_run_infos}
         mostRecentEvalInferenceDates={mostRecentEvalInferenceDates}
       />
 
@@ -427,7 +424,6 @@ export function EvaluationTable({
                           eval_name={eval_name}
                           evaluator_name={evaluator_name}
                           summaryStats={filteredStats}
-                          evalRunIds={available_eval_run_ids}
                         />
                       </TableHead>
                     );
@@ -503,7 +499,6 @@ export function EvaluationTable({
                                 variantName={
                                   runIdToVariant.get(runId) || "Unknown"
                                 }
-                                allRunIds={available_eval_run_ids}
                               />
                             </TableCell>
                           )}
@@ -564,12 +559,10 @@ const EvaluatorHeader = ({
   eval_name,
   evaluator_name,
   summaryStats,
-  evalRunIds,
 }: {
   eval_name: string;
   evaluator_name: string;
   summaryStats: EvaluationStatistics[];
-  evalRunIds: EvaluationRunInfo[];
 }) => {
   const config = useConfig();
   const evalConfig = config.evals[eval_name];
@@ -591,7 +584,6 @@ const EvaluatorHeader = ({
             <EvaluatorProperties
               metricConfig={metricProperties}
               summaryStats={summaryStats}
-              evalRunIds={evalRunIds}
               evaluatorConfig={evaluatorConfig}
             />
           </div>
@@ -626,12 +618,10 @@ const EvaluatorHeader = ({
 const EvaluatorProperties = ({
   metricConfig,
   summaryStats,
-  evalRunIds,
   evaluatorConfig,
 }: {
   metricConfig: MetricConfig;
   summaryStats: EvaluationStatistics[];
-  evalRunIds: EvaluationRunInfo[];
   evaluatorConfig: EvaluatorConfig;
 }) => {
   const [searchParams] = useSearchParams();
@@ -658,10 +648,7 @@ const EvaluatorProperties = ({
         <div className="mt-2 text-center text-xs text-muted-foreground">
           {orderedStats.map((stat) => {
             // Get the variant color for the circle using the run ID from the stat
-            const variantColorClass = getVariantColor(
-              stat.eval_run_id,
-              evalRunIds,
-            );
+            const variantColorClass = getVariantColor(stat.eval_run_id);
 
             return (
               <div

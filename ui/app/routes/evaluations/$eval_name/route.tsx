@@ -3,7 +3,7 @@ import { getConfig } from "~/utils/config/index.server";
 import {
   getEvalStatistics,
   getEvalResults,
-  getEvalRunIds,
+  getEvalRunInfos,
   countDatapointsForEval,
   getMostRecentEvalInferenceDate,
 } from "~/utils/clickhouse/evaluations.server";
@@ -44,7 +44,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   );
 
   // Set up all promises to run concurrently
-  const evalRunIdsPromise = getEvalRunIds(params.eval_name);
+  const evalRunInfosPromise = getEvalRunInfos(
+    selected_eval_run_ids_array,
+    function_name,
+  );
   const mostRecentEvalInferenceDatePromise = getMostRecentEvalInferenceDate(
     selected_eval_run_ids_array,
   );
@@ -85,13 +88,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // Wait for all three promises to complete concurrently
   const [
-    available_eval_run_ids,
+    selected_eval_run_infos,
     eval_results,
     eval_statistics,
     total_datapoints,
     mostRecentEvalInferenceDates,
   ] = await Promise.all([
-    evalRunIdsPromise,
+    evalRunInfosPromise,
     resultsPromise,
     statisticsPromise,
     total_datapoints_promise,
@@ -100,7 +103,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     eval_name: params.eval_name,
-    available_eval_run_ids,
+    selected_eval_run_infos,
     eval_results,
     eval_statistics,
     has_selected_runs: selected_eval_run_ids_array.length > 0,
@@ -115,7 +118,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const {
     eval_name,
-    available_eval_run_ids,
+    selected_eval_run_infos,
     eval_results,
     eval_statistics,
     has_selected_runs,
@@ -162,7 +165,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
 
           <EvaluationTable
             eval_name={eval_name}
-            available_eval_run_ids={available_eval_run_ids}
+            selected_eval_run_infos={selected_eval_run_infos}
             eval_results={eval_results}
             eval_statistics={eval_statistics}
             evaluator_names={evaluator_names}

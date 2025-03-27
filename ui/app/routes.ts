@@ -15,6 +15,10 @@ export default [
     "routes/api/datasets/count_inserts.route.ts",
   ),
   route(
+    "api/evaluations/search_runs/:eval_name",
+    "routes/api/evaluations/search_runs/$eval_name/route.ts",
+  ),
+  route(
     "api/function/:function_name/feedback_counts",
     "routes/api/function/$function_name/feedback_counts.route.ts",
   ),

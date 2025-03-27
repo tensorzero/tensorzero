@@ -3,17 +3,23 @@ import {
   countDatapointsForEval,
   countTotalEvalRuns,
   getEvalResults,
-  getEvalRunIds,
   getEvalRunInfo,
+  getEvalRunInfos,
   getEvalStatistics,
   getMostRecentEvalInferenceDate,
   searchEvalRuns,
 } from "./evaluations.server";
 
-describe("getEvalRunIds", () => {
-  test("should return correct run ids for entity_extraction eval", async () => {
-    const runIds = await getEvalRunIds("entity_extraction");
-    expect(runIds).toMatchObject([
+describe("getEvalRunInfos", () => {
+  test("should return correct run infos for specific eval run ids", async () => {
+    const runInfos = await getEvalRunInfos(
+      [
+        "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
+        "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
+      ],
+      "extract_entities",
+    );
+    expect(runInfos).toMatchObject([
       {
         eval_run_id: "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
         variant_name: "llama_8b_initial_prompt",
@@ -22,27 +28,26 @@ describe("getEvalRunIds", () => {
         eval_run_id: "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
         variant_name: "gpt4o_mini_initial_prompt",
       },
-      {
-        eval_run_id: "0195aef7-ec99-7312-924f-32b71c3496ee",
-        variant_name: "gpt4o_initial_prompt",
-      },
     ]);
   });
 
-  test("should return correct run ids for haiku eval", async () => {
-    const runIds = await getEvalRunIds("haiku");
-    expect(runIds).toMatchObject([
+  test("should return empty array when no matching run ids are found", async () => {
+    const runInfos = await getEvalRunInfos(
+      ["non-existent-id"],
+      "extract_entities",
+    );
+    expect(runInfos).toEqual([]);
+  });
+
+  test("should handle a single run id correctly", async () => {
+    const runInfos = await getEvalRunInfos(
+      ["0195aef7-ec99-7312-924f-32b71c3496ee"],
+      "extract_entities",
+    );
+    expect(runInfos).toMatchObject([
       {
-        eval_run_id: "0195c498-1cbe-7ac0-b5b2-5856741f5890",
-        variant_name: "better_prompt_haiku_3_5",
-      },
-      {
-        eval_run_id: "0195aef7-96fe-7d60-a2e6-5a6ea990c425",
-        variant_name: "initial_prompt_gpt4o_mini",
-      },
-      {
-        eval_run_id: "0195aef6-4ed4-7710-ae62-abb10744f153",
-        variant_name: "initial_prompt_haiku_3_5",
+        eval_run_id: "0195aef7-ec99-7312-924f-32b71c3496ee",
+        variant_name: "gpt4o_initial_prompt",
       },
     ]);
   });
@@ -50,7 +55,11 @@ describe("getEvalRunIds", () => {
 
 describe("searchEvalRuns", () => {
   test("should return matching run ids when searching by eval_run_id prefix", async () => {
-    const runIds = await searchEvalRuns("entity_extraction", "0195c5");
+    const runIds = await searchEvalRuns(
+      "entity_extraction",
+      "extract_entities",
+      "0195c5",
+    );
     expect(runIds).toMatchObject([
       {
         eval_run_id: "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
@@ -60,7 +69,11 @@ describe("searchEvalRuns", () => {
   });
 
   test("should return matching run ids when searching by variant_name for models", async () => {
-    const runIds = await searchEvalRuns("entity_extraction", "gpt4o");
+    const runIds = await searchEvalRuns(
+      "entity_extraction",
+      "extract_entities",
+      "gpt4o",
+    );
     expect(runIds).toMatchObject([
       {
         eval_run_id: "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
@@ -74,7 +87,7 @@ describe("searchEvalRuns", () => {
   });
 
   test("should return matching run ids when searching by partial variant_name", async () => {
-    const runIds = await searchEvalRuns("haiku", "initial");
+    const runIds = await searchEvalRuns("haiku", "write_haiku", "initial");
     expect(runIds).toMatchObject([
       {
         eval_run_id: "0195aef7-96fe-7d60-a2e6-5a6ea990c425",
@@ -88,7 +101,11 @@ describe("searchEvalRuns", () => {
   });
 
   test("should handle case-insensitive search", async () => {
-    const runIds = await searchEvalRuns("entity_extraction", "llama");
+    const runIds = await searchEvalRuns(
+      "entity_extraction",
+      "extract_entities",
+      "llama",
+    );
     expect(runIds).toMatchObject([
       {
         eval_run_id: "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
@@ -98,7 +115,11 @@ describe("searchEvalRuns", () => {
   });
 
   test("should return empty array when no matches found", async () => {
-    const runIds = await searchEvalRuns("entity_extraction", "nonexistent");
+    const runIds = await searchEvalRuns(
+      "entity_extraction",
+      "extract_entities",
+      "nonexistent",
+    );
     expect(runIds).toEqual([]);
   });
 });
