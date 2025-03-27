@@ -153,9 +153,6 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     searchParams.set("offset", String(offset - pageSize));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-  if (mostRecentEvalInferenceDates.size === 0) {
-    return <div>No inference dates found</div>;
-  }
 
   // Get the most recent inference date from the map
   // If selected_eval_run_ids_array is nonempty, but mostRecentEvalInferenceDates is empty,

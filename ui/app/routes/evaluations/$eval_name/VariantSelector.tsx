@@ -26,6 +26,7 @@ import { useSearchParams, useNavigate } from "react-router";
 import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
 import { formatDate } from "~/utils/date";
 import { useSearchEvalRunsFetcher } from "~/routes/api/evaluations/search_runs/$eval_name/route";
+import { useColorAssigner } from "./ColorAssigner";
 
 interface VariantSelectorProps {
   evalName: string;
@@ -48,6 +49,13 @@ export function VariantSelector({
   const selectedRunIds = selectedRunIdInfos.map((info) => info.eval_run_id);
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
+
+  // Maximum number of selections allowed
+  const MAX_SELECTIONS = 5;
+  const canAddMore = selectedRunIds.length < MAX_SELECTIONS;
+
+  // Use the color assigner context
+  const { getColor } = useColorAssigner();
 
   const { data, isLoading } = useSearchEvalRunsFetcher({
     evalName: evalName,
@@ -78,8 +86,8 @@ export function VariantSelector({
         (info) => info.eval_run_id !== runId,
       );
       updateSelectedRunIds(newSelectedRunIdInfos);
-    } else {
-      // Add the run
+    } else if (canAddMore) {
+      // Add the run only if we haven't reached the limit
       updateSelectedRunIds([...selectedRunIdInfos, runInfo]);
     }
   };
@@ -94,8 +102,9 @@ export function VariantSelector({
       // Deselect all
       updateSelectedRunIds([]);
     } else {
-      // Select all
-      updateSelectedRunIds(availableRunInfos);
+      // Select all, but respect the maximum limit
+      const runsToSelect = availableRunInfos.slice(0, MAX_SELECTIONS);
+      updateSelectedRunIds(runsToSelect);
     }
   };
 
@@ -143,24 +152,31 @@ export function VariantSelector({
                 ) : (
                   <>
                     <CommandEmpty>No results found.</CommandEmpty>
+                    {!canAddMore && !isLoading && (
+                      <div className="px-2 py-1.5 text-sm text-amber-600">
+                        Maximum of {MAX_SELECTIONS} runs can be selected.
+                      </div>
+                    )}
                     <CommandGroup>
                       {availableRunInfos.map((info) => {
                         const isSelected = selectedRunIds.includes(
                           info.eval_run_id,
                         );
-                        const variantColor = getVariantColorClass(
-                          info.eval_run_id,
-                        );
+                        const variantColor = getColor(info.eval_run_id);
                         const runIdSegment = getLastUuidSegment(
                           info.eval_run_id,
                         );
+                        const isDisabled = !isSelected && !canAddMore;
 
                         return (
                           <CommandItem
                             key={info.eval_run_id}
                             value={`${info.variant_name} ${info.eval_run_id}`}
                             onSelect={() => toggleRun(info.eval_run_id)}
-                            className="flex items-center gap-2"
+                            className={`flex items-center gap-2 ${
+                              isDisabled ? "cursor-not-allowed opacity-50" : ""
+                            }`}
+                            disabled={isDisabled}
                           >
                             <div
                               className={`${variantColor} h-3 w-3 rounded-full`}
@@ -188,7 +204,11 @@ export function VariantSelector({
                               selectedRunIds.includes(info.eval_run_id),
                             )
                               ? "Deselect All"
-                              : "Select All"}
+                              : `Select ${
+                                  availableRunInfos.length > MAX_SELECTIONS
+                                    ? `First ${MAX_SELECTIONS}`
+                                    : "All"
+                                }`}
                           </CommandItem>
                         </CommandGroup>
                       </>
@@ -205,7 +225,7 @@ export function VariantSelector({
       <div className="mt-3 flex flex-wrap gap-2">
         {selectedRunIdInfos.map((info) => {
           const runId = info.eval_run_id;
-          const variantColor = getVariantColor(runId);
+          const variantColor = getColor(runId);
           const runIdSegment = getLastUuidSegment(runId);
 
           return (
@@ -243,101 +263,4 @@ export function VariantSelector({
       </div>
     </div>
   );
-}
-
-// Helper hash function for consistent coloring
-function hashString(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash = hash & hash;
-  }
-  return hash;
-}
-
-// Get variant color based on runId hash - will produce consistent colors regardless of order
-export function getVariantColor(runId: string, isSelected = true) {
-  // Use a hash of the runId for consistent color assignment
-  // Increase number of possible colors from 4 to 10
-  const colorIndex = Math.abs(hashString(runId)) % 10;
-
-  // Expanded color palette with 10 distinct options
-  switch (colorIndex) {
-    case 0:
-      return isSelected
-        ? "bg-blue-600 hover:bg-blue-700"
-        : "border-blue-600 text-blue-600 hover:bg-blue-50";
-    case 1:
-      return isSelected
-        ? "bg-purple-600 hover:bg-purple-700"
-        : "border-purple-600 text-purple-600 hover:bg-purple-50";
-    case 2:
-      return isSelected
-        ? "bg-green-600 hover:bg-green-700"
-        : "border-green-600 text-green-600 hover:bg-green-50";
-    case 3:
-      return isSelected
-        ? "bg-red-600 hover:bg-red-700"
-        : "border-red-600 text-red-600 hover:bg-red-50";
-    case 4:
-      return isSelected
-        ? "bg-amber-600 hover:bg-amber-700"
-        : "border-amber-600 text-amber-600 hover:bg-amber-50";
-    case 5:
-      return isSelected
-        ? "bg-pink-600 hover:bg-pink-700"
-        : "border-pink-600 text-pink-600 hover:bg-pink-50";
-    case 6:
-      return isSelected
-        ? "bg-teal-600 hover:bg-teal-700"
-        : "border-teal-600 text-teal-600 hover:bg-teal-50";
-    case 7:
-      return isSelected
-        ? "bg-indigo-600 hover:bg-indigo-700"
-        : "border-indigo-600 text-indigo-600 hover:bg-indigo-50";
-    case 8:
-      return isSelected
-        ? "bg-cyan-600 hover:bg-cyan-700"
-        : "border-cyan-600 text-cyan-600 hover:bg-cyan-50";
-    case 9:
-      return isSelected
-        ? "bg-orange-600 hover:bg-orange-700"
-        : "border-orange-600 text-orange-600 hover:bg-orange-50";
-    default:
-      return isSelected
-        ? "bg-gray-600 hover:bg-gray-700"
-        : "border-gray-600 text-gray-600 hover:bg-gray-50";
-  }
-}
-
-// Helper function to get color class for the small badge in dropdown
-function getVariantColorClass(runId: string) {
-  // Use the same hash-based approach for consistency
-  const colorIndex = Math.abs(hashString(runId)) % 10;
-
-  // Return only the background color class - expanded to match the colors above
-  switch (colorIndex) {
-    case 0:
-      return "bg-blue-600";
-    case 1:
-      return "bg-purple-600";
-    case 2:
-      return "bg-green-600";
-    case 3:
-      return "bg-red-600";
-    case 4:
-      return "bg-amber-600";
-    case 5:
-      return "bg-pink-600";
-    case 6:
-      return "bg-teal-600";
-    case 7:
-      return "bg-indigo-600";
-    case 8:
-      return "bg-cyan-600";
-    case 9:
-      return "bg-orange-600";
-    default:
-      return "bg-gray-600";
-  }
 }
