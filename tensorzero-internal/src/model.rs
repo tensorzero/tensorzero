@@ -8,6 +8,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use std::{env, fs};
 use strum::VariantNames;
+use tensorzero_derive::TensorZeroDeserialize;
 #[allow(unused_imports)]
 use tracing::{span, warn, Instrument, Level};
 use url::Url;
@@ -29,12 +30,12 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
+use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::{
     current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
 use crate::model_table::{BaseModelTable, ShorthandModelConfig};
-use crate::variant::chat_completion::ExtraBodyConfig;
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -476,6 +477,7 @@ pub struct ModelProvider {
 impl From<&ModelProvider> for ModelProviderRequestInfo {
     fn from(val: &ModelProvider) -> Self {
         ModelProviderRequestInfo {
+            provider_name: val.name.clone(),
             extra_body: val.extra_body.clone(),
         }
     }
@@ -483,6 +485,7 @@ impl From<&ModelProvider> for ModelProviderRequestInfo {
 
 #[derive(Clone, Debug)]
 pub struct ModelProviderRequestInfo {
+    pub provider_name: Arc<str>,
     pub extra_body: Option<ExtraBodyConfig>,
 }
 
@@ -512,7 +515,7 @@ pub enum ProviderConfig {
 /// This is necessary because we want to load environment variables as we deserialize
 /// and we need to be able to deserialize the correct one based on the "type" field.
 /// Use the ProviderConfig struct for all post-initialization logic.
-#[derive(Deserialize, VariantNames)]
+#[derive(TensorZeroDeserialize, VariantNames)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
@@ -1346,7 +1349,7 @@ impl ShorthandModelConfig for ModelConfig {
                 ModelProvider {
                     name: provider_type.into(),
                     config: provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         })
@@ -1444,7 +1447,7 @@ mod tests {
                 ModelProvider {
                     name: "good_provider".into(),
                     config: good_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1482,7 +1485,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let model_name = "test model";
@@ -1509,7 +1512,7 @@ mod tests {
                 ModelProvider {
                     name: "error".into(),
                     config: bad_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1578,7 +1581,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -1593,7 +1596,7 @@ mod tests {
                     ModelProvider {
                         name: "error_provider".into(),
                         config: bad_provider_config,
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
                 (
@@ -1601,7 +1604,7 @@ mod tests {
                     ModelProvider {
                         name: "good_provider".into(),
                         config: good_provider_config,
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             ]),
@@ -1654,7 +1657,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -1666,7 +1669,7 @@ mod tests {
                 ModelProvider {
                     name: "good_provider".into(),
                     config: good_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1734,7 +1737,7 @@ mod tests {
                 ModelProvider {
                     name: "error".to_string().into(),
                     config: bad_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1807,7 +1810,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -1820,7 +1823,7 @@ mod tests {
                     ModelProvider {
                         name: "error_provider".to_string().into(),
                         config: bad_provider_config,
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
                 (
@@ -1828,7 +1831,7 @@ mod tests {
                     ModelProvider {
                         name: "good_provider".to_string().into(),
                         config: good_provider_config,
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             ]),
@@ -1905,7 +1908,7 @@ mod tests {
                 ModelProvider {
                     name: "model".into(),
                     config: provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1942,7 +1945,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let model_name = "test model";
@@ -2010,7 +2013,7 @@ mod tests {
                 ModelProvider {
                     name: "model".to_string().into(),
                     config: provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -2047,7 +2050,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let error = model_config
@@ -2129,7 +2132,7 @@ mod tests {
                 ModelProvider {
                     name: "anthropic".into(),
                     config: anthropic_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };

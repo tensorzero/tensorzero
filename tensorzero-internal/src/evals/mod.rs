@@ -7,6 +7,7 @@ use std::{
 };
 
 use serde::Deserialize;
+use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::{
     config_parser::{
@@ -14,12 +15,10 @@ use crate::{
     },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
+    inference::types::extra_body::ExtraBodyConfig,
     jsonschema_util::JSONSchemaFromPath,
     tool::create_implicit_tool_call_config,
-    variant::{
-        chat_completion::{ChatCompletionConfig, ExtraBodyConfig},
-        JsonMode, RetryConfig, VariantConfig,
-    },
+    variant::{chat_completion::ChatCompletionConfig, JsonMode, RetryConfig, VariantConfig},
 };
 
 pub const LLM_JUDGE_USER_SCHEMA_TEXT: &str = include_str!("llm_judge_user_schema.json");
@@ -208,8 +207,9 @@ impl UninitializedEvalConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 enum UninitializedEvaluatorConfig {
     ExactMatch(ExactMatchConfig),
     #[serde(rename = "llm_judge")]
@@ -322,8 +322,9 @@ impl UninitializedEvaluatorConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
 pub enum UninitializedLLMJudgeVariantConfig {
     ChatCompletion(UninitializedLLMJudgeChatCompletionVariantConfig),
 }
@@ -533,7 +534,7 @@ mod tests {
                         seed: None,
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             );
@@ -650,7 +651,7 @@ mod tests {
                         seed: None,
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             );
@@ -799,7 +800,7 @@ mod tests {
                         seed: None,
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             );
@@ -822,7 +823,7 @@ mod tests {
                         seed: None,
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             );
@@ -933,7 +934,7 @@ mod tests {
                         seed: None,
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             );

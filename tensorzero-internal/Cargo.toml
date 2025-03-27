@@ -80,6 +80,8 @@ tracing-subscriber = { version = "0.3.18", features = [
 ] }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
+tensorzero-derive = { path = "../tensorzero-derive"}
+clap = { workspace = true }
 
 
 [dev-dependencies]

@@ -136,7 +136,7 @@ impl InferenceProvider for OpenAIProvider {
         ModelProviderRequest {
             request,
             provider_name: _,
-            model_name: _,
+            model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -148,7 +148,12 @@ impl InferenceProvider for OpenAIProvider {
                     message: format!("Error serializing OpenAI request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(
+            &request.extra_body,
+            model_provider,
+            model_name,
+            &mut request_body,
+        )?;
         let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
@@ -222,7 +227,7 @@ impl InferenceProvider for OpenAIProvider {
         ModelProviderRequest {
             request,
             provider_name: _,
-            model_name: _,
+            model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -234,7 +239,12 @@ impl InferenceProvider for OpenAIProvider {
                     message: format!("Error serializing OpenAI request: {e}"),
                 })
             })?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(
+            &request.extra_body,
+            model_provider,
+            model_name,
+            &mut request_body,
+        )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -2252,7 +2262,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -2294,7 +2304,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -2346,7 +2356,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -2387,7 +2397,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -2431,7 +2441,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -2471,7 +2481,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -2540,7 +2550,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -2637,7 +2647,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -2816,7 +2826,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_with_tools);
@@ -2858,7 +2868,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) =

@@ -9,6 +9,7 @@ use crate::config_parser::LoadableConfig;
 use crate::config_parser::PathWithContents;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
+use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessageContent;
@@ -28,7 +29,6 @@ use crate::{
     minijinja_util::TemplateConfig,
 };
 
-use super::chat_completion::ExtraBodyConfig;
 use super::{
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
     InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, RetryConfig, Variant,
@@ -506,6 +506,17 @@ impl DiclConfig {
                 self.presence_penalty,
                 self.frequency_penalty,
             );
+        if !inference_config.extra_body.is_empty() {
+            return Err(ErrorDetails::InvalidRequest {
+                message: "Inference-level `extra_body` is not yet supported for dynamic_in_content_learning variant"
+                    .to_string(),
+            }
+            .into());
+        }
+        let extra_body = FullExtraBodyConfig {
+            extra_body: self.extra_body.clone(),
+            inference_extra_body: Default::default(),
+        };
         prepare_model_inference_request(
             messages,
             system,
@@ -514,7 +525,7 @@ impl DiclConfig {
             stream,
             inference_params,
             self.json_mode,
-            self.extra_body.as_ref(),
+            extra_body,
         )
     }
 }

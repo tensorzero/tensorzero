@@ -143,7 +143,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         ModelProviderRequest {
             request,
             provider_name: _,
-            model_name: _,
+            model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -154,7 +154,12 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 message: format!("Error serializing Gemini request: {e}"),
             })
         })?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(
+            &request.extra_body,
+            model_provider,
+            model_name,
+            &mut request_body,
+        )?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let mut url = self.request_url.clone();
@@ -223,7 +228,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         ModelProviderRequest {
             request,
             provider_name: _,
-            model_name: _,
+            model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -234,7 +239,12 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 message: format!("Error serializing Gemini request: {e}"),
             })
         })?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(
+            &request.extra_body,
+            model_provider,
+            model_name,
+            &mut request_body,
+        )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Error serializing request: {e}"),
@@ -1184,7 +1194,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let result = GeminiRequest::new(&inference_request);
@@ -1222,7 +1232,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let result = GeminiRequest::new(&inference_request);
@@ -1273,7 +1283,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         // JSON schema should be supported for Gemini Pro models
@@ -1376,7 +1386,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let request_body = GeminiRequest {
@@ -1465,7 +1475,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let request_body = GeminiRequest {
@@ -1643,7 +1653,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools);
@@ -1686,7 +1696,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools);

@@ -1,6 +1,5 @@
 use backon::ExponentialBuilder;
 use backon::Retryable;
-use chat_completion::ExtraBodyConfig;
 use futures::StreamExt;
 use itertools::izip;
 use serde::Deserialize;
@@ -19,6 +18,8 @@ use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
+use crate::inference::types::extra_body::FullExtraBodyConfig;
+use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
@@ -66,6 +67,7 @@ pub struct InferenceConfig<'a, 'request> {
     pub function_name: &'request str,
     pub variant_name: Option<&'request str>,
     pub ids: InferenceIds,
+    pub extra_body: UnfilteredInferenceExtraBody,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
@@ -105,6 +107,8 @@ impl<'a> BatchInferenceConfig<'a> {
                     inference_id: *inference_id,
                     episode_id: *episode_id,
                 },
+                // Not yet supported for batch inference requests
+                extra_body: Default::default(),
                 extra_cache_key: None,
             },
         )
@@ -405,7 +409,7 @@ fn prepare_model_inference_request<'a, 'request>(
     stream: bool,
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
-    extra_body: Option<&'request ExtraBodyConfig>,
+    extra_body: FullExtraBodyConfig,
 ) -> Result<ModelInferenceRequest<'request>, Error>
 where
     'a: 'request,
@@ -653,6 +657,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: Default::default(),
             extra_cache_key: None,
         };
 
@@ -702,7 +707,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            None,
+            Default::default(),
         )
         .unwrap();
 
@@ -750,7 +755,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            None,
+            Default::default(),
         )
         .unwrap();
 
@@ -784,6 +789,7 @@ mod tests {
             function_name: "test_function",
             variant_name: Some("test_variant"),
             dynamic_output_schema: Some(&dynamic_output_schema),
+            extra_body: Default::default(),
             extra_cache_key: None,
         };
         let json_mode = JsonMode::ImplicitTool;
@@ -796,7 +802,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            None,
+            Default::default(),
         )
         .unwrap();
 
@@ -819,7 +825,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            None,
+            Default::default(),
         )
         .unwrap();
 
@@ -838,7 +844,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            None,
+            Default::default(),
         )
         .unwrap();
 
@@ -874,6 +880,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: Default::default(),
             extra_cache_key: None,
         };
 
@@ -909,7 +916,7 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -927,7 +934,7 @@ mod tests {
                 ModelProvider {
                     name: model_name.into(),
                     config: dummy_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1014,7 +1021,7 @@ mod tests {
             output_schema: Some(&output_schema),
             tool_config: None,
             function_type: FunctionType::Json,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -1031,7 +1038,7 @@ mod tests {
                 ModelProvider {
                     name: model_name_json.into(),
                     config: dummy_provider_config_json,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1085,7 +1092,7 @@ mod tests {
                 ModelProvider {
                     name: error_model_name.into(),
                     config: error_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1141,6 +1148,7 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
+            extra_body: Default::default(),
             extra_cache_key: None,
         };
 
@@ -1176,7 +1184,7 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -1201,7 +1209,7 @@ mod tests {
                     ModelProvider {
                         name: error_model_name.into(),
                         config: error_provider_config,
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
                 (
@@ -1209,7 +1217,7 @@ mod tests {
                     ModelProvider {
                         name: model_name.into(),
                         config: dummy_provider_config,
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             ]),
@@ -1304,7 +1312,7 @@ mod tests {
                 ModelProvider {
                     name: "good_provider".into(),
                     config: dummy_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         }));
@@ -1325,7 +1333,7 @@ mod tests {
             seed: None,
             tool_config: None,
             function_type: FunctionType::Chat,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -1446,7 +1454,7 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -1471,7 +1479,7 @@ mod tests {
                     ModelProvider {
                         name: error_model_name.into(),
                         config: error_provider_config,
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
                 (
@@ -1479,7 +1487,7 @@ mod tests {
                     ModelProvider {
                         name: model_name.into(),
                         config: dummy_provider_config,
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             ]),

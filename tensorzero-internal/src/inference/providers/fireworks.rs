@@ -133,7 +133,7 @@ impl InferenceProvider for FireworksProvider {
         ModelProviderRequest {
             request,
             provider_name: _,
-            model_name: _,
+            model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
@@ -147,7 +147,12 @@ impl InferenceProvider for FireworksProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(
+            &request.extra_body,
+            model_provider,
+            model_name,
+            &mut request_body,
+        )?;
         let request_url = get_chat_url(&FIREWORKS_API_BASE)?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
@@ -218,7 +223,7 @@ impl InferenceProvider for FireworksProvider {
         ModelProviderRequest {
             request,
             provider_name: _,
-            model_name: _,
+            model_name,
         }: ModelProviderRequest<'a>,
         http_client: &'a reqwest::Client,
         api_key: &'a InferenceCredentials,
@@ -232,7 +237,12 @@ impl InferenceProvider for FireworksProvider {
                     })
                 },
             )?;
-        inject_extra_body(request.extra_body, model_provider, &mut request_body)?;
+        inject_extra_body(
+            &request.extra_body,
+            model_provider,
+            model_name,
+            &mut request_body,
+        )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
                 message: format!("Error serializing request body: {e}"),
@@ -516,7 +526,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -630,7 +640,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let fireworks_response_with_metadata = FireworksResponseWithMetadata {

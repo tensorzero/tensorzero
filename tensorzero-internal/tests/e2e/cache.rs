@@ -65,7 +65,7 @@ async fn test_cache_write_and_read() {
         json_mode: ModelInferenceRequestJsonMode::Off,
         function_type: FunctionType::Chat,
         output_schema: None,
-        extra_body: None,
+        extra_body: Default::default(),
         ..Default::default()
     };
     let model_provider_request = ModelProviderRequest {
@@ -189,7 +189,7 @@ async fn test_cache_stream_write_and_read() {
         json_mode: ModelInferenceRequestJsonMode::Off,
         function_type: FunctionType::Chat,
         output_schema: None,
-        extra_body: None,
+        extra_body: Default::default(),
         ..Default::default()
     };
     let model_provider_request = ModelProviderRequest {
