@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 
 use crate::embeddings::EmbeddingModelTable;
@@ -609,18 +610,21 @@ impl TryFrom<toml::Table> for UninitializedConfig {
     type Error = Error;
 
     fn try_from(table: toml::Table) -> Result<Self, Self::Error> {
-        // NOTE: We'd like to use `serde_path_to_error` here but it has a bug with enums:
-        //       https://github.com/dtolnay/path-to-error/issues/1
-        match table.try_into() {
+        match serde_path_to_error::deserialize(table) {
             Ok(config) => Ok(config),
-            Err(e) => Err(Error::new(ErrorDetails::Config {
-                message: format!("{e}"),
-            })),
+            Err(e) => {
+                let path = e.path().clone();
+                Err(Error::new(ErrorDetails::Config {
+                    // Extract the underlying message from the toml error, as
+                    // the path-tracking from the toml crate will be incorrect
+                    message: format!("{}: {}", path, e.into_inner().message()),
+                }))
+            }
         }
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
@@ -767,7 +771,7 @@ impl UninitializedFunctionConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
@@ -1069,7 +1073,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
-                message: "invalid socket address syntax\nin `gateway.bind_address`\n".to_string()
+                message: "gateway.bind_address: invalid socket address syntax".to_string()
             })
         );
     }
@@ -1111,8 +1115,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
-                message: "missing field `providers`\nin `models.claude-3-haiku-20240307`\n"
-                    .to_string()
+                message: "models.claude-3-haiku-20240307: missing field `providers`".to_string()
             })
         );
     }
@@ -1184,7 +1187,7 @@ mod tests {
         assert_eq!(
             error,
             Error::new(ErrorDetails::Config {
-                message: "Invalid api_key_location for Dummy provider\nin `models.dummy.providers.bad_credentials`\n"
+                message: "models.dummy.providers.bad_credentials: Invalid api_key_location for Dummy provider"
                     .to_string()
             })
         );
@@ -1223,7 +1226,7 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "missing field `variants`\nin `functions.generate_draft`\n".to_string()
+                message: "functions.generate_draft: missing field `variants`".to_string()
             }
             .into()
         );
@@ -1275,10 +1278,10 @@ mod tests {
 
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
-        let error = result.unwrap_err();
+        let error = result.unwrap_err().to_string();
         assert!(error
-            .to_string()
-            .contains("Model name 'anthropic::claude-3-haiku-20240307' contains a reserved prefix\nin `models`"));
+            .contains("models: Model name 'anthropic::claude-3-haiku-20240307' contains a reserved prefix"),
+        "Unexpected error: {error}");
     }
 
     /// Ensure that the config parsing fails when there are extra variables for providers
@@ -1804,9 +1807,8 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
-                message:
-                    "Model name 'tensorzero::bad_model' contains a reserved prefix\nin `models`\n"
-                        .to_string()
+                message: "models: Model name 'tensorzero::bad_model' contains a reserved prefix"
+                    .to_string()
             })
         );
     }
@@ -1833,7 +1835,7 @@ mod tests {
                 result.unwrap_err(),
                 Error::new(ErrorDetails::Config {
                     message:
-                        "Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix\nin `embedding_models`\n"
+                        "embedding_models: Embedding model name 'tensorzero::bad_embedding_model' contains a reserved prefix"
                             .to_string()
                 })
             );
@@ -2072,6 +2074,29 @@ mod tests {
 
         // Check the total number of templates
         assert_eq!(templates.len(), 14);
+    }
+
+    #[test]
+    fn test_load_bad_config_error_path() {
+        let config_str = r#"
+[functions.bash_assistant]
+type = "chat"
+
+[functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219]
+type = "chat_completion"
+model = "anthropic::claude-3-7-sonnet-20250219"
+max_tokens = 2048
+
+[functions.bash_assistant.variants.anthropic_claude_3_7_sonnet_20250219.extra_body]
+tools = [{ type = "bash_20250124", name = "bash" }]
+thinking = { type = "enabled", budget_tokens = 1024 }
+        "#;
+        let config = toml::from_str(config_str).expect("Failed to parse sample config");
+        let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let err = Config::load_from_toml(config, base_path.clone())
+            .expect_err("Config loading should fail")
+            .to_string();
+        assert_eq!(err, "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body: invalid type: map, expected a sequence");
     }
 
     #[test]
