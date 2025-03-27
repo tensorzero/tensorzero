@@ -668,6 +668,10 @@ impl EvaluatorConfig {
             }
             .into());
         }
+        let extra_body = FullExtraBodyConfig {
+            extra_body: self.inner.extra_body.clone(),
+            inference_extra_body: Default::default(),
+        };
         Ok((
             ModelInferenceRequest {
                 inference_id: inference_config.ids.inference_id,
@@ -684,10 +688,7 @@ impl EvaluatorConfig {
                 json_mode: json_mode.into(),
                 function_type: FunctionType::Json,
                 output_schema: Some(EVALUATOR_OUTPUT_SCHEMA.value),
-                extra_body: self.inner.extra_body.clone().map(|c| FullExtraBodyConfig {
-                    extra_body: c,
-                    inference_extra_body: Default::default(),
-                }),
+                extra_body,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
             },
             skipped_indices,
@@ -1202,7 +1203,7 @@ mod tests {
                             model_name: "best_of_n_1".into(),
                             ..Default::default()
                         }),
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 )]),
             },
@@ -1297,7 +1298,7 @@ mod tests {
                                 model_name: "error".into(),
                                 ..Default::default()
                             }),
-                            extra_body: None,
+                            extra_body: Default::default(),
                         },
                     )]),
                 },
@@ -1360,7 +1361,7 @@ mod tests {
                                 model_name: "regular".into(),
                                 ..Default::default()
                             }),
-                            extra_body: None,
+                            extra_body: Default::default(),
                         },
                     )]),
                 },
@@ -1440,7 +1441,7 @@ mod tests {
                             model_name: "best_of_n_big".into(),
                             ..Default::default()
                         }),
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 )]),
             },

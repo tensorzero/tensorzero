@@ -1,0 +1,5 @@
+error: TensorZeroDeserialize: #[serde(tag = "...")] attribute must be a string literal
+ --> tests/ui/invalid_tag.rs:2:15
+  |
+2 | #[serde(tag = 123)]
+  |               ^^^
