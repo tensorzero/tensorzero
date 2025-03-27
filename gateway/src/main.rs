@@ -16,7 +16,7 @@ use tensorzero_internal::endpoints;
 use tensorzero_internal::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_internal::error;
 use tensorzero_internal::gateway_util;
-use tensorzero_internal::observability;
+use tensorzero_internal::observability::{self, LogFormat};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -37,16 +37,22 @@ struct Args {
     #[clap(hide = true)]
     warn_default_cmd: bool,
 
+    /// Sets the log format used for all gateway logs.
+    #[arg(long)]
+    #[arg(value_enum)]
+    #[clap(default_value_t = LogFormat::default())]
+    log_format: LogFormat,
+
     /// Deprecated: use `--config-file` instead
     tensorzero_toml: Option<PathBuf>,
 }
 
 #[tokio::main]
 async fn main() {
-    // Set up logs and metrics
-    observability::setup_logs(true);
-    let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
     let args = Args::parse();
+    // Set up logs and metrics
+    observability::setup_logs(true, args.log_format);
+    let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     if args.warn_default_cmd {
         tracing::warn!("Deprecation warning: Running gateway from Docker container without overriding default CMD. Please override the command to either '--config-file path/to/tensorzero.toml' or '--default-config'.");

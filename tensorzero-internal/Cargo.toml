@@ -80,6 +80,7 @@ tracing-subscriber = { version = "0.3.18", features = [
 ] }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
+clap = { workspace = true }
 
 
 [dev-dependencies]
