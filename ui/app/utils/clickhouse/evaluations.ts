@@ -175,6 +175,11 @@ export function getEvaluatorMetricName(
   return `tensorzero::eval_name::${evalName}::evaluator_name::${evaluatorName}`;
 }
 
+function getEvaluatorNameFromMetricName(metricName: string): string {
+  const parts = metricName.split("::");
+  return parts[parts.length - 1];
+}
+
 export const evalInfoResultSchema = z.object({
   eval_run_id: z.string().uuid(),
   eval_name: z.string(),
@@ -200,6 +205,7 @@ export type EvalRunInfo = z.infer<typeof EvalRunInfoSchema>;
 export type ConsolidatedMetric = {
   metric_name: string;
   metric_value: string;
+  evaluator_name: string;
 };
 
 // Define a type for consolidated evaluation results
@@ -226,7 +232,13 @@ export const consolidate_eval_results = (
 
       resultMap.set(key, {
         ...baseResult,
-        metrics: [{ metric_name, metric_value }],
+        metrics: [
+          {
+            metric_name,
+            metric_value,
+            evaluator_name: getEvaluatorNameFromMetricName(metric_name),
+          },
+        ],
       });
     } else {
       // Add this metric to the existing result
@@ -234,6 +246,7 @@ export const consolidate_eval_results = (
       existingResult.metrics.push({
         metric_name: result.metric_name,
         metric_value: result.metric_value,
+        evaluator_name: getEvaluatorNameFromMetricName(result.metric_name),
       });
     }
   }

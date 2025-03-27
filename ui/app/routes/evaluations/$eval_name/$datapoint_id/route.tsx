@@ -16,6 +16,8 @@ import {
   getEvaluatorMetricName,
 } from "~/utils/clickhouse/evaluations";
 import { useConfig } from "~/context/config";
+import MetricValue from "~/components/inference/MetricValue";
+import { getMetricType } from "~/utils/config/evals";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -72,25 +74,18 @@ export default function EvaluationDatapointPage({
   loaderData;
   const config = useConfig();
   const eval_config = config.evals[eval_name];
-  const metric_name_to_evaluator_config = Object.fromEntries(
-    Object.entries(eval_config.evaluators).map(
-      ([evaluator_name, evaluator_config]) => [
-        getEvaluatorMetricName(eval_name, evaluator_name),
-        evaluator_config,
-      ],
-    ),
-  );
   const outputsToDisplay = [
     {
       id: "Reference",
       output: consolidatedEvalResults[0].reference_output,
+      metrics: [],
     },
     ...consolidatedEvalResults.map((result) => ({
       id: result.eval_run_id,
       output: result.generated_output,
+      metrics: result.metrics,
     })),
   ];
-  console.log(outputsToDisplay);
   return (
     <PageLayout>
       <PageHeader label="Datapoint" name={datapoint_id} />
@@ -114,6 +109,42 @@ export default function EvaluationDatapointPage({
                   </button>
                 </div>
                 <Output output={result.output} />
+
+                {result.id !== "Reference" &&
+                  result.metrics &&
+                  result.metrics.length > 0 && (
+                    <div className="mt-3 border-t border-gray-200 pt-2">
+                      <div className="mb-1 text-sm font-medium text-gray-500">
+                        Metrics
+                      </div>
+                      <div className="space-y-1">
+                        {result.metrics.map((metricObj) => {
+                          const metricName = metricObj.metric_name;
+                          const value = metricObj.metric_value;
+                          const evaluatorConfig =
+                            eval_config.evaluators[metricObj.evaluator_name];
+
+                          if (!evaluatorConfig) return null;
+
+                          return (
+                            <div
+                              key={metricObj.evaluator_name}
+                              className="flex items-center gap-2"
+                            >
+                              <span className="text-sm text-gray-600">
+                                {metricObj.evaluator_name}:
+                              </span>
+                              <MetricValue
+                                value={String(value)}
+                                metricType={getMetricType(evaluatorConfig)}
+                                evaluatorConfig={evaluatorConfig}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
               </div>
             ))}
           </div>
