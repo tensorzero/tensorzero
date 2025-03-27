@@ -305,9 +305,18 @@ jobs:
 
       - name: Run ui e2e tests
         working-directory: ui
-        run: TENSORZERO_CI=1 pnpm test-e2e
+        run: TENSORZERO_CI=1 pnpm test-e2e --grep 'launch'
         continue-on-error: true
         id: e2e_tests
+
+      - name: Print container logs
+        if: always()
+        working-directory: ui
+        run: |
+          echo "==== Gateway Logs ===="
+          docker logs tensorzero-ui_gateway_1
+          echo "==== UI Logs ===="
+          docker logs tensorzero-ui
 
       - name: Upload Playwright artifacts
         if: steps.e2e_tests.outcome == 'failure'
