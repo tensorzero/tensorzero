@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Check, ChevronsUpDown, X } from "lucide-react";
-import { Badge } from "~/components/ui/badge";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
   Command,
@@ -16,27 +15,17 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "~/components/ui/popover";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
 import { useSearchParams, useNavigate } from "react-router";
 import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
-import { formatDate } from "~/utils/date";
 import { useSearchEvalRunsFetcher } from "~/routes/api/evaluations/search_runs/$eval_name/route";
 import { useColorAssigner } from "./ColorAssigner";
+import { getLastUuidSegment } from "~/components/evaluations/EvalRunBadge";
+import EvalRunBadge from "~/components/evaluations/EvalRunBadge";
 
 interface VariantSelectorProps {
   evalName: string;
   mostRecentEvalInferenceDates: Map<string, Date>;
   selectedRunIdInfos: EvaluationRunInfo[];
-}
-
-// Helper function to get the last 6 digits of a UUID
-export function getLastUuidSegment(uuid: string): string {
-  return uuid.slice(-6);
 }
 
 export function VariantSelector({
@@ -223,43 +212,15 @@ export function VariantSelector({
 
       {/* Display selected variants as badges */}
       <div className="mt-3 flex flex-wrap gap-2">
-        {selectedRunIdInfos.map((info) => {
-          const runId = info.eval_run_id;
-          const variantColor = getColor(runId);
-          const runIdSegment = getLastUuidSegment(runId);
-
-          return (
-            <TooltipProvider key={runId}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    className={`${variantColor} flex cursor-help items-center gap-1.5 px-2 py-1`}
-                  >
-                    <span>{info.variant_name}</span>
-                    <span className="border-l border-white/30 pl-1.5 text-xs opacity-80">
-                      {runIdSegment}
-                    </span>
-                    <X
-                      className="ml-1 h-3 w-3 cursor-pointer opacity-70 hover:opacity-100"
-                      onClick={(e) => removeRun(runId, e)}
-                    />
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="p-2">
-                  <p className="text-xs">
-                    Run ID: <span className="font-mono text-xs">{runId}</span>
-                    <br />
-                    {mostRecentEvalInferenceDates.get(runId)
-                      ? `Last Updated: ${formatDate(
-                          mostRecentEvalInferenceDates.get(runId)!,
-                        )}`
-                      : null}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          );
-        })}
+        {selectedRunIdInfos.map((info) => (
+          <EvalRunBadge
+            key={info.eval_run_id}
+            runInfo={info}
+            getColor={getColor}
+            lastUpdateDate={mostRecentEvalInferenceDates.get(info.eval_run_id)}
+            onRemove={(e) => removeRun(info.eval_run_id, e)}
+          />
+        ))}
       </div>
     </div>
   );

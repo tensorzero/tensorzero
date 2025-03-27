@@ -11,13 +11,11 @@ import { PageLayout } from "~/components/layout/PageLayout";
 import Input from "~/components/inference/Input";
 import { redirect } from "react-router";
 import Output from "~/components/inference/Output";
-import {
-  consolidate_eval_results,
-  getEvaluatorMetricName,
-} from "~/utils/clickhouse/evaluations";
+import { consolidate_eval_results } from "~/utils/clickhouse/evaluations";
 import { useConfig } from "~/context/config";
-import MetricValue from "~/components/inference/MetricValue";
+import MetricValue from "~/components/evaluations/MetricValue";
 import { getMetricType } from "~/utils/config/evals";
+import EvalRunBadge from "~/components/evaluations/EvalRunBadge";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -56,7 +54,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
   return {
     consolidatedEvalResults,
-    selected_eval_run_ids_array,
     eval_name,
     datapoint_id,
   };
@@ -65,13 +62,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function EvaluationDatapointPage({
   loaderData,
 }: Route.ComponentProps) {
-  const {
-    consolidatedEvalResults,
-    selected_eval_run_ids_array,
-    eval_name,
-    datapoint_id,
-  } = loaderData;
-  loaderData;
+  const { consolidatedEvalResults, eval_name, datapoint_id } = loaderData;
   const config = useConfig();
   const eval_config = config.evals[eval_name];
   const outputsToDisplay = [
@@ -79,13 +70,22 @@ export default function EvaluationDatapointPage({
       id: "Reference",
       output: consolidatedEvalResults[0].reference_output,
       metrics: [],
+      variant_name: "Reference",
     },
     ...consolidatedEvalResults.map((result) => ({
       id: result.eval_run_id,
+      variant_name: result.variant_name,
       output: result.generated_output,
       metrics: result.metrics,
     })),
   ];
+
+  // Function to get color for each run
+  const getColor = () => {
+    // Return a fixed color since we don't need dynamic colors
+    return "bg-blue-500 hover:bg-blue-600 text-white";
+  };
+
   return (
     <PageLayout>
       <PageHeader label="Datapoint" name={datapoint_id} />
@@ -101,14 +101,30 @@ export default function EvaluationDatapointPage({
             {outputsToDisplay.map((result) => (
               <div
                 key={result.id}
-                className="min-w-[300px] max-w-[450px] flex-shrink-0"
+                className="flex min-w-[300px] max-w-[450px] flex-shrink-0 flex-col justify-between"
               >
-                <div className="mb-2">
-                  <button className="rounded-md bg-slate-700 px-4 py-2 text-sm text-white">
-                    {result.id}
-                  </button>
+                <div>
+                  <div className="mb-2 flex">
+                    {result.id === "Reference" ? (
+                      <EvalRunBadge
+                        runInfo={{
+                          eval_run_id: "",
+                          variant_name: result.variant_name,
+                        }}
+                        getColor={() => "bg-gray-100 text-gray-700"}
+                      />
+                    ) : (
+                      <EvalRunBadge
+                        runInfo={{
+                          eval_run_id: result.id,
+                          variant_name: result.variant_name,
+                        }}
+                        getColor={getColor}
+                      />
+                    )}
+                  </div>
+                  <Output output={result.output} />
                 </div>
-                <Output output={result.output} />
 
                 {result.id !== "Reference" &&
                   result.metrics &&
@@ -119,7 +135,6 @@ export default function EvaluationDatapointPage({
                       </div>
                       <div className="space-y-1">
                         {result.metrics.map((metricObj) => {
-                          const metricName = metricObj.metric_name;
                           const value = metricObj.metric_value;
                           const evaluatorConfig =
                             eval_config.evaluators[metricObj.evaluator_name];
@@ -138,6 +153,7 @@ export default function EvaluationDatapointPage({
                                 value={String(value)}
                                 metricType={getMetricType(evaluatorConfig)}
                                 evaluatorConfig={evaluatorConfig}
+                                className="text-sm"
                               />
                             </div>
                           );

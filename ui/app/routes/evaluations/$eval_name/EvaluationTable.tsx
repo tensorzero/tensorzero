@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import React from "react";
 import { useSearchParams, useNavigate } from "react-router";
-import { Check, X } from "lucide-react";
 
 import {
   Table,
@@ -37,12 +36,12 @@ import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import type { MetricConfig } from "~/utils/config/metric";
-import { getOptimize, type EvaluatorConfig } from "~/utils/config/evals";
+import { type EvaluatorConfig } from "~/utils/config/evals";
 import { useColorAssigner } from "./ColorAssigner";
 import { ColorAssignerProvider } from "./ColorAssigner";
 import MetricValue, {
   isCutoffFailed,
-} from "~/components/inference/MetricValue";
+} from "~/components/evaluations/MetricValue";
 
 // Enhanced TruncatedText component that can handle complex structures
 const TruncatedContent = ({
