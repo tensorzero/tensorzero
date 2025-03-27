@@ -54,7 +54,6 @@ export function VariantSelector({
     query: searchValue,
   });
   const availableRunInfos = data || [];
-  console.log(availableRunInfos);
 
   // Update the URL with the selected run IDs
   const updateSelectedRunIds = (runIdInfos: EvaluationRunInfo[]) => {
@@ -148,7 +147,7 @@ export function VariantSelector({
                         return (
                           <CommandItem
                             key={info.eval_run_id}
-                            value={info.eval_run_id}
+                            value={`${info.variant_name} ${info.eval_run_id}`}
                             onSelect={() => toggleRun(info.eval_run_id)}
                             className="flex items-center gap-2"
                           >
