@@ -353,7 +353,7 @@ export async function searchEvalRuns(
       AND name_tag.value = {eval_name:String}
       AND run_tag.key = 'tensorzero::eval_run_id'
       AND run_tag.function_name = {function_name:String}
-      AND (positionCaseInsensitive(run_tag.value, {search_query:String}) = 1 OR positionCaseInsensitive(run_tag.variant_name, {search_query:String}) = 1)
+      AND (positionCaseInsensitive(run_tag.value, {search_query:String}) > 0 OR positionCaseInsensitive(run_tag.variant_name, {search_query:String}) > 0)
     ORDER BY toUInt128(toUUID(eval_run_id)) DESC
     LIMIT {limit:UInt32}
     OFFSET {offset:UInt32}

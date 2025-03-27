@@ -43,7 +43,7 @@ export async function loader({
 export function useSearchEvalRunsFetcher(params: {
   evalName?: string;
   query?: string;
-}): { data: EvaluationRunInfo[]; isLoading: boolean } {
+}): { data?: EvaluationRunInfo[]; isLoading: boolean } {
   const runsFetcher = useFetcher();
 
   useEffect(() => {
@@ -59,7 +59,7 @@ export function useSearchEvalRunsFetcher(params: {
   }, [params.evalName, params.query]);
 
   return {
-    data: runsFetcher.data || [],
+    data: runsFetcher.data,
     isLoading: runsFetcher.state === "loading",
   };
 }

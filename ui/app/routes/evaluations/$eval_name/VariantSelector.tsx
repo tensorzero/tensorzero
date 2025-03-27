@@ -1,14 +1,21 @@
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "~/components/ui/dropdown-menu";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "~/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -39,13 +46,15 @@ export function VariantSelector({
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const selectedRunIds = selectedRunIdInfos.map((info) => info.eval_run_id);
-  const availableRunInfos = useSearchEvalRunsFetcher({
-    evalName: evalName,
-    query: "",
-  });
+  const [open, setOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
 
-  // State to track if dropdown is open
-  const [isOpen, setIsOpen] = useState(false);
+  const { data, isLoading } = useSearchEvalRunsFetcher({
+    evalName: evalName,
+    query: searchValue,
+  });
+  const availableRunInfos = data || [];
+  console.log(availableRunInfos);
 
   // Update the URL with the selected run IDs
   const updateSelectedRunIds = (runIdInfos: EvaluationRunInfo[]) => {
@@ -59,7 +68,7 @@ export function VariantSelector({
 
   // Toggle a run selection
   const toggleRun = (runId: string) => {
-    const runInfo = availableRunInfos.data.find(
+    const runInfo = availableRunInfos.find(
       (info) => info.eval_run_id === runId,
     );
     if (!runInfo) return;
@@ -78,7 +87,7 @@ export function VariantSelector({
 
   // Select all runs
   const selectAll = () => {
-    const allSelected = availableRunInfos.data.every((info) =>
+    const allSelected = availableRunInfos.every((info) =>
       selectedRunIds.includes(info.eval_run_id),
     );
 
@@ -87,59 +96,99 @@ export function VariantSelector({
       updateSelectedRunIds([]);
     } else {
       // Select all
-      updateSelectedRunIds(availableRunInfos.data);
+      updateSelectedRunIds(availableRunInfos);
     }
   };
 
   return (
     <div className="mb-6">
       <div className="flex flex-col space-y-2">
-        <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-          <DropdownMenuTrigger asChild>
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
             <Button
               variant="outline"
+              role="combobox"
+              aria-expanded={open}
               className="flex w-96 items-center justify-between gap-2"
             >
               <span>Select evaluation runs to compare...</span>
-              <ChevronDown className="h-4 w-4" />
+              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-96">
-            <DropdownMenuSeparator />
-            {availableRunInfos.data.map((info) => {
-              const isSelected = selectedRunIds.includes(info.eval_run_id);
-              const variantColor = getVariantColorClass(info.eval_run_id);
-              const runIdSegment = getLastUuidSegment(info.eval_run_id);
-
-              return (
-                <DropdownMenuCheckboxItem
-                  key={info.eval_run_id}
-                  checked={isSelected}
-                  onCheckedChange={() => toggleRun(info.eval_run_id)}
-                  className="flex items-center gap-2"
-                >
-                  <div className="flex flex-1 items-center gap-2">
-                    <Badge className={`${variantColor} h-3 w-3 p-0`} />
-                    <span className="flex-1 truncate">{info.variant_name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {runIdSegment}
+          </PopoverTrigger>
+          <PopoverContent className="w-96 p-0">
+            <Command>
+              <CommandInput
+                placeholder="Search evaluation runs..."
+                value={searchValue}
+                onValueChange={setSearchValue}
+              />
+              <CommandList>
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600"></div>
+                    <span className="ml-2 text-sm text-muted-foreground">
+                      Loading...
                     </span>
                   </div>
-                </DropdownMenuCheckboxItem>
-              );
-            })}
-            <DropdownMenuSeparator />
-            <DropdownMenuCheckboxItem
-              checked={availableRunInfos.data.every((info) =>
-                selectedRunIds.includes(info.eval_run_id),
-              )}
-              onCheckedChange={selectAll}
-              className="font-medium"
-            >
-              Select All
-            </DropdownMenuCheckboxItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+                ) : (
+                  <>
+                    <CommandEmpty>No results found.</CommandEmpty>
+                    <CommandGroup>
+                      {availableRunInfos.map((info) => {
+                        const isSelected = selectedRunIds.includes(
+                          info.eval_run_id,
+                        );
+                        const variantColor = getVariantColorClass(
+                          info.eval_run_id,
+                        );
+                        const runIdSegment = getLastUuidSegment(
+                          info.eval_run_id,
+                        );
+
+                        return (
+                          <CommandItem
+                            key={info.eval_run_id}
+                            value={info.eval_run_id}
+                            onSelect={() => toggleRun(info.eval_run_id)}
+                            className="flex items-center gap-2"
+                          >
+                            <div
+                              className={`${variantColor} h-3 w-3 rounded-full`}
+                            />
+                            <span className="flex-1 truncate">
+                              {info.variant_name}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {runIdSegment}
+                            </span>
+                            {isSelected && <Check className="ml-2 h-4 w-4" />}
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                    {availableRunInfos.length > 1 && (
+                      <>
+                        <CommandSeparator />
+                        <CommandGroup>
+                          <CommandItem
+                            onSelect={selectAll}
+                            className="font-medium"
+                          >
+                            {availableRunInfos.every((info) =>
+                              selectedRunIds.includes(info.eval_run_id),
+                            )
+                              ? "Deselect All"
+                              : "Select All"}
+                          </CommandItem>
+                        </CommandGroup>
+                      </>
+                    )}
+                  </>
+                )}
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Display selected variants as badges */}
