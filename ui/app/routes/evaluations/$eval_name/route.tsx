@@ -27,18 +27,22 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const dataset_name = config.evals[params.eval_name].dataset_name;
   const function_name = config.evals[params.eval_name].function_name;
   const function_type = config.functions[function_name].type;
+
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
+
   const selected_eval_run_ids = searchParams.get("eval_run_ids");
   const selected_eval_run_ids_array = selected_eval_run_ids
     ? selected_eval_run_ids.split(",")
     : [];
+
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
 
   const evaluator_names = Object.keys(
     config.evals[params.eval_name].evaluators,
   );
+
   const metric_names = evaluator_names.map((evaluatorName) =>
     getEvaluatorMetricName(params.eval_name, evaluatorName),
   );
@@ -48,45 +52,53 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     selected_eval_run_ids_array,
     function_name,
   );
+
   const mostRecentEvalInferenceDatePromise = getMostRecentEvalInferenceDate(
     selected_eval_run_ids_array,
   );
 
   // Create placeholder promises for results and statistics that will be used conditionally
-  const resultsPromise =
-    selected_eval_run_ids_array.length > 0
-      ? getEvalResults(
-          dataset_name,
-          function_name,
-          function_type,
-          metric_names,
-          selected_eval_run_ids_array,
-          pageSize,
-          offset,
-        )
-      : Promise.resolve([]);
+  let resultsPromise;
+  if (selected_eval_run_ids_array.length > 0) {
+    resultsPromise = getEvalResults(
+      dataset_name,
+      function_name,
+      function_type,
+      metric_names,
+      selected_eval_run_ids_array,
+      pageSize,
+      offset,
+    );
+  } else {
+    resultsPromise = Promise.resolve([]);
+  }
 
-  const statisticsPromise =
-    selected_eval_run_ids_array.length > 0
-      ? getEvalStatistics(
-          dataset_name,
-          function_name,
-          function_type,
-          metric_names,
-          selected_eval_run_ids_array,
-        )
-      : Promise.resolve([]);
-  const total_datapoints_promise =
-    selected_eval_run_ids_array.length > 0
-      ? countDatapointsForEval(
-          dataset_name,
-          function_name,
-          function_type,
-          selected_eval_run_ids_array,
-        )
-      : 0;
+  let statisticsPromise;
+  if (selected_eval_run_ids_array.length > 0) {
+    statisticsPromise = getEvalStatistics(
+      dataset_name,
+      function_name,
+      function_type,
+      metric_names,
+      selected_eval_run_ids_array,
+    );
+  } else {
+    statisticsPromise = Promise.resolve([]);
+  }
 
-  // Wait for all three promises to complete concurrently
+  let total_datapoints_promise;
+  if (selected_eval_run_ids_array.length > 0) {
+    total_datapoints_promise = countDatapointsForEval(
+      dataset_name,
+      function_name,
+      function_type,
+      selected_eval_run_ids_array,
+    );
+  } else {
+    total_datapoints_promise = Promise.resolve(0);
+  }
+
+  // Wait for all promises to complete concurrently
   const [
     selected_eval_run_infos,
     eval_results,
@@ -102,6 +114,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
 
   return {
+    selected_eval_run_ids_array,
     eval_name: params.eval_name,
     selected_eval_run_infos,
     eval_results,
@@ -117,6 +130,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const {
+    selected_eval_run_ids_array,
     eval_name,
     selected_eval_run_infos,
     eval_results,
@@ -139,11 +153,22 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     searchParams.set("offset", String(offset - pageSize));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
+  if (mostRecentEvalInferenceDates.size === 0) {
+    return <div>No inference dates found</div>;
+  }
 
   // Get the most recent inference date from the map
-  const mostRecentEvalInferenceDate = Array.from(
-    mostRecentEvalInferenceDates.values(),
-  ).reduce((max, current) => (current > max ? current : max), new Date(0));
+  // If selected_eval_run_ids_array is nonempty, but mostRecentEvalInferenceDates is empty,
+  // set the most recent inference date to the current time (we should refresh in case data shows up).
+  // If the selected_eval_run_ids_array is empty, set the most recent inference date to 0 (no need to refresh).
+  const mostRecentEvalInferenceDate =
+    selected_eval_run_ids_array.length > 0 &&
+    mostRecentEvalInferenceDates.size === 0
+      ? new Date()
+      : Array.from(mostRecentEvalInferenceDates.values()).reduce(
+          (max, current) => (current > max ? current : max),
+          new Date(0),
+        );
   // Use that time for auto-refreshing
   const isAutoRefreshing = useAutoRefresh(mostRecentEvalInferenceDate);
 

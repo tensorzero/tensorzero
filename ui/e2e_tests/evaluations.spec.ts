@@ -10,7 +10,9 @@ test("should show the evaluation result page", async ({ page }) => {
 
 test("push the new run button, launch an eval", async ({ page }) => {
   await page.goto("/evaluations");
+  await page.waitForTimeout(500);
   await page.getByText("New Run").click();
+  await page.waitForTimeout(500);
   await page.getByText("Select an evaluation").click();
   await page.waitForTimeout(500);
   await page
@@ -26,7 +28,9 @@ test("push the new run button, launch an eval", async ({ page }) => {
   await page.getByRole("button", { name: "Launch" }).click();
   await page.waitForTimeout(5000);
 
-  await expect(page.getByText("Compare Variants")).toBeVisible();
+  await expect(
+    page.getByText("Select evaluation runs to compare..."),
+  ).toBeVisible();
   await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
   await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
 
