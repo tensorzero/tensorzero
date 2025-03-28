@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
 import { getConfigPath } from "./config/index.server";
-import { EvalErrorSchema } from "./evals";
+import { EvalErrorSchema, type DisplayEvalError } from "./evals";
 /**
  * Get the path to the evals binary from environment variables.
  * Defaults to 'evals' if not specified.
@@ -19,7 +19,8 @@ function getGatewayURL(): string {
   return gatewayURL;
 }
 interface RunningEvalInfo {
-  errors: { datapoint_id?: string; message: string }[];
+  errors: DisplayEvalError[];
+  variantName: string;
   completed?: Date;
   started: Date;
 }
@@ -64,7 +65,6 @@ export function runEval(
   return new Promise<EvalStartInfo>((resolve, reject) => {
     // Spawn a child process to run the evals command
     const child = spawn(command[0], command.slice(1));
-    console.log("Running eval", command.join(" "));
 
     // Variables to track state
     let evalRunId: string | null = null;
@@ -96,6 +96,7 @@ export function runEval(
 
             // Initialize the tracking entry in our runningEvals map
             runningEvals[evalRunId] = {
+              variantName,
               errors: [],
               started: startTime,
             };

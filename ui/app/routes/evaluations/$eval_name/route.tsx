@@ -22,6 +22,7 @@ import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 import BasicInfo from "./EvaluationBasicInfo";
 import { useConfig } from "~/context/config";
 import { getRunningEval } from "~/utils/evals.server";
+import { EvalErrorInfo, type EvalErrorDisplayInfo } from "./EvalErrorInfo";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -115,8 +116,31 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
 
   const any_eval_is_running = Object.values(selected_eval_run_ids_array).some(
-    (evalRunId) => getRunningEval(evalRunId)?.completed === undefined,
+    (evalRunId) => {
+      const runningEval = getRunningEval(evalRunId);
+      return runningEval ? runningEval.completed === undefined : false;
+    },
   );
+
+  const errors: Record<string, EvalErrorDisplayInfo> =
+    selected_eval_run_ids_array.reduce(
+      (acc, evalRunId) => {
+        const evalRunInfo = getRunningEval(evalRunId);
+        if (evalRunInfo?.errors) {
+          acc[evalRunId] = {
+            variantName: evalRunInfo.variantName,
+            errors: evalRunInfo.errors,
+          };
+        } else {
+          acc[evalRunId] = {
+            variantName: evalRunId,
+            errors: [],
+          };
+        }
+        return acc;
+      },
+      {} as Record<string, EvalErrorDisplayInfo>,
+    );
 
   return {
     eval_name: params.eval_name,
@@ -130,6 +154,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     evaluator_names,
     mostRecentEvalInferenceDates,
     any_eval_is_running,
+    errors,
   };
 }
 
@@ -146,6 +171,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     evaluator_names,
     mostRecentEvalInferenceDates,
     any_eval_is_running,
+    errors,
   } = loaderData;
   const navigate = useNavigate();
   const handleNextPage = () => {
@@ -160,10 +186,13 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   };
 
   // Use that time for auto-refreshing
-  const isAutoRefreshing = useAutoRefresh(any_eval_is_running);
+  useAutoRefresh(any_eval_is_running);
 
   const config = useConfig();
   const eval_config = config.evals[eval_name];
+  const hasErrorsToDisplay = Object.values(errors).some(
+    (error) => error.errors.length > 0,
+  );
 
   return (
     <PageLayout>
@@ -173,11 +202,16 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
 
       <SectionsGroup>
         <SectionLayout>
+          {hasErrorsToDisplay && (
+            <>
+              <SectionHeader heading="Errors" />
+              <EvalErrorInfo errors={errors} />
+            </>
+          )}
           <div className="flex items-center justify-between">
             <SectionHeader heading="Results" />
-            <AutoRefreshIndicator isActive={isAutoRefreshing} />
+            <AutoRefreshIndicator isActive={any_eval_is_running} />
           </div>
-
           <EvaluationTable
             eval_name={eval_name}
             selected_eval_run_infos={selected_eval_run_infos}
