@@ -101,7 +101,7 @@ function EvalForm() {
           htmlFor="concurrency_limit"
           className="mb-1 block text-sm font-medium"
         >
-          Concurrency Limit
+          Concurrency
         </label>
         <input
           type="number"
@@ -131,7 +131,7 @@ export default function LaunchEvalModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Launch Eval</DialogTitle>
+          <DialogTitle>Launch Evaluation</DialogTitle>
         </DialogHeader>
 
         <EvalForm />
