@@ -10,6 +10,8 @@ export default [
       "**/build/**",
       "**/.react-router/**",
       "**/.venv/**",
+      "**/playwright-report/**",
+      "**/test-results/**",
     ],
   },
   {
