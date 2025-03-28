@@ -272,7 +272,7 @@ jobs:
 
       # - name: Run ESLint
       #   working-directory: ui
-      #   run: pnpm run lint
+      #   run: pnpm run lint 
 
       # - name: Run Prettier
       #   working-directory: ui
@@ -280,7 +280,7 @@ jobs:
 
       # - name: Run TypeScript type checking
       #   working-directory: ui
-      #   run: pnpm run typecheck
+      #    run: pnpm run typecheck
 
       - name: Build ui container
         run: docker build -f ui/Dockerfile . -t tensorzero/ui
