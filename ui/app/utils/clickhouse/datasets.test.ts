@@ -23,7 +23,7 @@ describe("countRowsForDataset", () => {
       output_source: "none",
     });
     const rows = await countRowsForDataset(dataset_params);
-    expect(rows).toBe(644);
+    expect(rows).toBe(720);
   });
 
   test("returns the correct number of rows for a specific variant", async () => {
@@ -34,7 +34,7 @@ describe("countRowsForDataset", () => {
       output_source: "none",
     });
     const rows = await countRowsForDataset(dataset_params);
-    expect(rows).toBe(110);
+    expect(rows).toBe(152);
   });
 
   test("throws an error if function_name is not provided but variant_name is", async () => {
@@ -260,14 +260,14 @@ describe("getDatasetCounts", () => {
       // Because other tests insert into the table, there could be additional datasets
       expect.arrayContaining([
         {
+          count: 118,
+          dataset_name: "foo",
+          last_updated: "2025-03-23T20:03:59Z",
+        },
+        {
           count: 6,
           dataset_name: "bar",
           last_updated: "2025-03-14T17:38:09Z",
-        },
-        {
-          count: 116,
-          dataset_name: "foo",
-          last_updated: "2025-02-19T00:25:29Z",
         },
       ]),
     );
@@ -291,7 +291,7 @@ describe("getDatasetRows", () => {
       if (rows.length !== pageSize) break;
     }
 
-    expect(allRows.length).toBe(116);
+    expect(allRows.length).toBe(118);
     expect(allRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

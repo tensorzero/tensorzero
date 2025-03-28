@@ -15,6 +15,10 @@ export default [
     "routes/api/datasets/count_inserts.route.ts",
   ),
   route(
+    "api/evaluations/search_runs/:eval_name",
+    "routes/api/evaluations/search_runs/$eval_name/route.ts",
+  ),
+  route(
     "api/function/:function_name/feedback_counts",
     "routes/api/function/$function_name/feedback_counts.route.ts",
   ),
@@ -26,7 +30,12 @@ export default [
     "datasets/:dataset_name/datapoint/:id",
     "routes/datasets/$dataset_name/datapoint/$id/route.tsx",
   ),
+  route("evaluations", "routes/evaluations/route.tsx"),
   route("evaluations/:eval_name", "routes/evaluations/$eval_name/route.tsx"),
+  route(
+    "evaluations/:eval_name/:datapoint_id",
+    "routes/evaluations/$eval_name/$datapoint_id/route.tsx",
+  ),
   route(
     "observability/inferences",
     "routes/observability/inferences/route.tsx",

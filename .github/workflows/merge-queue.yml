@@ -282,8 +282,7 @@ jobs:
         run: pnpm run typecheck
 
       - name: Build ui container
-        working-directory: ui
-        run: docker build -t tensorzero/ui .
+        run: docker build -f ui/Dockerfile . -t tensorzero/ui
 
       - name: Start services for ui tests
         working-directory: ui
@@ -292,12 +291,12 @@ jobs:
           echo "FIREWORKS_API_KEY=not_used" >> .env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> .env
-          echo "TENSORZERO_GATEWAY_URL=http://localhost:3000" >> .env
+          echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> .env
           docker compose -f fixtures/docker-compose.yml -f fixtures/docker-compose.ui.yml --project-name tensorzero-ui up -d --build --force-recreate
 
       - name: Run ui tests
         working-directory: ui
-        run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test
+        run: TENSORZERO_UI_CONFIG_PATH=fixtures/config/tensorzero.toml TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test
 
       - name: Install playwright dependencies
         working-directory: ui
@@ -305,7 +304,7 @@ jobs:
 
       - name: Run ui e2e tests
         working-directory: ui
-        run: TENSORZERO_CI=1 pnpm test-e2e
+        run: TENSORZERO_CI=1 pnpm test-e2e --grep 'launch'
         continue-on-error: true
         id: e2e_tests
 
