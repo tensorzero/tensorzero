@@ -295,6 +295,9 @@ jobs:
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> .env
           docker compose -f fixtures/docker-compose.yml -f fixtures/docker-compose.ui.yml --project-name tensorzero-ui up -d --build --force-recreate
 
+      - name: Debugging with ssh
+        uses: lhotari/action-upterm@v1
+
       - name: Run ui tests
         working-directory: ui
         run: TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test
