@@ -34,7 +34,7 @@ use crate::model::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
-use super::helpers::{inject_extra_body, peek_first_chunk};
+use super::helpers::{inject_extra_request_data, peek_first_chunk};
 use super::openai::convert_stream_error;
 
 lazy_static! {
@@ -147,7 +147,7 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             tensorzero_model_name,
@@ -160,6 +160,7 @@ impl InferenceProvider for AnthropicProvider {
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret())
             .header("content-type", "application/json")
+            .headers(headers)
             .json(&request_body)
             .send()
             .await
@@ -252,7 +253,7 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -270,6 +271,7 @@ impl InferenceProvider for AnthropicProvider {
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("content-type", "application/json")
             .header("x-api-key", api_key.expose_secret())
+            .headers(headers)
             .json(&request_body)
             .eventsource()
             .map_err(|e| {

@@ -30,7 +30,7 @@ use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchModelInferenceResponse,
     StartBatchProviderInferenceResponse,
 };
-use crate::inference::types::extra_body::ExtraBodyConfig;
+use crate::inference::types::extra_body::{ExtraBodyConfig, ExtraHeadersConfig};
 use crate::inference::types::{
     current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Usage,
@@ -81,6 +81,7 @@ where
                     name,
                     config: provider.config,
                     extra_body: provider.extra_body,
+                    extra_headers: provider.extra_headers,
                 },
             )
         })
@@ -465,12 +466,14 @@ pub struct UninitializedModelProvider {
     #[serde(flatten)]
     pub config: ProviderConfig,
     pub extra_body: Option<ExtraBodyConfig>,
+    pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 #[derive(Debug)]
 pub struct ModelProvider {
     pub name: Arc<str>,
     pub config: ProviderConfig,
+    pub extra_headers: Option<ExtraHeadersConfig>,
     pub extra_body: Option<ExtraBodyConfig>,
 }
 
@@ -478,6 +481,7 @@ impl From<&ModelProvider> for ModelProviderRequestInfo {
     fn from(val: &ModelProvider) -> Self {
         ModelProviderRequestInfo {
             provider_name: val.name.clone(),
+            extra_headers: val.extra_headers.clone(),
             extra_body: val.extra_body.clone(),
         }
     }
@@ -486,6 +490,7 @@ impl From<&ModelProvider> for ModelProviderRequestInfo {
 #[derive(Clone, Debug)]
 pub struct ModelProviderRequestInfo {
     pub provider_name: Arc<str>,
+    pub extra_headers: Option<ExtraHeadersConfig>,
     pub extra_body: Option<ExtraBodyConfig>,
 }
 
@@ -1350,6 +1355,7 @@ impl ShorthandModelConfig for ModelConfig {
                     name: provider_type.into(),
                     config: provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         })
@@ -1448,6 +1454,7 @@ mod tests {
                     name: "good_provider".into(),
                     config: good_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -1513,6 +1520,7 @@ mod tests {
                     name: "error".into(),
                     config: bad_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -1597,6 +1605,7 @@ mod tests {
                         name: "error_provider".into(),
                         config: bad_provider_config,
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
                 (
@@ -1605,6 +1614,7 @@ mod tests {
                         name: "good_provider".into(),
                         config: good_provider_config,
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
             ]),
@@ -1670,6 +1680,7 @@ mod tests {
                     name: "good_provider".into(),
                     config: good_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -1738,6 +1749,7 @@ mod tests {
                     name: "error".to_string().into(),
                     config: bad_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -1824,6 +1836,7 @@ mod tests {
                         name: "error_provider".to_string().into(),
                         config: bad_provider_config,
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
                 (
@@ -1832,6 +1845,7 @@ mod tests {
                         name: "good_provider".to_string().into(),
                         config: good_provider_config,
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
             ]),
@@ -1909,6 +1923,7 @@ mod tests {
                     name: "model".into(),
                     config: provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -2014,6 +2029,7 @@ mod tests {
                     name: "model".to_string().into(),
                     config: provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -2133,6 +2149,7 @@ mod tests {
                     name: "anthropic".into(),
                     config: anthropic_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };

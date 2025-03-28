@@ -67,6 +67,7 @@ pub struct E2ETestProvider {
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
 
+    pub bad_auth_extra_headers: Vec<E2ETestProvider>,
     pub extra_body_inference: Vec<E2ETestProvider>,
 
     pub reasoning_inference: Vec<E2ETestProvider>,
@@ -166,6 +167,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_inference_params_streaming_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_bad_auth_extra_headers_with_provider;
         use $crate::providers::common::test_image_inference_with_provider_filesystem;
         use $crate::providers::common::test_image_inference_with_provider_amazon_s3;
         use $crate::providers::common::test_dynamic_json_mode_inference_request_with_provider;
@@ -223,6 +225,14 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
                 test_streaming_reasoning_inference_request_simple_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_bad_auth_extra_headers() {
+            let providers = $func().await.bad_auth_extra_headers;
+            for provider in providers {
+                test_bad_auth_extra_headers_with_provider(provider).await;
             }
         }
 
@@ -1281,6 +1291,154 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
         raw_request_val.get("top_p")
     };
     assert_eq!(top_p.unwrap().as_f64().expect("Top P is not a number"), 0.8);
+}
+
+pub async fn test_bad_auth_extra_headers_with_provider(provider: E2ETestProvider) {
+    test_bad_auth_extra_headers_with_provider_and_stream(&provider, false).await;
+    test_bad_auth_extra_headers_with_provider_and_stream(&provider, true).await;
+}
+
+pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
+    provider: &E2ETestProvider,
+    stream: bool,
+) {
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": stream,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let res = response.json::<Value>().await.unwrap();
+    // The status codes/messages from providers are inconsistent,
+    // so we manually check for auth-related strings (where possible)
+    match provider.model_provider_name.as_str() {
+        "openai" => assert!(
+            res["error"]
+                .as_str()
+                .unwrap()
+                .contains("You didn't provide an API key")
+                || res["error"].as_str().unwrap().contains("400 Bad Request"),
+            "Unexpected error: {res}"
+        ),
+        "deepseek" => {
+            assert!(
+                res["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Authentication Fails"),
+                "Unexpected error: {res}"
+            );
+        }
+        "google_ai_studio_gemini" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("error decoding")
+                    || res["error"].as_str().unwrap().contains("400 Bad Request"),
+                "Unexpected error: {res}"
+            );
+        }
+        "aws-bedrock" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Bad Request"),
+                "Unexpected error: {res}"
+            );
+        }
+        "anthropic" => {
+            assert!(
+                res["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("authentication_error"),
+                "Unexpected error: {res}"
+            );
+        }
+        "azure" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Access denied"),
+                "Unexpected error: {res}"
+            );
+        }
+        "fireworks" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("unauthorized"),
+                "Unexpected error: {res}"
+            );
+        }
+        "gcp_vertex_anthropic" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Decode")
+                    || res["error"].as_str().unwrap().contains("400 Bad Request"),
+                "Unexpected error: {res}"
+            );
+        }
+        "hyperbolic" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Bad Request")
+                    || res["error"].as_str().unwrap().contains("401 Unauthorized"),
+                "Unexpected error: {res}"
+            );
+        }
+        "mistral" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Bearer token"),
+                "Unexpected error: {res}"
+            );
+        }
+        "sglang" | "tgi" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("401 Authorization"),
+                "Unexpected error: {res}"
+            )
+        }
+        "together" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Invalid API key"),
+                "Unexpected error: {res}"
+            )
+        }
+        "vllm" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Unauthorized"),
+                "Unexpected error: {res}"
+            )
+        }
+        "xai" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Incorrect"),
+                "Unexpected error: {res}"
+            )
+        }
+        "gcp_vertex_gemini" => {
+            assert!(
+                res["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("authentication credential"),
+                "Unexpected error: {res}"
+            )
+        }
+        _ => {
+            panic!("Got error: {res}");
+        }
+    }
+
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
 }
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {

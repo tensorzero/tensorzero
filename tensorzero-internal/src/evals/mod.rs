@@ -15,7 +15,7 @@ use crate::{
     },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
-    inference::types::extra_body::ExtraBodyConfig,
+    inference::types::extra_body::{ExtraBodyConfig, ExtraHeadersConfig},
     jsonschema_util::JSONSchemaFromPath,
     tool::create_implicit_tool_call_config,
     variant::{chat_completion::ChatCompletionConfig, JsonMode, RetryConfig, VariantConfig},
@@ -347,6 +347,8 @@ pub struct UninitializedLLMJudgeChatCompletionVariantConfig {
     pub retries: RetryConfig,
     #[serde(default)]
     pub extra_body: Option<ExtraBodyConfig>,
+    #[serde(default)]
+    pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 impl UninitializedLLMJudgeVariantConfig {
@@ -392,6 +394,7 @@ impl UninitializedLLMJudgeVariantConfig {
                     json_mode: Some(params.json_mode),
                     retries: params.retries,
                     extra_body: params.extra_body,
+                    extra_headers: params.extra_headers,
                 }))
             }
         }
@@ -535,6 +538,7 @@ mod tests {
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
             );
@@ -652,6 +656,7 @@ mod tests {
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
             );
@@ -801,6 +806,7 @@ mod tests {
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
             );
@@ -824,6 +830,7 @@ mod tests {
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
             );
@@ -935,6 +942,7 @@ mod tests {
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
             );
