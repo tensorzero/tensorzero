@@ -424,7 +424,9 @@ export function EvaluationTable({
                                 : "cursor-pointer"
                             }
                             onClick={() => {
-                              const eval_run_ids = selectedRunIds.join(",");
+                              const eval_run_ids = filteredVariants
+                                .map(([runId]) => runId)
+                                .join(",");
                               navigate(
                                 `/evaluations/${eval_name}/${datapoint.id}?eval_run_ids=${eval_run_ids}`,
                               );

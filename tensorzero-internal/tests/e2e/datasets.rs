@@ -468,6 +468,37 @@ async fn test_datapoint_insert_synthetic_json() {
 }
 
 #[tokio::test]
+async fn test_datapoint_insert_bad_name() {
+    let client = Client::new();
+    let dataset_name = "builder";
+    let datapoint_id = Uuid::now_v7();
+
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&json!({
+            "function_name": "json_success",
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+            "output": {"answer": "Hello"},
+            "output_schema": {},
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let resp_json = resp.json::<Value>().await.unwrap();
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let err_msg = resp_json.get("error").unwrap().as_str().unwrap();
+    assert!(
+        err_msg.contains("Invalid dataset name"),
+        "Unexpected error message: {err_msg}"
+    );
+}
+
+#[tokio::test]
 async fn test_datapoint_insert_invalid_input_synthetic_chat() {
     let client = Client::new();
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
@@ -892,6 +923,52 @@ async fn test_datapoint_insert_output_none_chat() {
       "staled_at": null
     });
     assert_eq!(datapoint, expected);
+}
+
+#[tokio::test]
+async fn test_datapoint_create_bad_name() {
+    let client = Client::new();
+    // Run inference (standard, no dryrun) to get an episode_id.
+    let inference_payload = json!({
+        "function_name": "basic_test",
+        "input": {
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello, world!"}]
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    let dataset_name = "builder";
+
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints"
+        )))
+        .json(&json!({
+            "inference_id": inference_id,
+            "output": "none"
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let err_msg = resp.text().await.unwrap();
+    assert!(
+        err_msg.contains("Invalid dataset name"),
+        "Unexpected error message: {err_msg}"
+    );
 }
 
 #[tokio::test]

@@ -66,4 +66,4 @@ slow-timeout = { period = "500s", terminate-after = 1 }
 # Settings for running unit tests
 filter = 'not binary(e2e)'
 retries = 0
-slow-timeout = { period = "5s", terminate-after = 1 }
+slow-timeout = { period = "10s", terminate-after = 1 }

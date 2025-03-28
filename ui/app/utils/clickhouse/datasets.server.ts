@@ -314,6 +314,7 @@ export async function insertRowsForDataset(
   if (!validatedParams.data.dataset_name) {
     throw new Error("dataset_name is required for dataset insertion");
   }
+  validateDatasetName(validatedParams.data.dataset_name);
 
   const destinationTable =
     validatedParams.data.inferenceType === "chat"
@@ -544,6 +545,7 @@ export async function staleDatapoint(
 export async function insertDatapoint(
   datapoint: ParsedDatasetRow,
 ): Promise<void> {
+  validateDatasetName(datapoint.dataset_name);
   const table =
     "tool_params" in datapoint
       ? "ChatInferenceDatapoint"
@@ -596,4 +598,10 @@ export async function countDatapointsForDatasetFunction(
   });
   const rows = await resultSet.json<{ count: number }>();
   return rows[0].count;
+}
+
+function validateDatasetName(dataset_name: string) {
+  if (dataset_name === "builder" || dataset_name.startsWith("tensorzero::")) {
+    throw new Error("Invalid dataset name");
+  }
 }

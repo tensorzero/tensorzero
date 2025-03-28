@@ -11,6 +11,7 @@ import {
   getDatasetCounts,
   getDatasetRows,
   insertDatapoint,
+  insertRowsForDataset,
   staleDatapoint,
 } from "./datasets.server";
 import { expect, test, describe } from "vitest";
@@ -739,5 +740,40 @@ describe("countDatapointsForDatasetFunction", () => {
   test("returns 0 for a real dataset and non-existent function", async () => {
     const count = await countDatapointsForDatasetFunction("foo", "fake");
     expect(count).toBeNull();
+  });
+});
+
+describe("insertRowsForDataset", () => {
+  test("handles invalid dataset names", async () => {
+    await expect(
+      insertRowsForDataset({
+        dataset_name: "builder",
+        inferenceType: "chat",
+        extra_where: [],
+        extra_params: {},
+        output_source: "none",
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("insertDatapoint", () => {
+  test("handles invalid dataset names", async () => {
+    await expect(
+      insertDatapoint({
+        dataset_name: "builder",
+        function_name: "write_haiku",
+        id: uuid(),
+        episode_id: null,
+        input: { messages: [] },
+        output: [],
+        tool_params: {},
+        tags: {},
+        auxiliary: "",
+        updated_at: new Date().toISOString(),
+        is_deleted: false,
+        staled_at: null,
+      }),
+    ).rejects.toThrow();
   });
 });
