@@ -1,2 +1,0 @@
-prediction: {{ prediction }}
-truth: {{ truth }}
