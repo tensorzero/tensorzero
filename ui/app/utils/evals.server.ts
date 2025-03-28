@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
 import { getConfigPath } from "./config/index.server";
-import { EvalErrorSchema, type EvalError } from "./evals";
+import { EvalErrorSchema } from "./evals";
 /**
  * Get the path to the evals binary from environment variables.
  * Defaults to 'evals' if not specified.
@@ -108,12 +108,12 @@ export function runEval(
 
             // Add to the beginning of the errors list
             runningEvals[evalRunId].errors.unshift(evalError);
-          } catch (error) {
+          } catch {
             // If it doesn't match our schema, just ignore it
           }
         }
         // We're ignoring other types of output that don't match these patterns
-      } catch (error) {
+      } catch {
         console.warn(`Bad JSON line: ${line}`);
       }
     };
@@ -180,3 +180,47 @@ const evalStartInfoSchema = z.object({
   num_datapoints: z.number(),
 });
 export type EvalStartInfo = z.infer<typeof evalStartInfoSchema>;
+
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+/**
+ * Cleans up old eval entries from the runningEvals map:
+ * - Removes completed evals older than 1 hour
+ * - Removes stalled evals (started but not completed) older than 24 hours
+ */
+export function cleanupOldEvals(): void {
+  const now = new Date();
+
+  Object.keys(runningEvals).forEach((evalRunId) => {
+    const evalInfo = runningEvals[evalRunId];
+
+    // Remove completed evals older than 1 hour
+    if (
+      evalInfo.completed &&
+      now.getTime() - evalInfo.completed.getTime() > ONE_HOUR_MS
+    ) {
+      delete runningEvals[evalRunId];
+      return;
+    }
+
+    // Remove stalled evals older than 24 hours
+    if (now.getTime() - evalInfo.started.getTime() > TWENTY_FOUR_HOURS_MS) {
+      delete runningEvals[evalRunId];
+    }
+  });
+}
+
+/**
+ * Starts a periodic cleanup of old evals.
+ * @param intervalMs The interval in milliseconds between cleanups. Default: 1 hour.
+ * @returns A function that can be called to stop the periodic cleanup.
+ */
+export function startPeriodicCleanup(intervalMs = ONE_HOUR_MS): () => void {
+  const intervalId = setInterval(cleanupOldEvals, intervalMs);
+
+  // Run an initial cleanup immediately
+  cleanupOldEvals();
+
+  // Return a function to stop the periodic cleanup
+  return () => clearInterval(intervalId);
+}

@@ -7,7 +7,7 @@ import {
   ScrollRestoration,
   useLoaderData,
 } from "react-router";
-
+import { useEffect } from "react";
 import { ConfigProvider } from "./context/config";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
@@ -15,6 +15,7 @@ import { getConfig } from "./utils/config/index.server";
 import { AppSidebar } from "./components/layout/app.sidebar";
 import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
+import { startPeriodicCleanup } from "./utils/evals.server";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -59,6 +60,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const config = useLoaderData<typeof loader>();
+
+  // Initialize eval cleanup when the app loads
+  useEffect(() => {
+    // Start the periodic cleanup and get the cleanup function
+    const stopCleanup = startPeriodicCleanup();
+
+    // Return cleanup function to stop the interval when the component unmounts
+    return () => {
+      stopCleanup();
+    };
+  }, []);
 
   return (
     <ConfigProvider value={config}>
