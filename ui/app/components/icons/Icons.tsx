@@ -313,18 +313,18 @@ export const Compare: React.FC<IconProps> = (props) => (
 export const Evaluation: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
     <path
-      d="M12 3v17a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1H3"
+      d="M8 2v11.33a.67.67 0 0 1-.67.67H3.33A1.33 1.33 0 0 1 2 12.67V3.33A1.33 1.33 0 0 1 3.33 2h9.34A1.33 1.33 0 0 1 14 3.33v4A.67.67 0 0 1 13.33 8H2"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1.33"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <path
-      d="m16 19 2 2 4-4"
+      d="m10.67 12.67 1.33 1.33 2.67-2.67"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1.33"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
