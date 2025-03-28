@@ -114,7 +114,7 @@ export default function Home() {
               source="/observability/inferences"
               icon={Inferences}
               title="Inferences"
-              description={`${totalInferences.toLocaleString()} total inferences`}
+              description={`${totalInferences.toLocaleString()} inferences`}
             />
             <FeatureCard
               source="/observability/episodes"
