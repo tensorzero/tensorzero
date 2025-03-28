@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use reqwest::StatusCode;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
@@ -26,7 +26,7 @@ use super::helpers::inject_extra_request_data;
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
-    OpenAIToolChoiceString, SpecificToolChoice,
+    OpenAIToolChoiceString, SpecificToolChoice, TensorZeroEventError,
 };
 use super::provider_trait::InferenceProvider;
 
@@ -248,7 +248,11 @@ impl InferenceProvider for AzureProvider {
                     raw_response: None,
                 })
             })?;
-        let stream = stream_openai(event_source, start_time).peekable();
+        let stream = stream_openai(
+            event_source.map_err(TensorZeroEventError::EventSource),
+            start_time,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 

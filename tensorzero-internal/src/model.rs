@@ -18,6 +18,7 @@ use crate::cache::{
     CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
 use crate::endpoints::inference::InferenceClients;
+use crate::inference::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
@@ -498,6 +499,7 @@ pub struct ModelProviderRequestInfo {
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     AWSBedrock(AWSBedrockProvider),
+    AWSSagemaker(AWSSagemakerProvider),
     Azure(AzureProvider),
     Fireworks(FireworksProvider),
     GCPVertexAnthropic(GCPVertexAnthropicProvider),
@@ -514,6 +516,15 @@ pub enum ProviderConfig {
     DeepSeek(DeepSeekProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
+}
+
+/// Contains all providers which implement `SelfHostedProvider` - these providers
+/// can be used as the target provider hosted by AWS Sagemaker
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[serde(deny_unknown_fields)]
+pub enum HostedProviderKind {
+    OpenAI,
 }
 
 /// Helper struct for deserializing the ProviderConfig.
@@ -537,6 +548,16 @@ pub(super) enum ProviderConfigHelper {
         region: Option<String>,
         #[serde(default)]
         allow_auto_detect_region: bool,
+    },
+    #[strum(serialize = "aws_sagemaker")]
+    #[serde(rename = "aws_sagemaker")]
+    AWSSagemaker {
+        endpoint_name: String,
+        model_name: String,
+        region: Option<String>,
+        #[serde(default)]
+        allow_auto_detect_region: bool,
+        hosted_provider: HostedProviderKind,
     },
     Azure {
         deployment_id: String,
@@ -661,6 +682,41 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 })?;
 
                 ProviderConfig::AWSBedrock(provider)
+            }
+            ProviderConfigHelper::AWSSagemaker {
+                endpoint_name,
+                region,
+                allow_auto_detect_region,
+                model_name,
+                hosted_provider,
+            } => {
+                let region = region.map(aws_types::region::Region::new);
+                if region.is_none() && !allow_auto_detect_region {
+                    return Err(D::Error::custom("AWS Sagemaker provider requires a region to be provided, or `allow_auto_detect_region = true`."));
+                }
+
+                let self_hosted = match hosted_provider {
+                    HostedProviderKind::OpenAI => {
+                        OpenAIProvider::new(model_name, None, Some(CredentialLocation::None))
+                            .map_err(|e| D::Error::custom(e.to_string()))?
+                    }
+                };
+                // NB: We need to make an async call here to initialize the AWS Sagemaker client.
+
+                let provider = tokio::task::block_in_place(move || {
+                    tokio::runtime::Handle::current()
+                        .block_on(async {
+                            AWSSagemakerProvider::new(endpoint_name, Box::new(self_hosted), region)
+                                .await
+                        })
+                        .map_err(|e| {
+                            serde::de::Error::custom(format!(
+                                "Failed to initialize AWS Sagemaker provider: {e}"
+                            ))
+                        })
+                })?;
+
+                ProviderConfig::AWSSagemaker(provider)
             }
             ProviderConfigHelper::Azure {
                 deployment_id,
@@ -795,6 +851,9 @@ impl ModelProvider {
             ProviderConfig::AWSBedrock(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
+            ProviderConfig::AWSSagemaker(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
             ProviderConfig::Azure(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
@@ -849,6 +908,9 @@ impl ModelProvider {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::AWSBedrock(provider) => {
+                provider.infer_stream(request, client, api_keys, self).await
+            }
+            ProviderConfig::AWSSagemaker(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Azure(provider) => {
@@ -913,6 +975,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::AWSBedrock(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::AWSSagemaker(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -1009,6 +1076,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::AWSBedrock(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::AWSSagemaker(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await

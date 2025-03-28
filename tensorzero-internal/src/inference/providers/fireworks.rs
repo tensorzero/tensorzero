@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::OnceLock};
 
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
@@ -28,7 +28,7 @@ use super::{
         get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
         tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse,
         OpenAIResponseChoice, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
-        OpenAIToolType,
+        OpenAIToolType, TensorZeroEventError,
     },
     provider_trait::InferenceProvider,
 };
@@ -271,7 +271,11 @@ impl InferenceProvider for FireworksProvider {
                     raw_response: None,
                 })
             })?;
-        let stream = stream_openai(event_source, start_time).peekable();
+        let stream = stream_openai(
+            event_source.map_err(TensorZeroEventError::EventSource),
+            start_time,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 
