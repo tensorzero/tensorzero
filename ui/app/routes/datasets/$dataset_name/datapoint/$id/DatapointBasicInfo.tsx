@@ -76,7 +76,11 @@ export default function BasicInfo({ datapoint }: BasicInfoProps) {
         <BasicInfoItemContent>
           <Chip
             label={datapoint.episode_id ?? "N/A"}
-            link={`/observability/episodes/${datapoint.episode_id}`}
+            link={
+              datapoint.episode_id
+                ? `/observability/episodes/${datapoint.episode_id}`
+                : undefined
+            }
             font="mono"
           />
         </BasicInfoItemContent>
