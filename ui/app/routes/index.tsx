@@ -111,7 +111,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div id="optimization" className="mb-12">
+        <div id="optimization" className="mb-16">
           <h2 className="mb-1 text-2xl font-medium">Optimization</h2>
           <p className="mb-6 max-w-[640px] text-sm text-fg-tertiary">
             Optimize your prompts, models, and inference strategies.
@@ -121,7 +121,28 @@ export default function Home() {
               source="/optimization/supervised-fine-tuning"
               icon={SupervisedFineTuning}
               title="Supervised Fine-tuning"
-              description={`${numFunctions} functions available`}
+              description={`${numFunctions} functions`}
+            />
+          </div>
+        </div>
+
+        <div id="optimization" className="mb-12">
+          <h2 className="mb-1 text-2xl font-medium">Workflows</h2>
+          <p className="mb-6 max-w-[640px] text-sm text-fg-tertiary">
+            Manage your LLM engineering workflows.
+          </p>
+          <div className="grid gap-6 md:grid-cols-3">
+            <FeatureCard
+              source="/datasets"
+              icon={SupervisedFineTuning}
+              title="Datasets"
+              description={`3 datasets`}
+            />
+            <FeatureCard
+              source="/evaluations"
+              icon={SupervisedFineTuning}
+              title="Evaluations"
+              description={`7 evaluations, 183 runs`}
             />
           </div>
         </div>
