@@ -579,8 +579,13 @@ describe("getEvalsForDatapoint", () => {
     );
     expect(evals.length).toBe(2);
 
+    // Sort evaluations by metric name to ensure consistent order
+    const sortedEvals = [...evals].sort((a, b) =>
+      a.metric_name.localeCompare(b.metric_name),
+    );
+
     // Check first evaluation result
-    const first_eval = evals[0];
+    const first_eval = sortedEvals[0];
     expect(first_eval.datapoint_id).toBe(
       "019373bc-e6e0-7e50-8822-af9bacfafe9a",
     );
@@ -597,7 +602,7 @@ describe("getEvalsForDatapoint", () => {
     expect(typeof first_eval.generated_output).toBe("object");
 
     // Check second evaluation result
-    const second_eval = evals[1];
+    const second_eval = sortedEvals[1];
     expect(second_eval.datapoint_id).toBe(
       "019373bc-e6e0-7e50-8822-af9bacfafe9a",
     );
