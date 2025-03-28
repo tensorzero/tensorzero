@@ -25,6 +25,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let bad_auth_extra_headers = vec![E2ETestProvider {
+        variant_name: "vllm-extra-headers".to_string(),
+        model_name: "microsoft/Phi-3.5-mini-instruct".into(),
+        model_provider_name: "vllm".into(),
+        credentials: HashMap::new(),
+    }];
+
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "vllm-default".to_string(),
@@ -51,6 +58,7 @@ async fn get_providers() -> E2ETestProviders {
     E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
+        bad_auth_extra_headers,
         reasoning_inference: vec![],
         inference_params_inference: providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,

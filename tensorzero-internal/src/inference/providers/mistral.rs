@@ -25,7 +25,7 @@ use crate::{
 };
 
 use super::{
-    helpers::inject_extra_body,
+    helpers::inject_extra_request_data,
     openai::{
         convert_stream_error, get_chat_url, tensorzero_to_openai_messages, OpenAIFunction,
         OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
@@ -139,7 +139,7 @@ impl InferenceProvider for MistralProvider {
                     message: format!("Error serializing Mistral request: {e}"),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -153,6 +153,7 @@ impl InferenceProvider for MistralProvider {
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
@@ -226,7 +227,7 @@ impl InferenceProvider for MistralProvider {
                     message: format!("Error serializing Mistral request: {e}"),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -245,6 +246,7 @@ impl InferenceProvider for MistralProvider {
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {

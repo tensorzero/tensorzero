@@ -45,6 +45,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let bad_auth_extra_headers = vec![E2ETestProvider {
+        variant_name: "anthropic-extra-headers".to_string(),
+        model_name: "claude-3-haiku-20240307-anthropic".into(),
+        model_provider_name: "anthropic".into(),
+        credentials: HashMap::new(),
+    }];
+
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         variant_name: "anthropic-dynamic".to_string(),
         model_name: "claude-3-haiku-20240307-anthropic-dynamic".into(),
@@ -82,6 +89,7 @@ async fn get_providers() -> E2ETestProviders {
 
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
+        bad_auth_extra_headers,
         extra_body_inference: extra_body_providers,
         reasoning_inference: vec![],
         inference_params_inference: standard_providers.clone(),
@@ -96,6 +104,61 @@ async fn get_providers() -> E2ETestProviders {
         shorthand_inference: shorthand_providers.clone(),
         supports_batch_inference: false,
     }
+}
+
+#[tokio::test]
+async fn test_thinking_128k() {
+    let client = Client::new();
+
+    // This model uses a custom stop sequence, as we want to make sure that
+    // we don't actually generate 128k tokens of output. This test just verifies
+    // that we can pass through the necessary 'anthropic-beta' header to support
+    // a large 'max_tokens'
+    let payload = json!({
+        "model_name": "claude-3-7-sonnet-20250219-thinking-128k",
+        "input":{
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Output a haiku that ends in the word 'my_custom_stop'"
+                }
+            ]},
+        "params": {
+            "chat_completion": {
+                "max_tokens": 128000,
+            }
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let resp_json = response.json::<Value>().await.unwrap();
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "Unexpected status code with response: {resp_json}"
+    );
+    let content = resp_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(content.len(), 2, "Unexpected content length: {content:?}");
+    assert_eq!(content[0]["type"], "thought", "Unexpected content type");
+    assert_eq!(content[1]["type"], "text", "Unexpected content type");
+    assert!(
+        !content[1]["text"]
+            .as_str()
+            .unwrap()
+            .contains("my_custom_stop"),
+        "Found my_custom_stop in content: {}",
+        content[1]["text"].as_str().unwrap()
+    );
+
+    // We don't check the database, as we already do that in lots of places.
 }
 
 #[tokio::test]

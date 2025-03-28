@@ -9,6 +9,7 @@ use crate::config_parser::LoadableConfig;
 use crate::config_parser::PathWithContents;
 use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
+use crate::inference::types::extra_body::ExtraHeadersConfig;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
@@ -53,6 +54,7 @@ pub struct DiclConfig {
     pub seed: Option<u32>,
     pub json_mode: Option<JsonMode>,
     pub extra_body: Option<ExtraBodyConfig>,
+    pub extra_headers: Option<ExtraHeadersConfig>,
     pub retries: RetryConfig,
 }
 
@@ -76,6 +78,8 @@ pub struct UninitializedDiclConfig {
     pub extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
     pub retries: RetryConfig,
+    #[serde(default)]
+    pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 impl Variant for DiclConfig {
@@ -515,6 +519,7 @@ impl DiclConfig {
         }
         let extra_body = FullExtraBodyConfig {
             extra_body: self.extra_body.clone(),
+            variant_extra_headers: self.extra_headers.clone(),
             inference_extra_body: Default::default(),
         };
         prepare_model_inference_request(
@@ -622,6 +627,7 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
             json_mode: self.json_mode,
             retries: self.retries,
             extra_body: self.extra_body,
+            extra_headers: self.extra_headers,
         })
     }
 }

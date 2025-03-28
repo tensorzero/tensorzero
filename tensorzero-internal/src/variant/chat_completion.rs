@@ -8,7 +8,9 @@ use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
-use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
+use crate::inference::types::extra_body::{
+    ExtraBodyConfig, ExtraHeadersConfig, FullExtraBodyConfig,
+};
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
     ModelInferenceRequest, RequestMessage, Role,
@@ -42,6 +44,7 @@ pub struct ChatCompletionConfig {
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     pub retries: RetryConfig,
     pub extra_body: Option<ExtraBodyConfig>,
+    pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -65,6 +68,8 @@ pub struct UninitializedChatCompletionConfig {
     pub retries: RetryConfig,
     #[serde(default)]
     pub extra_body: Option<ExtraBodyConfig>,
+    #[serde(default)]
+    pub extra_headers: Option<ExtraHeadersConfig>,
 }
 
 impl LoadableConfig<ChatCompletionConfig> for UninitializedChatCompletionConfig {
@@ -93,6 +98,7 @@ impl LoadableConfig<ChatCompletionConfig> for UninitializedChatCompletionConfig 
             json_mode: self.json_mode,
             retries: self.retries,
             extra_body: self.extra_body,
+            extra_headers: self.extra_headers,
         })
     }
 }
@@ -209,6 +215,7 @@ impl ChatCompletionConfig {
             );
 
         let extra_body = FullExtraBodyConfig {
+            variant_extra_headers: self.extra_headers.clone(),
             extra_body: self.extra_body.clone(),
             inference_extra_body: inference_config
                 .extra_body
@@ -507,6 +514,7 @@ mod tests {
             seed: None,
             retries: RetryConfig::default(),
             extra_body: Default::default(),
+            extra_headers: Default::default(),
         };
 
         // Test case 1: Regular user message
@@ -867,6 +875,7 @@ mod tests {
                     name: "good".into(),
                     config: good_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -878,6 +887,7 @@ mod tests {
                     name: "json_provider".into(),
                     config: json_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -893,6 +903,7 @@ mod tests {
                     name: "tool_provider".into(),
                     config: tool_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -904,6 +915,7 @@ mod tests {
                     name: "error".into(),
                     config: error_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -1091,6 +1103,7 @@ mod tests {
                     name: "good_provider".into(),
                     config: good_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -1649,6 +1662,7 @@ mod tests {
                     name: "good_provider".into(),
                     config: good_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -1660,6 +1674,7 @@ mod tests {
                     name: "error_provider".into(),
                     config: error_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };

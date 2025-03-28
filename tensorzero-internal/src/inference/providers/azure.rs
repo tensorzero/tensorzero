@@ -22,7 +22,7 @@ use crate::inference::types::{
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
@@ -131,7 +131,7 @@ impl InferenceProvider for AzureProvider {
                 message: format!("Error serializing Azure request: {e}"),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -144,6 +144,7 @@ impl InferenceProvider for AzureProvider {
             .post(request_url)
             .header("Content-Type", "application/json")
             .header("api-key", api_key.expose_secret())
+            .headers(headers)
             .json(&request_body)
             .send()
             .await
@@ -217,7 +218,7 @@ impl InferenceProvider for AzureProvider {
                 message: format!("Error serializing Azure request: {e}"),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -235,6 +236,7 @@ impl InferenceProvider for AzureProvider {
             .post(request_url)
             .header("Content-Type", "application/json")
             .header("api-key", api_key.expose_secret())
+            .headers(headers)
             .json(&request_body)
             .eventsource()
             .map_err(|e| {

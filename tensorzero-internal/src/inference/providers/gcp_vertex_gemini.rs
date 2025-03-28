@@ -34,7 +34,7 @@ use crate::model::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::convert_stream_error;
 
 const PROVIDER_NAME: &str = "GCP Vertex Gemini";
@@ -283,7 +283,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -297,6 +297,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             .post(&self.request_url)
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
@@ -371,7 +372,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -390,6 +391,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             .post(&self.streaming_request_url)
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {

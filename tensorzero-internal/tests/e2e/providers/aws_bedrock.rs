@@ -32,6 +32,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let bad_auth_extra_headers = vec![E2ETestProvider {
+        variant_name: "aws-bedrock-extra-headers".to_string(),
+        model_name: "claude-3-haiku-20240307-aws-bedrock".into(),
+        model_provider_name: "aws-bedrock".into(),
+        credentials: HashMap::new(),
+    }];
+
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "aws-bedrock".to_string(),
@@ -56,6 +63,7 @@ async fn get_providers() -> E2ETestProviders {
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
+        bad_auth_extra_headers,
         reasoning_inference: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],
