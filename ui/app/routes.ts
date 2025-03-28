@@ -15,6 +15,10 @@ export default [
     "routes/api/datasets/count_inserts.route.ts",
   ),
   route(
+    "api/datasets/count/dataset/:dataset_name/function/:function_name",
+    "routes/api/datasets/count_dataset_function.route.ts",
+  ),
+  route(
     "api/evaluations/search_runs/:eval_name",
     "routes/api/evaluations/search_runs/$eval_name/route.ts",
   ),

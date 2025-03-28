@@ -15,7 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import { useDatasetCountFetcher } from "~/routes/api/datasets/count_dataset_function.route";
 import { useConfig } from "~/context/config";
+import { Skeleton } from "~/components/ui/skeleton";
 
 interface LaunchEvalModalProps {
   isOpen: boolean;
@@ -31,6 +33,18 @@ function EvalForm() {
     null,
   );
   const [concurrencyLimit, setConcurrencyLimit] = useState<string>("5");
+  let count = null;
+  let isLoading = false;
+  let dataset = null;
+  let function_name = null;
+  if (selectedEvalName) {
+    dataset = config.evals[selectedEvalName]?.dataset_name;
+    function_name = config.evals[selectedEvalName]?.function_name;
+  }
+  const { count: datasetCount, isLoading: datasetLoading } =
+    useDatasetCountFetcher(dataset, function_name);
+  count = datasetCount;
+  isLoading = datasetLoading;
 
   // Check if all fields are filled
   const isFormValid =
@@ -63,6 +77,32 @@ function EvalForm() {
           ))}
         </SelectContent>
       </Select>
+      <div className="text-sm text-muted-foreground">
+        Dataset:{" "}
+        {dataset ? (
+          <span className="font-medium">{dataset}</span>
+        ) : (
+          <Skeleton className="inline-block h-4 w-16 align-middle" />
+        )}
+      </div>
+      <div className="text-sm text-muted-foreground">
+        Function:{" "}
+        {function_name ? (
+          <span className="font-medium">{function_name}</span>
+        ) : (
+          <Skeleton className="inline-block h-4 w-16 align-middle" />
+        )}
+      </div>
+      <div className="text-sm text-muted-foreground">
+        Datapoints:{" "}
+        {count !== null ? (
+          <span className="font-medium">{count}</span>
+        ) : isLoading ? (
+          <Skeleton className="inline-block h-4 w-16 align-middle" />
+        ) : (
+          <Skeleton className="inline-block h-4 w-16 align-middle" />
+        )}
+      </div>
       <div className="mt-4">
         <label
           htmlFor="variant_name"

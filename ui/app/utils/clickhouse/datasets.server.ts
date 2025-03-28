@@ -18,6 +18,7 @@ import {
   inputSchema,
   jsonInferenceOutputSchema,
 } from "./common";
+import { getConfig } from "../config/index.server";
 
 /**
  * Constructs a SELECT query for either the Chat or JSON dataset table.
@@ -573,4 +574,26 @@ export async function insertDatapoint(
     values,
     format: "JSONEachRow",
   });
+}
+
+export async function countDatapointsForDatasetFunction(
+  dataset_name: string,
+  function_name: string,
+): Promise<number | null> {
+  const config = await getConfig();
+  const function_type = config.functions[function_name]?.type;
+  if (!function_type) {
+    return null;
+  }
+  const table =
+    function_type === "chat"
+      ? "ChatInferenceDatapoint"
+      : "JsonInferenceDatapoint";
+  const resultSet = await clickhouseClient.query({
+    query: `SELECT toUInt32(count()) as count FROM {table:Identifier} WHERE dataset_name = {dataset_name:String} AND function_name = {function_name:String}`,
+    format: "JSONEachRow",
+    query_params: { dataset_name, function_name, table },
+  });
+  const rows = await resultSet.json<{ count: number }>();
+  return rows[0].count;
 }

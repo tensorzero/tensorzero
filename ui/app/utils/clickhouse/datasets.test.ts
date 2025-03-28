@@ -5,6 +5,7 @@ import {
   type ParsedChatInferenceDatapointRow,
 } from "./datasets";
 import {
+  countDatapointsForDatasetFunction,
   countRowsForDataset,
   getDatapoint,
   getDatasetCounts,
@@ -713,5 +714,30 @@ describe("datapoint operations", () => {
   test("handles staling of non-existent datapoint", async () => {
     // Should not throw
     await expect(staleDatapoint("fake", uuid(), "chat")).resolves.not.toThrow();
+  });
+});
+
+describe("countDatapointsForDatasetFunction", () => {
+  test("returns the correct count for a dataset and chat function", async () => {
+    const count = await countDatapointsForDatasetFunction("foo", "write_haiku");
+    expect(count).toBe(77);
+  });
+  test("returns the correct count for a dataset and json function", async () => {
+    const count = await countDatapointsForDatasetFunction(
+      "foo",
+      "extract_entities",
+    );
+    expect(count).toBe(42);
+  });
+  test("returns 0 for a non-existent dataset and real function", async () => {
+    const count = await countDatapointsForDatasetFunction(
+      "fake",
+      "write_haiku",
+    );
+    expect(count).toBe(0);
+  });
+  test("returns 0 for a real dataset and non-existent function", async () => {
+    const count = await countDatapointsForDatasetFunction("foo", "fake");
+    expect(count).toBeNull();
   });
 });
