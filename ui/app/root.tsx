@@ -7,7 +7,7 @@ import {
   ScrollRestoration,
   useLoaderData,
 } from "react-router";
-import { useEffect } from "react";
+
 import { ConfigProvider } from "./context/config";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
@@ -36,6 +36,8 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export async function loader() {
+  // Initialize eval cleanup when the app loads
+  startPeriodicCleanup();
   return await getConfig();
 }
 
@@ -60,17 +62,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const config = useLoaderData<typeof loader>();
-
-  // Initialize eval cleanup when the app loads
-  useEffect(() => {
-    // Start the periodic cleanup and get the cleanup function
-    const stopCleanup = startPeriodicCleanup();
-
-    // Return cleanup function to stop the interval when the component unmounts
-    return () => {
-      stopCleanup();
-    };
-  }, []);
 
   return (
     <ConfigProvider value={config}>

@@ -18,7 +18,6 @@ function getGatewayURL(): string {
   }
   return gatewayURL;
 }
-
 interface RunningEvalInfo {
   errors: { datapoint_id?: string; message: string }[];
   completed?: Date;
@@ -27,6 +26,15 @@ interface RunningEvalInfo {
 
 // This is a map of eval run id to running eval info
 const runningEvals: Record<string, RunningEvalInfo> = {};
+
+/**
+ * Returns the running information for a specific evaluation run.
+ * @param evalRunId The ID of the evaluation run to retrieve.
+ * @returns The running information for the specified evaluation run, or undefined if not found.
+ */
+export function getRunningEval(evalRunId: string): RunningEvalInfo | undefined {
+  return runningEvals[evalRunId];
+}
 
 export function runEval(
   evalName: string,
@@ -56,6 +64,7 @@ export function runEval(
   return new Promise<EvalStartInfo>((resolve, reject) => {
     // Spawn a child process to run the evals command
     const child = spawn(command[0], command.slice(1));
+    console.log("Running eval", command.join(" "));
 
     // Variables to track state
     let evalRunId: string | null = null;
