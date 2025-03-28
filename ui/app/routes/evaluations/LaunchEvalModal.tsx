@@ -91,7 +91,9 @@ function EvalForm() {
         Function:{" "}
         {function_name ? (
           <span className="font-medium">
-            <Link to={`/functions/${function_name}`}>{function_name}</Link>
+            <Link to={`/observability/functions/${function_name}`}>
+              {function_name}
+            </Link>
           </span>
         ) : (
           <Skeleton className="inline-block h-3 w-16 align-middle" />
