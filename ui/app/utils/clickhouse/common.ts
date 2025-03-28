@@ -50,6 +50,12 @@ export const base64ImageSchema = z.object({
 });
 export type Base64Image = z.infer<typeof base64ImageSchema>;
 
+export const resolvedBase64ImageSchema = z.object({
+  url: z.string(),
+  mime_type: z.string(),
+});
+export type ResolvedBase64Image = z.infer<typeof resolvedBase64ImageSchema>;
+
 export const storageKindSchema = z.discriminatedUnion("type", [
   z
     .object({
@@ -85,6 +91,12 @@ export const imageContentSchema = z.object({
 });
 export type ImageContent = z.infer<typeof imageContentSchema>;
 
+export const resolvedImageContentSchema = z.object({
+  type: z.literal("image"),
+  image: resolvedBase64ImageSchema,
+});
+export type ResolvedImageContent = z.infer<typeof resolvedImageContentSchema>;
+
 // Types for input to TensorZero
 export const inputMessageContentSchema = z.discriminatedUnion("type", [
   textInputSchema,
@@ -94,6 +106,16 @@ export const inputMessageContentSchema = z.discriminatedUnion("type", [
 ]);
 export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
 
+export const resolvedInputMessageContentSchema = z.discriminatedUnion("type", [
+  textInputSchema,
+  toolCallContentSchema,
+  toolResultContentSchema,
+  resolvedImageContentSchema,
+]);
+export type ResolvedInputMessageContent = z.infer<
+  typeof resolvedInputMessageContentSchema
+>;
+
 export const inputMessageSchema = z
   .object({
     role: roleSchema,
@@ -102,6 +124,14 @@ export const inputMessageSchema = z
   .strict();
 export type InputMessage = z.infer<typeof inputMessageSchema>;
 
+export const resolvedInputMessageSchema = z
+  .object({
+    role: roleSchema,
+    content: z.array(resolvedInputMessageContentSchema),
+  })
+  .strict();
+export type ResolvedInputMessage = z.infer<typeof resolvedInputMessageSchema>;
+
 export const inputSchema = z
   .object({
     system: z.any().optional(), // Value type from Rust maps to any in TS
@@ -109,6 +139,14 @@ export const inputSchema = z
   })
   .strict();
 export type Input = z.infer<typeof inputSchema>;
+
+export const resolvedInputSchema = z
+  .object({
+    system: z.any().optional(), // Value type from Rust maps to any in TS
+    messages: z.array(resolvedInputMessageSchema).default([]),
+  })
+  .strict();
+export type ResolvedInput = z.infer<typeof resolvedInputSchema>;
 
 // Types for main intermediate representations (content blocks and request messages)
 export const textContentSchema = z.object({

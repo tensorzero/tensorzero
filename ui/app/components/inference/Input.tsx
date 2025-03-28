@@ -3,6 +3,9 @@ import type {
   Input,
   InputMessage,
   InputMessageContent,
+  ResolvedInput,
+  ResolvedInputMessage,
+  ResolvedInputMessageContent,
 } from "~/utils/clickhouse/common";
 import { SkeletonImage } from "./SkeletonImage";
 import { SystemContent } from "./SystemContent";
@@ -10,7 +13,7 @@ import { useEffect, useState } from "react";
 
 // Base interface with just the common required properties
 interface BaseInputProps {
-  input: Input;
+  input: ResolvedInput;
 }
 
 // For when isEditing is not provided (default behavior)
@@ -24,7 +27,7 @@ interface DefaultInputProps extends BaseInputProps {
 interface EditableInputProps extends BaseInputProps {
   isEditing: boolean;
   onSystemChange: (system: string | object) => void;
-  onMessagesChange: (messages: InputMessage[]) => void;
+  onMessagesChange: (messages: ResolvedInputMessage[]) => void;
 }
 
 type InputProps = DefaultInputProps | EditableInputProps;
@@ -35,7 +38,10 @@ export default function Input({
   onSystemChange,
   onMessagesChange,
 }: InputProps) {
-  const handleMessageChange = (index: number, updatedMessage: InputMessage) => {
+  const handleMessageChange = (
+    index: number,
+    updatedMessage: ResolvedInputMessage,
+  ) => {
     const updatedMessages = [...input.messages];
     updatedMessages[index] = updatedMessage;
     onMessagesChange?.(updatedMessages);
@@ -75,7 +81,7 @@ export default function Input({
 }
 
 interface BaseMessageProps {
-  message: InputMessage;
+  message: ResolvedInputMessage;
 }
 
 interface DefaultMessageProps extends BaseMessageProps {
@@ -85,13 +91,15 @@ interface DefaultMessageProps extends BaseMessageProps {
 
 interface EditableMessageProps extends BaseMessageProps {
   isEditing: boolean;
-  onMessageChange: (message: InputMessage) => void;
+  onMessageChange: (message: ResolvedInputMessage) => void;
 }
 
 type MessageProps = DefaultMessageProps | EditableMessageProps;
 
 function Message({ message, isEditing, onMessageChange }: MessageProps) {
-  const handleContentChange = (updatedContent: InputMessage["content"]) => {
+  const handleContentChange = (
+    updatedContent: ResolvedInputMessage["content"],
+  ) => {
     onMessageChange?.({ ...message, content: updatedContent });
   };
 
@@ -110,7 +118,7 @@ function Message({ message, isEditing, onMessageChange }: MessageProps) {
 }
 
 interface BaseMessageContentProps {
-  content: InputMessage["content"];
+  content: ResolvedInputMessage["content"];
 }
 
 interface DefaultMessageContentProps extends BaseMessageContentProps {
@@ -120,7 +128,7 @@ interface DefaultMessageContentProps extends BaseMessageContentProps {
 
 interface EditableMessageContentProps extends BaseMessageContentProps {
   isEditing: boolean;
-  onContentChange: (content: InputMessage["content"]) => void;
+  onContentChange: (content: ResolvedInputMessage["content"]) => void;
 }
 
 type MessageContentProps =
@@ -134,7 +142,7 @@ function MessageContent({
 }: MessageContentProps) {
   const handleBlockChange = (
     index: number,
-    updatedBlock: InputMessageContent,
+    updatedBlock: ResolvedInputMessageContent,
   ) => {
     const updatedContent = [...content];
     updatedContent[index] = updatedBlock;
