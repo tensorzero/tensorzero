@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -77,30 +77,36 @@ function EvalForm() {
           ))}
         </SelectContent>
       </Select>
-      <div className="text-sm text-muted-foreground">
+      <div className="my-1 text-xs text-muted-foreground">
         Dataset:{" "}
         {dataset ? (
-          <span className="font-medium">{dataset}</span>
+          <span className="font-medium">
+            <Link to={`/datasets/${dataset}`}>{dataset}</Link>
+          </span>
         ) : (
-          <Skeleton className="inline-block h-4 w-16 align-middle" />
+          <Skeleton className="inline-block h-3 w-16 align-middle" />
         )}
       </div>
-      <div className="text-sm text-muted-foreground">
+      <div className="mb-1 text-xs text-muted-foreground">
         Function:{" "}
         {function_name ? (
-          <span className="font-medium">{function_name}</span>
+          <span className="font-medium">
+            <Link to={`/observability/functions/${function_name}`}>
+              {function_name}
+            </Link>
+          </span>
         ) : (
-          <Skeleton className="inline-block h-4 w-16 align-middle" />
+          <Skeleton className="inline-block h-3 w-16 align-middle" />
         )}
       </div>
-      <div className="text-sm text-muted-foreground">
+      <div className="mb-1 text-xs text-muted-foreground">
         Datapoints:{" "}
         {count !== null ? (
           <span className="font-medium">{count}</span>
         ) : isLoading ? (
-          <Skeleton className="inline-block h-4 w-16 align-middle" />
+          <Skeleton className="inline-block h-3 w-16 align-middle" />
         ) : (
-          <Skeleton className="inline-block h-4 w-16 align-middle" />
+          <Skeleton className="inline-block h-3 w-16 align-middle" />
         )}
       </div>
       <div className="mt-4">
