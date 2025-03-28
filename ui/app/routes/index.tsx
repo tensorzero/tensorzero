@@ -11,6 +11,7 @@ import {
   GitHub,
   Globe,
   Documentation,
+  Dataset,
 } from "~/components/icons/Icons";
 import {
   countInferencesByFunction,
@@ -18,6 +19,12 @@ import {
 } from "~/utils/clickhouse/inference";
 import { getConfig } from "~/utils/config/index.server";
 import { useLoaderData } from "react-router";
+import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
+import { countTotalEvalRuns } from "~/utils/clickhouse/evaluations.server";
+import { useConfig } from "~/context/config";
+
+const FF_ENABLE_DATASETS =
+  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
 
 interface FeatureCardProps {
   source: string;
@@ -68,17 +75,29 @@ export async function loader() {
   const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
   const numFunctions = Object.keys(config.functions).length;
   const numEpisodes = await countEpisodes();
+  const datasetCounts = await getDatasetCounts();
+  const numDatasets = datasetCounts.length;
+  const numEvalRuns = await countTotalEvalRuns();
 
   return {
     totalInferences,
     numFunctions,
     numEpisodes,
+    numDatasets,
+    numEvalRuns,
   };
 }
 
 export default function Home() {
-  const { totalInferences, numFunctions, numEpisodes } =
-    useLoaderData<typeof loader>();
+  const {
+    totalInferences,
+    numFunctions,
+    numEpisodes,
+    numDatasets,
+    numEvalRuns,
+  } = useLoaderData<typeof loader>();
+  const config = useConfig();
+  const numEvals = Object.keys(config.evals).length;
 
   return (
     <div className="flex flex-col">
@@ -126,26 +145,28 @@ export default function Home() {
           </div>
         </div>
 
-        <div id="optimization" className="mb-12">
-          <h2 className="mb-1 text-2xl font-medium">Workflows</h2>
-          <p className="mb-6 max-w-[640px] text-sm text-fg-tertiary">
-            Manage your LLM engineering workflows.
-          </p>
-          <div className="grid gap-6 md:grid-cols-3">
-            <FeatureCard
-              source="/datasets"
-              icon={SupervisedFineTuning}
-              title="Datasets"
-              description={`3 datasets`}
-            />
-            <FeatureCard
-              source="/evaluations"
-              icon={SupervisedFineTuning}
-              title="Evaluations"
-              description={`7 evaluations, 183 runs`}
-            />
+        {FF_ENABLE_DATASETS && (
+          <div id="workflows" className="mb-12">
+            <h2 className="mb-1 text-2xl font-medium">Workflows</h2>
+            <p className="mb-6 max-w-[640px] text-sm text-fg-tertiary">
+              Manage your LLM engineering workflows.
+            </p>
+            <div className="grid gap-6 md:grid-cols-3">
+              <FeatureCard
+                source="/datasets"
+                icon={Dataset}
+                title="Datasets"
+                description={`${numDatasets} datasets`}
+              />
+              <FeatureCard
+                source="/evaluations"
+                icon={SupervisedFineTuning}
+                title="Evaluations"
+                description={`${numEvals} evaluations, ${numEvalRuns} runs`}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="mt-16 border-t border-gray-200 pt-16">
           <div className="grid gap-8 md:grid-cols-3">
