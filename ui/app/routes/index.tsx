@@ -12,6 +12,7 @@ import {
   Globe,
   Documentation,
   Dataset,
+  Evaluation,
 } from "~/components/icons/Icons";
 import {
   countInferencesByFunction,
@@ -160,7 +161,7 @@ export default function Home() {
               />
               <FeatureCard
                 source="/evaluations"
-                icon={SupervisedFineTuning}
+                icon={Evaluation}
                 title="Evaluations"
                 description={`${numEvals} evaluations, ${numEvalRuns} runs`}
               />

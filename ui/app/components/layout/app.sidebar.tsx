@@ -7,6 +7,7 @@ import {
   SupervisedFineTuning,
   Documentation,
   Dataset,
+  Evaluation,
 } from "~/components/icons/Icons";
 import { useSidebar } from "~/components/ui/sidebar";
 import { cn } from "~/utils/common";
@@ -88,7 +89,7 @@ const navigation: NavigationSection[] = [
             {
               title: "Evaluations",
               url: "/evaluations",
-              icon: SupervisedFineTuning,
+              icon: Evaluation,
             },
           ],
         },
