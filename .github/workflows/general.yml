@@ -303,6 +303,9 @@ jobs:
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
 
+      - name: Delete old ClickHouse cloud dbs
+        run: ./ci/delete-clickhouse-dbs.sh
+
       # We run this as a separate step so that we can see live build logs
       # (and fail the job immediately if the build fails)
       - name: Build the gateway for E2E tests
