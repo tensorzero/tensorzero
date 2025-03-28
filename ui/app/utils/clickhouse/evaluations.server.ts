@@ -69,27 +69,35 @@ export async function getEvalResults(
     feedback.metric_name as metric_name,
     feedback.value as metric_value
   FROM (
-    SELECT *
-    FROM {datapoint_table_name:Identifier}
-    WHERE dataset_name = {dataset_name:String}
-      AND function_name = {function_name:String}
-      AND (
-        ${staled_window_query}
-      )
-    ORDER BY toUInt128(id) DESC
+    SELECT DISTINCT dp.id as dp_id
+    FROM {datapoint_table_name:Identifier} dp
+    INNER JOIN TagInference datapoint_tag
+      ON dp.id = toUUIDOrNull(datapoint_tag.value)
+      AND datapoint_tag.key = 'tensorzero::datapoint_id'
+      AND datapoint_tag.function_name = {function_name:String}
+    INNER JOIN {inference_table_name:Identifier} ci
+      ON ci.id = datapoint_tag.inference_id
+      AND ci.function_name = {function_name:String}
+    WHERE dp.dataset_name = {dataset_name:String}
+      AND dp.function_name = {function_name:String}
+      AND (ci.tags['tensorzero::eval_run_id'] IS NULL OR
+           ci.tags['tensorzero::eval_run_id'] IN ({eval_run_ids:Array(String)}))
+    ORDER BY toUInt128(toUUID(dp.id)) DESC
     LIMIT {limit:UInt32}
     OFFSET {offset:UInt32}
-  ) dp
-  LEFT JOIN TagInference datapoint_tag FINAL
+  ) paginated_dp
+  INNER JOIN {datapoint_table_name:Identifier} dp
+    ON dp.id = paginated_dp.dp_id
+  INNER JOIN TagInference datapoint_tag FINAL
     ON dp.id = toUUIDOrNull(datapoint_tag.value)
     AND datapoint_tag.key = 'tensorzero::datapoint_id'
     AND datapoint_tag.function_name = {function_name:String}
-  LEFT JOIN {inference_table_name:Identifier} ci
+  INNER JOIN {inference_table_name:Identifier} ci
     ON datapoint_tag.inference_id = ci.id
     AND ci.function_name = {function_name:String}
     AND ci.variant_name = datapoint_tag.variant_name
     AND ci.episode_id = datapoint_tag.episode_id
-  LEFT JOIN (
+  INNER JOIN (
     SELECT target_id, metric_name, toString(value) as value
     FROM BooleanMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
