@@ -61,7 +61,8 @@ export function CodeMessage({
     return <EmptyMessage message={emptyMessage} />;
   }
 
-  const lines = content.split("\n");
+  // We still need line count for line numbers, but won't split the content for rendering
+  const lineCount = content ? content.split("\n").length : 0;
 
   return (
     <div className={cn("relative w-full", className)}>
@@ -71,22 +72,18 @@ export function CodeMessage({
         <div className="w-full">
           <div className="flex w-full">
             {showLineNumbers && (
-              <div className="pointer-events-none sticky left-0 flex-shrink-0 select-none bg-bg-primary pb-4 pl-4 pr-3 pt-4 text-right font-mono text-fg-muted">
-                {lines.map((_, i) => (
-                  <div key={i} className="h-[1.5rem] text-sm leading-6">
+              <div className="pointer-events-none sticky left-0 min-w-[3rem] flex-shrink-0 select-none bg-bg-primary py-5 pl-4 pr-3 text-right font-mono text-fg-muted">
+                {Array.from({ length: lineCount }, (_, i) => (
+                  <div key={i} className="text-sm leading-6">
                     {i + 1}
                   </div>
                 ))}
               </div>
             )}
             <div className="w-0 flex-grow overflow-auto">
-              <pre className="min-w-full p-4">
+              <pre className="w-full px-4 py-5">
                 <code className="block whitespace-pre font-mono text-sm leading-6 text-fg-primary">
-                  {lines.map((line, i) => (
-                    <div key={i} className="h-[1.5rem]">
-                      {line || " "}
-                    </div>
-                  ))}
+                  {content || " "}
                 </code>
               </pre>
             </div>
@@ -120,7 +117,7 @@ export function TextMessage({
       <Label text={label} />
 
       <div className="w-full overflow-hidden rounded-lg bg-bg-primary">
-        <div className="p-4">
+        <div className="p-5">
           <div className="whitespace-pre-wrap break-words text-sm text-fg-primary">
             {content}
           </div>
