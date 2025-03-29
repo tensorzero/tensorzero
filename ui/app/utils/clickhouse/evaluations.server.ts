@@ -160,16 +160,16 @@ export async function getEvalStatistics(
   FROM (
     ${getEvalResultDatapointIdsQuery}
   ) dp
-  LEFT JOIN TagInference datapoint_tag FINAL
+  INNER JOIN TagInference datapoint_tag FINAL
     ON dp_id = toUUIDOrNull(datapoint_tag.value)
     AND datapoint_tag.key = 'tensorzero::datapoint_id'
     AND datapoint_tag.function_name = {function_name:String}
-  LEFT JOIN {inference_table_name:Identifier} ci
+  INNER JOIN {inference_table_name:Identifier} ci
     ON datapoint_tag.inference_id = ci.id
     AND ci.function_name = {function_name:String}
     AND ci.variant_name = datapoint_tag.variant_name
     AND ci.episode_id = datapoint_tag.episode_id
-  LEFT JOIN (
+  INNER JOIN (
     SELECT target_id, metric_name, value
     FROM BooleanMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
