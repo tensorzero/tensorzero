@@ -26,7 +26,7 @@ import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesAccordion } from "./ModelInferencesAccordion";
 import { useState } from "react";
 import { useConfig } from "~/context/config";
-import { VariantResponseModal } from "./VariantResponseModal";
+import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
   PageHeader,
@@ -265,9 +265,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           isLoading={variantInferenceIsLoading}
           setIsLoading={setVariantInferenceIsLoading}
           onClose={handleModalClose}
-          inference={inference}
+          item={inference}
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
           selectedVariant={selectedVariant}
+          source="inference"
         />
       )}
     </PageLayout>

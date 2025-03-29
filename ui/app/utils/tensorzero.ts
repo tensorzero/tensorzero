@@ -3,7 +3,10 @@ TensorZero Client (for internal use only for now)
 */
 
 import { z } from "zod";
-import { contentBlockOutputSchema } from "./clickhouse/common";
+import {
+  contentBlockOutputSchema,
+  type StoragePath,
+} from "./clickhouse/common";
 
 /**
  * JSON types.
@@ -53,12 +56,9 @@ export const ToolResultSchema = z.object({
 });
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 
-/**
- * An input message's content may be structured.
- */
 export const TextContentSchema = z.object({
   type: z.literal("text"),
-  value: JSONValueSchema,
+  text: z.string(),
 });
 
 export const TextArgumentsContentSchema = z.object({
@@ -81,12 +81,30 @@ export const ToolResultContentSchema = z.object({
   ...ToolResultSchema.shape,
 });
 
+export const ImageContentSchema = z
+  .object({
+    type: z.literal("image"),
+  })
+  .and(
+    z.union([
+      z.object({
+        url: z.string(),
+      }),
+      z.object({
+        mime_type: z.string(),
+        data: z.string(),
+      }),
+    ]),
+  );
+export type ImageContent = z.infer<typeof ImageContentSchema>;
+
 export const InputMessageContentSchema = z.union([
   TextContentSchema,
   TextArgumentsContentSchema,
   RawTextContentSchema,
   ToolCallContentSchema,
   ToolResultContentSchema,
+  ImageContentSchema,
 ]);
 
 export type InputMessageContent = z.infer<typeof InputMessageContentSchema>;
@@ -483,5 +501,13 @@ export class TensorZeroClient {
 
     const body = await response.json();
     return DatapointResponseSchema.parse(body);
+  }
+  async getObject(storagePath: StoragePath): Promise<string> {
+    const url = `${this.baseUrl}/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to get object: ${response.statusText}`);
+    }
+    return response.text();
   }
 }

@@ -19,6 +19,7 @@ import {
   jsonInferenceOutputSchema,
 } from "./common";
 import { getConfig } from "../config/index.server";
+import { resolveInput } from "../resolve.server";
 
 /**
  * Constructs a SELECT query for either the Chat or JSON dataset table.
@@ -476,17 +477,19 @@ export async function getDatapoint(
     );
   }
   const row = DatapointRowSchema.parse(allResults[0]);
-  const parsedRow = parseDatapointRow(row);
+  const parsedRow = await parseDatapointRow(row);
 
   return parsedRow;
 }
 
-function parseDatapointRow(row: DatapointRow): ParsedDatasetRow {
+async function parseDatapointRow(row: DatapointRow): Promise<ParsedDatasetRow> {
+  const parsedInput = inputSchema.parse(JSON.parse(row.input));
+  const resolvedInput = await resolveInput(parsedInput);
   if ("tool_params" in row) {
     // Chat inference row
     return {
       ...row,
-      input: inputSchema.parse(JSON.parse(row.input)),
+      input: resolvedInput,
       output: row.output
         ? z.array(contentBlockOutputSchema).parse(JSON.parse(row.output))
         : undefined,
@@ -502,7 +505,7 @@ function parseDatapointRow(row: DatapointRow): ParsedDatasetRow {
     // JSON inference row
     return {
       ...row,
-      input: inputSchema.parse(JSON.parse(row.input)),
+      input: resolvedInput,
       output: row.output
         ? jsonInferenceOutputSchema.parse(JSON.parse(row.output))
         : undefined,

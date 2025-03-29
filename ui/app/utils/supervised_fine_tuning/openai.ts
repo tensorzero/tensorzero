@@ -282,6 +282,11 @@ export function content_block_to_openai_message(
       throw new Error(
         "Image content is not supported for OpenAI fine-tuning. We have an open issue for this feature at https://github.com/tensorzero/tensorzero/issues/1132.",
       );
+    case "raw_text":
+      return {
+        role: role as OpenAIRole,
+        content: content.value,
+      };
   }
 }
 
