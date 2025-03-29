@@ -118,7 +118,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const any_eval_is_running = Object.values(selected_eval_run_ids_array).some(
     (evalRunId) => {
       const runningEval = getRunningEval(evalRunId);
-      return runningEval ? runningEval.completed === undefined : false;
+      if (!runningEval) {
+        return false;
+      }
+      if (runningEval.completed) {
+        // If the eval has completed and the completion time is at least 5 seconds ago,
+        // return false
+        if (runningEval.completed.getTime() + 5000 < Date.now()) {
+          return false;
+        }
+      }
+      return true;
     },
   );
 
