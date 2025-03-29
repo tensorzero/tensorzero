@@ -314,7 +314,7 @@ jobs:
         working-directory: ui
         env:
           TENSORZERO_CI: 1
-        run: pnpm test-e2e --grep 'launch'
+        run: pnpm test-e2e
         continue-on-error: true
         id: e2e_tests
 
