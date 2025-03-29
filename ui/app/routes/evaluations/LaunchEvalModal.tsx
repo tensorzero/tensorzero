@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -15,7 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import { useDatasetCountFetcher } from "~/routes/api/datasets/count_dataset_function.route";
 import { useConfig } from "~/context/config";
+import { Skeleton } from "~/components/ui/skeleton";
 
 interface LaunchEvalModalProps {
   isOpen: boolean;
@@ -31,6 +33,18 @@ function EvalForm() {
     null,
   );
   const [concurrencyLimit, setConcurrencyLimit] = useState<string>("5");
+  let count = null;
+  let isLoading = false;
+  let dataset = null;
+  let function_name = null;
+  if (selectedEvalName) {
+    dataset = config.evals[selectedEvalName]?.dataset_name;
+    function_name = config.evals[selectedEvalName]?.function_name;
+  }
+  const { count: datasetCount, isLoading: datasetLoading } =
+    useDatasetCountFetcher(dataset, function_name);
+  count = datasetCount;
+  isLoading = datasetLoading;
 
   // Check if all fields are filled
   const isFormValid =
@@ -63,6 +77,38 @@ function EvalForm() {
           ))}
         </SelectContent>
       </Select>
+      <div className="my-1 text-xs text-muted-foreground">
+        Dataset:{" "}
+        {dataset ? (
+          <span className="font-medium">
+            <Link to={`/datasets/${dataset}`}>{dataset}</Link>
+          </span>
+        ) : (
+          <Skeleton className="inline-block h-3 w-16 align-middle" />
+        )}
+      </div>
+      <div className="mb-1 text-xs text-muted-foreground">
+        Function:{" "}
+        {function_name ? (
+          <span className="font-medium">
+            <Link to={`/observability/functions/${function_name}`}>
+              {function_name}
+            </Link>
+          </span>
+        ) : (
+          <Skeleton className="inline-block h-3 w-16 align-middle" />
+        )}
+      </div>
+      <div className="mb-1 text-xs text-muted-foreground">
+        Datapoints:{" "}
+        {count !== null ? (
+          <span className="font-medium">{count}</span>
+        ) : isLoading ? (
+          <Skeleton className="inline-block h-3 w-16 align-middle" />
+        ) : (
+          <Skeleton className="inline-block h-3 w-16 align-middle" />
+        )}
+      </div>
       <div className="mt-4">
         <label
           htmlFor="variant_name"
@@ -101,7 +147,7 @@ function EvalForm() {
           htmlFor="concurrency_limit"
           className="mb-1 block text-sm font-medium"
         >
-          Concurrency Limit
+          Concurrency
         </label>
         <input
           type="number"
@@ -131,7 +177,7 @@ export default function LaunchEvalModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Launch Eval</DialogTitle>
+          <DialogTitle>Launch Evaluation</DialogTitle>
         </DialogHeader>
 
         <EvalForm />

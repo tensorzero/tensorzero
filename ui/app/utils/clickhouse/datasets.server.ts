@@ -18,6 +18,7 @@ import {
   inputSchema,
   jsonInferenceOutputSchema,
 } from "./common";
+import { getConfig } from "../config/index.server";
 
 /**
  * Constructs a SELECT query for either the Chat or JSON dataset table.
@@ -313,6 +314,7 @@ export async function insertRowsForDataset(
   if (!validatedParams.data.dataset_name) {
     throw new Error("dataset_name is required for dataset insertion");
   }
+  validateDatasetName(validatedParams.data.dataset_name);
 
   const destinationTable =
     validatedParams.data.inferenceType === "chat"
@@ -543,6 +545,7 @@ export async function staleDatapoint(
 export async function insertDatapoint(
   datapoint: ParsedDatasetRow,
 ): Promise<void> {
+  validateDatasetName(datapoint.dataset_name);
   const table =
     "tool_params" in datapoint
       ? "ChatInferenceDatapoint"
@@ -573,4 +576,32 @@ export async function insertDatapoint(
     values,
     format: "JSONEachRow",
   });
+}
+
+export async function countDatapointsForDatasetFunction(
+  dataset_name: string,
+  function_name: string,
+): Promise<number | null> {
+  const config = await getConfig();
+  const function_type = config.functions[function_name]?.type;
+  if (!function_type) {
+    return null;
+  }
+  const table =
+    function_type === "chat"
+      ? "ChatInferenceDatapoint"
+      : "JsonInferenceDatapoint";
+  const resultSet = await clickhouseClient.query({
+    query: `SELECT toUInt32(count()) as count FROM {table:Identifier} WHERE dataset_name = {dataset_name:String} AND function_name = {function_name:String}`,
+    format: "JSONEachRow",
+    query_params: { dataset_name, function_name, table },
+  });
+  const rows = await resultSet.json<{ count: number }>();
+  return rows[0].count;
+}
+
+function validateDatasetName(dataset_name: string) {
+  if (dataset_name === "builder" || dataset_name.startsWith("tensorzero::")) {
+    throw new Error("Invalid dataset name");
+  }
 }

@@ -21,6 +21,8 @@ import { useNavigate } from "react-router";
 import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 import BasicInfo from "./EvaluationBasicInfo";
 import { useConfig } from "~/context/config";
+import { getRunningEval } from "~/utils/evals.server";
+import { EvalErrorInfo, type EvalErrorDisplayInfo } from "./EvalErrorInfo";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -113,8 +115,44 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     mostRecentEvalInferenceDatePromise,
   ]);
 
+  const any_eval_is_running = Object.values(selected_eval_run_ids_array).some(
+    (evalRunId) => {
+      const runningEval = getRunningEval(evalRunId);
+      if (!runningEval) {
+        return false;
+      }
+      if (runningEval.completed) {
+        // If the eval has completed and the completion time is at least 5 seconds ago,
+        // return false
+        if (runningEval.completed.getTime() + 5000 < Date.now()) {
+          return false;
+        }
+      }
+      return true;
+    },
+  );
+
+  const errors: Record<string, EvalErrorDisplayInfo> =
+    selected_eval_run_ids_array.reduce(
+      (acc, evalRunId) => {
+        const evalRunInfo = getRunningEval(evalRunId);
+        if (evalRunInfo?.errors) {
+          acc[evalRunId] = {
+            variantName: evalRunInfo.variantName,
+            errors: evalRunInfo.errors,
+          };
+        } else {
+          acc[evalRunId] = {
+            variantName: evalRunId,
+            errors: [],
+          };
+        }
+        return acc;
+      },
+      {} as Record<string, EvalErrorDisplayInfo>,
+    );
+
   return {
-    selected_eval_run_ids_array,
     eval_name: params.eval_name,
     selected_eval_run_infos,
     eval_results,
@@ -125,12 +163,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     total_datapoints,
     evaluator_names,
     mostRecentEvalInferenceDates,
+    any_eval_is_running,
+    errors,
   };
 }
 
 export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const {
-    selected_eval_run_ids_array,
     eval_name,
     selected_eval_run_infos,
     eval_results,
@@ -141,6 +180,8 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     total_datapoints,
     evaluator_names,
     mostRecentEvalInferenceDates,
+    any_eval_is_running,
+    errors,
   } = loaderData;
   const navigate = useNavigate();
   const handleNextPage = () => {
@@ -154,23 +195,14 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
-  // Get the most recent inference date from the map
-  // If selected_eval_run_ids_array is nonempty, but mostRecentEvalInferenceDates is empty,
-  // set the most recent inference date to the current time (we should refresh in case data shows up).
-  // If the selected_eval_run_ids_array is empty, set the most recent inference date to 0 (no need to refresh).
-  const mostRecentEvalInferenceDate =
-    selected_eval_run_ids_array.length > 0 &&
-    mostRecentEvalInferenceDates.size === 0
-      ? new Date()
-      : Array.from(mostRecentEvalInferenceDates.values()).reduce(
-          (max, current) => (current > max ? current : max),
-          new Date(0),
-        );
   // Use that time for auto-refreshing
-  const isAutoRefreshing = useAutoRefresh(mostRecentEvalInferenceDate);
+  useAutoRefresh(any_eval_is_running);
 
   const config = useConfig();
   const eval_config = config.evals[eval_name];
+  const hasErrorsToDisplay = Object.values(errors).some(
+    (error) => error.errors.length > 0,
+  );
 
   return (
     <PageLayout>
@@ -180,11 +212,16 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
 
       <SectionsGroup>
         <SectionLayout>
+          {hasErrorsToDisplay && (
+            <>
+              <SectionHeader heading="Errors" />
+              <EvalErrorInfo errors={errors} />
+            </>
+          )}
           <div className="flex items-center justify-between">
             <SectionHeader heading="Results" />
-            <AutoRefreshIndicator isActive={isAutoRefreshing} />
+            <AutoRefreshIndicator isActive={any_eval_is_running} />
           </div>
-
           <EvaluationTable
             eval_name={eval_name}
             selected_eval_run_infos={selected_eval_run_infos}
