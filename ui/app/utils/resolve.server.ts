@@ -1,7 +1,7 @@
 import type {
   ResolvedBase64Image,
+  ResolvedImageContent,
   ResolvedInputMessageContent,
-  StoragePath,
 } from "./clickhouse/common";
 import type { InputMessageContent } from "./clickhouse/common";
 import type { ResolvedInputMessage } from "./clickhouse/common";
@@ -49,7 +49,7 @@ async function resolveContent(
       try {
         return {
           ...content,
-          image: await resolveImage(content.storage_path),
+          image: await resolveImage(content as ResolvedImageContent),
         };
       } catch (error) {
         return {
@@ -61,11 +61,13 @@ async function resolveContent(
 }
 
 async function resolveImage(
-  storagePath: StoragePath,
+  content: ResolvedImageContent,
 ): Promise<ResolvedBase64Image> {
-  const object = await tensorZeroClient.getObject(storagePath);
+  const object = await tensorZeroClient.getObject(content.storage_path);
+  const json = JSON.parse(object);
+  const dataURL = `data:${content.image.mime_type};base64,${json.data}`;
   return {
-    url: object,
-    mime_type: "image/png",
+    url: dataURL,
+    mime_type: content.image.mime_type,
   };
 }

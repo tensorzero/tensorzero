@@ -185,7 +185,7 @@ function MessageContent({
               />
             );
           case "image":
-            return <ImageBlock image={block} />;
+            return <ImageBlock key={index} image={block} />;
           default:
             return null;
         }

@@ -68,6 +68,8 @@ export const storageKindSchema = z.discriminatedUnion("type", [
       type: z.literal("s3_compatible"),
       bucket_name: z.string(),
       region: z.string(),
+      endpoint: z.string().nullable(),
+      allow_http: z.boolean().nullable(),
     })
     .strict(),
   z
