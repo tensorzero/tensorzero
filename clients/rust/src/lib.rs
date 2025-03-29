@@ -17,6 +17,9 @@ mod client_inference_params;
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 
 pub use tensorzero_internal::cache::CacheParamsOptions;
+pub use tensorzero_internal::endpoints::dynamic_evaluation_run::{
+    DynamicEvaluationRunResponse, Params as DynamicEvaluationRunParams,
+};
 pub use tensorzero_internal::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_internal::endpoints::feedback::Params as FeedbackParams;
 pub use tensorzero_internal::endpoints::inference::{
@@ -360,6 +363,35 @@ impl Client {
                         &gateway.state.http_client,
                         gateway.state.clickhouse_connection_info.clone(),
                         params.into(),
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
+            }
+        }
+    }
+
+    pub async fn dynamic_evaluation_run(
+        &self,
+        params: DynamicEvaluationRunParams,
+    ) -> Result<DynamicEvaluationRunResponse, TensorZeroError> {
+        match &self.mode {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("dynamic_evaluation_run").map_err(|e| TensorZeroError::Other {
+                    source: tensorzero_internal::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /dynamic_evaluation_run endpoint: {}", e),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.post(url).json(&params);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_internal::endpoints::dynamic_evaluation_run::dynamic_evaluation_run(
+                        gateway.state.clone(),
+                        params,
                     )
                     .await
                     .map_err(err_to_http)

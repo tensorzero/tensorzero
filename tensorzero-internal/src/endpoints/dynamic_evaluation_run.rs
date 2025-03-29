@@ -13,7 +13,7 @@ use crate::{
     uuid_util::generate_dynamic_evaluation_run_episode_id,
 };
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Params {
     pub variants: HashMap<String, String>,
     pub tags: HashMap<String, String>,
@@ -26,7 +26,7 @@ pub struct DynamicEvaluationRun {
     pub tags: HashMap<String, String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct DynamicEvaluationRunResponse {
     pub episode_id: Uuid,
 }
@@ -36,7 +36,7 @@ pub async fn dynamic_evaluation_run_handler(
     State(app_state): AppState,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Json<DynamicEvaluationRunResponse>, Error> {
-    dynamic_evaluation_run(app_state, params).await
+    dynamic_evaluation_run(app_state, params).await.map(Json)
 }
 
 pub async fn dynamic_evaluation_run(
@@ -46,7 +46,7 @@ pub async fn dynamic_evaluation_run(
         ..
     }: AppStateData,
     params: Params,
-) -> Result<Json<DynamicEvaluationRunResponse>, Error> {
+) -> Result<DynamicEvaluationRunResponse, Error> {
     validate_tags(&params.tags, false)?;
     validate_variant_pins(&params.variants, &config)?;
     let episode_id = generate_dynamic_evaluation_run_episode_id();
@@ -57,7 +57,7 @@ pub async fn dynamic_evaluation_run(
         params.tags,
     )
     .await?;
-    Ok(Json(DynamicEvaluationRunResponse { episode_id }))
+    Ok(DynamicEvaluationRunResponse { episode_id })
 }
 
 fn validate_variant_pins(
