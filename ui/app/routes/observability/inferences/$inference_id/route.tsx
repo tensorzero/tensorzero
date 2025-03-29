@@ -18,7 +18,7 @@ import {
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./InferenceBasicInfo";
 import Input from "~/components/inference/Input";
-import Output from "~/components/inference/Output";
+import Output from "./InferenceOutput";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { tensorZeroClient } from "~/utils/tensorzero.server";
 import { ParameterCard } from "./InferenceParameters";
@@ -205,7 +205,14 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Output" />
-          <Output output={inference.output} />
+          <Output
+            output={inference.output}
+            outputSchema={
+              inference.function_type === "json"
+                ? inference.output_schema
+                : undefined
+            }
+          />
         </SectionLayout>
 
         <SectionLayout>
@@ -236,13 +243,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           <SectionLayout>
             <SectionHeader heading="Tool Parameters" />
             <ParameterCard parameters={inference.tool_params} />
-          </SectionLayout>
-        )}
-
-        {inference.function_type === "json" && (
-          <SectionLayout>
-            <SectionHeader heading="Output Schema" />
-            <ParameterCard parameters={inference.output_schema} />
           </SectionLayout>
         )}
 
