@@ -54,6 +54,18 @@ function resolvedInputMessageContentToTensorZeroContent(
 ): TensorZeroContent {
   switch (content.type) {
     case "text":
+      // If the text is string then send it as {"type": "text", "text": "..."}
+      // If it is an object then send it as {"type": "text", "arguments": {...}}
+      if (typeof content.value === "string") {
+        return {
+          type: "text",
+          text: content.value,
+        };
+      }
+      return {
+        type: "text",
+        arguments: content.value,
+      };
     case "raw_text":
     case "tool_call":
     case "tool_result":

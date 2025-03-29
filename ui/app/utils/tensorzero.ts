@@ -56,12 +56,9 @@ export const ToolResultSchema = z.object({
 });
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 
-/**
- * An input message's content may be structured.
- */
 export const TextContentSchema = z.object({
   type: z.literal("text"),
-  value: JSONValueSchema,
+  text: z.string(),
 });
 
 export const TextArgumentsContentSchema = z.object({
