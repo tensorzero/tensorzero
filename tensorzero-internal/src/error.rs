@@ -178,6 +178,9 @@ pub enum ErrorDetails {
     InvalidDiclConfig {
         message: String,
     },
+    InvalidDynamicEvaluationRun {
+        episode_id: Uuid,
+    },
     InvalidTensorzeroUuid {
         kind: String,
         message: String,
@@ -352,6 +355,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
+            ErrorDetails::InvalidDynamicEvaluationRun { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
@@ -436,6 +440,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidDynamicEvaluationRun { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -677,6 +682,13 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::InvalidDatasetName { dataset_name } => {
                 write!(f, "Invalid dataset name: {}. Datasets cannot be named \"builder\" or begin with \"tensorzero::\"", dataset_name)
+            }
+            ErrorDetails::InvalidDynamicEvaluationRun { episode_id } => {
+                write!(
+                    f,
+                    "Dynamic evaluation run not found for episode id: {}",
+                    episode_id
+                )
             }
             ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{}", message),
             ErrorDetails::InvalidTensorzeroUuid { message, kind } => {

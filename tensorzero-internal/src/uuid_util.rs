@@ -84,18 +84,15 @@ const DYNAMIC_EVALUATION_OFFSET_S: u64 = 10_000_000_000;
 /// It is ten billion seconds (~317 years)
 pub const DYNAMIC_EVALUATION_OFFSET: Duration = Duration::from_secs(DYNAMIC_EVALUATION_OFFSET_S);
 
-/*
 /// The threshold for generation of dynamic evaluation run IDs.
 /// This will seed the UUIDv7 with current time + 10 billion seconds.
 /// We ignore nanoseconds, sequence number, and usable bits.
-TODO: use this in inference handler
 pub const DYNAMIC_EVALUATION_THRESHOLD: Timestamp = Timestamp::from_unix_time(
     DYNAMIC_EVALUATION_OFFSET_S,
     0, // ns
     0, // seq
     0, // bits
 );
-*/
 
 pub fn generate_dynamic_evaluation_run_episode_id() -> Uuid {
     #[allow(clippy::expect_used)]
@@ -112,11 +109,28 @@ pub fn generate_dynamic_evaluation_run_episode_id() -> Uuid {
     Uuid::new_v7(timestamp)
 }
 
+/// Compares two UUID timestamps to determine if the first one is earlier than the second.
+///
+/// # Arguments
+///
+/// * `early` - The timestamp expected to be earlier
+/// * `late` - The timestamp expected to be later
+///
+/// # Returns
+///
+/// * `true` if `early` is chronologically before `late`
+/// * `false` otherwise
+pub fn compare_timestamps(early: Timestamp, late: Timestamp) -> bool {
+    let (early_s, early_ns) = early.to_unix();
+    let (late_s, late_ns) = late.to_unix();
+    early_s < late_s || (early_s == late_s && early_ns < late_ns)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use uuid::timestamp::context::NoContext;
-    use uuid::{uuid, Timestamp};
+    use uuid::uuid;
 
     #[test]
     fn test_validate_episode_id() {
@@ -215,5 +229,36 @@ mod tests {
         let id1 = generate_dynamic_evaluation_run_episode_id();
         let id2 = generate_dynamic_evaluation_run_episode_id();
         assert_ne!(id1, id2, "Generated UUIDs should be unique");
+    }
+
+    #[test]
+    fn test_compare_timestamps() {
+        use uuid::NoContext;
+        use uuid::Timestamp;
+
+        // Case 1: First timestamp is before the second timestamp
+        let timestamp1 = Timestamp::from_unix(NoContext, 1000, 0);
+        let timestamp2 = Timestamp::from_unix(NoContext, 2000, 0);
+        assert!(compare_timestamps(timestamp1, timestamp2));
+
+        // Case 2: First timestamp is equal to the second timestamp
+        let timestamp3 = Timestamp::from_unix(NoContext, 3000, 0);
+        let timestamp4 = Timestamp::from_unix(NoContext, 3000, 0);
+        assert!(!compare_timestamps(timestamp3, timestamp4));
+
+        // Case 3: First timestamp is after the second timestamp
+        let timestamp5 = Timestamp::from_unix(NoContext, 5000, 0);
+        let timestamp6 = Timestamp::from_unix(NoContext, 4000, 0);
+        assert!(!compare_timestamps(timestamp5, timestamp6));
+
+        // Case 4: Subsecond precision comparison
+        let timestamp7 = Timestamp::from_unix(NoContext, 6000, 499);
+        let timestamp8 = Timestamp::from_unix(NoContext, 6000, 500);
+        assert!(compare_timestamps(timestamp7, timestamp8));
+
+        // Case 5: Subsecond precision equal
+        let timestamp9 = Timestamp::from_unix(NoContext, 7000, 500);
+        let timestamp10 = Timestamp::from_unix(NoContext, 7000, 500);
+        assert!(!compare_timestamps(timestamp9, timestamp10));
     }
 }
