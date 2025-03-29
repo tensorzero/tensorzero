@@ -37,7 +37,7 @@ export function SnippetHeader({
   className,
 }: SnippetHeaderProps) {
   return (
-    <div className={cn("flex flex-col space-y-1.5 px-6 pt-6", className)}>
+    <div className={cn("flex flex-col gap-1 px-6 pb-4 pt-6", className)}>
       {heading && <SnippetHeading>{heading}</SnippetHeading>}
       {description && <SnippetDescription>{description}</SnippetDescription>}
       {children}
@@ -54,7 +54,7 @@ export function SnippetHeading({ children, className }: SnippetHeadingProps) {
   return (
     <h3
       className={cn(
-        "text-xl font-semibold leading-none tracking-tight",
+        "text-lg font-medium leading-none tracking-tight",
         className,
       )}
     >
@@ -73,9 +73,7 @@ export function SnippetDescription({
   className,
 }: SnippetDescriptionProps) {
   return (
-    <div className={cn("mt-1 text-sm text-fg-secondary", className)}>
-      {children}
-    </div>
+    <div className={cn("text-sm text-fg-secondary", className)}>{children}</div>
   );
 }
 
@@ -89,7 +87,7 @@ interface SnippetContentProps {
 export function SnippetContent({
   children,
   className,
-  maxHeight = 600,
+  maxHeight = 560,
 }: SnippetContentProps) {
   const [expanded, setExpanded] = useState(false);
   const [needsExpansion, setNeedsExpansion] = useState(false);
@@ -124,7 +122,7 @@ export function SnippetContent({
       </div>
 
       {needsExpansion && !expanded && (
-        <div className="absolute bottom-0 left-0 right-0 flex justify-center bg-gradient-to-t from-bg-primary to-transparent pb-4 pt-16">
+        <div className="absolute bottom-0 left-0 right-0 flex justify-center bg-gradient-to-t from-bg-primary to-transparent pb-4 pt-8">
           <Button variant="outline" size="sm" onClick={() => setExpanded(true)}>
             Show more
           </Button>
@@ -199,7 +197,7 @@ export function SnippetTabs({
       onValueChange={handleTabChange}
       className={cn("w-full", className)}
     >
-      <TabsList className="flex w-full justify-start rounded-none border-b border-border p-2">
+      <TabsList className="flex w-full justify-start rounded-none border-b border-border p-3">
         {tabs.map((tab) => (
           <TabsTrigger
             key={tab.id}

@@ -9,7 +9,7 @@ import {
   SnippetMessage,
   type SnippetTab,
 } from "~/components/layout/SnippetLayout";
-import { CodeMessage } from "~/components/layout/SnippetContent";
+import { CodeMessage, TextMessage } from "~/components/layout/SnippetContent";
 
 interface OutputProps {
   output: JsonInferenceOutput | ContentBlockOutput[];
@@ -25,21 +25,13 @@ function isJsonInferenceOutput(
 function renderContentBlock(block: ContentBlockOutput, index: number) {
   switch (block.type) {
     case "text":
-      return (
-        <CodeMessage
-          key={index}
-          label="Text"
-          content={block.text}
-          showLineNumbers={true}
-        />
-      );
+      return <TextMessage key={index} label="Text" content={block.text} />;
     case "tool_call":
       return (
-        <CodeMessage
+        <TextMessage
           key={index}
           label={`Tool: ${block.name}`}
           content={JSON.stringify(block.arguments, null, 2)}
-          showLineNumbers={true}
         />
       );
   }

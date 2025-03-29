@@ -11,23 +11,18 @@ interface FunctionSchemaProps {
   functionConfig: FunctionConfig;
 }
 
-function formatSchema(schema?: JSONSchema) {
-  if (!schema) {
-    return "No schema defined";
-  }
-  return JSON.stringify(schema, null, 2);
-}
-
 // Create a schema tab with appropriate indicator based on schema content
 function createSchemaTab(
   id: string,
   label: string,
   schema?: JSONSchema,
-): SnippetTab {
+  emptyMessage?: string,
+): SnippetTab & { emptyMessage?: string } {
   return {
     id,
     label,
     indicator: schema ? "content" : "empty",
+    emptyMessage,
   };
 }
 
@@ -43,12 +38,34 @@ export default function FunctionSchema({
       : {}),
   };
 
-  const tabs: SnippetTab[] = [
-    createSchemaTab("system", "System Schema", schemas.system),
-    createSchemaTab("user", "User Schema", schemas.user),
-    createSchemaTab("assistant", "Assistant Schema", schemas.assistant),
+  const tabs = [
+    createSchemaTab(
+      "system",
+      "System Schema",
+      schemas.system,
+      "No system schema defined",
+    ),
+    createSchemaTab(
+      "user",
+      "User Schema",
+      schemas.user,
+      "No user schema defined",
+    ),
+    createSchemaTab(
+      "assistant",
+      "Assistant Schema",
+      schemas.assistant,
+      "No assistant schema defined",
+    ),
     ...(functionConfig.type === "json"
-      ? [createSchemaTab("output", "Output Schema", schemas.output)]
+      ? [
+          createSchemaTab(
+            "output",
+            "Output Schema",
+            schemas.output,
+            "No output schema defined",
+          ),
+        ]
       : []),
   ];
 
@@ -59,14 +76,23 @@ export default function FunctionSchema({
   return (
     <SnippetLayout>
       <SnippetTabs tabs={tabs} defaultTab={defaultTab}>
-        {(activeTab) => (
-          <SnippetContent>
-            <CodeMessage
-              content={formatSchema(schemas[activeTab as keyof typeof schemas])}
-              showLineNumbers={true}
-            />
-          </SnippetContent>
-        )}
+        {(activeTab) => {
+          const tab = tabs.find((tab) => tab.id === activeTab);
+          const schema = schemas[activeTab as keyof typeof schemas];
+          const formattedContent = schema
+            ? JSON.stringify(schema, null, 2)
+            : undefined;
+
+          return (
+            <SnippetContent maxHeight={360}>
+              <CodeMessage
+                content={formattedContent}
+                showLineNumbers={true}
+                emptyMessage={tab?.emptyMessage}
+              />
+            </SnippetContent>
+          );
+        }}
       </SnippetTabs>
     </SnippetLayout>
   );

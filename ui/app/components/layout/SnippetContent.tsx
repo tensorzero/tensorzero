@@ -1,15 +1,52 @@
 import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
-import { Copy } from "lucide-react";
-import { useRef, useState } from "react";
 import { cn } from "~/utils/common";
+
+// Empty message component
+interface EmptyMessageProps {
+  message?: string;
+  className?: string;
+}
+
+export function EmptyMessage({
+  message = "No content defined",
+  className,
+}: EmptyMessageProps) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-center py-16 text-sm text-fg-secondary",
+        className,
+      )}
+    >
+      {message}
+    </div>
+  );
+}
+
+// Label component
+interface LabelProps {
+  text?: string;
+  className?: string;
+}
+
+export function Label({ text, className }: LabelProps) {
+  if (!text) return null;
+
+  return (
+    <Badge
+      className={cn("mx-4 mb-0 mt-4 bg-bg-muted text-fg-primary", className)}
+    >
+      {text}
+    </Badge>
+  );
+}
 
 // Code content component
 interface CodeMessageProps {
   label?: string;
   content?: string;
   showLineNumbers?: boolean;
-  forceShowCopyButton?: boolean;
+  emptyMessage?: string;
   className?: string;
 }
 
@@ -17,69 +54,24 @@ export function CodeMessage({
   label,
   content,
   showLineNumbers = false,
-  forceShowCopyButton = false,
+  emptyMessage,
   className,
 }: CodeMessageProps) {
-  if (!content) return null;
-  const [error, setError] = useState<string | null>(null);
-
-  const isSecureContext =
-    typeof window !== "undefined" && window.isSecureContext;
-  const isClipboard = typeof navigator !== "undefined" && !!navigator.clipboard;
-  const shouldShowCopyButton =
-    (isSecureContext && isClipboard) || forceShowCopyButton;
-  const textAreaRef = useRef<HTMLTextAreaElement>(null);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setError(null);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to copy. Please copy manually.");
-      if (textAreaRef.current) {
-        textAreaRef.current.select();
-      }
-    }
-  };
+  if (!content) {
+    return <EmptyMessage message={emptyMessage} />;
+  }
 
   const lines = content.split("\n");
 
   return (
-    <div className={cn("relative w-full max-w-full", className)}>
-      {label && <Badge className="mb-2">{label}</Badge>}
+    <div className={cn("relative w-full", className)}>
+      <Label text={label} />
 
-      <div className="relative w-full max-w-full overflow-hidden rounded-lg bg-bg-primary">
-        {shouldShowCopyButton && (
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleCopy}
-            className="absolute right-2 top-2 z-10 h-7 w-7 p-0 shadow-none"
-            aria-label="Copy code"
-          >
-            <Copy className="h-4 w-4" />
-          </Button>
-        )}
-
-        <textarea
-          ref={textAreaRef}
-          value={content}
-          readOnly
-          className="sr-only"
-          aria-hidden="true"
-        />
-
-        {error && (
-          <div className="absolute right-2 top-10 z-10 mt-2 rounded bg-red-100 p-2 text-xs text-red-800">
-            {error}
-          </div>
-        )}
-
-        <div className="relative w-full max-w-full overflow-hidden">
-          <div className="flex max-w-full">
+      <div className="w-full overflow-hidden rounded-lg bg-bg-primary">
+        <div className="w-full">
+          <div className="flex w-full">
             {showLineNumbers && (
-              <div className="flex-shrink-0 select-none pb-4 pl-4 pr-3 pt-4 text-right font-mono text-fg-muted">
+              <div className="pointer-events-none sticky left-0 flex-shrink-0 select-none bg-bg-primary pb-4 pl-4 pr-3 pt-4 text-right font-mono text-fg-muted">
                 {lines.map((_, i) => (
                   <div key={i} className="h-[1.5rem] text-sm leading-6">
                     {i + 1}
@@ -87,11 +79,11 @@ export function CodeMessage({
                 ))}
               </div>
             )}
-            <div className="min-w-0 flex-1 overflow-auto">
-              <pre className="w-full max-w-full overflow-x-auto p-4">
-                <code className="block font-mono text-sm leading-6 text-fg-primary">
+            <div className="w-0 flex-grow overflow-auto">
+              <pre className="min-w-full p-4">
+                <code className="block whitespace-pre font-mono text-sm leading-6 text-fg-primary">
                   {lines.map((line, i) => (
-                    <div key={i} className="h-[1.5rem] truncate">
+                    <div key={i} className="h-[1.5rem]">
                       {line || " "}
                     </div>
                   ))}
@@ -109,75 +101,28 @@ export function CodeMessage({
 interface TextMessageProps {
   label?: string;
   content?: string;
-  forceShowCopyButton?: boolean;
+  emptyMessage?: string;
   className?: string;
 }
 
 export function TextMessage({
   label,
   content,
-  forceShowCopyButton = false,
+  emptyMessage,
   className,
 }: TextMessageProps) {
-  if (!content) return null;
-  const [error, setError] = useState<string | null>(null);
-
-  const isSecureContext =
-    typeof window !== "undefined" && window.isSecureContext;
-  const isClipboard = typeof navigator !== "undefined" && !!navigator.clipboard;
-  const shouldShowCopyButton =
-    (isSecureContext && isClipboard) || forceShowCopyButton;
-  const textAreaRef = useRef<HTMLTextAreaElement>(null);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setError(null);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to copy. Please copy manually.");
-      if (textAreaRef.current) {
-        textAreaRef.current.select();
-      }
-    }
-  };
+  if (!content) {
+    return <EmptyMessage message={emptyMessage} />;
+  }
 
   return (
-    <div className={cn("relative w-full max-w-full", className)}>
-      {label && <Badge className="mb-2">{label}</Badge>}
+    <div className={cn("relative w-full", className)}>
+      <Label text={label} />
 
-      <div className="relative w-full max-w-full overflow-hidden rounded-lg bg-bg-primary">
-        {shouldShowCopyButton && (
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleCopy}
-            className="absolute right-2 top-2 z-10 h-7 w-7 p-0 shadow-none"
-            aria-label="Copy text"
-          >
-            <Copy className="h-4 w-4" />
-          </Button>
-        )}
-
-        <textarea
-          ref={textAreaRef}
-          value={content}
-          readOnly
-          className="sr-only"
-          aria-hidden="true"
-        />
-
-        {error && (
-          <div className="absolute right-2 top-10 z-10 mt-2 rounded bg-red-100 p-2 text-xs text-red-800">
-            {error}
-          </div>
-        )}
-
-        <div className="relative w-full max-w-full overflow-hidden">
-          <div className="p-4">
-            <div className="max-w-full overflow-x-auto whitespace-pre-wrap break-words text-fg-primary">
-              {content}
-            </div>
+      <div className="w-full overflow-hidden rounded-lg bg-bg-primary">
+        <div className="p-4">
+          <div className="whitespace-pre-wrap break-words text-sm text-fg-primary">
+            {content}
           </div>
         </div>
       </div>
