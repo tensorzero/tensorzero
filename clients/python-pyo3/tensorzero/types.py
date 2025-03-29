@@ -375,3 +375,8 @@ class TensorZeroError(BaseTensorZeroError):
 
     def __str__(self) -> str:
         return f"TensorZeroError (status code {self.status_code}): {self.text}"
+
+
+@dataclass
+class DynamicEvaluationRunResponse:
+    episode_id: UUID
