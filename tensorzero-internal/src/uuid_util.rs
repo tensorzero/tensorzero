@@ -1,5 +1,5 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use uuid::Uuid;
+use uuid::{Timestamp, Uuid};
 
 use crate::{
     error::{Error, ErrorDetails},
@@ -79,6 +79,39 @@ pub fn uuid_elapsed(uuid: &Uuid) -> Result<Duration, Error> {
     Ok(elapsed)
 }
 
+/// The offset for generation of dynamic evaluation run IDs.
+const DYNAMIC_EVALUATION_OFFSET_S: u64 = 10_000_000_000;
+/// It is ten billion seconds (~317 years)
+pub const DYNAMIC_EVALUATION_OFFSET: Duration = Duration::from_secs(DYNAMIC_EVALUATION_OFFSET_S);
+
+/*
+/// The threshold for generation of dynamic evaluation run IDs.
+/// This will seed the UUIDv7 with current time + 10 billion seconds.
+/// We ignore nanoseconds, sequence number, and usable bits.
+TODO: use this in inference handler
+pub const DYNAMIC_EVALUATION_THRESHOLD: Timestamp = Timestamp::from_unix_time(
+    DYNAMIC_EVALUATION_OFFSET_S,
+    0, // ns
+    0, // seq
+    0, // bits
+);
+*/
+
+pub fn generate_dynamic_evaluation_run_episode_id() -> Uuid {
+    #[allow(clippy::expect_used)]
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+    let now_plus_offset = now + DYNAMIC_EVALUATION_OFFSET;
+    let timestamp = Timestamp::from_unix_time(
+        now_plus_offset.as_secs(),
+        now_plus_offset.subsec_nanos(),
+        0, // counter
+        0, // usable_counter_bits
+    );
+    Uuid::new_v7(timestamp)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,5 +182,38 @@ mod tests {
                 raw_uuid: future_uuid.to_string(),
             }
         );
+    }
+
+    #[test]
+    fn test_generate_dynamic_evaluation_run_episode_id() {
+        let dynamic_id = generate_dynamic_evaluation_run_episode_id();
+
+        // Verify it's a v7 UUID
+        assert_eq!(dynamic_id.get_version_num(), 7);
+
+        // Extract the timestamp and verify it's in the expected range
+        let timestamp_info = dynamic_id.get_timestamp().expect("Should have timestamp");
+        let (seconds, _) = timestamp_info.to_unix();
+
+        // Current timestamp plus the offset
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs();
+        let expected_approx_time = now + DYNAMIC_EVALUATION_OFFSET_S;
+
+        // Allow small difference due to execution time
+        let margin = 5; // 5 seconds margin
+        assert!(
+            seconds >= expected_approx_time - margin && seconds <= expected_approx_time + margin,
+            "Expected timestamp around {}, got {}",
+            expected_approx_time,
+            seconds
+        );
+
+        // Generate two UUIDs and ensure they're different
+        let id1 = generate_dynamic_evaluation_run_episode_id();
+        let id2 = generate_dynamic_evaluation_run_episode_id();
+        assert_ne!(id1, id2, "Generated UUIDs should be unique");
     }
 }
