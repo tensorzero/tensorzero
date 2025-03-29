@@ -240,3 +240,11 @@ active = true
 system_instructions = "evals/haiku/topic_starts_with_f/system_instructions.txt"
 json_mode = "strict"
 temperature = 0
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                               OBJECT_STORAGE                               │
+# └────────────────────────────────────────────────────────────────────────────┘
+[object_storage]
+type = "s3_compatible"
+bucket_name = "tensorzero-e2e-test-images"
+region = "us-east-1"
