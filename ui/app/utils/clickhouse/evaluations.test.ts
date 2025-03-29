@@ -181,7 +181,8 @@ describe("getEvalResults", () => {
 
   test("should return correct results for entity_extraction eval that skips a staled datapoint", async () => {
     // There is a datapoint that was inserted and deleted before the last eval run after the first two.
-    // We test here that it is not included and the data is not ragged.
+    // We test here that it is not included and the data is ragged due to the datapoint at the top of the
+    // table only having one eval run.
     const results = await getEvalResults(
       "foo",
       "extract_entities",
@@ -195,10 +196,10 @@ describe("getEvalResults", () => {
         "0195aef7-ec99-7312-924f-32b71c3496ee",
         "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
       ],
-      6,
+      2,
       0,
     );
-    expect(results.length).toBe(36); // 6 datapoints * 3 eval runs * 2 metrics
+    expect(results.length).toBe(8); // 1 datapoints * 3 eval runs * 2 metrics + 1 ragged datapoint * 1 eval run * 2 metrics
     // Verify that we have both metrics in the results
     const metricNames = new Set(results.map((r) => r.metric_name));
     expect(
@@ -211,9 +212,9 @@ describe("getEvalResults", () => {
         "tensorzero::eval_name::entity_extraction::evaluator_name::count_sports",
       ),
     ).toBe(true);
-    // Verify that the number of distinct datapoint ids is 6
+    // Verify that the number of distinct datapoint ids is 2
     const datapointIds = new Set(results.map((r) => r.datapoint_id));
-    expect(datapointIds.size).toBe(6);
+    expect(datapointIds.size).toBe(2);
   });
 
   test("should return correct results for ragged haiku eval", async () => {
