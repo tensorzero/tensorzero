@@ -9,6 +9,7 @@ import type {
 } from "~/utils/clickhouse/common";
 import { SystemContent } from "./SystemContent";
 import { useEffect, useState } from "react";
+import { SkeletonImage } from "./SkeletonImage";
 
 // Base interface with just the common required properties
 interface BaseInputProps {
@@ -186,6 +187,13 @@ function MessageContent({
             );
           case "image":
             return <ImageBlock key={index} image={block} />;
+          case "image_error":
+            return (
+              <div key={index}>
+                <div className="mb-2 text-red-500">Failed to resolve image</div>
+                <SkeletonImage />
+              </div>
+            );
           default:
             return null;
         }
