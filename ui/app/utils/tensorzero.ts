@@ -3,7 +3,12 @@ TensorZero Client (for internal use only for now)
 */
 
 import { z } from "zod";
-import { contentBlockOutputSchema } from "./clickhouse/common";
+import {
+  contentBlockOutputSchema,
+  type ResolvedInput,
+  type ResolvedInputMessage,
+  type StoragePath,
+} from "./clickhouse/common";
 
 /**
  * JSON types.
@@ -483,5 +488,13 @@ export class TensorZeroClient {
 
     const body = await response.json();
     return DatapointResponseSchema.parse(body);
+  }
+  async getObject(storagePath: StoragePath): Promise<string> {
+    const url = `${this.baseUrl}/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to get object: ${response.statusText}`);
+    }
+    return response.text();
   }
 }

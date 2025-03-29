@@ -10,6 +10,12 @@ export const textInputSchema = z.object({
 });
 export type TextInput = z.infer<typeof textInputSchema>;
 
+export const rawTextInputSchema = z.object({
+  type: z.literal("raw_text"),
+  value: z.string(),
+});
+export type RawTextInput = z.infer<typeof rawTextInputSchema>;
+
 export const toolCallSchema = z
   .object({
     name: z.string(),
@@ -97,12 +103,21 @@ export const resolvedImageContentSchema = z.object({
 });
 export type ResolvedImageContent = z.infer<typeof resolvedImageContentSchema>;
 
+export const resolvedImageContentErrorSchema = z.object({
+  type: z.literal("image_error"),
+  error: z.string(),
+});
+export type ResolvedImageContentError = z.infer<
+  typeof resolvedImageContentErrorSchema
+>;
+
 // Types for input to TensorZero
 export const inputMessageContentSchema = z.discriminatedUnion("type", [
   textInputSchema,
   toolCallContentSchema,
   toolResultContentSchema,
   imageContentSchema,
+  rawTextInputSchema,
 ]);
 export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
 
@@ -111,7 +126,10 @@ export const resolvedInputMessageContentSchema = z.discriminatedUnion("type", [
   toolCallContentSchema,
   toolResultContentSchema,
   resolvedImageContentSchema,
+  resolvedImageContentErrorSchema,
+  rawTextInputSchema,
 ]);
+
 export type ResolvedInputMessageContent = z.infer<
   typeof resolvedInputMessageContentSchema
 >;
@@ -160,6 +178,7 @@ export const contentBlockSchema = z.discriminatedUnion("type", [
   toolCallContentSchema,
   toolResultContentSchema,
   imageContentSchema,
+  rawTextInputSchema,
 ]);
 export type ContentBlock = z.infer<typeof contentBlockSchema>;
 
