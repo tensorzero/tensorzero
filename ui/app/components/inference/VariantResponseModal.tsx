@@ -17,6 +17,7 @@ import type { ContentBlockOutput } from "~/utils/clickhouse/common";
 import { OutputContent } from "~/components/inference/Output";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { Card, CardContent } from "~/components/ui/card";
+import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
 
 interface VariantResponseModalProps {
   isOpen: boolean;
@@ -70,7 +71,6 @@ export function VariantResponseModal({
   const variantInferenceFetcher = useFetcher();
 
   useEffect(() => {
-    console.log("item", item);
     if (isOpen) {
       setVariantResponse(null);
       setShowRawResponse(false);
@@ -87,9 +87,10 @@ export function VariantResponseModal({
           selectedVariant,
         );
       } else {
+        const tensorZeroInput = resolvedInputToTensorZeroInput(item.input);
         request = {
           function_name: item.function_name,
-          input: item.input,
+          input: tensorZeroInput,
           variant_name: selectedVariant,
           dryrun: true,
         };
@@ -292,13 +293,14 @@ function prepareDefaultFunctionRequest(
   inference: ParsedInferenceRow,
   selectedVariant: string,
 ) {
+  const tensorZeroInput = resolvedInputToTensorZeroInput(inference.input);
   if (inference.function_type === "chat") {
     const tool_choice = inference.tool_params?.tool_choice;
     const parallel_tool_calls = inference.tool_params?.parallel_tool_calls;
     const tools_available = inference.tool_params?.tools_available;
     return {
       model_name: selectedVariant,
-      input: inference.input,
+      input: tensorZeroInput,
       dryrun: true,
       tool_choice: tool_choice,
       parallel_tool_calls: parallel_tool_calls,
@@ -310,7 +312,7 @@ function prepareDefaultFunctionRequest(
     const output_schema = inference.output_schema;
     return {
       model_name: selectedVariant,
-      input: inference.input,
+      input: tensorZeroInput,
       dryrun: true,
       output_schema: output_schema,
     };

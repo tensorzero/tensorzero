@@ -84,12 +84,30 @@ export const ToolResultContentSchema = z.object({
   ...ToolResultSchema.shape,
 });
 
+export const ImageContentSchema = z
+  .object({
+    type: z.literal("image"),
+  })
+  .and(
+    z.union([
+      z.object({
+        url: z.string(),
+      }),
+      z.object({
+        mime_type: z.string(),
+        data: z.string(),
+      }),
+    ]),
+  );
+export type ImageContent = z.infer<typeof ImageContentSchema>;
+
 export const InputMessageContentSchema = z.union([
   TextContentSchema,
   TextArgumentsContentSchema,
   RawTextContentSchema,
   ToolCallContentSchema,
   ToolResultContentSchema,
+  ImageContentSchema,
 ]);
 
 export type InputMessageContent = z.infer<typeof InputMessageContentSchema>;

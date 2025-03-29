@@ -574,7 +574,7 @@ export const parsedInferenceRowSchema = z.discriminatedUnion("function_type", [
   }),
   parsedJsonInferenceRowSchema.extend({
     function_type: z.literal("json"),
-    input: z.any(), // Overwritten with resolved input
+    input: resolvedInputSchema,
   }),
 ]);
 
