@@ -30,8 +30,8 @@ use tensorzero_internal::{
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientInferenceParams, ClientSecretString, DynamicEvaluationRunParams,
-    DynamicEvaluationRunResponse, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, Input, TensorZeroError, Tool,
+    DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, Input,
+    TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -677,16 +677,19 @@ impl TensorZeroGateway {
     #[pyo3(signature = (*, variants, tags))]
     fn dynamic_evaluation_run(
         this: PyRef<'_, Self>,
-        py: Python<'_>,
         variants: HashMap<String, String>,
         tags: HashMap<String, String>,
-    ) -> PyResult<Py<PyAny>> {
-        let fut = this
-            .as_super()
-            .client
-            .dynamic_evaluation_run(DynamicEvaluationRunParams { variants, tags });
-        let resp = tokio_block_on_without_gil(py, fut).map_err(|e| convert_error(py, e))?;
-        serialize_to_dict(py, resp)
+    ) -> PyResult<Bound<'_, PyAny>> {
+        let client = this.as_super().client.clone();
+        let params = DynamicEvaluationRunParams { variants, tags };
+
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.dynamic_evaluation_run(params).await;
+            Python::with_gil(|py| match res {
+                Ok(resp) => serialize_to_dict(py, resp),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
     }
 }
 
@@ -1000,18 +1003,20 @@ impl AsyncTensorZeroGateway {
     /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
     /// :return: A `DynamicEvaluationRunResponse` object.
     #[pyo3(signature = (*, variants, tags))]
-    fn dynamic_evaluation_run<'a>(
-        this: PyRef<'a, Self>,
+    fn dynamic_evaluation_run(
+        this: PyRef<'_, Self>,
         variants: HashMap<String, String>,
         tags: HashMap<String, String>,
-    ) -> PyResult<Bound<'a, PyAny>> {
+    ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
         let params = DynamicEvaluationRunParams { variants, tags };
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.dynamic_evaluation_run(params).await;
-            let res = res.map_err(|e| convert_error(this.py(), e))?;
-            Python::with_gil(|py| serialize_to_dict(py, res))
+            Python::with_gil(|py| match res {
+                Ok(resp) => serialize_to_dict(py, resp),
+                Err(e) => Err(convert_error(py, e)),
+            })
         })
     }
 }
