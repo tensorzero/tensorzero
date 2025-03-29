@@ -9,6 +9,7 @@ import { Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
+import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import { useFetcher } from "react-router";
 import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
@@ -22,13 +23,17 @@ interface VariantResponseModalProps {
   isLoading: boolean;
   setIsLoading: (isLoading: boolean) => void;
   onClose: () => void;
-  inference: ParsedInferenceRow;
-  inferenceUsage: InferenceUsage;
+  // Use a union type to accept either inference or datapoint
+  item: ParsedInferenceRow | ParsedDatasetRow;
+  // Make inferenceUsage optional since datasets don't have it by default
+  inferenceUsage?: InferenceUsage;
   selectedVariant: string;
+  // Add a source property to determine what type of item we're dealing with
+  source: "inference" | "datapoint";
 }
 
 interface VariantResponseInfo {
-  output: JsonInferenceOutput | ContentBlockOutput[];
+  output?: JsonInferenceOutput | ContentBlockOutput[];
   usage?: InferenceUsage;
 }
 
@@ -37,9 +42,10 @@ export function VariantResponseModal({
   isLoading,
   setIsLoading,
   onClose,
-  inference,
+  item,
   inferenceUsage,
   selectedVariant,
+  source,
 }: VariantResponseModalProps) {
   const [variantResponse, setVariantResponse] =
     useState<VariantResponseInfo | null>(null);
@@ -48,28 +54,46 @@ export function VariantResponseModal({
   );
   const [showRawResponse, setShowRawResponse] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Set up baseline response based on source type
   const baselineResponse: VariantResponseInfo = {
-    output: inference.output,
-    usage: inferenceUsage,
+    output: item.output,
+    usage: source === "inference" ? inferenceUsage : undefined,
   };
-  const originalVariant = inference.variant_name;
+
+  // Get original variant name if available (only for inferences)
+  const originalVariant =
+    source === "inference"
+      ? (item as ParsedInferenceRow).variant_name
+      : undefined;
 
   const variantInferenceFetcher = useFetcher();
 
   useEffect(() => {
+    console.log("item", item);
     if (isOpen) {
       setVariantResponse(null);
       setShowRawResponse(false);
       setError(null);
-      const request =
-        inference.function_name === "tensorzero::default"
-          ? prepareDefaultFunctionRequest(inference, selectedVariant)
-          : {
-              function_name: inference.function_name,
-              input: inference.input,
-              variant_name: selectedVariant,
-              dryrun: true,
-            };
+
+      // Prepare request based on source and function type
+      let request;
+      if (
+        source === "inference" &&
+        item.function_name === "tensorzero::default"
+      ) {
+        request = prepareDefaultFunctionRequest(
+          item as ParsedInferenceRow,
+          selectedVariant,
+        );
+      } else {
+        request = {
+          function_name: item.function_name,
+          input: item.input,
+          variant_name: selectedVariant,
+          dryrun: true,
+        };
+      }
 
       variantInferenceFetcher.submit(
         { data: JSON.stringify(request) },
@@ -80,7 +104,7 @@ export function VariantResponseModal({
       );
       setIsLoading(true);
     }
-  }, [isOpen, selectedVariant]);
+  }, [isOpen, selectedVariant, source]);
 
   useEffect(() => {
     if (
@@ -99,7 +123,7 @@ export function VariantResponseModal({
         const inferenceOutput =
           variantInferenceFetcher.data as InferenceResponse;
 
-        // Check if the response contains an error using type guard
+        // Check if the response contains an error
         if ("error" in inferenceOutput && inferenceOutput.error) {
           setError(
             `Inference Failed: ${typeof inferenceOutput.error === "string" ? inferenceOutput.error : JSON.stringify(inferenceOutput.error)}`,
@@ -155,11 +179,13 @@ export function VariantResponseModal({
           <>
             <div className="flex-1">
               <h4 className="mb-1 text-xs font-semibold">Output</h4>
-              <Card>
-                <CardContent className="pt-8">
-                  <OutputContent output={response.output} />
-                </CardContent>
-              </Card>
+              {response.output && (
+                <Card>
+                  <CardContent className="pt-8">
+                    <OutputContent output={response.output} />
+                  </CardContent>
+                </Card>
+              )}
             </div>
             {response.usage && (
               <div className="mt-4">
@@ -178,20 +204,38 @@ export function VariantResponseModal({
     </div>
   );
 
+  // Create a dynamic title based on the source
+  const getTitle = () => {
+    if (source === "inference") {
+      return (
+        <>
+          Comparing{" "}
+          <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+            {originalVariant}
+          </code>{" "}
+          vs.{" "}
+          <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+            {selectedVariant}
+          </code>
+        </>
+      );
+    } else {
+      return (
+        <>
+          Comparing datapoint vs.{" "}
+          <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+            {selectedVariant}
+          </code>
+        </>
+      );
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-h-[90vh] sm:max-w-[1200px]">
         <DialogHeader>
-          <DialogTitle>
-            Comparing{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
-              {originalVariant}
-            </code>{" "}
-            vs.{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
-              {selectedVariant}
-            </code>
-          </DialogTitle>
+          <DialogTitle>{getTitle()}</DialogTitle>
         </DialogHeader>
         <div className="mt-4 max-h-[70vh] overflow-y-auto">
           {isLoading ? (

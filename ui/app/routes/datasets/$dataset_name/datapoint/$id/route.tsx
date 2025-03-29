@@ -7,7 +7,7 @@ import Output from "~/components/inference/Output";
 import { useEffect, useState, useMemo } from "react";
 import { useConfig } from "~/context/config";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
-import { VariantResponseModal } from "./VariantResponseModal";
+import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import type { Route } from "./+types/route";
 import type { ActionFunctionArgs } from "react-router";
 import {
@@ -355,8 +355,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           isLoading={variantInferenceIsLoading}
           setIsLoading={setVariantInferenceIsLoading}
           onClose={handleModalClose}
-          datapoint={datapoint}
+          item={datapoint}
           selectedVariant={selectedVariant}
+          source="datapoint"
         />
       )}
     </PageLayout>
