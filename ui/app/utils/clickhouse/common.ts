@@ -100,6 +100,7 @@ export type ImageContent = z.infer<typeof imageContentSchema>;
 export const resolvedImageContentSchema = z.object({
   type: z.literal("image"),
   image: resolvedBase64ImageSchema,
+  storage_path: storagePathSchema,
 });
 export type ResolvedImageContent = z.infer<typeof resolvedImageContentSchema>;
 

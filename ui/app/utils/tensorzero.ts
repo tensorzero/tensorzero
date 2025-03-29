@@ -5,8 +5,6 @@ TensorZero Client (for internal use only for now)
 import { z } from "zod";
 import {
   contentBlockOutputSchema,
-  type ResolvedInput,
-  type ResolvedInputMessage,
   type StoragePath,
 } from "./clickhouse/common";
 

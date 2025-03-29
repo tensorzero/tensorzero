@@ -1,6 +1,11 @@
 import { z } from "zod";
-import { contentBlockOutputSchema, jsonInferenceOutputSchema } from "./common";
+import {
+  contentBlockOutputSchema,
+  jsonInferenceOutputSchema,
+  resolvedInputSchema,
+} from "./common";
 import { inputSchema } from "./common";
+import { resolveInput } from "../resolve.server";
 
 export const EvaluationRunInfoSchema = z.object({
   eval_run_id: z.string(),
@@ -32,7 +37,7 @@ export type EvaluationResultWithVariant = z.infer<
 export const JsonEvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),
   eval_run_id: z.string().uuid(),
-  input: inputSchema,
+  input: resolvedInputSchema,
   generated_output: jsonInferenceOutputSchema,
   reference_output: jsonInferenceOutputSchema,
   metric_name: z.string(),
@@ -44,7 +49,7 @@ export type JsonEvaluationResult = z.infer<typeof JsonEvaluationResultSchema>;
 export const ChatEvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),
   eval_run_id: z.string().uuid(),
-  input: inputSchema,
+  input: resolvedInputSchema,
   generated_output: z.array(contentBlockOutputSchema),
   reference_output: z.array(contentBlockOutputSchema),
   metric_name: z.string(),
@@ -89,12 +94,13 @@ export type ParsedEvaluationResultWithVariant = z.infer<
   typeof ParsedEvaluationResultWithVariantSchema
 >;
 
-export function parseEvaluationResult(
+export async function parseEvaluationResult(
   result: EvaluationResult,
-): ParsedEvaluationResult {
+): Promise<ParsedEvaluationResult> {
   try {
     // Parse the input field
     const parsedInput = inputSchema.parse(JSON.parse(result.input));
+    const resolvedInput = await resolveInput(parsedInput);
 
     // Parse the outputs
     const generatedOutput = JSON.parse(result.generated_output);
@@ -105,7 +111,7 @@ export function parseEvaluationResult(
       // This is likely a chat evaluation result
       return ChatEvaluationResultSchema.parse({
         ...result,
-        input: parsedInput,
+        input: resolvedInput,
         generated_output: generatedOutput,
         reference_output: referenceOutput,
       });
@@ -113,7 +119,7 @@ export function parseEvaluationResult(
       // This is likely a JSON evaluation result
       return JsonEvaluationResultSchema.parse({
         ...result,
-        input: parsedInput,
+        input: resolvedInput,
         generated_output: generatedOutput,
         reference_output: referenceOutput,
       });
@@ -128,12 +134,12 @@ export function parseEvaluationResult(
   }
 }
 
-export function parseEvaluationResultWithVariant(
+export async function parseEvaluationResultWithVariant(
   result: EvaluationResultWithVariant,
-): ParsedEvaluationResultWithVariant {
+): Promise<ParsedEvaluationResultWithVariant> {
   try {
     // Parse using the same logic as parseEvaluationResult
-    const parsedResult = parseEvaluationResult(result);
+    const parsedResult = await parseEvaluationResult(result);
 
     // Add the variant_name to the parsed result
     const parsedResultWithVariant = {

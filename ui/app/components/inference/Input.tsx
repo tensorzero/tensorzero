@@ -1,13 +1,12 @@
 import { Card, CardContent } from "~/components/ui/card";
 import type {
   Input,
-  InputMessage,
   InputMessageContent,
+  ResolvedImageContent,
   ResolvedInput,
   ResolvedInputMessage,
   ResolvedInputMessageContent,
 } from "~/utils/clickhouse/common";
-import { SkeletonImage } from "./SkeletonImage";
 import { SystemContent } from "./SystemContent";
 import { useEffect, useState } from "react";
 
@@ -186,7 +185,7 @@ function MessageContent({
               />
             );
           case "image":
-            return <ImageBlock />;
+            return <ImageBlock image={block} />;
           default:
             return null;
         }
@@ -385,6 +384,6 @@ function ToolResultBlock({
   );
 }
 
-function ImageBlock() {
-  return <SkeletonImage />;
+function ImageBlock({ image }: { image: ResolvedImageContent }) {
+  return <img src={image.image.url} alt="Image" />;
 }

@@ -37,6 +37,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { InferenceActions } from "./InferenceActions";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
+import { resolveInput } from "~/utils/resolve.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -77,8 +78,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
 
+  const resolvedInput = await resolveInput(inference.input);
+  const resolvedInference = {
+    ...inference,
+    input: resolvedInput,
+  };
+
   return {
-    inference,
+    inference: resolvedInference,
     model_inferences,
     feedback,
     feedback_bounds,

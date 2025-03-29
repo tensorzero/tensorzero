@@ -2,6 +2,7 @@ import z from "zod";
 import {
   type ContentBlockOutput,
   type JsonInferenceOutput,
+  resolvedInputSchema,
   type TableBounds,
   TableBoundsSchema,
 } from "./common";
@@ -16,6 +17,7 @@ import {
 import { data } from "react-router";
 import type { FunctionConfig } from "../config/function";
 import { clickhouseClient } from "./client.server";
+import { resolveInput } from "../resolve.server";
 
 export const inferenceByIdRowSchema = z
   .object({
@@ -568,9 +570,11 @@ export type ParsedJsonInferenceRow = z.infer<
 export const parsedInferenceRowSchema = z.discriminatedUnion("function_type", [
   parsedChatInferenceRowSchema.extend({
     function_type: z.literal("chat"),
+    input: resolvedInputSchema,
   }),
   parsedJsonInferenceRowSchema.extend({
     function_type: z.literal("json"),
+    input: z.any(), // Overwritten with resolved input
   }),
 ]);
 
@@ -586,11 +590,15 @@ export function parseInferenceOutput(
   return jsonInferenceOutputSchema.parse(parsed);
 }
 
-function parseInferenceRow(row: InferenceRow): ParsedInferenceRow {
+async function parseInferenceRow(
+  row: InferenceRow,
+): Promise<ParsedInferenceRow> {
+  const input = inputSchema.parse(JSON.parse(row.input));
+  const resolvedInput = await resolveInput(input);
   if (row.function_type === "chat") {
     return {
       ...row,
-      input: inputSchema.parse(JSON.parse(row.input)),
+      input: resolvedInput,
       output: parseInferenceOutput(row.output) as ContentBlockOutput[],
       inference_params: z
         .record(z.string(), z.unknown())
@@ -605,7 +613,7 @@ function parseInferenceRow(row: InferenceRow): ParsedInferenceRow {
   } else {
     return {
       ...row,
-      input: inputSchema.parse(JSON.parse(row.input)),
+      input: resolvedInput,
       output: parseInferenceOutput(row.output) as JsonInferenceOutput,
       inference_params: z
         .record(z.string(), z.unknown())
@@ -685,7 +693,7 @@ LEFT JOIN JsonInference j
   const rows = await resultSet.json<InferenceRow>();
   const firstRow = rows[0];
   if (!firstRow) return null;
-  const parsedRow = parseInferenceRow(firstRow);
+  const parsedRow = await parseInferenceRow(firstRow);
   return parsedRow;
 }
 

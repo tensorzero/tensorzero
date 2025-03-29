@@ -119,7 +119,7 @@ export async function getEvalResults(
     },
   });
   const rows = await result.json<EvaluationResult>();
-  return rows.map((row) => parseEvaluationResult(row));
+  return Promise.all(rows.map((row) => parseEvaluationResult(row)));
 }
 
 /*
@@ -453,6 +453,8 @@ export async function getEvalsForDatapoint(
     },
   });
   const rows = await result.json<EvaluationResultWithVariant>();
-  const parsed_rows = rows.map((row) => parseEvaluationResultWithVariant(row));
+  const parsed_rows = await Promise.all(
+    rows.map((row) => parseEvaluationResultWithVariant(row)),
+  );
   return parsed_rows;
 }

@@ -28,21 +28,21 @@ import {
 } from "~/components/layout/PageLayout";
 import { DatapointActions } from "./DatapointActions";
 import type {
-  Input as ClickHouseInput,
-  InputMessage,
-  InputMessageContent,
+  ResolvedInput,
+  ResolvedInputMessage,
+  ResolvedInputMessageContent,
 } from "~/utils/clickhouse/common";
 import { getConfig } from "~/utils/config/index.server";
 
 /**
  * Transforms input from clickhouse format to TensorZero client format
  */
-function transformInputForTensorZero(input: ClickHouseInput) {
+function transformInputForTensorZero(input: ResolvedInput) {
   return {
     system: input.system,
-    messages: input.messages.map((msg: InputMessage) => ({
+    messages: input.messages.map((msg: ResolvedInputMessage) => ({
       role: msg.role as "system" | "user" | "assistant" | "tool",
-      content: msg.content.map((c: InputMessageContent) => {
+      content: msg.content.map((c: ResolvedInputMessageContent) => {
         if (c.type === "text") {
           return { type: "text" as const, value: c.value };
         } else if (c.type === "tool_call") {
@@ -235,7 +235,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setInput({ ...input, system });
   };
 
-  const handleMessagesChange = (messages: InputMessage[]) => {
+  const handleMessagesChange = (messages: ResolvedInputMessage[]) => {
     setInput({ ...input, messages });
   };
 
