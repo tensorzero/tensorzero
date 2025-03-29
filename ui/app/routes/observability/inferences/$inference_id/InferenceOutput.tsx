@@ -13,7 +13,7 @@ import { CodeMessage, TextMessage } from "~/components/layout/SnippetContent";
 
 interface OutputProps {
   output: JsonInferenceOutput | ContentBlockOutput[];
-  outputSchema?: any;
+  outputSchema?: Record<string, unknown>;
 }
 
 function isJsonInferenceOutput(
