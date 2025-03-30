@@ -333,8 +333,8 @@ export async function getEvalRunInfo(limit: number = 100, offset: number = 0) {
     t1.function_name,
     t1.variant_name,
     formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(toUInt128(t1.inference_id)))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
-FROM tensorzero_ui_fixtures.TagInference t1
-JOIN tensorzero_ui_fixtures.TagInference t2
+FROM TagInference t1
+JOIN TagInference t2
     ON t1.inference_id = t2.inference_id
 WHERE t1.key = 'tensorzero::eval_run_id'
   AND t2.key = 'tensorzero::eval_name'
