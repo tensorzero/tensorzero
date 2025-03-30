@@ -81,6 +81,14 @@ fn validate_variant_pins(
     Ok(())
 }
 
+fn to_map_literal(map: &HashMap<String, String>) -> String {
+    let items: Vec<String> = map
+        .iter()
+        .map(|(k, v)| format!("'{}':'{}'", k, v))
+        .collect();
+    format!("{{{}}}", items.join(","))
+}
+
 async fn write_dynamic_evaluation_run(
     clickhouse: ClickHouseConnectionInfo,
     episode_id: Uuid,
@@ -95,16 +103,8 @@ async fn write_dynamic_evaluation_run(
     VALUES ({short_key:UInt64}, {episode_id:UUID}, {variant_pins:Map(String, String)}, {experiment_tags:Map(String, String)})
     "#;
     let mut params = HashMap::new();
-    let variant_pins_str = serde_json::to_string(&variant_pins).map_err(|_| {
-        Error::new(ErrorDetails::Serialization {
-            message: "Failed to serialize variant pins".to_string(),
-        })
-    })?;
-    let tags_str = serde_json::to_string(&tags).map_err(|_| {
-        Error::new(ErrorDetails::Serialization {
-            message: "Failed to serialize tags".to_string(),
-        })
-    })?;
+    let variant_pins_str = to_map_literal(&variant_pins);
+    let tags_str = to_map_literal(&tags);
     let short_key_str = short_key.to_string();
     let episode_id_str = episode_id.to_string();
     params.insert("short_key", short_key_str.as_str());
