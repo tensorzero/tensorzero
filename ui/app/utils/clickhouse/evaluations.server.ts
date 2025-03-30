@@ -1,20 +1,25 @@
 import { getConfig } from "../config/index.server";
+import { resolveInput } from "../resolve.server";
 import { clickhouseClient } from "./client.server";
+import { inputSchema } from "./common";
 import {
   EvaluationRunInfoSchema,
   EvaluationStatisticsSchema,
   type EvaluationResult,
   type EvaluationRunInfo,
   type EvaluationStatistics,
-  parseEvaluationResult,
   type EvalInfoResult,
   evalInfoResultSchema,
   getEvaluatorMetricName,
   type EvaluationResultWithVariant,
-  parseEvaluationResultWithVariant,
   type ParsedEvaluationResultWithVariant,
+  type ParsedEvaluationResult,
+  JsonEvaluationResultSchema,
+  ParsedEvaluationResultSchema,
+  ChatEvaluationResultSchema,
+  ParsedEvaluationResultWithVariantSchema,
 } from "./evaluations";
-import { getStaledWindowQuery, uuidv7ToTimestamp } from "./helpers";
+import { uuidv7ToTimestamp } from "./helpers";
 
 export async function getEvalRunInfos(
   eval_run_ids: string[],
@@ -42,6 +47,93 @@ export async function getEvalRunInfos(
   return rows.map((row) => EvaluationRunInfoSchema.parse(row));
 }
 
+async function parseEvaluationResult(
+  result: EvaluationResult,
+): Promise<ParsedEvaluationResult> {
+  try {
+    // Parse the input field
+    const parsedInput = inputSchema.parse(JSON.parse(result.input));
+    const resolvedInput = await resolveInput(parsedInput);
+
+    // Parse the outputs
+    const generatedOutput = JSON.parse(result.generated_output);
+    const referenceOutput = JSON.parse(result.reference_output);
+
+    // Determine if this is a chat result by checking if generated_output is an array
+    if (Array.isArray(generatedOutput)) {
+      // This is likely a chat evaluation result
+      return ChatEvaluationResultSchema.parse({
+        ...result,
+        input: resolvedInput,
+        generated_output: generatedOutput,
+        reference_output: referenceOutput,
+      });
+    } else {
+      // This is likely a JSON evaluation result
+      return JsonEvaluationResultSchema.parse({
+        ...result,
+        input: resolvedInput,
+        generated_output: generatedOutput,
+        reference_output: referenceOutput,
+      });
+    }
+  } catch (error) {
+    console.warn(
+      "Failed to parse evaluation result using structure-based detection:",
+      error,
+    );
+    // If structure-based detection fails, try the original parsing as fallback
+    return ParsedEvaluationResultSchema.parse(result);
+  }
+}
+
+async function parseEvaluationResultWithVariant(
+  result: EvaluationResultWithVariant,
+): Promise<ParsedEvaluationResultWithVariant> {
+  try {
+    // Parse using the same logic as parseEvaluationResult
+    const parsedResult = await parseEvaluationResult(result);
+
+    // Add the variant_name to the parsed result
+    const parsedResultWithVariant = {
+      ...parsedResult,
+      variant_name: result.variant_name,
+    };
+    return ParsedEvaluationResultWithVariantSchema.parse(
+      parsedResultWithVariant,
+    );
+  } catch (error) {
+    console.warn(
+      "Failed to parse evaluation result with variant using structure-based detection:",
+      error,
+    );
+    // Fallback to direct parsing if needed
+    return ParsedEvaluationResultWithVariantSchema.parse({
+      ...result,
+      input: result.input,
+      generated_output: result.generated_output,
+      reference_output: result.reference_output,
+    });
+  }
+}
+
+const getEvalResultDatapointIdsQuery = `
+  SELECT DISTINCT dp.id as dp_id
+  FROM {datapoint_table_name:Identifier} dp
+  INNER JOIN TagInference datapoint_tag
+    ON dp.id = toUUIDOrNull(datapoint_tag.value)
+    AND datapoint_tag.key = 'tensorzero::datapoint_id'
+    AND datapoint_tag.function_name = {function_name:String}
+  INNER JOIN {inference_table_name:Identifier} ci
+    ON ci.id = datapoint_tag.inference_id
+    AND ci.function_name = {function_name:String}
+  WHERE dp.dataset_name = {dataset_name:String}
+    AND dp.function_name = {function_name:String}
+    AND (ci.tags['tensorzero::eval_run_id'] IS NULL OR
+         ci.tags['tensorzero::eval_run_id'] IN ({eval_run_ids:Array(String)}))
+  ORDER BY toUInt128(toUUID(dp.id)) DESC
+`;
+
 export async function getEvalResults(
   dataset_name: string,
   function_name: string,
@@ -55,10 +147,8 @@ export async function getEvalResults(
     function_type === "chat"
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
-  const eval_run_timestamps = eval_run_ids.map((id) => uuidv7ToTimestamp(id));
   const inference_table_name =
     function_type === "chat" ? "ChatInference" : "JsonInference";
-  const staled_window_query = getStaledWindowQuery(eval_run_timestamps);
   const query = `
   SELECT
     dp.input as input,
@@ -69,27 +159,22 @@ export async function getEvalResults(
     feedback.metric_name as metric_name,
     feedback.value as metric_value
   FROM (
-    SELECT *
-    FROM {datapoint_table_name:Identifier}
-    WHERE dataset_name = {dataset_name:String}
-      AND function_name = {function_name:String}
-      AND (
-        ${staled_window_query}
-      )
-    ORDER BY toUInt128(id) DESC
+    ${getEvalResultDatapointIdsQuery}
     LIMIT {limit:UInt32}
     OFFSET {offset:UInt32}
-  ) dp
-  LEFT JOIN TagInference datapoint_tag FINAL
+  ) paginated_dp
+  INNER JOIN {datapoint_table_name:Identifier} dp
+    ON dp.id = paginated_dp.dp_id
+  INNER JOIN TagInference datapoint_tag FINAL
     ON dp.id = toUUIDOrNull(datapoint_tag.value)
     AND datapoint_tag.key = 'tensorzero::datapoint_id'
     AND datapoint_tag.function_name = {function_name:String}
-  LEFT JOIN {inference_table_name:Identifier} ci
+  INNER JOIN {inference_table_name:Identifier} ci
     ON datapoint_tag.inference_id = ci.id
     AND ci.function_name = {function_name:String}
     AND ci.variant_name = datapoint_tag.variant_name
     AND ci.episode_id = datapoint_tag.episode_id
-  LEFT JOIN (
+  INNER JOIN (
     SELECT target_id, metric_name, toString(value) as value
     FROM BooleanMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
@@ -119,7 +204,7 @@ export async function getEvalResults(
     },
   });
   const rows = await result.json<EvaluationResult>();
-  return rows.map((row) => parseEvaluationResult(row));
+  return Promise.all(rows.map((row) => parseEvaluationResult(row)));
 }
 
 /*
@@ -138,10 +223,8 @@ export async function getEvalStatistics(
     function_type === "chat"
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
-  const eval_run_timestamps = eval_run_ids.map((id) => uuidv7ToTimestamp(id));
   const inference_table_name =
     function_type === "chat" ? "ChatInference" : "JsonInference";
-  const staled_window_query = getStaledWindowQuery(eval_run_timestamps);
   const query = `
   SELECT
     ci.tags['tensorzero::eval_run_id'] AS eval_run_id,
@@ -150,24 +233,18 @@ export async function getEvalStatistics(
     avg(toFloat64(feedback.value)) AS mean_metric,
     stddevSamp(toFloat64(feedback.value)) / sqrt(count()) AS stderr_metric
   FROM (
-    SELECT *
-    FROM {datapoint_table_name:Identifier}
-    WHERE dataset_name = {dataset_name:String}
-      AND function_name = {function_name:String}
-      AND (
-        ${staled_window_query}
-      )
+    ${getEvalResultDatapointIdsQuery}
   ) dp
-  LEFT JOIN TagInference datapoint_tag FINAL
-    ON dp.id = toUUIDOrNull(datapoint_tag.value)
+  INNER JOIN TagInference datapoint_tag FINAL
+    ON dp_id = toUUIDOrNull(datapoint_tag.value)
     AND datapoint_tag.key = 'tensorzero::datapoint_id'
     AND datapoint_tag.function_name = {function_name:String}
-  LEFT JOIN {inference_table_name:Identifier} ci
+  INNER JOIN {inference_table_name:Identifier} ci
     ON datapoint_tag.inference_id = ci.id
     AND ci.function_name = {function_name:String}
     AND ci.variant_name = datapoint_tag.variant_name
     AND ci.episode_id = datapoint_tag.episode_id
-  LEFT JOIN (
+  INNER JOIN (
     SELECT target_id, metric_name, value
     FROM BooleanMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
@@ -211,17 +288,14 @@ export async function countDatapointsForEval(
     function_type === "chat"
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
-  const eval_run_timestamps = eval_run_ids.map((id) => uuidv7ToTimestamp(id));
-  const staled_window_query = getStaledWindowQuery(eval_run_timestamps);
+  const inference_table_name =
+    function_type === "chat" ? "ChatInference" : "JsonInference";
 
   const query = `
       SELECT toUInt32(count()) as count
-      FROM {datapoint_table_name:Identifier}
-      WHERE dataset_name = {dataset_name:String}
-        AND function_name = {function_name:String}
-        AND (
-          ${staled_window_query}
-        )
+      FROM (
+        ${getEvalResultDatapointIdsQuery}
+      )
   `;
 
   const result = await clickhouseClient.query({
@@ -231,6 +305,8 @@ export async function countDatapointsForEval(
       dataset_name: dataset_name,
       function_name: function_name,
       datapoint_table_name: datapoint_table_name,
+      inference_table_name: inference_table_name,
+      eval_run_ids: eval_run_ids,
     },
   });
   const rows = await result.json<{ count: number }>();
@@ -453,6 +529,8 @@ export async function getEvalsForDatapoint(
     },
   });
   const rows = await result.json<EvaluationResultWithVariant>();
-  const parsed_rows = rows.map((row) => parseEvaluationResultWithVariant(row));
+  const parsed_rows = await Promise.all(
+    rows.map((row) => parseEvaluationResultWithVariant(row)),
+  );
   return parsed_rows;
 }

@@ -23,7 +23,7 @@ import type {
   EvaluationStatistics,
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
-import type { Input } from "~/utils/clickhouse/common";
+import type { Input, ResolvedInput } from "~/utils/clickhouse/common";
 import type {
   JsonInferenceOutput,
   ContentBlockOutput,
@@ -49,7 +49,7 @@ const TruncatedContent = ({
   maxLength = 30,
   type = "text",
 }: {
-  content: string | Input | JsonInferenceOutput | ContentBlockOutput[];
+  content: string | ResolvedInput | JsonInferenceOutput | ContentBlockOutput[];
   maxLength?: number;
   type?: "text" | "input" | "output";
 }) => {
@@ -107,7 +107,7 @@ const TruncatedContent = ({
             avoidCollisions={true}
           >
             <div className="flex h-full w-full items-center justify-center p-4">
-              <InputComponent input={content as Input} />
+              <InputComponent input={content as ResolvedInput} />
             </div>
           </TooltipContent>
         </Tooltip>
@@ -258,7 +258,7 @@ export function EvaluationTable({
       string,
       {
         id: string;
-        input: Input;
+        input: ResolvedInput;
         reference_output: JsonInferenceOutput | ContentBlockOutput[];
       }
     >();
@@ -424,7 +424,9 @@ export function EvaluationTable({
                                 : "cursor-pointer"
                             }
                             onClick={() => {
-                              const eval_run_ids = selectedRunIds.join(",");
+                              const eval_run_ids = filteredVariants
+                                .map(([runId]) => runId)
+                                .join(",");
                               navigate(
                                 `/evaluations/${eval_name}/${datapoint.id}?eval_run_ids=${eval_run_ids}`,
                               );

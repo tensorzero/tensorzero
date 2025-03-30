@@ -292,11 +292,18 @@ jobs:
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> .env
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> .env
-          docker compose -f fixtures/docker-compose.yml -f fixtures/docker-compose.ui.yml --project-name tensorzero-ui up -d --build --force-recreate
+          echo "AWS_REGION=us-east-1" >> .env
+          echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
+          echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml --project-name tensorzero-ui up -d --build --force-recreate
 
       - name: Run ui tests
         working-directory: ui
-        run: TENSORZERO_UI_CONFIG_PATH=fixtures/config/tensorzero.toml TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures pnpm test
+        env:
+          TENSORZERO_UI_CONFIG_PATH: fixtures/config/tensorzero.toml
+          TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures
+          TENSORZERO_GATEWAY_URL: http://localhost:3000
+        run: pnpm test
 
       - name: Install playwright dependencies
         working-directory: ui
@@ -304,7 +311,9 @@ jobs:
 
       - name: Run ui e2e tests
         working-directory: ui
-        run: TENSORZERO_CI=1 pnpm test-e2e --grep 'launch'
+        env:
+          TENSORZERO_CI: 1
+        run: pnpm test-e2e
         continue-on-error: true
         id: e2e_tests
 

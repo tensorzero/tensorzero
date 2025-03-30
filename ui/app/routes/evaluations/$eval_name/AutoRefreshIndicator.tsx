@@ -30,26 +30,17 @@ export default function AutoRefreshIndicator({
           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
         ></path>
       </svg>
-      Auto-refreshing
+      Auto-refreshing...
     </div>
   );
 }
 
-export const useAutoRefresh = (mostRecentDate: Date, interval = 1000) => {
+export const useAutoRefresh = (active: boolean, interval = 1000) => {
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const revalidator = useRevalidator();
 
   useEffect(() => {
-    // Only auto-refresh if it's been less than 1 minute since the most recent date
-    const now = new Date();
-    const differenceInMs = now.getTime() - mostRecentDate.getTime();
-    const differenceInMinutes = differenceInMs / (1000 * 60);
-
-    if (differenceInMinutes >= 1) {
-      setIsAutoRefreshing(false);
-      return; // Don't set up auto-refresh if data is older than 1 minute
-    }
-
+    if (!active) return;
     setIsAutoRefreshing(true);
 
     // Set up interval for revalidation
@@ -64,7 +55,7 @@ export const useAutoRefresh = (mostRecentDate: Date, interval = 1000) => {
       clearInterval(intervalId);
       setIsAutoRefreshing(false);
     };
-  }, [mostRecentDate, revalidator, interval]);
+  }, [active, revalidator, interval]);
 
   return isAutoRefreshing;
 };

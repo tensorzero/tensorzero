@@ -10,6 +10,12 @@ export const textInputSchema = z.object({
 });
 export type TextInput = z.infer<typeof textInputSchema>;
 
+export const rawTextInputSchema = z.object({
+  type: z.literal("raw_text"),
+  value: z.string(),
+});
+export type RawTextInput = z.infer<typeof rawTextInputSchema>;
+
 export const toolCallSchema = z
   .object({
     name: z.string(),
@@ -50,12 +56,20 @@ export const base64ImageSchema = z.object({
 });
 export type Base64Image = z.infer<typeof base64ImageSchema>;
 
+export const resolvedBase64ImageSchema = z.object({
+  url: z.string(),
+  mime_type: z.string(),
+});
+export type ResolvedBase64Image = z.infer<typeof resolvedBase64ImageSchema>;
+
 export const storageKindSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("s3_compatible"),
       bucket_name: z.string(),
       region: z.string(),
+      endpoint: z.string().nullable(),
+      allow_http: z.boolean().nullable(),
     })
     .strict(),
   z
@@ -85,14 +99,43 @@ export const imageContentSchema = z.object({
 });
 export type ImageContent = z.infer<typeof imageContentSchema>;
 
+export const resolvedImageContentSchema = z.object({
+  type: z.literal("image"),
+  image: resolvedBase64ImageSchema,
+  storage_path: storagePathSchema,
+});
+export type ResolvedImageContent = z.infer<typeof resolvedImageContentSchema>;
+
+export const resolvedImageContentErrorSchema = z.object({
+  type: z.literal("image_error"),
+  error: z.string(),
+});
+export type ResolvedImageContentError = z.infer<
+  typeof resolvedImageContentErrorSchema
+>;
+
 // Types for input to TensorZero
 export const inputMessageContentSchema = z.discriminatedUnion("type", [
   textInputSchema,
   toolCallContentSchema,
   toolResultContentSchema,
   imageContentSchema,
+  rawTextInputSchema,
 ]);
 export type InputMessageContent = z.infer<typeof inputMessageContentSchema>;
+
+export const resolvedInputMessageContentSchema = z.discriminatedUnion("type", [
+  textInputSchema,
+  toolCallContentSchema,
+  toolResultContentSchema,
+  resolvedImageContentSchema,
+  resolvedImageContentErrorSchema,
+  rawTextInputSchema,
+]);
+
+export type ResolvedInputMessageContent = z.infer<
+  typeof resolvedInputMessageContentSchema
+>;
 
 export const inputMessageSchema = z
   .object({
@@ -102,6 +145,14 @@ export const inputMessageSchema = z
   .strict();
 export type InputMessage = z.infer<typeof inputMessageSchema>;
 
+export const resolvedInputMessageSchema = z
+  .object({
+    role: roleSchema,
+    content: z.array(resolvedInputMessageContentSchema),
+  })
+  .strict();
+export type ResolvedInputMessage = z.infer<typeof resolvedInputMessageSchema>;
+
 export const inputSchema = z
   .object({
     system: z.any().optional(), // Value type from Rust maps to any in TS
@@ -109,6 +160,14 @@ export const inputSchema = z
   })
   .strict();
 export type Input = z.infer<typeof inputSchema>;
+
+export const resolvedInputSchema = z
+  .object({
+    system: z.any().optional(), // Value type from Rust maps to any in TS
+    messages: z.array(resolvedInputMessageSchema).default([]),
+  })
+  .strict();
+export type ResolvedInput = z.infer<typeof resolvedInputSchema>;
 
 // Types for main intermediate representations (content blocks and request messages)
 export const textContentSchema = z.object({
@@ -122,6 +181,7 @@ export const contentBlockSchema = z.discriminatedUnion("type", [
   toolCallContentSchema,
   toolResultContentSchema,
   imageContentSchema,
+  rawTextInputSchema,
 ]);
 export type ContentBlock = z.infer<typeof contentBlockSchema>;
 
