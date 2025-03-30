@@ -202,7 +202,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       </PageHeader>
 
       <SectionsGroup>
-
         <SectionLayout>
           <SectionHeader heading="Variants" />
           <FunctionVariantTable

@@ -396,7 +396,7 @@ export default function BasicInfo({
           );
         })()}
 
-        {/* Weight */}
+      {/* Weight */}
       <BasicInfoItem>
         <BasicInfoItemTitle>Weight</BasicInfoItemTitle>
         <BasicInfoItemContent>
