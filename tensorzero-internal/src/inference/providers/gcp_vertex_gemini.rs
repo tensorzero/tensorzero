@@ -1390,7 +1390,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
@@ -1428,7 +1428,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-pro");
@@ -1479,7 +1479,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         // JSON schema should be supported for Gemini Pro models
@@ -1547,7 +1547,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::On,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         // JSON mode should be supported for Gemini Flash models but without a schema
@@ -1647,7 +1647,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let request_body = GCPVertexGeminiRequest {
@@ -1733,7 +1733,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let request_body = GCPVertexGeminiRequest {
@@ -1908,7 +1908,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-1.5-pro-001");
@@ -1952,7 +1952,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-2.0-flash-lite");

@@ -63,9 +63,10 @@ async fn run_evals_json() {
     run_eval(args, eval_run_id, &mut output).await.unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
     let mut total_the = 0;
-    for line in output_str.lines() {
+    for line in output_lines {
         let parsed: EvalUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
         let parsed = match parsed {
@@ -199,8 +200,9 @@ async fn run_exact_match_eval_chat() {
     run_eval(args, eval_run_id, &mut output).await.unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
-    for line in output_str.lines() {
+    for line in output_lines {
         let parsed: EvalUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
         let parsed = match parsed {
@@ -301,9 +303,10 @@ async fn run_llm_judge_eval_chat() {
     run_eval(args, eval_run_id, &mut output).await.unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
     let mut total_topic_fs = 0;
-    for line in output_str.lines() {
+    for line in output_lines {
         let parsed: EvalUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
         let parsed = match parsed {
@@ -418,6 +421,10 @@ async fn run_llm_judge_eval_chat_human_readable() {
     // Let's make sure this threshold passes and the output is reasonable
     run_eval(args, eval_run_id, &mut output).await.unwrap();
     let output_str = String::from_utf8(output).unwrap();
+    // Check for run info at the beginning
+    assert!(output_str.contains("Run ID:"));
+    assert!(output_str.contains("Number of datapoints:"));
+    // Check for the expected evaluation results
     assert!(output_str.contains("topic_starts_with_f: 0.30 ± 0.14"));
     assert!(output_str.contains("exact_match: 0.00 ± 0.00"));
 }
@@ -447,6 +454,10 @@ async fn run_llm_judge_eval_json_human_readable() {
     // Let's make sure this threshold fails and the output is reasonable
     let err = run_eval(args, eval_run_id, &mut output).await.unwrap_err();
     let output_str = String::from_utf8(output).unwrap();
+    // Check for run info at the beginning
+    assert!(output_str.contains("Run ID:"));
+    assert!(output_str.contains("Number of datapoints:"));
+    // Check for the expected evaluation results
     assert!(output_str.contains("count_sports: 0.50 ± 0.20"));
     // We don't assert the exact value here because it's not deterministic
     assert!(output_str.contains("exact_match: "));
@@ -571,7 +582,8 @@ async fn run_evals_errors() {
     run_eval(args, eval_run_id, &mut output).await.unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
-    for line in output_str.lines() {
+    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    for line in output_lines {
         let parsed: EvalUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
         let error = match parsed {

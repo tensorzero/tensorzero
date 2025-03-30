@@ -5,11 +5,13 @@ import {
   type ParsedChatInferenceDatapointRow,
 } from "./datasets";
 import {
+  countDatapointsForDatasetFunction,
   countRowsForDataset,
   getDatapoint,
   getDatasetCounts,
   getDatasetRows,
   insertDatapoint,
+  insertRowsForDataset,
   staleDatapoint,
 } from "./datasets.server";
 import { expect, test, describe } from "vitest";
@@ -23,7 +25,7 @@ describe("countRowsForDataset", () => {
       output_source: "none",
     });
     const rows = await countRowsForDataset(dataset_params);
-    expect(rows).toBe(644);
+    expect(rows).toBe(720);
   });
 
   test("returns the correct number of rows for a specific variant", async () => {
@@ -34,7 +36,7 @@ describe("countRowsForDataset", () => {
       output_source: "none",
     });
     const rows = await countRowsForDataset(dataset_params);
-    expect(rows).toBe(110);
+    expect(rows).toBe(152);
   });
 
   test("throws an error if function_name is not provided but variant_name is", async () => {
@@ -260,14 +262,14 @@ describe("getDatasetCounts", () => {
       // Because other tests insert into the table, there could be additional datasets
       expect.arrayContaining([
         {
+          count: 118,
+          dataset_name: "foo",
+          last_updated: "2025-03-23T20:03:59Z",
+        },
+        {
           count: 6,
           dataset_name: "bar",
           last_updated: "2025-03-14T17:38:09Z",
-        },
-        {
-          count: 116,
-          dataset_name: "foo",
-          last_updated: "2025-02-19T00:25:29Z",
         },
       ]),
     );
@@ -291,7 +293,7 @@ describe("getDatasetRows", () => {
       if (rows.length !== pageSize) break;
     }
 
-    expect(allRows.length).toBe(116);
+    expect(allRows.length).toBe(118);
     expect(allRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -713,5 +715,65 @@ describe("datapoint operations", () => {
   test("handles staling of non-existent datapoint", async () => {
     // Should not throw
     await expect(staleDatapoint("fake", uuid(), "chat")).resolves.not.toThrow();
+  });
+});
+
+describe("countDatapointsForDatasetFunction", () => {
+  test("returns the correct count for a dataset and chat function", async () => {
+    const count = await countDatapointsForDatasetFunction("foo", "write_haiku");
+    expect(count).toBe(77);
+  });
+  test("returns the correct count for a dataset and json function", async () => {
+    const count = await countDatapointsForDatasetFunction(
+      "foo",
+      "extract_entities",
+    );
+    expect(count).toBe(42);
+  });
+  test("returns 0 for a non-existent dataset and real function", async () => {
+    const count = await countDatapointsForDatasetFunction(
+      "fake",
+      "write_haiku",
+    );
+    expect(count).toBe(0);
+  });
+  test("returns 0 for a real dataset and non-existent function", async () => {
+    const count = await countDatapointsForDatasetFunction("foo", "fake");
+    expect(count).toBeNull();
+  });
+});
+
+describe("insertRowsForDataset", () => {
+  test("handles invalid dataset names", async () => {
+    await expect(
+      insertRowsForDataset({
+        dataset_name: "builder",
+        inferenceType: "chat",
+        extra_where: [],
+        extra_params: {},
+        output_source: "none",
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("insertDatapoint", () => {
+  test("handles invalid dataset names", async () => {
+    await expect(
+      insertDatapoint({
+        dataset_name: "builder",
+        function_name: "write_haiku",
+        id: uuid(),
+        episode_id: null,
+        input: { messages: [] },
+        output: [],
+        tool_params: {},
+        tags: {},
+        auxiliary: "",
+        updated_at: new Date().toISOString(),
+        is_deleted: false,
+        staled_at: null,
+      }),
+    ).rejects.toThrow();
   });
 });

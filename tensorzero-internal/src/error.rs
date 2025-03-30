@@ -172,6 +172,9 @@ pub enum ErrorDetails {
         variant_name: String,
         message: String,
     },
+    InvalidDatasetName {
+        dataset_name: String,
+    },
     InvalidDiclConfig {
         message: String,
     },
@@ -348,6 +351,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidBatchParams { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidCandidate { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidMessage { .. } => tracing::Level::WARN,
@@ -431,6 +435,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidBatchParams { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidModel { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -669,6 +674,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::InvalidDiclConfig { message } => {
                 write!(f, "Invalid dynamic in-context learning config: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new", message)
+            }
+            ErrorDetails::InvalidDatasetName { dataset_name } => {
+                write!(f, "Invalid dataset name: {}. Datasets cannot be named \"builder\" or begin with \"tensorzero::\"", dataset_name)
             }
             ErrorDetails::InvalidFunctionVariants { message } => write!(f, "{}", message),
             ErrorDetails::InvalidTensorzeroUuid { message, kind } => {

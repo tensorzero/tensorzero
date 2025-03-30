@@ -6,6 +6,8 @@ import {
   Functions,
   SupervisedFineTuning,
   Documentation,
+  Dataset,
+  Evaluation,
 } from "~/components/icons/Icons";
 import { useSidebar } from "~/components/ui/sidebar";
 import { cn } from "~/utils/common";
@@ -28,6 +30,9 @@ import {
   SidebarGroupLabel,
   SidebarGroupContent,
 } from "~/components/ui/sidebar";
+
+const FF_ENABLE_DATASETS =
+  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
 
 interface NavigationItem {
   title: string;
@@ -71,6 +76,25 @@ const navigation: NavigationSection[] = [
       },
     ],
   },
+  ...(FF_ENABLE_DATASETS
+    ? [
+        {
+          title: "Workflows",
+          items: [
+            {
+              title: "Datasets",
+              url: "/datasets",
+              icon: Dataset,
+            },
+            {
+              title: "Evaluations",
+              url: "/evaluations",
+              icon: Evaluation,
+            },
+          ],
+        },
+      ]
+    : []),
 ];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {

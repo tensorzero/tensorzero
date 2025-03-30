@@ -20,6 +20,7 @@ from tensorzero import (
     InferenceInput,
     InferenceResponse,
 )
+from tensorzero.types import ExtraBody
 
 class BaseTensorZeroGateway:
     pass
@@ -87,6 +88,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         tags: Optional[Dict[str, str]] = None,
         credentials: Optional[Dict[str, str]] = None,
         cache_options: Optional[Dict[str, Any]] = None,
+        extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
     ) -> Union[InferenceResponse, Iterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.
@@ -115,6 +117,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
                             It should be one of: "auto", "required", "off", or {"specific": str}. The last option pins the request to a specific tool name.
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
         :param tags: If set, adds tags to the inference request.
+        :param extra_body: If set, injects extra fields into the provider request body.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
         """
@@ -226,6 +229,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         tags: Optional[Dict[str, str]] = None,
         credentials: Optional[Dict[str, str]] = None,
         cache_options: Optional[Dict[str, Any]] = None,
+        extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
     ) -> Union[InferenceResponse, AsyncIterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.
@@ -254,6 +258,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
                             It should be one of: "auto", "required", "off", or {"specific": str}. The last option pins the request to a specific tool name.
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
         :param tags: If set, adds tags to the inference request.
+        :param extra_body: If set, injects extra fields into the provider request body.
         :return: If stream is false, returns an InferenceResponse.
                  If stream is true, returns an async iterator that yields InferenceChunks as they come in.
         """

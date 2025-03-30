@@ -106,7 +106,7 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
         /// Captures the raw request from `modify_before_signing`.
         /// After the request is executed, we use this to retrieve the raw request.
         raw_request: Arc<Mutex<Option<String>>>,
-        extra_body: Option<FullExtraBodyConfig>,
+        extra_body: FullExtraBodyConfig,
         model_provider_info: ModelProviderRequestInfo,
         model_name: String,
     }

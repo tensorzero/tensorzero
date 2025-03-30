@@ -1,196 +1,227 @@
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
-import { Badge } from "~/components/ui/badge";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "~/components/ui/dropdown-menu";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "~/components/ui/command";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "~/components/ui/popover";
 import { useSearchParams, useNavigate } from "react-router";
 import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
+import { useSearchEvalRunsFetcher } from "~/routes/api/evaluations/search_runs/$eval_name/route";
+import { useColorAssigner } from "./ColorAssigner";
+import { getLastUuidSegment } from "~/components/evaluations/EvalRunBadge";
+import EvalRunBadge from "~/components/evaluations/EvalRunBadge";
 
 interface VariantSelectorProps {
-  available_run_ids: EvaluationRunInfo[];
+  evalName: string;
+  mostRecentEvalInferenceDates: Map<string, Date>;
+  selectedRunIdInfos: EvaluationRunInfo[];
 }
 
-// Helper function to get the last 6 digits of a UUID
-export function getLastUuidSegment(uuid: string): string {
-  return uuid.slice(-6);
-}
-
-export function VariantSelector({ available_run_ids }: VariantSelectorProps) {
+export function VariantSelector({
+  evalName,
+  mostRecentEvalInferenceDates,
+  selectedRunIdInfos,
+}: VariantSelectorProps) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
-  const selectedRunIds = selectedRunIdsParam
-    ? selectedRunIdsParam.split(",")
-    : [];
+  const selectedRunIds = selectedRunIdInfos.map((info) => info.eval_run_id);
+  const [open, setOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
 
-  // State to track if dropdown is open
-  const [isOpen, setIsOpen] = useState(false);
+  // Maximum number of selections allowed
+  const MAX_SELECTIONS = 5;
+  const canAddMore = selectedRunIds.length < MAX_SELECTIONS;
+
+  // Use the color assigner context
+  const { getColor } = useColorAssigner();
+
+  const { data, isLoading } = useSearchEvalRunsFetcher({
+    evalName: evalName,
+    query: searchValue,
+  });
+  const availableRunInfos = data || [];
 
   // Update the URL with the selected run IDs
-  const updateSelectedRunIds = (runIds: string[]) => {
+  const updateSelectedRunIds = (runIdInfos: EvaluationRunInfo[]) => {
     const newParams = new URLSearchParams(searchParams);
-    newParams.set("eval_run_ids", runIds.join(","));
+    newParams.set(
+      "eval_run_ids",
+      runIdInfos.map((info) => info.eval_run_id).join(","),
+    );
     navigate(`?${newParams.toString()}`, { replace: true });
   };
 
   // Toggle a run selection
   const toggleRun = (runId: string) => {
+    const runInfo = availableRunInfos.find(
+      (info) => info.eval_run_id === runId,
+    );
+    if (!runInfo) return;
+
     if (selectedRunIds.includes(runId)) {
-      updateSelectedRunIds(selectedRunIds.filter((id) => id !== runId));
-    } else {
-      updateSelectedRunIds([...selectedRunIds, runId]);
+      // Remove the run
+      const newSelectedRunIdInfos = selectedRunIdInfos.filter(
+        (info) => info.eval_run_id !== runId,
+      );
+      updateSelectedRunIds(newSelectedRunIdInfos);
+    } else if (canAddMore) {
+      // Add the run only if we haven't reached the limit
+      updateSelectedRunIds([...selectedRunIdInfos, runInfo]);
     }
   };
 
   // Select all runs
   const selectAll = () => {
-    updateSelectedRunIds(available_run_ids.map((info) => info.eval_run_id));
+    const allSelected = availableRunInfos.every((info) =>
+      selectedRunIds.includes(info.eval_run_id),
+    );
+
+    if (allSelected) {
+      // Deselect all
+      updateSelectedRunIds([]);
+    } else {
+      // Select all, but respect the maximum limit
+      const runsToSelect = availableRunInfos.slice(0, MAX_SELECTIONS);
+      updateSelectedRunIds(runsToSelect);
+    }
+  };
+
+  // Function to remove a specific run
+  const removeRun = (runId: string, e: React.MouseEvent) => {
+    // Stop the tooltip from triggering
+    e.stopPropagation();
+
+    const newSelectedRunIdInfos = selectedRunIdInfos.filter(
+      (info) => info.eval_run_id !== runId,
+    );
+    updateSelectedRunIds(newSelectedRunIdInfos);
   };
 
   return (
     <div className="mb-6">
       <div className="flex flex-col space-y-2">
-        <h2 className="text-lg font-semibold">Compare Variants</h2>
-
-        <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-          <DropdownMenuTrigger asChild>
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
             <Button
               variant="outline"
-              className="flex w-56 items-center justify-between gap-2"
+              role="combobox"
+              aria-expanded={open}
+              className="flex w-96 items-center justify-between gap-2"
             >
-              <span>Select run ID...</span>
-              <ChevronDown className="h-4 w-4" />
+              <span>Select evaluation runs to compare...</span>
+              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuLabel>Select Run IDs</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {available_run_ids.map((info) => {
-              const isSelected = selectedRunIds.includes(info.eval_run_id);
-              const variantColor = getVariantColorClass(info.eval_run_id);
-              const runIdSegment = getLastUuidSegment(info.eval_run_id);
-
-              return (
-                <DropdownMenuCheckboxItem
-                  key={info.eval_run_id}
-                  checked={isSelected}
-                  onCheckedChange={() => toggleRun(info.eval_run_id)}
-                  className="flex items-center gap-2"
-                >
-                  <div className="flex flex-1 items-center gap-2">
-                    <Badge className={`${variantColor} h-3 w-3 p-0`} />
-                    <span className="flex-1 truncate">{info.variant_name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {runIdSegment}
+          </PopoverTrigger>
+          <PopoverContent className="w-96 p-0">
+            <Command>
+              <CommandInput
+                placeholder="Search by variant name or evaluation run ID..."
+                value={searchValue}
+                onValueChange={setSearchValue}
+              />
+              <CommandList>
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600"></div>
+                    <span className="ml-2 text-sm text-muted-foreground">
+                      Loading...
                     </span>
                   </div>
-                </DropdownMenuCheckboxItem>
-              );
-            })}
-            <DropdownMenuSeparator />
-            <DropdownMenuCheckboxItem
-              checked={selectedRunIds.length === available_run_ids.length}
-              onCheckedChange={selectAll}
-              className="font-medium"
-            >
-              Select All
-            </DropdownMenuCheckboxItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+                ) : (
+                  <>
+                    <CommandEmpty>No results found.</CommandEmpty>
+                    {!canAddMore && !isLoading && (
+                      <div className="px-2 py-1.5 text-sm text-amber-600">
+                        Maximum of {MAX_SELECTIONS} runs can be selected.
+                      </div>
+                    )}
+                    <CommandGroup>
+                      {availableRunInfos.map((info) => {
+                        const isSelected = selectedRunIds.includes(
+                          info.eval_run_id,
+                        );
+                        const variantColor = getColor(info.eval_run_id);
+                        const runIdSegment = getLastUuidSegment(
+                          info.eval_run_id,
+                        );
+                        const isDisabled = !isSelected && !canAddMore;
+
+                        return (
+                          <CommandItem
+                            key={info.eval_run_id}
+                            value={`${info.variant_name} ${info.eval_run_id}`}
+                            onSelect={() => toggleRun(info.eval_run_id)}
+                            className={`flex items-center gap-2 ${
+                              isDisabled ? "cursor-not-allowed opacity-50" : ""
+                            }`}
+                            disabled={isDisabled}
+                          >
+                            <div
+                              className={`${variantColor} h-3 w-3 rounded-full`}
+                            />
+                            <span className="flex-1 truncate">
+                              {info.variant_name}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {runIdSegment}
+                            </span>
+                            {isSelected && <Check className="ml-2 h-4 w-4" />}
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                    {availableRunInfos.length > 1 && (
+                      <>
+                        <CommandSeparator />
+                        <CommandGroup>
+                          <CommandItem
+                            onSelect={selectAll}
+                            className="font-medium"
+                          >
+                            {availableRunInfos.every((info) =>
+                              selectedRunIds.includes(info.eval_run_id),
+                            )
+                              ? "Deselect All"
+                              : `Select ${
+                                  availableRunInfos.length > MAX_SELECTIONS
+                                    ? `First ${MAX_SELECTIONS}`
+                                    : "All"
+                                }`}
+                          </CommandItem>
+                        </CommandGroup>
+                      </>
+                    )}
+                  </>
+                )}
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Display selected variants as badges */}
       <div className="mt-3 flex flex-wrap gap-2">
-        {selectedRunIds.map((runId) => {
-          const info = available_run_ids.find((i) => i.eval_run_id === runId);
-          if (!info) return null;
-
-          const variantColor = getVariantColor(runId, available_run_ids);
-          const runIdSegment = getLastUuidSegment(runId);
-
-          return (
-            <TooltipProvider key={runId}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    className={`${variantColor} flex cursor-help items-center gap-1.5 px-2 py-1`}
-                  >
-                    <span>{info.variant_name}</span>
-                    <span className="border-l border-white/30 pl-1.5 text-xs opacity-80">
-                      {runIdSegment}
-                    </span>
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="p-2">
-                  <p className="text-xs">Run ID: {runId}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          );
-        })}
+        {selectedRunIdInfos.map((info) => (
+          <EvalRunBadge
+            key={info.eval_run_id}
+            runInfo={info}
+            getColor={getColor}
+            lastUpdateDate={mostRecentEvalInferenceDates.get(info.eval_run_id)}
+            onRemove={(e) => removeRun(info.eval_run_id, e)}
+          />
+        ))}
       </div>
     </div>
   );
-}
-
-// Helper function to get the appropriate color class based on variant
-export function getVariantColor(
-  runId: string,
-  allRunIds: EvaluationRunInfo[],
-  isSelected = true,
-) {
-  // Assign a color based on the index in the array
-  const index = allRunIds.findIndex((info) => info.eval_run_id === runId);
-
-  switch (index % 4) {
-    case 0:
-      return isSelected
-        ? "bg-blue-600 hover:bg-blue-700"
-        : "border-blue-600 text-blue-600 hover:bg-blue-50";
-    case 1:
-      return isSelected
-        ? "bg-purple-600 hover:bg-purple-700"
-        : "border-purple-600 text-purple-600 hover:bg-purple-50";
-    case 2:
-      return isSelected
-        ? "bg-green-600 hover:bg-green-700"
-        : "border-green-600 text-green-600 hover:bg-green-50";
-    default:
-      return isSelected
-        ? "bg-gray-600 hover:bg-gray-700"
-        : "border-gray-600 text-gray-600 hover:bg-gray-50";
-  }
-}
-
-// Helper function to get color class for the small badge in dropdown
-function getVariantColorClass(runId: string) {
-  // Simple color assignment based on the UUID
-  const hashCode = Array.from(runId).reduce(
-    (acc, char) => char.charCodeAt(0) + ((acc << 5) - acc),
-    0,
-  );
-
-  switch (Math.abs(hashCode) % 4) {
-    case 0:
-      return "bg-blue-600";
-    case 1:
-      return "bg-purple-600";
-    case 2:
-      return "bg-green-600";
-    default:
-      return "bg-gray-600";
-  }
 }

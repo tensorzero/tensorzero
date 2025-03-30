@@ -7,6 +7,7 @@ use clap::Parser;
 use dataset::query_dataset;
 use evaluators::evaluate_inference;
 use helpers::{get_tool_params_args, resolved_input_to_input, setup_logging};
+use serde::{Deserialize, Serialize};
 use stats::{EvalError, EvalInfo, EvalStats, EvalUpdate};
 use tensorzero::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
@@ -110,6 +111,15 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
     let eval_name = Arc::new(args.name);
     let dataset_len = dataset.len();
     let mut task_id_to_datapoint_id = HashMap::new();
+
+    write_run_info(
+        &mut writer,
+        &RunInfo {
+            eval_run_id,
+            num_datapoints: dataset_len,
+        },
+        &args.format,
+    )?;
 
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
@@ -326,6 +336,29 @@ async fn infer_datapoint(
             bail!("Streaming inference should never happen in evals")
         }
     }
+}
+
+fn write_run_info(
+    writer: &mut impl Write,
+    run_info: &RunInfo,
+    format: &OutputFormat,
+) -> Result<()> {
+    match format {
+        OutputFormat::Jsonl => {
+            writeln!(writer, "{}", serde_json::to_string(run_info)?)?;
+        }
+        OutputFormat::HumanReadable => {
+            writeln!(writer, "Run ID: {}", run_info.eval_run_id)?;
+            writeln!(writer, "Number of datapoints: {}", run_info.num_datapoints)?;
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RunInfo {
+    pub eval_run_id: Uuid,
+    pub num_datapoints: usize,
 }
 
 pub struct ThrottledTensorZeroClient {

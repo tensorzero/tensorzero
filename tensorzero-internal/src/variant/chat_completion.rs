@@ -207,6 +207,14 @@ impl ChatCompletionConfig {
                 self.presence_penalty,
                 self.frequency_penalty,
             );
+
+        let extra_body = FullExtraBodyConfig {
+            extra_body: self.extra_body.clone(),
+            inference_extra_body: inference_config
+                .extra_body
+                .clone()
+                .filter(inference_config.variant_name),
+        };
         prepare_model_inference_request(
             messages,
             system,
@@ -215,16 +223,7 @@ impl ChatCompletionConfig {
             stream,
             inference_params,
             self.json_mode,
-            self.extra_body.clone().map(|extra_body| {
-                let inference_extra_body = inference_config
-                    .extra_body
-                    .clone()
-                    .filter(inference_config.variant_name);
-                FullExtraBodyConfig {
-                    extra_body,
-                    inference_extra_body,
-                }
-            }),
+            extra_body,
         )
     }
 }
@@ -507,7 +506,7 @@ mod tests {
             max_tokens: None,
             seed: None,
             retries: RetryConfig::default(),
-            extra_body: None,
+            extra_body: Default::default(),
         };
 
         // Test case 1: Regular user message
@@ -867,7 +866,7 @@ mod tests {
                 ModelProvider {
                     name: "good".into(),
                     config: good_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -878,7 +877,7 @@ mod tests {
                 ModelProvider {
                     name: "json_provider".into(),
                     config: json_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -893,7 +892,7 @@ mod tests {
                 ModelProvider {
                     name: "tool_provider".into(),
                     config: tool_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -904,7 +903,7 @@ mod tests {
                 ModelProvider {
                     name: "error".into(),
                     config: error_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1091,7 +1090,7 @@ mod tests {
                 ModelProvider {
                     name: "good_provider".into(),
                     config: good_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1351,7 +1350,7 @@ mod tests {
                 path: user_template_name.into(),
                 contents: "".to_string(),
             }),
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let result = chat_completion_config
@@ -1649,7 +1648,7 @@ mod tests {
                 ModelProvider {
                     name: "good_provider".into(),
                     config: good_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1660,7 +1659,7 @@ mod tests {
                 ModelProvider {
                     name: "error_provider".into(),
                     config: error_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };

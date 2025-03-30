@@ -18,6 +18,13 @@ const DEFAULT_CONFIG_PATH = "config/tensorzero.toml";
 const ENV_CONFIG_PATH = process.env.TENSORZERO_UI_CONFIG_PATH;
 const CACHE_TTL_MS = 1000 * 60; // 1 minute
 
+export function getConfigPath() {
+  if (ENV_CONFIG_PATH) {
+    return ENV_CONFIG_PATH;
+  }
+  return DEFAULT_CONFIG_PATH;
+}
+
 /*
 Config Context provider:
 

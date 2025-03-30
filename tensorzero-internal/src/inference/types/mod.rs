@@ -382,7 +382,7 @@ pub struct ModelInferenceRequest<'a> {
     pub json_mode: ModelInferenceRequestJsonMode,
     pub function_type: FunctionType,
     pub output_schema: Option<&'a Value>,
-    pub extra_body: Option<FullExtraBodyConfig>,
+    pub extra_body: FullExtraBodyConfig,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.

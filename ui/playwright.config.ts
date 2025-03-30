@@ -31,7 +31,7 @@ export default defineConfig({
       : "http://localhost:5173",
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: "on-first-retry",
+    trace: "on",
     video: "on-first-retry",
   },
 
@@ -79,6 +79,8 @@ export default defineConfig({
     : {
         command: "pnpm run dev",
         url: "http://localhost:5173",
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer: true,
+        stdout: "pipe",
+        stderr: "pipe",
       },
 });
