@@ -21,7 +21,7 @@ export default function DatasetTable({
         <TableHeader>
           <TableRow>
             <TableHead>Dataset Name</TableHead>
-            <TableHead>Count</TableHead>
+            <TableHead>Datapoint Count</TableHead>
             <TableHead>Last Updated</TableHead>
           </TableRow>
         </TableHeader>
