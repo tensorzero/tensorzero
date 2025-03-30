@@ -190,8 +190,7 @@ function MessageContent({
           case "image_error":
             return (
               <div key={index}>
-                <div className="mb-2 text-red-500">Failed to resolve image</div>
-                <SkeletonImage />
+                <SkeletonImage error={true} />
               </div>
             );
           default:
@@ -393,5 +392,17 @@ function ToolResultBlock({
 }
 
 function ImageBlock({ image }: { image: ResolvedImageContent }) {
-  return <img src={image.image.url} alt="Image" />;
+  return (
+    <div className="w-60 rounded bg-slate-100 p-2 text-xs text-slate-300">
+      <div className="mb-2">Image</div>
+      <a
+        href={image.image.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        download={"tensorzero_" + image.storage_path.path}
+      >
+        <img src={image.image.url} alt="Image" />
+      </a>
+    </div>
+  );
 }
