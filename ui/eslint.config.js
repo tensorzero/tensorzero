@@ -44,6 +44,13 @@ export default [
       "react/jsx-uses-react": "error",
       "react/jsx-uses-vars": "error",
       "react/react-in-jsx-scope": "off",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Literal[value='tensorzero_ui_fixtures']",
+          message: "The string 'tensorzero_ui_fixtures' is not allowed.",
+        },
+      ],
     },
   },
   pluginJs.configs.recommended,
