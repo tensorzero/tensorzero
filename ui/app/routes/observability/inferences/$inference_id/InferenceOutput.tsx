@@ -71,7 +71,7 @@ export function OutputContent({ output, outputSchema }: OutputProps) {
                 content={
                   output.parsed
                     ? JSON.stringify(output.parsed, null, 2)
-                    : "No parsed output available"
+                    : "The inference output failed to parse against the schema."
                 }
                 showLineNumbers={true}
               />

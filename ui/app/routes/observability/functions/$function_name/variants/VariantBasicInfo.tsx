@@ -34,7 +34,7 @@ export default function BasicInfo({
       <BasicInfoItem>
         <BasicInfoItemTitle>Type</BasicInfoItemTitle>
         <BasicInfoItemContent>
-          <Chip label={variantConfig.type} />
+          <Chip label={variantConfig.type} font="mono" />
         </BasicInfoItemContent>
       </BasicInfoItem>
 
@@ -50,14 +50,6 @@ export default function BasicInfo({
             link={`/observability/functions/${function_name}`}
             font="mono"
           />
-        </BasicInfoItemContent>
-      </BasicInfoItem>
-
-      {/* Weight */}
-      <BasicInfoItem>
-        <BasicInfoItemTitle>Weight</BasicInfoItemTitle>
-        <BasicInfoItemContent>
-          <Chip label={variantConfig.weight.toString()} />
         </BasicInfoItemContent>
       </BasicInfoItem>
 
@@ -403,6 +395,14 @@ export default function BasicInfo({
             </>
           );
         })()}
+
+        {/* Weight */}
+      <BasicInfoItem>
+        <BasicInfoItemTitle>Weight</BasicInfoItemTitle>
+        <BasicInfoItemContent>
+          <Chip label={variantConfig.weight.toString()} />
+        </BasicInfoItemContent>
+      </BasicInfoItem>
     </BasicInfoLayout>
   );
 }

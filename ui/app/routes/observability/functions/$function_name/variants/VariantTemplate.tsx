@@ -58,19 +58,19 @@ export default function VariantTemplate({
         "system",
         "System Template",
         templates.system,
-        "No system template defined",
+        "No system template defined.",
       ),
       createTemplateTab(
         "user",
         "User Template",
         templates.user,
-        "No user template defined",
+        "No user template defined.",
       ),
       createTemplateTab(
         "assistant",
         "Assistant Template",
         templates.assistant,
-        "No assistant template defined",
+        "No assistant template defined.",
       ),
     ];
 
@@ -86,7 +86,7 @@ export default function VariantTemplate({
             const template = templates[activeTab as keyof typeof templates];
 
             return (
-              <SnippetContent maxHeight={400}>
+              <SnippetContent maxHeight={240}>
                 <TextMessage
                   content={template}
                   emptyMessage={tab?.emptyMessage}
@@ -110,7 +110,7 @@ export default function VariantTemplate({
         "system_instructions",
         "System Instructions",
         content,
-        "No system instructions defined",
+        "No system instructions defined.",
       ),
     ];
 
@@ -118,10 +118,10 @@ export default function VariantTemplate({
       <SnippetLayout>
         <SnippetTabs tabs={tabs} defaultTab="system_instructions">
           {() => (
-            <SnippetContent maxHeight={400}>
+            <SnippetContent maxHeight={240}>
               <TextMessage
                 content={content}
-                emptyMessage="No system instructions defined"
+                emptyMessage="No system instructions defined."
               />
             </SnippetContent>
           )}

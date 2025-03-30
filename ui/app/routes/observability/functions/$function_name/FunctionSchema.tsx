@@ -43,19 +43,19 @@ export default function FunctionSchema({
       "system",
       "System Schema",
       schemas.system,
-      "No system schema defined",
+      "No system schema defined.",
     ),
     createSchemaTab(
       "user",
       "User Schema",
       schemas.user,
-      "No user schema defined",
+      "No user schema defined.",
     ),
     createSchemaTab(
       "assistant",
       "Assistant Schema",
       schemas.assistant,
-      "No assistant schema defined",
+      "No assistant schema defined.",
     ),
     ...(functionConfig.type === "json"
       ? [
@@ -63,7 +63,7 @@ export default function FunctionSchema({
             "output",
             "Output Schema",
             schemas.output,
-            "No output schema defined",
+            "No output schema defined.",
           ),
         ]
       : []),
@@ -84,7 +84,7 @@ export default function FunctionSchema({
             : undefined;
 
           return (
-            <SnippetContent maxHeight={360}>
+            <SnippetContent maxHeight={240}>
               <CodeMessage
                 content={formattedContent}
                 showLineNumbers={true}

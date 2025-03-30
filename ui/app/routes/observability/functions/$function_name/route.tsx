@@ -202,10 +202,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       </PageHeader>
 
       <SectionsGroup>
-        <SectionLayout>
-          <SectionHeader heading="Schema" />
-          <FunctionSchema functionConfig={function_config} />
-        </SectionLayout>
 
         <SectionLayout>
           <SectionHeader heading="Variants" />
@@ -216,7 +212,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         </SectionLayout>
 
         <SectionLayout>
-          <SectionHeader heading="Metric" />
+          <SectionHeader heading="Metrics" />
           <MetricSelector
             metricsWithFeedback={metricsWithFeedback}
             selectedMetric={metric_name || ""}
@@ -230,6 +226,11 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
               onTimeGranularityChange={handleTimeGranularityChange}
             />
           )}
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Schemas" />
+          <FunctionSchema functionConfig={function_config} />
         </SectionLayout>
 
         <SectionLayout>

@@ -87,7 +87,7 @@ interface SnippetContentProps {
 export function SnippetContent({
   children,
   className,
-  maxHeight = 560,
+  maxHeight = 360,
 }: SnippetContentProps) {
   const [expanded, setExpanded] = useState(false);
   const [needsExpansion, setNeedsExpansion] = useState(false);
@@ -218,12 +218,12 @@ export function SnippetTabs({
       </TabsList>
 
       {typeof children === "function" ? (
-        <TabsContent value={activeTab} className="mt-2">
+        <TabsContent value={activeTab}>
           {children(activeTab)}
         </TabsContent>
       ) : (
         tabs.map((tab) => (
-          <TabsContent key={tab.id} value={tab.id} className="mt-2">
+          <TabsContent key={tab.id} value={tab.id}>
             {tab.content}
           </TabsContent>
         ))
