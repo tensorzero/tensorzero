@@ -38,6 +38,7 @@ from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
+    DynamicEvaluationRunResponse,
     FeedbackResponse,
     FinishReason,
     ImageBase64,
@@ -2638,3 +2639,48 @@ def test_content_block_text_init_validation():
     text = Text(type="text", arguments=arguments)
     assert text.text is None
     assert text.arguments == arguments
+
+
+def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
+    response = sync_client.dynamic_evaluation_run(
+        variants={"basic_test": "test2"},
+        tags={"foo": "bar"},
+    )
+    # assert isinstance(response, DynamicEvaluationRunResponse)
+    episode_id = response.episode_id
+    assert isinstance(episode_id, UUID)
+    assert episode_id is not None
+    inference_response = sync_client.inference(
+        function_name="basic_test",
+        episode_id=episode_id,
+        input={
+            "messages": [{"role": "user", "content": "Hello, world!"}],
+            "system": {"assistant_name": "Dr. Mehta"},
+        },
+    )
+    assert isinstance(inference_response, ChatInferenceResponse)
+    assert inference_response.content[0].text.startswith("Megumin")
+    assert inference_response.variant_name == "test2"
+
+
+@pytest.mark.asyncio
+async def test_async_dynamic_evaluation_run(async_client: AsyncTensorZeroGateway):
+    response = await async_client.dynamic_evaluation_run(
+        variants={"basic_test": "test2"},
+        tags={"foo": "bar"},
+    )
+    assert isinstance(response, DynamicEvaluationRunResponse)
+    episode_id = response.episode_id
+    assert isinstance(episode_id, UUID)
+    assert episode_id is not None
+    inference_response = await async_client.inference(
+        function_name="basic_test",
+        episode_id=episode_id,
+        input={
+            "messages": [{"role": "user", "content": "Hello, world!"}],
+            "system": {"assistant_name": "Dr. Mehta"},
+        },
+    )
+    assert isinstance(inference_response, ChatInferenceResponse)
+    assert inference_response.content[0].text.startswith("Megumin")
+    assert inference_response.variant_name == "test2"

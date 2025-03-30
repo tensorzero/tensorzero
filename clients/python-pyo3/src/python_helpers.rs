@@ -4,7 +4,9 @@
 use std::{borrow::Cow, collections::HashMap};
 
 use pyo3::{exceptions::PyValueError, intern, prelude::*, sync::GILOnceCell, types::PyDict};
-use tensorzero_rust::{FeedbackResponse, InferenceResponse, InferenceResponseChunk, Tool};
+use tensorzero_rust::{
+    DynamicEvaluationRunResponse, FeedbackResponse, InferenceResponse, InferenceResponseChunk, Tool,
+};
 use uuid::Uuid;
 
 use crate::{tensorzero_internal_error, JSON_DUMPS, JSON_LOADS};
@@ -53,6 +55,26 @@ pub fn parse_inference_chunk(py: Python<'_>, chunk: InferenceResponseChunk) -> P
 
     let json_data = serialize_to_dict(py, chunk)?;
     let python_parsed = parse_inference_chunk.call1(py, (json_data,))?;
+    Ok(python_parsed.into_any())
+}
+
+pub fn parse_dynamic_evaluation_run_response(
+    py: Python<'_>,
+    data: DynamicEvaluationRunResponse,
+) -> PyResult<Py<PyAny>> {
+    static PARSE_DYNAMIC_EVALUATION_RUN_RESPONSE: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
+    // This should never actually fail, since we're just importing code defined in our own Python
+    // package. However, we still produce a Python error if it fails, rather than panicking
+    // and bringing down the entire Python process.
+    let parse_dynamic_evaluation_run_response = PARSE_DYNAMIC_EVALUATION_RUN_RESPONSE
+        .get_or_try_init::<_, PyErr>(py, || {
+            let self_module = PyModule::import(py, "tensorzero.types")?;
+            Ok(self_module
+                .getattr("parse_dynamic_evaluation_run_response")?
+                .unbind())
+        })?;
+    let json_data = serialize_to_dict(py, data)?;
+    let python_parsed = parse_dynamic_evaluation_run_response.call1(py, (json_data,))?;
     Ok(python_parsed.into_any())
 }
 

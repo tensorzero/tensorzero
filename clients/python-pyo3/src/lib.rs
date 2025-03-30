@@ -21,8 +21,9 @@ use pyo3::{
     IntoPyObjectExt,
 };
 use python_helpers::{
-    deserialize_from_pyobj, parse_feedback_response, parse_inference_chunk,
-    parse_inference_response, parse_tool, python_uuid_to_uuid, serialize_to_dict,
+    deserialize_from_pyobj, parse_dynamic_evaluation_run_response, parse_feedback_response,
+    parse_inference_chunk, parse_inference_response, parse_tool, python_uuid_to_uuid,
+    serialize_to_dict,
 };
 use tensorzero_internal::{
     gateway_util::ShutdownHandle, inference::types::extra_body::UnfilteredInferenceExtraBody,
@@ -679,17 +680,16 @@ impl TensorZeroGateway {
         this: PyRef<'_, Self>,
         variants: HashMap<String, String>,
         tags: HashMap<String, String>,
-    ) -> PyResult<Bound<'_, PyAny>> {
+    ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
         let params = DynamicEvaluationRunParams { variants, tags };
+        let fut = client.dynamic_evaluation_run(params);
 
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.dynamic_evaluation_run(params).await;
-            Python::with_gil(|py| match res {
-                Ok(resp) => serialize_to_dict(py, resp),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
+        let resp = tokio_block_on_without_gil(this.py(), fut);
+        match resp {
+            Ok(resp) => parse_dynamic_evaluation_run_response(this.py(), resp),
+            Err(e) => Err(convert_error(this.py(), e)),
+        }
     }
 }
 
@@ -1014,7 +1014,7 @@ impl AsyncTensorZeroGateway {
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.dynamic_evaluation_run(params).await;
             Python::with_gil(|py| match res {
-                Ok(resp) => serialize_to_dict(py, resp),
+                Ok(resp) => parse_dynamic_evaluation_run_response(py, resp),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
