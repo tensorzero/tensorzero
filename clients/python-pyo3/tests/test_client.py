@@ -2659,7 +2659,10 @@ def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
         },
     )
     assert isinstance(inference_response, ChatInferenceResponse)
-    assert inference_response.content[0].text.startswith("Megumin")
+    first_content_block = inference_response.content[0]
+    assert isinstance(first_content_block, Text)
+    assert first_content_block.text is not None
+    assert first_content_block.text.startswith("Megumin")
     assert inference_response.variant_name == "test2"
 
 
@@ -2682,5 +2685,8 @@ async def test_async_dynamic_evaluation_run(async_client: AsyncTensorZeroGateway
         },
     )
     assert isinstance(inference_response, ChatInferenceResponse)
-    assert inference_response.content[0].text.startswith("Megumin")
+    first_content_block = inference_response.content[0]
+    assert isinstance(first_content_block, Text)
+    assert first_content_block.text is not None
+    assert first_content_block.text.startswith("Megumin")
     assert inference_response.variant_name == "test2"
