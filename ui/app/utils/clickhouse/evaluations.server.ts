@@ -1,18 +1,23 @@
 import { getConfig } from "../config/index.server";
+import { resolveInput } from "../resolve.server";
 import { clickhouseClient } from "./client.server";
+import { inputSchema } from "./common";
 import {
   EvaluationRunInfoSchema,
   EvaluationStatisticsSchema,
   type EvaluationResult,
   type EvaluationRunInfo,
   type EvaluationStatistics,
-  parseEvaluationResult,
   type EvalInfoResult,
   evalInfoResultSchema,
   getEvaluatorMetricName,
   type EvaluationResultWithVariant,
-  parseEvaluationResultWithVariant,
   type ParsedEvaluationResultWithVariant,
+  type ParsedEvaluationResult,
+  JsonEvaluationResultSchema,
+  ParsedEvaluationResultSchema,
+  ChatEvaluationResultSchema,
+  ParsedEvaluationResultWithVariantSchema,
 } from "./evaluations";
 import { uuidv7ToTimestamp } from "./helpers";
 
@@ -40,6 +45,76 @@ export async function getEvalRunInfos(
 
   const rows = await result.json<EvaluationRunInfo[]>();
   return rows.map((row) => EvaluationRunInfoSchema.parse(row));
+}
+
+async function parseEvaluationResult(
+  result: EvaluationResult,
+): Promise<ParsedEvaluationResult> {
+  try {
+    // Parse the input field
+    const parsedInput = inputSchema.parse(JSON.parse(result.input));
+    const resolvedInput = await resolveInput(parsedInput);
+
+    // Parse the outputs
+    const generatedOutput = JSON.parse(result.generated_output);
+    const referenceOutput = JSON.parse(result.reference_output);
+
+    // Determine if this is a chat result by checking if generated_output is an array
+    if (Array.isArray(generatedOutput)) {
+      // This is likely a chat evaluation result
+      return ChatEvaluationResultSchema.parse({
+        ...result,
+        input: resolvedInput,
+        generated_output: generatedOutput,
+        reference_output: referenceOutput,
+      });
+    } else {
+      // This is likely a JSON evaluation result
+      return JsonEvaluationResultSchema.parse({
+        ...result,
+        input: resolvedInput,
+        generated_output: generatedOutput,
+        reference_output: referenceOutput,
+      });
+    }
+  } catch (error) {
+    console.warn(
+      "Failed to parse evaluation result using structure-based detection:",
+      error,
+    );
+    // If structure-based detection fails, try the original parsing as fallback
+    return ParsedEvaluationResultSchema.parse(result);
+  }
+}
+
+async function parseEvaluationResultWithVariant(
+  result: EvaluationResultWithVariant,
+): Promise<ParsedEvaluationResultWithVariant> {
+  try {
+    // Parse using the same logic as parseEvaluationResult
+    const parsedResult = await parseEvaluationResult(result);
+
+    // Add the variant_name to the parsed result
+    const parsedResultWithVariant = {
+      ...parsedResult,
+      variant_name: result.variant_name,
+    };
+    return ParsedEvaluationResultWithVariantSchema.parse(
+      parsedResultWithVariant,
+    );
+  } catch (error) {
+    console.warn(
+      "Failed to parse evaluation result with variant using structure-based detection:",
+      error,
+    );
+    // Fallback to direct parsing if needed
+    return ParsedEvaluationResultWithVariantSchema.parse({
+      ...result,
+      input: result.input,
+      generated_output: result.generated_output,
+      reference_output: result.reference_output,
+    });
+  }
 }
 
 const getEvalResultDatapointIdsQuery = `
@@ -129,7 +204,7 @@ export async function getEvalResults(
     },
   });
   const rows = await result.json<EvaluationResult>();
-  return rows.map((row) => parseEvaluationResult(row));
+  return Promise.all(rows.map((row) => parseEvaluationResult(row)));
 }
 
 /*
@@ -454,6 +529,8 @@ export async function getEvalsForDatapoint(
     },
   });
   const rows = await result.json<EvaluationResultWithVariant>();
-  const parsed_rows = rows.map((row) => parseEvaluationResultWithVariant(row));
+  const parsed_rows = await Promise.all(
+    rows.map((row) => parseEvaluationResultWithVariant(row)),
+  );
   return parsed_rows;
 }

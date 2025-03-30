@@ -1,8 +1,8 @@
 import { z } from "zod";
 import {
   contentBlockOutputSchema,
-  inputSchema,
   jsonInferenceOutputSchema,
+  resolvedInputSchema,
 } from "./common";
 import type { ParsedInferenceRow } from "./inference";
 import { v7 as uuid } from "uuid";
@@ -68,7 +68,7 @@ export const ParsedChatInferenceDatapointRowSchema =
     output: true,
     tool_params: true,
   }).extend({
-    input: inputSchema,
+    input: resolvedInputSchema,
     output: z.array(contentBlockOutputSchema).optional(),
     tool_params: z.record(z.string(), z.unknown()).optional(),
     tags: z.record(z.string(), z.string()),
@@ -83,7 +83,7 @@ export const ParsedJsonInferenceDatapointRowSchema =
     output: true,
     output_schema: true,
   }).extend({
-    input: inputSchema,
+    input: resolvedInputSchema,
     output: jsonInferenceOutputSchema.optional(),
     output_schema: z.record(z.string(), z.unknown()),
   });
