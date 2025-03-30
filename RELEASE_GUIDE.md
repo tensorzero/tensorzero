@@ -60,21 +60,16 @@ docker buildx create \
 Every time you want to build the Docker container, you need to run from the root of the repository:
 
 ```bash
-DOCKER_BUILDKIT=1 docker buildx build -f ui/Dockerfile . \
+DOCKER_BUILDKIT=1 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   -t tensorzero/ui:latest \
   -t tensorzero/ui:XXXX.XX.X \
+  -f ui/Dockerfile \
   --attest type=provenance,mode=max \
   --attest type=sbom \
-  --push
+  --push \
+  .
 ```
-
-DOCKER_BUILDKIT=1 docker buildx build -f ui/Dockerfile . \
- --platform linux/amd64,linux/arm64 \
- -t test \
- --attest type=provenance,mode=max \
- --attest type=sbom \
- --push
 
 > [!IMPORTANT]
 > Make sure to replace the `XXXX.XX.X` placeholder with the actual version of the Docker container you are building.
