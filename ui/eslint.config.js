@@ -12,6 +12,7 @@ export default [
       "**/.venv/**",
       "**/playwright-report/**",
       "**/test-results/**",
+      "eslint.config.js",
     ],
   },
   {
@@ -47,7 +48,8 @@ export default [
       "no-restricted-syntax": [
         "error",
         {
-          selector: "Literal[value='tensorzero_ui_fixtures']",
+          selector:
+            ":matches(Literal, TemplateElement)[value.raw=/tensorzero_ui_fixtures/]",
           message: "The string 'tensorzero_ui_fixtures' is not allowed.",
         },
       ],
