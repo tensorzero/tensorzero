@@ -8,7 +8,6 @@ import {
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
-import { Badge } from "~/components/ui/badge";
 import { Link } from "react-router";
 
 export default function DatasetTable({
@@ -39,9 +38,7 @@ export default function DatasetTable({
                   </code>
                 </Link>
               </TableCell>
-              <TableCell className="max-w-[200px]">
-                <Badge variant="outline">{count.count}</Badge>
-              </TableCell>
+              <TableCell className="max-w-[200px]">{count.count}</TableCell>
               <TableCell>{formatDate(new Date(count.last_updated))}</TableCell>
             </TableRow>
           ))}
