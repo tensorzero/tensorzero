@@ -5,7 +5,7 @@ from sagemaker import image_uris
 import boto3
 
 HF_MODEL_NAME = "unsloth/Llama-3.2-1B"
-SAGEMAKER_ROLE = "arn:aws:iam::637423354485:role/AmazonSageMaker-ExecutionRole-20250328T164731"
+SAGEMAKER_ROLE = "arn:aws:iam::637423354485:role/service-role/AmazonSageMaker-ExecutionRole-20250328T164731"
 
 def main():
     role = SAGEMAKER_ROLE
@@ -23,11 +23,13 @@ def main():
     sm_client = boto3.client("sagemaker")
     smr_client = boto3.client("sagemaker-runtime")
 
-    deepspeed_image_uri = image_uris.retrieve(
-        framework="djl-deepspeed", 
-        region=sess.boto_session.region_name, 
-        version="0.26.0"
-    )
+    # deepspeed_image_uri = image_uris.retrieve(
+    #     framework="djl-deepspeed", 
+    #     region=sess.boto_session.region_name, 
+    #     version="0.29.0"
+    # )
+    deepspeed_image_uri = "763104351884.dkr.ecr.us-east-2.amazonaws.com/huggingface-pytorch-inference:2.1.0-transformers4.37.0-cpu-py310-ubuntu22.04"
+    print("Got url: ", deepspeed_image_uri)
 
     env_generation = {"HUGGINGFACE_HUB_CACHE": "/tmp",
                   "TRANSFORMERS_CACHE": "/tmp",
@@ -35,9 +37,9 @@ def main():
                   "OPTION_MODEL_ID": HF_MODEL_NAME,
                   "OPTION_TRUST_REMOTE_CODE": "true",
                   "OPTION_TENSOR_PARALLEL_DEGREE": "max",
-                  "OPTION_ROLLING_BATCH": "vllm",
                   "OPTION_MAX_ROLLING_BATCH_SIZE": "32",
-                  "OPTION_DTYPE":"fp16"
+                  "OPTION_DTYPE":"fp16",
+                  "HF_TASK": "question-answering",
                  }
 
     # - Select the appropriate environment variable which will tune the deployment server.
@@ -74,19 +76,18 @@ def main():
                 "VariantName": "variant1",
                 "ModelName": model_name,
                 'ServerlessConfig': {
-                    'MemorySizeInMB': 4096,
+                    'MemorySizeInMB': 3072,
                     'MaxConcurrency': 2,
-                    'ProvisionedConcurrency': 0,
-                },
-                # "ModelDataDownloadTimeoutInSeconds": 2400,
-                "ContainerStartupHealthCheckTimeoutInSeconds": 2400,
-                "RoutingConfig": {
-                    'RoutingStrategy': 'LEAST_OUTSTANDING_REQUESTS'
                 },
             },
         ],
     )
-    print("Created endpoint: ", endpoint_config_response)
+    print("Created endpoint config: ", endpoint_config_response)
+
+    create_endpoint_response = sm_client.create_endpoint(
+        EndpointName=f"{endpoint_name}", EndpointConfigName=endpoint_config_name
+    )
+    print(f"Created Endpoint: {create_endpoint_response['EndpointArn']}")
 
 
 if __name__ == "__main__":
