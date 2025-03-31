@@ -7,11 +7,11 @@ import {
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
-import type { EvalConfig } from "~/utils/config/evals";
+import type { EvaluationConfig } from "~/utils/config/evaluations";
 
 interface BasicInfoProps {
   eval_name: string;
-  eval_config: EvalConfig;
+  eval_config: EvaluationConfig;
 }
 
 export default function BasicInfo({ eval_name, eval_config }: BasicInfoProps) {

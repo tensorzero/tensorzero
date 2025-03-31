@@ -1,4 +1,4 @@
-import { getEvalsForDatapoint } from "~/utils/clickhouse/evaluations.server";
+import { getEvaluationsForDatapoint } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/route";
 import { getConfig } from "~/utils/config/index.server";
 import {
@@ -18,7 +18,10 @@ import {
 } from "~/utils/clickhouse/evaluations";
 import { useConfig } from "~/context/config";
 import MetricValue from "~/components/evaluations/MetricValue";
-import { getMetricType, type EvaluatorConfig } from "~/utils/config/evals";
+import {
+  getMetricType,
+  type EvaluatorConfig,
+} from "~/utils/config/evaluations";
 import EvalRunBadge from "~/components/evaluations/EvalRunBadge";
 import BasicInfo from "./EvaluationDatapointBasicInfo";
 import {
@@ -32,7 +35,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
   const eval_name = params.eval_name;
   const datapoint_id = params.datapoint_id;
-  const dataset_name = config.evals[eval_name].dataset_name;
+  const dataset_name = config.evaluations[eval_name].dataset_name;
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
 
@@ -43,7 +46,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (selected_eval_run_ids_array.length === 0) {
     return redirect(`/datasets/${dataset_name}/datapoint/${datapoint_id}`);
   }
-  const evalResults = await getEvalsForDatapoint(
+  const evalResults = await getEvaluationsForDatapoint(
     eval_name,
     datapoint_id,
     selected_eval_run_ids_array,
@@ -75,7 +78,7 @@ export default function EvaluationDatapointPage({
 }: Route.ComponentProps) {
   const { consolidatedEvalResults, eval_name, datapoint_id } = loaderData;
   const config = useConfig();
-  const eval_config = config.evals[eval_name];
+  const eval_config = config.evaluations[eval_name];
   const outputsToDisplay = [
     {
       id: "Reference",

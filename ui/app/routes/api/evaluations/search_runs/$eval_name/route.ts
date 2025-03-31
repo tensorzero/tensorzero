@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
-import { searchEvalRuns } from "~/utils/clickhouse/evaluations.server";
+import { searchEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
 import { getConfig } from "~/utils/config/index.server";
 
@@ -16,13 +16,13 @@ export async function loader({
   }
   const query = searchParams.get("q") || "";
   const config = await getConfig();
-  const function_name = config.evals[evalName].function_name;
+  const function_name = config.evaluations[evalName].function_name;
 
   if (!evalName) {
     return new Response("Missing eval_name parameter", { status: 400 });
   }
 
-  const runs = await searchEvalRuns(evalName, function_name, query);
+  const runs = await searchEvaluationRuns(evalName, function_name, query);
   return new Response(JSON.stringify(runs), {
     headers: {
       "Content-Type": "application/json",

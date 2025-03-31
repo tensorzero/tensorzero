@@ -10,7 +10,7 @@ use tracing::instrument;
 
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
-use crate::evals::{EvalConfig, UninitializedEvalConfig};
+use crate::evaluations::{EvalConfig, UninitializedEvalConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -33,7 +33,7 @@ pub struct Config<'c> {
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
-    pub evals: HashMap<String, Arc<EvalConfig>>, // eval name => eval config
+    pub evaluations: HashMap<String, Arc<EvalConfig>>, // eval name => eval config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
 }
@@ -335,7 +335,7 @@ impl<'c> Config<'c> {
             functions,
             metrics: uninitialized_config.metrics,
             tools,
-            evals: HashMap::new(),
+            evaluations: HashMap::new(),
             templates,
             object_store_info,
         };
@@ -353,13 +353,13 @@ impl<'c> Config<'c> {
         // Validate the config
         config.validate()?;
 
-        // We add the evals after validation since we will be writing tensorzero:: functions to the functions map
+        // We add the evaluations after validation since we will be writing tensorzero:: functions to the functions map
         // and tensorzero:: metrics to the metrics map
-        let mut evals = HashMap::new();
-        for (name, eval_config) in uninitialized_config.evals {
+        let mut evaluations = HashMap::new();
+        for (name, eval_config) in uninitialized_config.evaluations {
             let (eval_config, eval_function_configs, eval_metric_configs) =
                 eval_config.load(&config.functions, &base_path, &name)?;
-            evals.insert(name, Arc::new(eval_config));
+            evaluations.insert(name, Arc::new(eval_config));
             for (eval_function_name, eval_function_config) in eval_function_configs {
                 if config.functions.contains_key(&eval_function_name) {
                     return Err(ErrorDetails::Config {
@@ -399,7 +399,7 @@ impl<'c> Config<'c> {
                 config.metrics.insert(eval_metric_name, eval_metric_config);
             }
         }
-        config.evals = evals;
+        config.evaluations = evaluations;
 
         Ok(config)
     }
@@ -575,7 +575,7 @@ struct UninitializedConfig {
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
     #[serde(default)]
-    pub evals: HashMap<String, UninitializedEvalConfig>, // eval name => eval config
+    pub evaluations: HashMap<String, UninitializedEvalConfig>, // eval name => eval config
     pub object_storage: Option<StorageKind>,
 }
 
@@ -1205,8 +1205,9 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "Function `generate_draft` not found (referenced in `[evals.eval1]`)"
-                    .to_string()
+                message:
+                    "Function `generate_draft` not found (referenced in `[evaluations.eval1]`)"
+                        .to_string()
             }
             .into()
         );
@@ -1672,7 +1673,7 @@ mod tests {
     #[test]
     fn test_config_validate_eval_function_nonexistent() {
         let mut config = get_sample_valid_config();
-        config["evals"]["eval1"]["function_name"] = "nonexistent_function".into();
+        config["evaluations"]["eval1"]["function_name"] = "nonexistent_function".into();
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
 
@@ -1680,7 +1681,7 @@ mod tests {
             result.unwrap_err(),
             ErrorDetails::Config {
                 message:
-                    "Function `nonexistent_function` not found (referenced in `[evals.eval1]`)"
+                    "Function `nonexistent_function` not found (referenced in `[evaluations.eval1]`)"
                         .to_string()
             }
             .into()
@@ -1691,9 +1692,9 @@ mod tests {
     #[test]
     fn test_config_validate_eval_name_contains_double_colon() {
         let mut config = get_sample_valid_config();
-        let eval1 = config["evals"]["eval1"].clone();
+        let eval1 = config["evaluations"]["eval1"].clone();
         config
-            .get_mut("evals")
+            .get_mut("evaluations")
             .unwrap()
             .as_table_mut()
             .unwrap()
@@ -1704,8 +1705,9 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "Eval names cannot contain \"::\" (referenced in `[evals.bad::eval]`)"
-                    .to_string()
+                message:
+                    "Eval names cannot contain \"::\" (referenced in `[evaluations.bad::eval]`)"
+                        .to_string()
             }
             .into()
         );
@@ -2063,13 +2065,13 @@ mod tests {
             *templates
                 .get("tensorzero::llm_judge::eval1::llm_judge_bool::user")
                 .unwrap(),
-            include_str!("evals/llm_judge_user_template.minijinja").to_string()
+            include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
         );
         assert_eq!(
             *templates
                 .get("tensorzero::llm_judge::eval1::llm_judge_float::user")
                 .unwrap(),
-            include_str!("evals/llm_judge_user_template.minijinja").to_string()
+            include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
         );
 
         // Check the total number of templates

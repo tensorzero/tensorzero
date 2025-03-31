@@ -29,7 +29,7 @@ const config: Config = {
     },
   },
   tools: {},
-  evals: {},
+  evaluations: {},
 };
 
 const meta = {

@@ -7,15 +7,15 @@ import { type VariantConfig } from "./variant";
 import {
   LLMJudgeIncludeConfigSchema,
   ExactMatchConfigSchema,
-  type EvalConfig,
+  type EvaluationConfig,
   type EvaluatorConfig,
-} from "./evals";
+} from "./evaluations";
 import type { MetricConfig } from "./metric";
 import type { RawFunctionConfig } from "./function.server";
 
 // User template for LLM judge
 // This is problematic because we would ideally want an automated way
-// to keep this in sync with tensorzero-internal/src/evals/llm_judge_user_template.minijinja
+// to keep this in sync with tensorzero-internal/src/evaluations/llm_judge_user_template.minijinja
 const llm_judge_user_template = `# Input
 
 {{input}}
@@ -32,7 +32,7 @@ const llm_judge_user_template = `# Input
 
 // Output schemas for LLM judge with float output
 // This is problematic because we would ideally want an automated way
-// to keep this in sync with tensorzero-internal/src/evals/llm_judge_float_output_schema.json
+// to keep this in sync with tensorzero-internal/src/evaluations/llm_judge_float_output_schema.json
 const llm_judge_float_output_schema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   type: "object",
@@ -52,7 +52,7 @@ const llm_judge_float_output_schema = {
 
 // Output schemas for LLM judge with boolean output
 // This is problematic because we would ideally want an automated way
-// to keep this in sync with tensorzero-internal/src/evals/llm_judge_boolean_output_schema.json
+// to keep this in sync with tensorzero-internal/src/evaluations/llm_judge_boolean_output_schema.json
 const llm_judge_boolean_output_schema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   type: "object",
@@ -72,7 +72,7 @@ const llm_judge_boolean_output_schema = {
 
 // User schema for LLM judge
 // This is problematic because we would ideally want an automated way
-// to keep this in sync with tensorzero-internal/src/evals/llm_judge_user_schema.json
+// to keep this in sync with tensorzero-internal/src/evaluations/llm_judge_user_schema.json
 const llm_judge_user_schema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   type: "object",
@@ -137,7 +137,7 @@ export const UninitializedEvaluatorConfigSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export const UninitializedEvalConfigSchema = z.object({
+export const UninitializedEvaluationConfigSchema = z.object({
   evaluators: z.record(z.string(), UninitializedEvaluatorConfigSchema),
   dataset_name: z.string(),
   function_name: z.string(),
@@ -234,7 +234,7 @@ async function loadLLMJudgeEvaluator(
   // Check for valid evaluator name
   if (evaluatorName.includes("::")) {
     throw new Error(
-      `Evaluator names cannot contain "::" (referenced in [evals.${evalName}.${evaluatorName}])`,
+      `Evaluator names cannot contain "::" (referenced in [evaluations.${evalName}.${evaluatorName}])`,
     );
   }
 
@@ -260,7 +260,7 @@ async function loadLLMJudgeEvaluator(
   // Validate that exactly one variant is active
   if (activeVariantCount !== 1) {
     throw new Error(
-      `Evaluator \`${evaluatorName}\` in \`[evals.${evalName}]\` must have exactly 1 variant that is active. Found ${activeVariantCount} variants with nonzero weights.`,
+      `Evaluator \`${evaluatorName}\` in \`[evaluations.${evalName}]\` must have exactly 1 variant that is active. Found ${activeVariantCount} variants with nonzero weights.`,
     );
   }
 
@@ -315,7 +315,7 @@ async function loadEvaluator(
 }> {
   if (evaluatorName.includes("::")) {
     throw new Error(
-      `Evaluator names cannot contain "::" (referenced in [evals.${evalName}.${evaluatorName}])`,
+      `Evaluator names cannot contain "::" (referenced in [evaluations.${evalName}.${evaluatorName}])`,
     );
   }
   switch (config.type) {
@@ -354,8 +354,8 @@ async function loadEvaluator(
 }
 
 // Transform the raw eval config
-export const RawEvalConfigSchema = UninitializedEvalConfigSchema.transform(
-  (raw) => {
+export const RawEvalConfigSchema =
+  UninitializedEvaluationConfigSchema.transform((raw) => {
     return {
       ...raw,
       load: async function (
@@ -363,21 +363,21 @@ export const RawEvalConfigSchema = UninitializedEvalConfigSchema.transform(
         evalName: string,
         functions: Record<string, RawFunctionConfig>,
       ): Promise<{
-        evalConfig: EvalConfig;
+        evalConfig: EvaluationConfig;
         functionConfigs: Record<string, FunctionConfig>;
         metricConfigs: Record<string, MetricConfig>;
       }> {
         // Check for valid eval name
         if (evalName.includes("::")) {
           throw new Error(
-            `Eval names cannot contain "::" (referenced in [evals.${evalName}])`,
+            `Eval names cannot contain "::" (referenced in [evaluations.${evalName}])`,
           );
         }
 
         // Check if referenced function exists
         if (!functions[raw.function_name]) {
           throw new Error(
-            `Function \`${raw.function_name}\` not found (referenced in \`[evals.${evalName}]\`)`,
+            `Function \`${raw.function_name}\` not found (referenced in \`[evaluations.${evalName}]\`)`,
           );
         }
 
@@ -421,7 +421,6 @@ export const RawEvalConfigSchema = UninitializedEvalConfigSchema.transform(
         };
       },
     };
-  },
-);
+  });
 
 export type RawEvalConfig = z.infer<typeof RawEvalConfigSchema>;

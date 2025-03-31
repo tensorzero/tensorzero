@@ -1336,7 +1336,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "evals"
+name = "evaluations"
 version = "0.1.0"
 dependencies = [
  "anyhow",
