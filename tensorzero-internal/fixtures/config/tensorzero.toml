@@ -171,36 +171,36 @@ description = "Get the weather for a given location"
 parameters = "fixtures/config/tools/get_temperature.json"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                                   EVALS                                    │
+# │                                EVALUATIONS                                 │
 # └────────────────────────────────────────────────────────────────────────────┘
-[evals.eval1]
+[evaluations.eval1]
 dataset_name = "dataset1"
 function_name = "generate_draft"
 
-[evals.eval1.evaluators.em_evaluator]
+[evaluations.eval1.evaluators.em_evaluator]
 type = "exact_match"
 
-[evals.eval1.evaluators.llm_judge_bool]
+[evaluations.eval1.evaluators.llm_judge_bool]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "min"
 
-[evals.eval1.evaluators.llm_judge_bool.variants.anthropic_promptA]
+[evaluations.eval1.evaluators.llm_judge_bool.variants.anthropic_promptA]
 type = "chat_completion"
 active = true
 model = "anthropic::claude-3.5-sonnet"
-system_instructions = "fixtures/config/evals/eval1/llm_judge_bool/system_instructions.txt"
+system_instructions = "fixtures/config/evaluations/eval1/llm_judge_bool/system_instructions.txt"
 json_mode = "implicit_tool"
 
-[evals.eval1.evaluators.llm_judge_float]
+[evaluations.eval1.evaluators.llm_judge_float]
 type = "llm_judge"
 output_type = "float"
 optimize = "min"
 include = { reference_output = true }
 
-[evals.eval1.evaluators.llm_judge_float.variants.anthropic_promptA]
+[evaluations.eval1.evaluators.llm_judge_float.variants.anthropic_promptA]
 type = "chat_completion"
 active = true
 json_mode = "off"
 model = "anthropic::claude-3.5-sonnet"
-system_instructions = "fixtures/config/evals/eval1/llm_judge_float/system_instructions.txt"
+system_instructions = "fixtures/config/evaluations/eval1/llm_judge_float/system_instructions.txt"

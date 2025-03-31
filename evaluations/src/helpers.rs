@@ -70,9 +70,11 @@ async fn resolved_input_message_content_to_input_message_content(
         }
         ResolvedInputMessageContent::Thought(thought) => Ok(InputMessageContent::Thought(thought)),
         ResolvedInputMessageContent::Image(_image) => {
-            // TODO: Implement image support for evals
+            // TODO: Implement image support for evaluation
             // This will involve grabbing the image from object storage using the object storage client included in `tensorzero-internal`
-            Err(anyhow::anyhow!("Image not supported for evals (yet!)"))
+            Err(anyhow::anyhow!(
+                "Image not supported for evaluations (yet!)"
+            ))
         }
         ResolvedInputMessageContent::Unknown {
             data,

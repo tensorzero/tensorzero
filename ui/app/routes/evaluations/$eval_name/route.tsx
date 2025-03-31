@@ -1,11 +1,11 @@
 import type { Route } from "./+types/route";
 import { getConfig } from "~/utils/config/index.server";
 import {
-  getEvalStatistics,
-  getEvalResults,
+  getEvaluationStatistics,
+  getEvaluationResults,
   getEvalRunInfos,
-  countDatapointsForEval,
-  getMostRecentEvalInferenceDate,
+  countDatapointsForEvaluation,
+  getMostRecentEvaluationInferenceDate,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import { EvaluationTable } from "./EvaluationTable";
@@ -21,13 +21,16 @@ import { useNavigate } from "react-router";
 import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 import BasicInfo from "./EvaluationBasicInfo";
 import { useConfig } from "~/context/config";
-import { getRunningEval } from "~/utils/evals.server";
-import { EvalErrorInfo, type EvalErrorDisplayInfo } from "./EvalErrorInfo";
+import { getRunningEvaluation } from "~/utils/evaluations.server";
+import {
+  EvaluationErrorInfo,
+  type EvaluationErrorDisplayInfo,
+} from "./EvaluationErrorInfo";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
-  const dataset_name = config.evals[params.eval_name].dataset_name;
-  const function_name = config.evals[params.eval_name].function_name;
+  const dataset_name = config.evaluations[params.eval_name].dataset_name;
+  const function_name = config.evaluations[params.eval_name].function_name;
   const function_type = config.functions[function_name].type;
 
   const url = new URL(request.url);
@@ -42,7 +45,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
 
   const evaluator_names = Object.keys(
-    config.evals[params.eval_name].evaluators,
+    config.evaluations[params.eval_name].evaluators,
   );
 
   const metric_names = evaluator_names.map((evaluatorName) =>
@@ -55,14 +58,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     function_name,
   );
 
-  const mostRecentEvalInferenceDatePromise = getMostRecentEvalInferenceDate(
-    selected_eval_run_ids_array,
-  );
+  const mostRecentEvalInferenceDatePromise =
+    getMostRecentEvaluationInferenceDate(selected_eval_run_ids_array);
 
   // Create placeholder promises for results and statistics that will be used conditionally
   let resultsPromise;
   if (selected_eval_run_ids_array.length > 0) {
-    resultsPromise = getEvalResults(
+    resultsPromise = getEvaluationResults(
       dataset_name,
       function_name,
       function_type,
@@ -77,7 +79,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   let statisticsPromise;
   if (selected_eval_run_ids_array.length > 0) {
-    statisticsPromise = getEvalStatistics(
+    statisticsPromise = getEvaluationStatistics(
       dataset_name,
       function_name,
       function_type,
@@ -90,7 +92,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   let total_datapoints_promise;
   if (selected_eval_run_ids_array.length > 0) {
-    total_datapoints_promise = countDatapointsForEval(
+    total_datapoints_promise = countDatapointsForEvaluation(
       dataset_name,
       function_name,
       function_type,
@@ -117,7 +119,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const any_eval_is_running = Object.values(selected_eval_run_ids_array).some(
     (evalRunId) => {
-      const runningEval = getRunningEval(evalRunId);
+      const runningEval = getRunningEvaluation(evalRunId);
       if (!runningEval) {
         return false;
       }
@@ -132,10 +134,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     },
   );
 
-  const errors: Record<string, EvalErrorDisplayInfo> =
+  const errors: Record<string, EvaluationErrorDisplayInfo> =
     selected_eval_run_ids_array.reduce(
       (acc, evalRunId) => {
-        const evalRunInfo = getRunningEval(evalRunId);
+        const evalRunInfo = getRunningEvaluation(evalRunId);
         if (evalRunInfo?.errors) {
           acc[evalRunId] = {
             variantName: evalRunInfo.variantName,
@@ -149,7 +151,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         }
         return acc;
       },
-      {} as Record<string, EvalErrorDisplayInfo>,
+      {} as Record<string, EvaluationErrorDisplayInfo>,
     );
 
   return {
@@ -199,7 +201,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   useAutoRefresh(any_eval_is_running);
 
   const config = useConfig();
-  const eval_config = config.evals[eval_name];
+  const eval_config = config.evaluations[eval_name];
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
   );
@@ -215,7 +217,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
           {hasErrorsToDisplay && (
             <>
               <SectionHeader heading="Errors" />
-              <EvalErrorInfo errors={errors} />
+              <EvaluationErrorInfo errors={errors} />
             </>
           )}
           <div className="flex items-center justify-between">

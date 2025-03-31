@@ -7,26 +7,26 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import {
-  countTotalEvalRuns,
-  getEvalRunInfo,
+  countTotalEvaluationRuns,
+  getEvaluationRunInfo,
 } from "~/utils/clickhouse/evaluations.server";
 import { getConfig } from "~/utils/config/index.server";
 import EvalRunsTable from "./EvalRunsTable";
 import { useState } from "react";
-import { EvalsActions } from "./EvalsActions";
+import { EvaluationsActions } from "./EvaluationsActions";
 import LaunchEvalModal from "./LaunchEvalModal";
-import { runEval } from "~/utils/evals.server";
+import { runEvaluation } from "~/utils/evaluations.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const totalEvalRuns = await countTotalEvalRuns();
+  const totalEvalRuns = await countTotalEvaluationRuns();
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
-  const evalRuns = await getEvalRunInfo(pageSize, offset);
+  const evalRuns = await getEvaluationRunInfo(pageSize, offset);
   const config = await getConfig();
   const evalRunsWithDataset = evalRuns.map((runInfo) => {
-    const dataset = config.evals[runInfo.eval_name].dataset_name;
+    const dataset = config.evaluations[runInfo.eval_name].dataset_name;
     return {
       ...runInfo,
       dataset,
@@ -48,7 +48,7 @@ export async function action({ request }: Route.ActionArgs) {
   const concurrency_limit = formData.get("concurrency_limit");
   let eval_start_info;
   try {
-    eval_start_info = await runEval(
+    eval_start_info = await runEvaluation(
       eval_name as string,
       variant_name as string,
       parseInt(concurrency_limit as string),
@@ -62,7 +62,9 @@ export async function action({ request }: Route.ActionArgs) {
   );
 }
 
-export default function EvalSummaryPage({ loaderData }: Route.ComponentProps) {
+export default function EvaluationSummaryPage({
+  loaderData,
+}: Route.ComponentProps) {
   const navigate = useNavigate();
   const { totalEvalRuns, evalRunsWithDataset, offset, pageSize } = loaderData;
 
@@ -82,7 +84,7 @@ export default function EvalSummaryPage({ loaderData }: Route.ComponentProps) {
     <PageLayout>
       <PageHeader heading="Evaluation Runs" count={totalEvalRuns} />
       <SectionLayout>
-        <EvalsActions onNewRun={() => setLaunchEvalModalIsOpen(true)} />
+        <EvaluationsActions onNewRun={() => setLaunchEvalModalIsOpen(true)} />
         <EvalRunsTable evalRuns={evalRunsWithDataset} />
         <PageButtons
           onPreviousPage={handlePreviousPage}

@@ -1,16 +1,16 @@
-import type { DisplayEvalError, EvalError } from "~/utils/evals";
+import type { DisplayEvalError, EvalError } from "~/utils/evaluations";
 import EvalRunBadge from "~/components/evaluations/EvalRunBadge";
 
-export interface EvalErrorDisplayInfo {
+export interface EvaluationErrorDisplayInfo {
   variantName: string;
   errors: DisplayEvalError[];
 }
 
-export interface EvalErrorInfoProps {
-  errors: Record<string, EvalErrorDisplayInfo>;
+export interface EvaluationErrorInfoProps {
+  errors: Record<string, EvaluationErrorDisplayInfo>;
 }
 
-export function EvalErrorInfo({ errors }: EvalErrorInfoProps) {
+export function EvaluationErrorInfo({ errors }: EvaluationErrorInfoProps) {
   const sortedErrorEntries = Object.entries(errors).sort((a, b) =>
     b[0].localeCompare(a[0]),
   ); // Sort in reverse order by key

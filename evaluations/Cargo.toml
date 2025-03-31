@@ -1,5 +1,5 @@
 [package]
-name = "evals"
+name = "evaluations"
 version = "0.1.0"
 edition = "2021"
 
@@ -41,6 +41,6 @@ dbg_macro = "deny"
 
 [features]
 default = []
-# Forward this feature to 'evals', so that our
+# Forward this feature to 'evaluations', so that our
 # tests can recognize things like the `dummy` provider
 e2e_tests = ["tensorzero/e2e_tests"]

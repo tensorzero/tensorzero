@@ -115,12 +115,12 @@ test("parse e2e config", async () => {
   );
 
   // Test eval configs are properly generated
-  // Test that evals from the config are present
-  expect(validatedConfig.evals).toBeDefined();
-  expect(Object.keys(validatedConfig.evals).length).toBeGreaterThan(0);
+  // Test that evaluations from the config are present
+  expect(validatedConfig.evaluations).toBeDefined();
+  expect(Object.keys(validatedConfig.evaluations).length).toBeGreaterThan(0);
 
   // Get a sample eval and check its structure
-  const sampleEval = validatedConfig.evals["entity_test"]; // Using an eval from the test config
+  const sampleEval = validatedConfig.evaluations["entity_test"]; // Using an eval from the test config
   if (sampleEval) {
     expect(sampleEval.function_name).toBeDefined();
     expect(sampleEval.dataset_name).toBeDefined();
@@ -190,13 +190,13 @@ test("parse empty config", async () => {
   expect(validatedConfig).toBeDefined();
 });
 
-test("parse fixture config with evals", async () => {
+test("parse fixture config with evaluations", async () => {
   const validatedConfig = await loadConfig("fixtures/config/tensorzero.toml");
   expect(validatedConfig).toBeDefined();
-  expect(validatedConfig.evals).toBeDefined();
+  expect(validatedConfig.evaluations).toBeDefined();
 
   // Check entity_extraction eval
-  const entityExtractionEval = validatedConfig.evals["entity_extraction"];
+  const entityExtractionEval = validatedConfig.evaluations["entity_extraction"];
   expect(entityExtractionEval).toBeDefined();
   expect(entityExtractionEval.function_name).toBe("extract_entities");
   expect(entityExtractionEval.dataset_name).toBe("foo");
@@ -249,7 +249,7 @@ test("parse fixture config with evals", async () => {
   }
 
   // Check haiku eval
-  const haikuEval = validatedConfig.evals["haiku"];
+  const haikuEval = validatedConfig.evaluations["haiku"];
   expect(haikuEval).toBeDefined();
   expect(haikuEval.function_name).toBe("write_haiku");
 

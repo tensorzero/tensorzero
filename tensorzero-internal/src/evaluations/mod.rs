@@ -145,7 +145,7 @@ impl UninitializedEvalConfig {
         if !functions.contains_key(&self.function_name) {
             return Err(ErrorDetails::Config {
                 message: format!(
-                    "Function `{}` not found (referenced in `[evals.{eval_name}]`)",
+                    "Function `{}` not found (referenced in `[evaluations.{eval_name}]`)",
                     self.function_name
                 ),
             }
@@ -155,7 +155,7 @@ impl UninitializedEvalConfig {
         if eval_name.contains("::") {
             return Err(ErrorDetails::Config {
                 message: format!(
-                    "Eval names cannot contain \"::\" (referenced in `[evals.{eval_name}]`)"
+                    "Eval names cannot contain \"::\" (referenced in `[evaluations.{eval_name}]`)"
                 ),
             }
             .into());
@@ -238,7 +238,7 @@ impl UninitializedEvaluatorConfig {
         if evaluator_name.contains("::") {
             return Err(ErrorDetails::Config {
                 message: format!(
-                    "Evaluator names cannot contain \"::\" (referenced in `[evals.{eval_name}.{evaluator_name}]`)"
+                    "Evaluator names cannot contain \"::\" (referenced in `[evaluations.{eval_name}.{evaluator_name}]`)"
                 ),
             }
             .into());
@@ -271,7 +271,7 @@ impl UninitializedEvaluatorConfig {
                 if nonzero_weights != 1 && variants.len() > 1 {
                     return Err(ErrorDetails::Config {
                         message: format!(
-                            "Evaluator `{evaluator_name}` in `[evals.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."
+                            "Evaluator `{evaluator_name}` in `[evaluations.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."
                         ),
                     }
                     .into());
@@ -282,14 +282,14 @@ impl UninitializedEvaluatorConfig {
                         variant
                     } else {
                         return Err(ErrorDetails::Config {
-                            message: format!("Evaluator `{evaluator_name}` in `[evals.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."),
+                            message: format!("Evaluator `{evaluator_name}` in `[evaluations.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."),
                         }
                         .into());
                     };
                     if let Some(weight) = variant.weight {
                         if weight != 1.0 {
                             return Err(ErrorDetails::Config {
-                                message: format!("Evaluator `{evaluator_name}` in `[evals.{eval_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
+                                message: format!("Evaluator `{evaluator_name}` in `[evaluations.{eval_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
                             }
                             .into());
                         }
@@ -460,7 +460,7 @@ mod tests {
     #[test]
     fn test_read_system_instructions() {
         let system_instructions = read_system_instructions(
-            PathBuf::from("evals/eval1/llm_judge_bool/system_instructions.txt"),
+            PathBuf::from("evaluations/eval1/llm_judge_bool/system_instructions.txt"),
             &PathBuf::from("fixtures/config"),
         )
         .unwrap();
@@ -471,12 +471,12 @@ mod tests {
 
         // Nonexistent file
         let result = read_system_instructions(
-            PathBuf::from("evals/eval1/llm_judge_bool/nonexistent.txt"),
+            PathBuf::from("evaluations/eval1/llm_judge_bool/nonexistent.txt"),
             &PathBuf::from("fixtures/config"),
         );
         assert_eq!(*result.unwrap_err().get_details(), ErrorDetails::FileRead {
             message: "Failed to open system instructions file: No such file or directory (os error 2)".to_string(),
-            file_path: "fixtures/config/evals/eval1/llm_judge_bool/nonexistent.txt".to_string(),
+            file_path: "fixtures/config/evaluations/eval1/llm_judge_bool/nonexistent.txt".to_string(),
         });
     }
 
@@ -555,7 +555,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -672,7 +672,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -821,7 +821,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -844,7 +844,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-4"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.5),
                         top_p: None,
@@ -895,7 +895,7 @@ mod tests {
             assert_eq!(
                 *result.unwrap_err().get_details(),
                 ErrorDetails::Config {
-                    message: "Evaluator `multiple_active_variants` in `[evals.test_eval]` must have exactly 1 variant that is active. Found 2 variants with nonzero weights.".to_string(),
+                    message: "Evaluator `multiple_active_variants` in `[evaluations.test_eval]` must have exactly 1 variant that is active. Found 2 variants with nonzero weights.".to_string(),
                 }
             );
         }
@@ -939,7 +939,7 @@ mod tests {
                 *result.unwrap_err().get_details(),
                 ErrorDetails::Config {
                     message:
-                        "Evaluator names cannot contain \"::\" (referenced in `[evals.test_eval.foo::invalid_name]`)"
+                        "Evaluator names cannot contain \"::\" (referenced in `[evaluations.test_eval.foo::invalid_name]`)"
                             .to_string(),
                 }
             );
@@ -955,7 +955,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -1021,7 +1021,7 @@ mod tests {
                         active: None, // No 'active' field specified
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -1091,7 +1091,7 @@ mod tests {
                         active: Some(false), // Explicitly inactive
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -1131,7 +1131,7 @@ mod tests {
             assert_eq!(
                 *result.unwrap_err().get_details(),
                 ErrorDetails::Config {
-                    message: format!("Evaluator `llm_judge_inactive` in `[evals.{eval_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
+                    message: format!("Evaluator `llm_judge_inactive` in `[evaluations.{eval_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
                 }
             );
         }

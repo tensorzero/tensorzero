@@ -8,14 +8,14 @@ use dataset::query_dataset;
 use evaluators::evaluate_inference;
 use helpers::{get_tool_params_args, resolved_input_to_input, setup_logging};
 use serde::{Deserialize, Serialize};
-use stats::{EvalError, EvalInfo, EvalStats, EvalUpdate};
+use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
 use tensorzero::{
     CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
     DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceResponse,
 };
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::config_parser::MetricConfigOptimize;
-use tensorzero_internal::evals::EvaluatorConfig;
+use tensorzero_internal::evaluations::EvaluatorConfig;
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo, config_parser::Config, endpoints::datasets::Datapoint,
     function::FunctionConfig,
@@ -48,7 +48,7 @@ pub struct Args {
     #[arg(long, default_value = "./config/tensorzero.toml")]
     pub config_file: PathBuf,
 
-    /// URL of a running TensorZero HTTP gateway server to use for requests. This runs evals using that gateway.
+    /// URL of a running TensorZero HTTP gateway server to use for requests. This runs evaluations using that gateway.
     #[arg(long)]
     pub gateway_url: Option<Url>,
 
@@ -76,7 +76,7 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
 
     let config = Config::load_and_verify_from_path(&args.config_file).await?;
     let eval_config = config
-        .evals
+        .evaluations
         .get(&args.name)
         .ok_or(anyhow!("Eval not found"))?;
     let function_config = config.get_function(&eval_config.function_name)?;
@@ -165,20 +165,24 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
     }
 
     // Collect results
-    let mut eval_stats = EvalStats::new(args.format, dataset_len);
+    let mut eval_stats = EvaluationStats::new(args.format, dataset_len);
 
     while let Some(result) = join_set.join_next_with_id().await {
         match result {
             Ok((_, Ok((datapoint, inference_response, eval_result)))) => {
                 eval_stats.push(
-                    EvalUpdate::Success(EvalInfo::new(datapoint, inference_response, eval_result)),
+                    EvaluationUpdate::Success(EvaluationInfo::new(
+                        datapoint,
+                        inference_response,
+                        eval_result,
+                    )),
                     &mut writer,
                 )?;
             }
             Ok((task_id, Err(e))) => {
                 tracing::warn!("Task error: {}", e);
                 eval_stats.push(
-                    EvalUpdate::Error(EvalError {
+                    EvaluationUpdate::Error(EvaluationError {
                         datapoint_id: task_id_to_datapoint_id[&task_id],
                         message: e.to_string(),
                     }),
@@ -186,7 +190,7 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
                 )?;
             }
             Err(e) => eval_stats.push(
-                EvalUpdate::Error(EvalError {
+                EvaluationUpdate::Error(EvaluationError {
                     datapoint_id: task_id_to_datapoint_id[&e.id()],
                     message: e.to_string(),
                 }),
@@ -333,7 +337,7 @@ async fn infer_datapoint(
     match inference_result {
         InferenceOutput::NonStreaming(inference_response) => Ok(inference_response),
         InferenceOutput::Streaming(_inference_stream) => {
-            bail!("Streaming inference should never happen in evals")
+            bail!("Streaming inference should never happen in evaluations")
         }
     }
 }
@@ -385,7 +389,7 @@ impl ThrottledTensorZeroClient {
 
 #[cfg(test)]
 mod tests {
-    use tensorzero_internal::evals::ExactMatchConfig;
+    use tensorzero_internal::evaluations::ExactMatchConfig;
 
     use super::*;
 
