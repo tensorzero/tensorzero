@@ -4,8 +4,8 @@
 )]
 mod common;
 use clap::Parser;
-use evals::evaluators::llm_judge::run_llm_judge_evaluator;
-use evals::ThrottledTensorZeroClient;
+use evaluations::evaluators::llm_judge::run_llm_judge_evaluator;
+use evaluations::ThrottledTensorZeroClient;
 use serde_json::json;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeOutputType};
@@ -16,7 +16,7 @@ use url::Url;
 
 use crate::common::write_json_fixture_to_dataset;
 use common::write_chat_fixture_to_dataset;
-use evals::{run_eval, stats::EvalUpdate, Args, OutputFormat};
+use evaluations::{run_eval, stats::EvalUpdate, Args, OutputFormat};
 use std::{path::PathBuf, sync::Arc};
 use tensorzero::{ClientBuilder, ClientBuilderMode};
 use tensorzero::{InferenceResponse, Role};
@@ -546,7 +546,7 @@ async fn test_parse_args() {
 
 #[tokio::test]
 async fn test_run_eval_binary() {
-    let bin_path = env!("CARGO_BIN_EXE_evals");
+    let bin_path = std::env::var("CARGO_BIN_EXE_evaluations").unwrap();
     let output = std::process::Command::new(bin_path)
         .output()
         .expect("Failed to execute evals binary");

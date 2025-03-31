@@ -7,9 +7,9 @@ import { type VariantConfig } from "./variant";
 import {
   LLMJudgeIncludeConfigSchema,
   ExactMatchConfigSchema,
-  type EvalConfig,
+  type EvaluationConfig,
   type EvaluatorConfig,
-} from "./evals";
+} from "./evaluations";
 import type { MetricConfig } from "./metric";
 import type { RawFunctionConfig } from "./function.server";
 
@@ -137,7 +137,7 @@ export const UninitializedEvaluatorConfigSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export const UninitializedEvalConfigSchema = z.object({
+export const UninitializedEvaluationConfigSchema = z.object({
   evaluators: z.record(z.string(), UninitializedEvaluatorConfigSchema),
   dataset_name: z.string(),
   function_name: z.string(),
@@ -354,8 +354,8 @@ async function loadEvaluator(
 }
 
 // Transform the raw eval config
-export const RawEvalConfigSchema = UninitializedEvalConfigSchema.transform(
-  (raw) => {
+export const RawEvalConfigSchema =
+  UninitializedEvaluationConfigSchema.transform((raw) => {
     return {
       ...raw,
       load: async function (
@@ -363,7 +363,7 @@ export const RawEvalConfigSchema = UninitializedEvalConfigSchema.transform(
         evalName: string,
         functions: Record<string, RawFunctionConfig>,
       ): Promise<{
-        evalConfig: EvalConfig;
+        evalConfig: EvaluationConfig;
         functionConfigs: Record<string, FunctionConfig>;
         metricConfigs: Record<string, MetricConfig>;
       }> {
@@ -421,7 +421,6 @@ export const RawEvalConfigSchema = UninitializedEvalConfigSchema.transform(
         };
       },
     };
-  },
-);
+  });
 
 export type RawEvalConfig = z.infer<typeof RawEvalConfigSchema>;

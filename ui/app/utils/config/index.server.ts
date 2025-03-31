@@ -141,7 +141,10 @@ export const RawConfig = z
       .default({}),
     metrics: z.record(z.string(), MetricConfigSchema).optional().default({}),
     tools: z.record(z.string(), ToolConfigSchema).optional().default({}),
-    evals: z.record(z.string(), RawEvalConfigSchema).optional().default({}),
+    evaluations: z
+      .record(z.string(), RawEvalConfigSchema)
+      .optional()
+      .default({}),
   })
   .transform((raw) => {
     const config = { ...raw };
@@ -151,7 +154,7 @@ export const RawConfig = z
         const loadedMetrics: Record<string, MetricConfig> = {};
         const loadedFunctions: Record<string, FunctionConfig> = {};
         const loadedEvals: Record<string, EvaluationConfig> = {};
-        for (const [key, evalItem] of Object.entries(config.evals)) {
+        for (const [key, evalItem] of Object.entries(config.evaluations)) {
           const { evalConfig, functionConfigs, metricConfigs } =
             await evalItem.load(config_path, key, config.functions);
           loadedEvals[key] = evalConfig;

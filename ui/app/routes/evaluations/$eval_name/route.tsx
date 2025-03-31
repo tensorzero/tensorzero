@@ -25,7 +25,7 @@ import { getRunningEval } from "~/utils/evaluations.server";
 import {
   EvaluationErrorInfo,
   type EvaluationErrorDisplayInfo,
-} from "./EvalErrorInfo";
+} from "./EvaluationErrorInfo";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();

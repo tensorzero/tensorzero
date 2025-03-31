@@ -13,7 +13,7 @@ import {
 import { getConfig } from "~/utils/config/index.server";
 import EvalRunsTable from "./EvalRunsTable";
 import { useState } from "react";
-import { EvaluationsActions } from "./EvalsActions";
+import { EvaluationsActions } from "./EvaluationsActions";
 import LaunchEvalModal from "./LaunchEvalModal";
 import { runEval } from "~/utils/evaluations.server";
 

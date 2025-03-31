@@ -1,13 +1,13 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
 import { getConfigPath } from "./config/index.server";
-import { EvalErrorSchema, type DisplayEvalError } from "./evals";
+import { EvalErrorSchema, type DisplayEvalError } from "./evaluations";
 /**
  * Get the path to the evals binary from environment variables.
  * Defaults to 'evals' if not specified.
  */
-function getEvalsPath(): string {
-  return process.env.TENSORZERO_EVALS_PATH || "evals";
+function getEvaluationsPath(): string {
+  return process.env.TENSORZERO_EVALUATIONS_PATH || "evals";
 }
 
 function getGatewayURL(): string {
@@ -42,7 +42,7 @@ export function runEval(
   variantName: string,
   concurrency: number,
 ): Promise<EvalStartInfo> {
-  const evalsPath = getEvalsPath();
+  const evalsPath = getEvaluationsPath();
   const gatewayURL = getGatewayURL();
   // Construct the command to run the evals binary
   // Example: evals --gateway-url http://localhost:3000 --name entity_extraction --variant llama_8b_initial_prompt --concurrency 10 --format jsonl
