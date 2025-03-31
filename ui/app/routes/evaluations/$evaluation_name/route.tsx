@@ -126,8 +126,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       return false;
     }
     if (runningEvaluation.completed) {
-      // If the evaluation has completed and the completion time is at least 5 seconds ago,
-      // return false
+      // If the evaluation has completed and the completion time is at least
+      // 5 seconds ago, return false
       if (runningEvaluation.completed.getTime() + 5000 < Date.now()) {
         return false;
       }
