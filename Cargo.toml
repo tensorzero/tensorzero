@@ -34,7 +34,7 @@ pyo3 = { version = "0.24", features = ["experimental-async", "abi3-py39"] }
 axum = { version = "0.8", features = ["macros"] }
 anyhow = "1.0.97"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.32", features = ["derive"] }
+clap = { version = "4.5.34", features = ["derive"] }
 futures = "0.3.30"
 url = "2.5.4"
 
