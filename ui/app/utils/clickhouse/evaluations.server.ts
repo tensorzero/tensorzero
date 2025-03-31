@@ -134,7 +134,7 @@ const getEvalResultDatapointIdsQuery = `
   ORDER BY toUInt128(toUUID(dp.id)) DESC
 `;
 
-export async function getEvalResults(
+export async function getEvaluationResults(
   dataset_name: string,
   function_name: string,
   function_type: "chat" | "json",
@@ -212,7 +212,7 @@ For each eval run and metric, we want to know:
  - how many datapoints were used
  - what was the mean and stderr of the metric value
 */
-export async function getEvalStatistics(
+export async function getEvaluationStatistics(
   dataset_name: string,
   function_name: string,
   function_type: "chat" | "json",
@@ -278,7 +278,7 @@ export async function getEvalStatistics(
   return rows.map((row) => EvaluationStatisticsSchema.parse(row));
 }
 
-export async function countDatapointsForEval(
+export async function countDatapointsForEvaluation(
   dataset_name: string,
   function_name: string,
   function_type: "chat" | "json",
@@ -313,7 +313,7 @@ export async function countDatapointsForEval(
   return rows[0].count;
 }
 
-export async function countTotalEvalRuns() {
+export async function countTotalEvaluationRuns() {
   const query = `
     SELECT toUInt32(uniqExact(value)) as count FROM TagInference WHERE key = 'tensorzero::eval_run_id'
   `;
@@ -325,7 +325,10 @@ export async function countTotalEvalRuns() {
   return rows[0].count;
 }
 
-export async function getEvalRunInfo(limit: number = 100, offset: number = 0) {
+export async function getEvaluationRunInfo(
+  limit: number = 100,
+  offset: number = 0,
+) {
   const query = `
     SELECT
     t1.value AS eval_run_id,
@@ -333,8 +336,8 @@ export async function getEvalRunInfo(limit: number = 100, offset: number = 0) {
     t1.function_name,
     t1.variant_name,
     formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(toUInt128(t1.inference_id)))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
-FROM tensorzero_ui_fixtures.TagInference t1
-JOIN tensorzero_ui_fixtures.TagInference t2
+FROM TagInference t1
+JOIN TagInference t2
     ON t1.inference_id = t2.inference_id
 WHERE t1.key = 'tensorzero::eval_run_id'
   AND t2.key = 'tensorzero::eval_name'
@@ -365,7 +368,7 @@ For each eval run id, returns the maximum of:
 1. The timestamp from the eval run id itself (derived from UUIDv7)
 2. The timestamp of the most recent inference associated with that eval run id
 */
-export async function getMostRecentEvalInferenceDate(
+export async function getMostRecentEvaluationInferenceDate(
   eval_run_ids: string[],
 ): Promise<Map<string, Date>> {
   const query = `
@@ -416,7 +419,7 @@ export async function getMostRecentEvalInferenceDate(
   return resultMap;
 }
 
-export async function searchEvalRuns(
+export async function searchEvaluationRuns(
   eval_name: string,
   function_name: string,
   search_query: string,
@@ -455,14 +458,14 @@ export async function searchEvalRuns(
   return rows.map((row) => EvaluationRunInfoSchema.parse(row));
 }
 
-export async function getEvalsForDatapoint(
+export async function getEvaluationsForDatapoint(
   eval_name: string,
   datapoint_id: string,
   eval_run_ids: string[],
 ): Promise<ParsedEvaluationResultWithVariant[]> {
   const config = await getConfig();
-  const function_name = config.evals[eval_name].function_name;
-  const dataset_name = config.evals[eval_name].dataset_name;
+  const function_name = config.evaluations[eval_name].function_name;
+  const dataset_name = config.evaluations[eval_name].dataset_name;
   if (!function_name) {
     throw new Error(`Eval ${eval_name} not found in config`);
   }
@@ -475,7 +478,7 @@ export async function getEvalsForDatapoint(
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
 
-  const evaluators = config.evals[eval_name].evaluators;
+  const evaluators = config.evaluations[eval_name].evaluators;
   const metric_names = Object.keys(evaluators).map((evaluatorName) =>
     getEvaluatorMetricName(eval_name, evaluatorName),
   );

@@ -1,4 +1,8 @@
-import { Card, CardContent } from "~/components/ui/card";
+import {
+  SnippetLayout,
+  SnippetContent,
+} from "~/components/layout/SnippetLayout";
+import { CodeMessage } from "~/components/layout/SnippetContent";
 
 interface ParameterCardProps {
   parameters: Record<string, unknown>;
@@ -6,12 +10,14 @@ interface ParameterCardProps {
 
 export function ParameterCard({ parameters }: ParameterCardProps) {
   return (
-    <Card>
-      <CardContent className="pt-6">
-        <pre className="overflow-x-auto rounded-md bg-muted p-4">
-          <code className="text-sm">{JSON.stringify(parameters, null, 2)}</code>
-        </pre>
-      </CardContent>
-    </Card>
+    <SnippetLayout>
+      <SnippetContent>
+        <CodeMessage
+          content={JSON.stringify(parameters, null, 2)}
+          showLineNumbers={true}
+          emptyMessage="No parameters defined"
+        />
+      </SnippetContent>
+    </SnippetLayout>
   );
 }

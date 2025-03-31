@@ -33,7 +33,7 @@ export default function FunctionInferenceTable({
               colSpan={4}
               className="px-3 py-8 text-center text-fg-muted"
             >
-              No inferences found
+              No inferences found.
             </TableCell>
           </TableRow>
         ) : (

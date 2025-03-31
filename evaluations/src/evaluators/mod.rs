@@ -5,7 +5,7 @@ use anyhow::Result;
 use serde_json::Value;
 use tensorzero::{FeedbackParams, InferenceResponse};
 use tensorzero_internal::endpoints::datasets::Datapoint;
-use tensorzero_internal::evals::{get_evaluator_metric_name, EvalConfig, EvaluatorConfig};
+use tensorzero_internal::evaluations::{get_evaluator_metric_name, EvalConfig, EvaluatorConfig};
 
 mod exact_match;
 use exact_match::run_exact_match_evaluator;

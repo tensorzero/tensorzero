@@ -212,12 +212,7 @@ export default function VariantDetails() {
         </SectionLayout>
 
         <SectionLayout>
-          <SectionHeader heading="Template" />
-          <VariantTemplate variantConfig={variant_config} />
-        </SectionLayout>
-
-        <SectionLayout>
-          <SectionHeader heading="Metric" />
+          <SectionHeader heading="Metrics" />
           <MetricSelector
             metricsWithFeedback={metricsWithFeedback}
             selectedMetric={metric_name || ""}
@@ -231,6 +226,11 @@ export default function VariantDetails() {
               onTimeGranularityChange={handleTimeGranularityChange}
             />
           )}
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Templates" />
+          <VariantTemplate variantConfig={variant_config} />
         </SectionLayout>
 
         <SectionLayout>

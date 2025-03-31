@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use evals::{run_eval, Args};
+use evaluations::{run_eval, Args};
 use uuid::Uuid;
 
 #[tokio::main]

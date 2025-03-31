@@ -36,7 +36,7 @@ import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import type { MetricConfig } from "~/utils/config/metric";
-import { type EvaluatorConfig } from "~/utils/config/evals";
+import { type EvaluatorConfig } from "~/utils/config/evaluations";
 import { useColorAssigner } from "./ColorAssigner";
 import { ColorAssignerProvider } from "./ColorAssigner";
 import MetricValue, {
@@ -488,7 +488,7 @@ export function EvaluationTable({
                               const metricType =
                                 config.metrics[metric_name].type;
                               const evaluatorConfig =
-                                config.evals[eval_name].evaluators[
+                                config.evaluations[eval_name].evaluators[
                                   evaluator_name
                                 ];
 
@@ -536,7 +536,7 @@ const EvaluatorHeader = ({
   summaryStats: EvaluationStatistics[];
 }) => {
   const config = useConfig();
-  const evalConfig = config.evals[eval_name];
+  const evalConfig = config.evaluations[eval_name];
   const evaluatorConfig = evalConfig.evaluators[evaluator_name];
   const metric_name = getEvaluatorMetricName(eval_name, evaluator_name);
   const metricProperties = config.metrics[metric_name];

@@ -27,7 +27,7 @@ interface LaunchEvalModalProps {
 function EvalForm() {
   const fetcher = useFetcher();
   const config = useConfig();
-  const eval_names = Object.keys(config.evals);
+  const eval_names = Object.keys(config.evaluations);
   const [selectedEvalName, setSelectedEvalName] = useState<string | null>(null);
   const [selectedVariantName, setSelectedVariantName] = useState<string | null>(
     null,
@@ -38,8 +38,8 @@ function EvalForm() {
   let dataset = null;
   let function_name = null;
   if (selectedEvalName) {
-    dataset = config.evals[selectedEvalName]?.dataset_name;
-    function_name = config.evals[selectedEvalName]?.function_name;
+    dataset = config.evaluations[selectedEvalName]?.dataset_name;
+    function_name = config.evaluations[selectedEvalName]?.function_name;
   }
   const { count: datasetCount, isLoading: datasetLoading } =
     useDatasetCountFetcher(dataset, function_name);
@@ -129,7 +129,8 @@ function EvalForm() {
           {(() => {
             if (!selectedEvalName) return null;
 
-            const eval_function = config.evals[selectedEvalName].function_name;
+            const eval_function =
+              config.evaluations[selectedEvalName].function_name;
             const variant_names = Object.keys(
               config.functions[eval_function].variants,
             );

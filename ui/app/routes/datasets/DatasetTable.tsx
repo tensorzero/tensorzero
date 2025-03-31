@@ -8,7 +8,6 @@ import {
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
-import { Badge } from "~/components/ui/badge";
 import { Link } from "react-router";
 
 export default function DatasetTable({
@@ -22,29 +21,40 @@ export default function DatasetTable({
         <TableHeader>
           <TableRow>
             <TableHead>Dataset Name</TableHead>
-            <TableHead>Count</TableHead>
+            <TableHead>Datapoint Count</TableHead>
             <TableHead>Last Updated</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {counts.map((count) => (
-            <TableRow key={count.dataset_name} id={count.dataset_name}>
-              <TableCell className="max-w-[200px]">
-                <Link
-                  to={`/datasets/${count.dataset_name}`}
-                  className="block no-underline"
-                >
-                  <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                    {count.dataset_name}
-                  </code>
-                </Link>
+          {counts.length === 0 ? (
+            <TableRow className="hover:bg-bg-primary">
+              <TableCell
+                colSpan={3}
+                className="px-3 py-8 text-center text-fg-muted"
+              >
+                No datasets found.
               </TableCell>
-              <TableCell className="max-w-[200px]">
-                <Badge variant="outline">{count.count}</Badge>
-              </TableCell>
-              <TableCell>{formatDate(new Date(count.last_updated))}</TableCell>
             </TableRow>
-          ))}
+          ) : (
+            counts.map((count) => (
+              <TableRow key={count.dataset_name} id={count.dataset_name}>
+                <TableCell className="max-w-[200px]">
+                  <Link
+                    to={`/datasets/${count.dataset_name}`}
+                    className="block no-underline"
+                  >
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                      {count.dataset_name}
+                    </code>
+                  </Link>
+                </TableCell>
+                <TableCell className="max-w-[200px]">{count.count}</TableCell>
+                <TableCell>
+                  {formatDate(new Date(count.last_updated))}
+                </TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
     </div>

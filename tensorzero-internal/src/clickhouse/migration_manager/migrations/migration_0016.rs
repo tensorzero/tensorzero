@@ -7,7 +7,7 @@ use super::{check_table_exists, table_is_nonempty};
 
 /// This migration is used to set up the ClickHouse database for the datasets feature.
 /// It creates two tables: `ChatInferenceDatapoint` and `JsonInferenceDatapoint`
-/// These tables store the information required to do things like run evals,
+/// These tables store the information required to do things like run evaluations,
 /// implement dynamic in-context learning, and run curated SFT jobs.
 /// We anticipate unpredictable future uses for datasets as well.
 ///

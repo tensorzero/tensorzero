@@ -34,9 +34,9 @@ WORKDIR /minijinja
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 RUN wasm-pack build --features console_error_panic_hook
 
-# ========== evals-build-env ==========
+# ========== evaluations-build-env ==========
 
-FROM rust:latest AS evals-build-env
+FROM rust:latest AS evaluations-build-env
 
 COPY . /tensorzero
 
@@ -46,10 +46,10 @@ RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt
 
 ARG CARGO_BUILD_FLAGS=""
 
-RUN --mount=type=cache,id=tensorzero-evals-release,sharing=shared,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=tensorzero-evals-release,sharing=shared,target=/usr/local/cargo/git \
-    --mount=type=cache,id=tensorzero-evals-release,sharing=locked,target=/src/target \
-    cargo build --release -p evals $CARGO_BUILD_FLAGS && \
+RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
+    --mount=type=cache,id=tensorzero-evaluations-release,sharing=locked,target=/src/target \
+    cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
     cp -r /tensorzero/target/release /release
 
 
@@ -79,7 +79,7 @@ COPY --from=production-dependencies-env /app/node_modules /app/node_modules
 
 COPY --from=build-env /app/build /app/build
 
-COPY --from=evals-build-env /release/evals /usr/local/bin/evals
+COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations
 
 WORKDIR /app
 

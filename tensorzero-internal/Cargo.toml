@@ -22,7 +22,7 @@ workspace = true
 async-stream = { workspace = true }
 async-trait = "0.1.86"
 aws-config = { version = "1.6", features = ["behavior-version-latest"] }
-aws-sdk-bedrockruntime = { version = "1.77.0", default-features = false, features = [
+aws-sdk-bedrockruntime = { version = "1.79.0", default-features = false, features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
@@ -41,9 +41,9 @@ derive_builder = "0.20.0"
 futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
-image = { version = "0.25.5", default-features = false }
+image = { version = "0.25.6", default-features = false }
 itertools = "0.14.0"
-jsonschema = "0.29.0"
+jsonschema = "0.29.1"
 jsonwebtoken = "9.3.1"
 lazy_static = { version = "1.5.0" }
 metrics = "0.24.1"
@@ -90,7 +90,7 @@ tracing-test = { workspace = true }
 tensorzero = { path = "../clients/rust" }
 paste = "1.0.15"
 base64 = "0.22.1"
-aws-sdk-s3 = { version = "1.79.0", default-features = false, features = [
+aws-sdk-s3 = { version = "1.81.0", default-features = false, features = [
     "behavior-version-latest",
     "sigv4a",
     "rt-tokio",

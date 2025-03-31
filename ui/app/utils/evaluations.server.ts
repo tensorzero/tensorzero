@@ -1,13 +1,13 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
 import { getConfigPath } from "./config/index.server";
-import { EvalErrorSchema, type DisplayEvalError } from "./evals";
+import { EvalErrorSchema, type DisplayEvalError } from "./evaluations";
 /**
- * Get the path to the evals binary from environment variables.
- * Defaults to 'evals' if not specified.
+ * Get the path to the evaluations binary from environment variables.
+ * Defaults to 'evaluations' if not specified.
  */
-function getEvalsPath(): string {
-  return process.env.TENSORZERO_EVALS_PATH || "evals";
+function getEvaluationsPath(): string {
+  return process.env.TENSORZERO_EVALUATIONS_PATH || "evaluations";
 }
 
 function getGatewayURL(): string {
@@ -26,28 +26,30 @@ interface RunningEvalInfo {
 }
 
 // This is a map of eval run id to running eval info
-const runningEvals: Record<string, RunningEvalInfo> = {};
+const runningEvaluations: Record<string, RunningEvalInfo> = {};
 
 /**
  * Returns the running information for a specific evaluation run.
  * @param evalRunId The ID of the evaluation run to retrieve.
  * @returns The running information for the specified evaluation run, or undefined if not found.
  */
-export function getRunningEval(evalRunId: string): RunningEvalInfo | undefined {
-  return runningEvals[evalRunId];
+export function getRunningEvaluation(
+  evalRunId: string,
+): RunningEvalInfo | undefined {
+  return runningEvaluations[evalRunId];
 }
 
-export function runEval(
+export function runEvaluation(
   evalName: string,
   variantName: string,
   concurrency: number,
-): Promise<EvalStartInfo> {
-  const evalsPath = getEvalsPath();
+): Promise<EvaluationStartInfo> {
+  const evaluationsPath = getEvaluationsPath();
   const gatewayURL = getGatewayURL();
-  // Construct the command to run the evals binary
-  // Example: evals --gateway-url http://localhost:3000 --name entity_extraction --variant llama_8b_initial_prompt --concurrency 10 --format jsonl
+  // Construct the command to run the evaluations binary
+  // Example: evaluations --gateway-url http://localhost:3000 --name entity_extraction --variant llama_8b_initial_prompt --concurrency 10 --format jsonl
   const command = [
-    evalsPath,
+    evaluationsPath,
     "--gateway-url",
     gatewayURL,
     "--config-file",
@@ -62,8 +64,8 @@ export function runEval(
     "jsonl",
   ];
 
-  return new Promise<EvalStartInfo>((resolve, reject) => {
-    // Spawn a child process to run the evals command
+  return new Promise<EvaluationStartInfo>((resolve, reject) => {
+    // Spawn a child process to run the evaluations command
     const child = spawn(command[0], command.slice(1));
 
     // Variables to track state
@@ -91,11 +93,12 @@ export function runEval(
           parsedLine.num_datapoints
         ) {
           try {
-            const evalStartInfo = evalStartInfoSchema.parse(parsedLine);
-            evalRunId = evalStartInfo.eval_run_id;
+            const evaluationStartInfo =
+              evaluationStartInfoSchema.parse(parsedLine);
+            evalRunId = evaluationStartInfo.eval_run_id;
 
-            // Initialize the tracking entry in our runningEvals map
-            runningEvals[evalRunId] = {
+            // Initialize the tracking entry in our runningEvaluations map
+            runningEvaluations[evalRunId] = {
               variantName,
               errors: [],
               started: startTime,
@@ -105,7 +108,7 @@ export function runEval(
             initialDataReceived = true;
 
             // Resolve the promise with the eval start info
-            resolve(evalStartInfo);
+            resolve(evaluationStartInfo);
           } catch (error) {
             reject(error);
           }
@@ -117,7 +120,7 @@ export function runEval(
             const evalError = EvalErrorSchema.parse(parsedLine);
 
             // Add to the beginning of the errors list
-            runningEvals[evalRunId].errors.unshift(evalError);
+            runningEvaluations[evalRunId].errors.unshift(evalError);
           } catch {
             // If it doesn't match our schema, just ignore it
           }
@@ -164,11 +167,11 @@ export function runEval(
 
       if (evalRunId) {
         // Mark the eval as completed
-        runningEvals[evalRunId].completed = new Date();
+        runningEvaluations[evalRunId].completed = new Date();
 
         // Add exit code info if not successful
         if (code !== 0) {
-          runningEvals[evalRunId].errors.push({
+          runningEvaluations[evalRunId].errors.push({
             message: `Process exited with code ${code}`,
           });
         }
@@ -185,51 +188,51 @@ export function runEval(
   });
 }
 
-const evalStartInfoSchema = z.object({
+const evaluationStartInfoSchema = z.object({
   eval_run_id: z.string(),
   num_datapoints: z.number(),
 });
-export type EvalStartInfo = z.infer<typeof evalStartInfoSchema>;
+export type EvaluationStartInfo = z.infer<typeof evaluationStartInfoSchema>;
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 /**
- * Cleans up old eval entries from the runningEvals map:
- * - Removes completed evals older than 1 hour
- * - Removes stalled evals (started but not completed) older than 24 hours
+ * Cleans up old evaluation entries from the runningEvaluations map:
+ * - Removes completed evaluations older than 1 hour
+ * - Removes stalled evaluations (started but not completed) older than 24 hours
  */
-export function cleanupOldEvals(): void {
+export function cleanupOldEvaluations(): void {
   const now = new Date();
 
-  Object.keys(runningEvals).forEach((evalRunId) => {
-    const evalInfo = runningEvals[evalRunId];
+  Object.keys(runningEvaluations).forEach((evalRunId) => {
+    const evalInfo = runningEvaluations[evalRunId];
 
-    // Remove completed evals older than 1 hour
+    // Remove completed evaluations older than 1 hour
     if (
       evalInfo.completed &&
       now.getTime() - evalInfo.completed.getTime() > ONE_HOUR_MS
     ) {
-      delete runningEvals[evalRunId];
+      delete runningEvaluations[evalRunId];
       return;
     }
 
-    // Remove stalled evals older than 24 hours
+    // Remove stalled evaluations older than 24 hours
     if (now.getTime() - evalInfo.started.getTime() > TWENTY_FOUR_HOURS_MS) {
-      delete runningEvals[evalRunId];
+      delete runningEvaluations[evalRunId];
     }
   });
 }
 
 /**
- * Starts a periodic cleanup of old evals.
+ * Starts a periodic cleanup of old evaluations.
  * @param intervalMs The interval in milliseconds between cleanups. Default: 1 hour.
  * @returns A function that can be called to stop the periodic cleanup.
  */
 export function startPeriodicCleanup(intervalMs = ONE_HOUR_MS): () => void {
-  const intervalId = setInterval(cleanupOldEvals, intervalMs);
+  const intervalId = setInterval(cleanupOldEvaluations, intervalMs);
 
   // Run an initial cleanup immediately
-  cleanupOldEvals();
+  cleanupOldEvaluations();
 
   // Return a function to stop the periodic cleanup
   return () => clearInterval(intervalId);

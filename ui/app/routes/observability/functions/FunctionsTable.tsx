@@ -59,27 +59,38 @@ export default function FunctionsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {mergedFunctions.map(
-            ({ function_name, count, max_timestamp, type }) => (
-              <TableRow key={function_name} id={function_name}>
-                <TableCell className="max-w-[200px] lg:max-w-none">
-                  <FunctionLink functionName={function_name}>
-                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {function_name}
-                    </code>
-                  </FunctionLink>
-                </TableCell>
-                <TableCell>
-                  <Code>{type}</Code>
-                </TableCell>
-                <TableCell>{count}</TableCell>
-                <TableCell>
-                  {max_timestamp === "Never"
-                    ? "Never"
-                    : formatDate(new Date(max_timestamp))}
-                </TableCell>
-              </TableRow>
-            ),
+          {mergedFunctions.length === 0 ? (
+            <TableRow className="hover:bg-bg-primary">
+              <TableCell
+                colSpan={4}
+                className="px-3 py-8 text-center text-fg-muted"
+              >
+                No functions found.
+              </TableCell>
+            </TableRow>
+          ) : (
+            mergedFunctions.map(
+              ({ function_name, count, max_timestamp, type }) => (
+                <TableRow key={function_name} id={function_name}>
+                  <TableCell className="max-w-[200px] lg:max-w-none">
+                    <FunctionLink functionName={function_name}>
+                      <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                        {function_name}
+                      </code>
+                    </FunctionLink>
+                  </TableCell>
+                  <TableCell>
+                    <Code>{type}</Code>
+                  </TableCell>
+                  <TableCell>{count}</TableCell>
+                  <TableCell>
+                    {max_timestamp === "Never"
+                      ? "Never"
+                      : formatDate(new Date(max_timestamp))}
+                  </TableCell>
+                </TableRow>
+              ),
+            )
           )}
         </TableBody>
       </Table>
