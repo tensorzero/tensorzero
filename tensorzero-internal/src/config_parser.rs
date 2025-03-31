@@ -10,7 +10,7 @@ use tracing::instrument;
 
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
-use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
+use crate::evaluations::{StaticEvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -33,7 +33,7 @@ pub struct Config<'c> {
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
-    pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
+    pub evaluations: HashMap<String, Arc<StaticEvaluationConfig>>, // evaluation name => evaluation config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
 }

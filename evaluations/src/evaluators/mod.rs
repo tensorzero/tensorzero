@@ -6,7 +6,7 @@ use serde_json::Value;
 use tensorzero::{FeedbackParams, InferenceResponse};
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{
-    get_evaluator_metric_name, EvaluationConfig, EvaluatorConfig,
+    get_evaluator_metric_name, EvaluatorConfig, StaticEvaluationConfig,
 };
 
 mod exact_match;
@@ -29,7 +29,7 @@ pub type EvaluationResult = HashMap<String, Result<Option<Value>>>;
 pub(crate) async fn evaluate_inference(
     inference_response: Arc<InferenceResponse>,
     datapoint: Arc<Datapoint>,
-    evaluation_config: Arc<EvaluationConfig>,
+    evaluation_config: Arc<StaticEvaluationConfig>,
     evaluation_name: Arc<String>,
     tensorzero_client: Arc<ThrottledTensorZeroClient>,
     evaluation_run_id: Uuid,
@@ -107,7 +107,7 @@ pub(crate) async fn evaluate_inference(
 ///
 /// NOTE: Each evaluator we implement in the match statement below should follow this contract.
 async fn run_evaluator(
-    evaluation_config: &EvaluationConfig,
+    evaluation_config: &StaticEvaluationConfig,
     evaluator_name: String,
     inference_response: &InferenceResponse,
     tensorzero_client: &ThrottledTensorZeroClient,

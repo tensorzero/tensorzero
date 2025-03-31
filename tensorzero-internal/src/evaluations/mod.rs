@@ -28,7 +28,7 @@ pub const LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT: &str =
     include_str!("llm_judge_boolean_output_schema.json");
 
 #[derive(Debug)]
-pub struct EvaluationConfig {
+pub struct StaticEvaluationConfig {
     pub evaluators: HashMap<String, EvaluatorConfig>,
     pub dataset_name: String,
     pub function_name: String,
@@ -131,7 +131,7 @@ pub struct UninitializedEvaluationConfig {
 
 type EvaluationLoadResult = Result<
     (
-        EvaluationConfig,                     // The evaluation itself
+        StaticEvaluationConfig,               // The evaluation itself
         HashMap<String, Arc<FunctionConfig>>, // All functions which the evaluation needs {function_name -> function_config}
         HashMap<String, MetricConfig>, // All metrics which the evaluation needs {metric_name -> metric_config}
     ),
@@ -199,7 +199,7 @@ impl UninitializedEvaluationConfig {
             );
         }
         Ok((
-            EvaluationConfig {
+            StaticEvaluationConfig {
                 evaluators,
                 dataset_name: self.dataset_name,
                 function_name: self.function_name,
