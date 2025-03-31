@@ -552,7 +552,7 @@ mod tests {
                 "test_variant".to_string(),
                 UninitializedLLMJudgeVariantConfig::ChatCompletion(
                     UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: true,
+                        active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
                             "evals/eval1/llm_judge_bool/system_instructions.txt",
@@ -669,7 +669,7 @@ mod tests {
                 "test_variant".to_string(),
                 UninitializedLLMJudgeVariantConfig::ChatCompletion(
                     UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: true,
+                        active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
                             "evals/eval1/llm_judge_bool/system_instructions.txt",
@@ -818,7 +818,7 @@ mod tests {
                 "test_variant1".to_string(),
                 UninitializedLLMJudgeVariantConfig::ChatCompletion(
                     UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: true,
+                        active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
                             "evals/eval1/llm_judge_bool/system_instructions.txt",
@@ -841,7 +841,7 @@ mod tests {
                 "test_variant2".to_string(),
                 UninitializedLLMJudgeVariantConfig::ChatCompletion(
                     UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: true,
+                        active: Some(true),
                         model: Arc::from("gpt-4"),
                         system_instructions: PathBuf::from(
                             "evals/eval1/llm_judge_bool/system_instructions.txt",
@@ -952,7 +952,7 @@ mod tests {
                 "test_variant".to_string(),
                 UninitializedLLMJudgeVariantConfig::ChatCompletion(
                     UninitializedLLMJudgeChatCompletionVariantConfig {
-                        active: true,
+                        active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
                             "evals/eval1/llm_judge_bool/system_instructions.txt",
@@ -1011,7 +1011,130 @@ mod tests {
             }
         }
 
-        // Test case 8: a single variant with active = false
+        // Test case 8: Single LLM Judge variant with no 'active' field specified (defaults to active)
+        {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "default_active_variant".to_string(),
+                UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                    UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: None, // No 'active' field specified
+                        model: Arc::from("gpt-3.5-turbo"),
+                        system_instructions: PathBuf::from(
+                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                        ),
+                        temperature: Some(0.7),
+                        top_p: None,
+                        max_tokens: Some(100),
+                        presence_penalty: None,
+                        frequency_penalty: None,
+                        seed: None,
+                        json_mode: JsonMode::ImplicitTool,
+                        retries: RetryConfig::default(),
+                        extra_body: Default::default(),
+                    },
+                ),
+            );
+
+            let llm_judge_config = UninitializedLLMJudgeConfig {
+                variants,
+                output_type: LLMJudgeOutputType::Boolean,
+                optimize: LLMJudgeOptimize::Max,
+                include: LLMJudgeIncludeConfig::default(),
+                cutoff: None,
+            };
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "llm_judge_default_active".to_string(),
+                UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
+            );
+
+            let uninitialized_config = UninitializedEvalConfig {
+                evaluators,
+                dataset_name: "test_dataset".to_string(),
+                function_name: function_name.to_string(),
+            };
+
+            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            assert!(result.is_ok());
+
+            let (_config, additional_functions, _metric_configs) = result.unwrap();
+            let function_config_name =
+                get_llm_judge_function_name(eval_name, "llm_judge_default_active");
+            let function_config = additional_functions.get(&function_config_name).unwrap();
+            match function_config.as_ref() {
+                FunctionConfig::Json(json_config) => {
+                    assert_eq!(json_config.variants.len(), 1);
+                    let variant = json_config.variants.get("default_active_variant").unwrap();
+                    // Check that the weight is Some(1.0) which indicates it defaulted to active
+                    match variant {
+                        VariantConfig::ChatCompletion(cc_config) => {
+                            assert_eq!(cc_config.weight, Some(1.0));
+                        }
+                        #[allow(unreachable_patterns)] // Keep the pattern exhaustive
+                        _ => panic!("Expected ChatCompletion variant config"),
+                    }
+                }
+                #[allow(unreachable_patterns)] // Keep the pattern exhaustive
+                _ => panic!("Expected Json function config"),
+            }
+        }
+
+        // Test case 9: Single LLM Judge variant explicitly set to inactive (active = false)
+        {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "inactive_variant".to_string(),
+                UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                    UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: Some(false), // Explicitly inactive
+                        model: Arc::from("gpt-3.5-turbo"),
+                        system_instructions: PathBuf::from(
+                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                        ),
+                        temperature: Some(0.7),
+                        top_p: None,
+                        max_tokens: Some(100),
+                        presence_penalty: None,
+                        frequency_penalty: None,
+                        seed: None,
+                        json_mode: JsonMode::ImplicitTool,
+                        retries: RetryConfig::default(),
+                        extra_body: Default::default(),
+                    },
+                ),
+            );
+
+            let llm_judge_config = UninitializedLLMJudgeConfig {
+                variants,
+                output_type: LLMJudgeOutputType::Boolean,
+                optimize: LLMJudgeOptimize::Max,
+                include: LLMJudgeIncludeConfig::default(),
+                cutoff: None,
+            };
+
+            let mut evaluators = HashMap::new();
+            evaluators.insert(
+                "llm_judge_inactive".to_string(),
+                UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
+            );
+
+            let uninitialized_config = UninitializedEvalConfig {
+                evaluators,
+                dataset_name: "test_dataset".to_string(),
+                function_name: function_name.to_string(),
+            };
+
+            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            assert!(result.is_err());
+            assert_eq!(
+                *result.unwrap_err().get_details(),
+                ErrorDetails::Config {
+                    message: format!("Evaluator `llm_judge_inactive` in `[evals.{eval_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
+                }
+            );
+        }
     }
 
     // Helper functions for tests
