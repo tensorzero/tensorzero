@@ -56,7 +56,10 @@ export default function FeedbackTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <FeedbackValue feedback={item} />
+                  <FeedbackValue
+                    feedback={item}
+                    metric={metrics[getMetricName(item)]}
+                  />
                 </TableCell>
                 <TableCell>{formatDate(new Date(item.timestamp))}</TableCell>
               </TableRow>
