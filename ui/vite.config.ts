@@ -5,13 +5,17 @@ import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import wasm from "vite-plugin-wasm";
 
+// We don't need to load react-router in storybook or tests
+const shouldLoadReactRouter =
+  !process.env.VITEST && !process.argv[1]?.includes("storybook");
+
 export default defineConfig({
   css: {
     postcss: {
       plugins: [tailwindcss, autoprefixer],
     },
   },
-  plugins: [wasm(), reactRouter(), tsconfigPaths()],
+  plugins: [wasm(), shouldLoadReactRouter && reactRouter(), tsconfigPaths()],
   // IMPORTANT:
   // If we don't set the target to es2022, we need `vite-plugin-top-level-await`
   // for "vite-plugin-wasm".

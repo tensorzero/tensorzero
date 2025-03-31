@@ -16,11 +16,7 @@ const config: StorybookConfig = {
   ],
   framework: {
     name: "@storybook/react-vite",
-    options: {
-      builder: {
-        viteConfigPath: "vite.storybook.config.ts",
-      },
-    },
+    options: {},
   },
 };
 export default config;
