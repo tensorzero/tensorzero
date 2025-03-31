@@ -17,25 +17,27 @@ import {
 } from "~/components/ui/popover";
 import { useSearchParams, useNavigate } from "react-router";
 import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
-import { useSearchEvalRunsFetcher } from "~/routes/api/evaluations/search_runs/$eval_name/route";
+import { useSearchEvaluationRunsFetcher } from "~/routes/api/evaluations/search_runs/$evaluation_name/route";
 import { useColorAssigner } from "./ColorAssigner";
-import { getLastUuidSegment } from "~/components/evaluations/EvalRunBadge";
-import EvalRunBadge from "~/components/evaluations/EvalRunBadge";
+import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
+import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 
 interface VariantSelectorProps {
-  evalName: string;
-  mostRecentEvalInferenceDates: Map<string, Date>;
+  evaluationName: string;
+  mostRecentEvaluationInferenceDates: Map<string, Date>;
   selectedRunIdInfos: EvaluationRunInfo[];
 }
 
 export function VariantSelector({
-  evalName,
-  mostRecentEvalInferenceDates,
+  evaluationName,
+  mostRecentEvaluationInferenceDates,
   selectedRunIdInfos,
 }: VariantSelectorProps) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const selectedRunIds = selectedRunIdInfos.map((info) => info.eval_run_id);
+  const selectedRunIds = selectedRunIdInfos.map(
+    (info) => info.evaluation_run_id,
+  );
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
 
@@ -46,8 +48,8 @@ export function VariantSelector({
   // Use the color assigner context
   const { getColor } = useColorAssigner();
 
-  const { data, isLoading } = useSearchEvalRunsFetcher({
-    evalName: evalName,
+  const { data, isLoading } = useSearchEvaluationRunsFetcher({
+    evaluationName: evaluationName,
     query: searchValue,
   });
   const availableRunInfos = data || [];
@@ -56,8 +58,8 @@ export function VariantSelector({
   const updateSelectedRunIds = (runIdInfos: EvaluationRunInfo[]) => {
     const newParams = new URLSearchParams(searchParams);
     newParams.set(
-      "eval_run_ids",
-      runIdInfos.map((info) => info.eval_run_id).join(","),
+      "evaluation_run_ids",
+      runIdInfos.map((info) => info.evaluation_run_id).join(","),
     );
     navigate(`?${newParams.toString()}`, { replace: true });
   };
@@ -65,14 +67,14 @@ export function VariantSelector({
   // Toggle a run selection
   const toggleRun = (runId: string) => {
     const runInfo = availableRunInfos.find(
-      (info) => info.eval_run_id === runId,
+      (info) => info.evaluation_run_id === runId,
     );
     if (!runInfo) return;
 
     if (selectedRunIds.includes(runId)) {
       // Remove the run
       const newSelectedRunIdInfos = selectedRunIdInfos.filter(
-        (info) => info.eval_run_id !== runId,
+        (info) => info.evaluation_run_id !== runId,
       );
       updateSelectedRunIds(newSelectedRunIdInfos);
     } else if (canAddMore) {
@@ -84,7 +86,7 @@ export function VariantSelector({
   // Select all runs
   const selectAll = () => {
     const allSelected = availableRunInfos.every((info) =>
-      selectedRunIds.includes(info.eval_run_id),
+      selectedRunIds.includes(info.evaluation_run_id),
     );
 
     if (allSelected) {
@@ -103,7 +105,7 @@ export function VariantSelector({
     e.stopPropagation();
 
     const newSelectedRunIdInfos = selectedRunIdInfos.filter(
-      (info) => info.eval_run_id !== runId,
+      (info) => info.evaluation_run_id !== runId,
     );
     updateSelectedRunIds(newSelectedRunIdInfos);
   };
@@ -149,19 +151,19 @@ export function VariantSelector({
                     <CommandGroup>
                       {availableRunInfos.map((info) => {
                         const isSelected = selectedRunIds.includes(
-                          info.eval_run_id,
+                          info.evaluation_run_id,
                         );
-                        const variantColor = getColor(info.eval_run_id);
+                        const variantColor = getColor(info.evaluation_run_id);
                         const runIdSegment = getLastUuidSegment(
-                          info.eval_run_id,
+                          info.evaluation_run_id,
                         );
                         const isDisabled = !isSelected && !canAddMore;
 
                         return (
                           <CommandItem
-                            key={info.eval_run_id}
-                            value={`${info.variant_name} ${info.eval_run_id}`}
-                            onSelect={() => toggleRun(info.eval_run_id)}
+                            key={info.evaluation_run_id}
+                            value={`${info.variant_name} ${info.evaluation_run_id}`}
+                            onSelect={() => toggleRun(info.evaluation_run_id)}
                             className={`flex items-center gap-2 ${
                               isDisabled ? "cursor-not-allowed opacity-50" : ""
                             }`}
@@ -190,7 +192,7 @@ export function VariantSelector({
                             className="font-medium"
                           >
                             {availableRunInfos.every((info) =>
-                              selectedRunIds.includes(info.eval_run_id),
+                              selectedRunIds.includes(info.evaluation_run_id),
                             )
                               ? "Deselect All"
                               : `Select ${
@@ -213,12 +215,14 @@ export function VariantSelector({
       {/* Display selected variants as badges */}
       <div className="mt-3 flex flex-wrap gap-2">
         {selectedRunIdInfos.map((info) => (
-          <EvalRunBadge
-            key={info.eval_run_id}
+          <EvaluationRunBadge
+            key={info.evaluation_run_id}
             runInfo={info}
             getColor={getColor}
-            lastUpdateDate={mostRecentEvalInferenceDates.get(info.eval_run_id)}
-            onRemove={(e) => removeRun(info.eval_run_id, e)}
+            lastUpdateDate={mostRecentEvaluationInferenceDates.get(
+              info.evaluation_run_id,
+            )}
+            onRemove={(e) => removeRun(info.evaluation_run_id, e)}
           />
         ))}
       </div>
