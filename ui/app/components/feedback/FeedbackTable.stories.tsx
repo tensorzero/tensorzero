@@ -35,15 +35,6 @@ const config: Config = {
 const meta = {
   title: "FeedbackTable",
   component: FeedbackTable,
-  decorators: [
-    (Story) => (
-      <ConfigProvider value={config}>
-        <div className="w-[80vw] p-4">
-          <Story />
-        </div>
-      </ConfigProvider>
-    ),
-  ],
 } satisfies Meta<typeof FeedbackTable>;
 
 export default meta;
@@ -130,16 +121,32 @@ const mockFeedback: FeedbackRow[] = [
   },
 ];
 
+const StoryWrapper = ({ children }: { children: React.ReactNode }) => (
+  <ConfigProvider value={config}>
+    <div className="w-[80vw] p-4">{children}</div>
+  </ConfigProvider>
+);
+
 export const Empty: Story = {
   args: {
     feedback: [],
   },
+  render: (args) => (
+    <StoryWrapper>
+      <FeedbackTable feedback={args.feedback} />
+    </StoryWrapper>
+  ),
 };
 
 export const WithData: Story = {
   args: {
     feedback: mockFeedback,
   },
+  render: (args) => (
+    <StoryWrapper>
+      <FeedbackTable feedback={args.feedback} />
+    </StoryWrapper>
+  ),
 };
 
 export const WithLongComment: Story = {
@@ -160,6 +167,11 @@ export const WithLongComment: Story = {
       },
     ],
   },
+  render: (args) => (
+    <StoryWrapper>
+      <FeedbackTable feedback={args.feedback} />
+    </StoryWrapper>
+  ),
 };
 
 export const WithLongDemonstration: Story = {
@@ -179,4 +191,9 @@ export const WithLongDemonstration: Story = {
       },
     ],
   },
+  render: (args) => (
+    <StoryWrapper>
+      <FeedbackTable feedback={args.feedback} />
+    </StoryWrapper>
+  ),
 };
