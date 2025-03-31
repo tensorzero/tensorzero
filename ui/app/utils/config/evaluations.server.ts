@@ -171,7 +171,7 @@ function getEvaluatorMetricName(
   evalName: string,
   evaluatorName: string,
 ): string {
-  return `tensorzero::eval_name::${evalName}::evaluator_name::${evaluatorName}`;
+  return `tensorzero::evaluation_name::${evalName}::evaluator_name::${evaluatorName}`;
 }
 
 // Transform an uninitialized LLM judge variant config into a variant config
@@ -353,8 +353,8 @@ async function loadEvaluator(
   }
 }
 
-// Transform the raw eval config
-export const RawEvalConfigSchema =
+// Transform the raw evaluation config
+export const RawEvaluationConfigSchema =
   UninitializedEvaluationConfigSchema.transform((raw) => {
     return {
       ...raw,
@@ -363,14 +363,14 @@ export const RawEvalConfigSchema =
         evalName: string,
         functions: Record<string, RawFunctionConfig>,
       ): Promise<{
-        evalConfig: EvaluationConfig;
+        EvaluationConfig: EvaluationConfig;
         functionConfigs: Record<string, FunctionConfig>;
         metricConfigs: Record<string, MetricConfig>;
       }> {
-        // Check for valid eval name
+        // Check for valid evaluation name
         if (evalName.includes("::")) {
           throw new Error(
-            `Eval names cannot contain "::" (referenced in [evaluations.${evalName}])`,
+            `evaluation names cannot contain "::" (referenced in [evaluations.${evalName}])`,
           );
         }
 
@@ -411,7 +411,7 @@ export const RawEvalConfigSchema =
         }
 
         return {
-          evalConfig: {
+          EvaluationConfig: {
             evaluators,
             dataset_name: raw.dataset_name,
             function_name: raw.function_name,
@@ -423,4 +423,4 @@ export const RawEvalConfigSchema =
     };
   });
 
-export type RawEvalConfig = z.infer<typeof RawEvalConfigSchema>;
+export type RawEvaluationConfig = z.infer<typeof RawEvaluationConfigSchema>;

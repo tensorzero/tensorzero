@@ -27,7 +27,7 @@ interface LaunchEvalModalProps {
 function EvalForm() {
   const fetcher = useFetcher();
   const config = useConfig();
-  const eval_names = Object.keys(config.evaluations);
+  const evaluation_names = Object.keys(config.evaluations);
   const [selectedEvalName, setSelectedEvalName] = useState<string | null>(null);
   const [selectedVariantName, setSelectedVariantName] = useState<string | null>(
     null,
@@ -55,24 +55,27 @@ function EvalForm() {
   return (
     <fetcher.Form method="post">
       <div className="mt-4">
-        <label htmlFor="eval_name" className="mb-1 block text-sm font-medium">
+        <label
+          htmlFor="evaluation_name"
+          className="mb-1 block text-sm font-medium"
+        >
           Evaluation
         </label>
       </div>
       <Select
-        name="eval_name"
+        name="evaluation_name"
         onValueChange={(value) => {
           setSelectedEvalName(value);
-          setSelectedVariantName(null); // Reset variant selection when eval changes
+          setSelectedVariantName(null); // Reset variant selection when evaluation changes
         }}
       >
         <SelectTrigger>
           <SelectValue placeholder="Select an evaluation" />
         </SelectTrigger>
         <SelectContent>
-          {eval_names.map((eval_name) => (
-            <SelectItem key={eval_name} value={eval_name}>
-              {eval_name}
+          {evaluation_names.map((evaluation_name) => (
+            <SelectItem key={evaluation_name} value={evaluation_name}>
+              {evaluation_name}
             </SelectItem>
           ))}
         </SelectContent>
@@ -129,10 +132,10 @@ function EvalForm() {
           {(() => {
             if (!selectedEvalName) return null;
 
-            const eval_function =
+            const evaluation_function =
               config.evaluations[selectedEvalName].function_name;
             const variant_names = Object.keys(
-              config.functions[eval_function].variants,
+              config.functions[evaluation_function].variants,
             );
 
             return variant_names.map((variant_name) => (

@@ -6,7 +6,7 @@ import {
 } from "./common";
 
 export const EvaluationRunInfoSchema = z.object({
-  eval_run_id: z.string(),
+  evaluation_run_id: z.string(),
   variant_name: z.string(),
 });
 
@@ -14,7 +14,7 @@ export type EvaluationRunInfo = z.infer<typeof EvaluationRunInfoSchema>;
 
 export const EvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),
-  eval_run_id: z.string().uuid(),
+  evaluation_run_id: z.string().uuid(),
   input: z.string(),
   generated_output: z.string(),
   reference_output: z.string(),
@@ -34,7 +34,7 @@ export type EvaluationResultWithVariant = z.infer<
 
 export const JsonEvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),
-  eval_run_id: z.string().uuid(),
+  evaluation_run_id: z.string().uuid(),
   input: resolvedInputSchema,
   generated_output: jsonInferenceOutputSchema,
   reference_output: jsonInferenceOutputSchema,
@@ -46,7 +46,7 @@ export type JsonEvaluationResult = z.infer<typeof JsonEvaluationResultSchema>;
 
 export const ChatEvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),
-  eval_run_id: z.string().uuid(),
+  evaluation_run_id: z.string().uuid(),
   input: resolvedInputSchema,
   generated_output: z.array(contentBlockOutputSchema),
   reference_output: z.array(contentBlockOutputSchema),
@@ -93,7 +93,7 @@ export type ParsedEvaluationResultWithVariant = z.infer<
 >;
 
 export const EvaluationStatisticsSchema = z.object({
-  eval_run_id: z.string(),
+  evaluation_run_id: z.string(),
   metric_name: z.string(),
   datapoint_count: z.number(),
   mean_metric: z.number(),
@@ -106,7 +106,7 @@ export function getEvaluatorMetricName(
   evalName: string,
   evaluatorName: string,
 ): string {
-  return `tensorzero::eval_name::${evalName}::evaluator_name::${evaluatorName}`;
+  return `tensorzero::evaluation_name::${evalName}::evaluator_name::${evaluatorName}`;
 }
 
 function getEvaluatorNameFromMetricName(metricName: string): string {
@@ -115,8 +115,8 @@ function getEvaluatorNameFromMetricName(metricName: string): string {
 }
 
 export const evalInfoResultSchema = z.object({
-  eval_run_id: z.string().uuid(),
-  eval_name: z.string(),
+  evaluation_run_id: z.string().uuid(),
+  evaluation_name: z.string(),
   function_name: z.string(),
   variant_name: z.string(),
   last_inference_timestamp: z.string().datetime(),
@@ -125,8 +125,8 @@ export const evalInfoResultSchema = z.object({
 export type EvalInfoResult = z.infer<typeof evalInfoResultSchema>;
 
 export const EvalRunInfoSchema = z.object({
-  eval_run_id: z.string().uuid(),
-  eval_name: z.string(),
+  evaluation_run_id: z.string().uuid(),
+  evaluation_name: z.string(),
   function_name: z.string(),
   variant_name: z.string(),
   last_inference_timestamp: z.string().datetime(),
@@ -150,15 +150,15 @@ export type ConsolidatedEvaluationResult = Omit<
   metrics: ConsolidatedMetric[];
 };
 
-export const consolidate_eval_results = (
-  eval_results: ParsedEvaluationResultWithVariant[],
+export const consolidate_evaluation_results = (
+  evaluation_results: ParsedEvaluationResultWithVariant[],
 ): ConsolidatedEvaluationResult[] => {
-  // Create a map to store results by datapoint_id and eval_run_id
+  // Create a map to store results by datapoint_id and evaluation_run_id
   const resultMap = new Map<string, ConsolidatedEvaluationResult>();
 
   // Process each evaluation result
-  for (const result of eval_results) {
-    const key = `${result.datapoint_id}:${result.eval_run_id}:${result.variant_name}`;
+  for (const result of evaluation_results) {
+    const key = `${result.datapoint_id}:${result.evaluation_run_id}:${result.variant_name}`;
 
     if (!resultMap.has(key)) {
       // Create a new consolidated result without metric_name and metric_value

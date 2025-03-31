@@ -27,7 +27,7 @@ export default function EvalRunBadge({
   lastUpdateDate,
   onRemove,
 }: EvalRunBadgeProps) {
-  const runId = runInfo.eval_run_id;
+  const runId = runInfo.evaluation_run_id;
   const variantColor = getColor(runId);
   const runIdSegment = getLastUuidSegment(runId);
   // If runId is empty, render a simple badge without tooltip

@@ -1,12 +1,12 @@
 use anyhow::Result;
 use clap::Parser;
-use evaluations::{run_eval, Args};
+use evaluations::{run_evaluation, Args};
 use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let eval_run_id = Uuid::now_v7();
+    let evaluation_run_id = Uuid::now_v7();
     let args = Args::parse();
     let mut writer = std::io::stdout();
-    run_eval(args, eval_run_id, &mut writer).await
+    run_evaluation(args, evaluation_run_id, &mut writer).await
 }

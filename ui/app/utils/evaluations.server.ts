@@ -25,7 +25,7 @@ interface RunningEvalInfo {
   started: Date;
 }
 
-// This is a map of eval run id to running eval info
+// This is a map of evaluation run id to running evaluation info
 const runningEvaluations: Record<string, RunningEvalInfo> = {};
 
 /**
@@ -86,16 +86,16 @@ export function runEvaluation(
         // Try to parse the line as JSON
         const parsedLine = JSON.parse(line);
 
-        // Check if this is the initial data containing eval_run_id
+        // Check if this is the initial data containing evaluation_run_id
         if (
           !initialDataReceived &&
-          parsedLine.eval_run_id &&
+          parsedLine.evaluation_run_id &&
           parsedLine.num_datapoints
         ) {
           try {
             const evaluationStartInfo =
               evaluationStartInfoSchema.parse(parsedLine);
-            evalRunId = evaluationStartInfo.eval_run_id;
+            evalRunId = evaluationStartInfo.evaluation_run_id;
 
             // Initialize the tracking entry in our runningEvaluations map
             runningEvaluations[evalRunId] = {
@@ -107,7 +107,7 @@ export function runEvaluation(
             // Mark that we've received the initial data
             initialDataReceived = true;
 
-            // Resolve the promise with the eval start info
+            // Resolve the promise with the evaluation start info
             resolve(evaluationStartInfo);
           } catch (error) {
             reject(error);
@@ -166,7 +166,7 @@ export function runEvaluation(
       }
 
       if (evalRunId) {
-        // Mark the eval as completed
+        // Mark the evaluation as completed
         runningEvaluations[evalRunId].completed = new Date();
 
         // Add exit code info if not successful
@@ -189,7 +189,7 @@ export function runEvaluation(
 }
 
 const evaluationStartInfoSchema = z.object({
-  eval_run_id: z.string(),
+  evaluation_run_id: z.string(),
   num_datapoints: z.number(),
 });
 export type EvaluationStartInfo = z.infer<typeof evaluationStartInfoSchema>;

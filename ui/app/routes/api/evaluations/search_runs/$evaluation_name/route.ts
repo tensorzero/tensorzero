@@ -10,16 +10,16 @@ export async function loader({
 }: LoaderFunctionArgs): Promise<Response> {
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
-  const evalName = searchParams.get("eval_name");
+  const evalName = searchParams.get("evaluation_name");
   if (!evalName) {
-    return new Response("Missing eval_name parameter", { status: 400 });
+    return new Response("Missing evaluation_name parameter", { status: 400 });
   }
   const query = searchParams.get("q") || "";
   const config = await getConfig();
   const function_name = config.evaluations[evalName].function_name;
 
   if (!evalName) {
-    return new Response("Missing eval_name parameter", { status: 400 });
+    return new Response("Missing evaluation_name parameter", { status: 400 });
   }
 
   const runs = await searchEvaluationRuns(evalName, function_name, query);
@@ -49,7 +49,7 @@ export function useSearchEvalRunsFetcher(params: {
   useEffect(() => {
     if (params.evalName) {
       const searchParams = new URLSearchParams();
-      searchParams.set("eval_name", params.evalName);
+      searchParams.set("evaluation_name", params.evalName);
       if (params.query) searchParams.set("q", params.query);
 
       runsFetcher.load(

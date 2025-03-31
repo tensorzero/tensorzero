@@ -23,7 +23,7 @@ export function EvaluationErrorInfo({ errors }: EvaluationErrorInfoProps) {
       {sortedErrorEntries.map(([key, { variantName, errors }]) => {
         if (!errors || errors.length === 0) return null;
         const runInfo = {
-          eval_run_id: key,
+          evaluation_run_id: key,
           variant_name: variantName,
         };
 

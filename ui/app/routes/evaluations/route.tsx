@@ -26,7 +26,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const evalRuns = await getEvaluationRunInfo(pageSize, offset);
   const config = await getConfig();
   const evalRunsWithDataset = evalRuns.map((runInfo) => {
-    const dataset = config.evaluations[runInfo.eval_name].dataset_name;
+    const dataset = config.evaluations[runInfo.evaluation_name].dataset_name;
     return {
       ...runInfo,
       dataset,
@@ -43,13 +43,13 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
-  const eval_name = formData.get("eval_name");
+  const evaluation_name = formData.get("evaluation_name");
   const variant_name = formData.get("variant_name");
   const concurrency_limit = formData.get("concurrency_limit");
-  let eval_start_info;
+  let evaluation_start_info;
   try {
-    eval_start_info = await runEvaluation(
-      eval_name as string,
+    evaluation_start_info = await runEvaluation(
+      evaluation_name as string,
       variant_name as string,
       parseInt(concurrency_limit as string),
     );
@@ -58,7 +58,7 @@ export async function action({ request }: Route.ActionArgs) {
     throw new Response("Failed to start eval", { status: 500 });
   }
   return redirect(
-    `/evaluations/${eval_name}?eval_run_ids=${eval_start_info.eval_run_id}`,
+    `/evaluations/${evaluation_name}?evaluation_run_ids=${evaluation_start_info.evaluation_run_id}`,
   );
 }
 

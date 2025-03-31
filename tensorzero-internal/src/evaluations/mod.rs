@@ -28,7 +28,7 @@ pub const LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT: &str =
     include_str!("llm_judge_boolean_output_schema.json");
 
 #[derive(Debug)]
-pub struct EvalConfig {
+pub struct EvaluationConfig {
     pub evaluators: HashMap<String, EvaluatorConfig>,
     pub dataset_name: String,
     pub function_name: String,
@@ -108,19 +108,22 @@ impl From<LLMJudgeOptimize> for MetricConfigOptimize {
     }
 }
 
-pub fn get_llm_judge_function_name(eval_name: &str, evaluator_name: &str) -> String {
-    format!("tensorzero::llm_judge::{}::{}", eval_name, evaluator_name)
+pub fn get_llm_judge_function_name(evaluation_name: &str, evaluator_name: &str) -> String {
+    format!(
+        "tensorzero::llm_judge::{}::{}",
+        evaluation_name, evaluator_name
+    )
 }
 
-pub fn get_evaluator_metric_name(eval_name: &str, evaluator_name: &str) -> String {
+pub fn get_evaluator_metric_name(evaluation_name: &str, evaluator_name: &str) -> String {
     format!(
-        "tensorzero::eval_name::{}::evaluator_name::{}",
-        eval_name, evaluator_name
+        "tensorzero::evaluation_name::{}::evaluator_name::{}",
+        evaluation_name, evaluator_name
     )
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UninitializedEvalConfig {
+pub struct UninitializedEvaluationConfig {
     evaluators: HashMap<String, UninitializedEvaluatorConfig>,
     dataset_name: String,
     function_name: String,
@@ -128,34 +131,34 @@ pub struct UninitializedEvalConfig {
 
 type EvalLoadResult = Result<
     (
-        EvalConfig,                           // The eval itself
-        HashMap<String, Arc<FunctionConfig>>, // All functions which the eval needs {function_name -> function_config}
-        HashMap<String, MetricConfig>, // All metrics which the eval needs {metric_name -> metric_config}
+        EvaluationConfig,                     // The evaluation itself
+        HashMap<String, Arc<FunctionConfig>>, // All functions which the evaluation needs {function_name -> function_config}
+        HashMap<String, MetricConfig>, // All metrics which the evaluation needs {metric_name -> metric_config}
     ),
     Error,
 >;
 
-impl UninitializedEvalConfig {
+impl UninitializedEvaluationConfig {
     pub fn load<P: AsRef<Path>>(
         self,
         functions: &HashMap<String, Arc<FunctionConfig>>,
         base_path: P,
-        eval_name: &str,
+        evaluation_name: &str,
     ) -> EvalLoadResult {
         if !functions.contains_key(&self.function_name) {
             return Err(ErrorDetails::Config {
                 message: format!(
-                    "Function `{}` not found (referenced in `[evaluations.{eval_name}]`)",
+                    "Function `{}` not found (referenced in `[evaluations.{evaluation_name}]`)",
                     self.function_name
                 ),
             }
             .into());
         }
-        // Eval names cannot have "::" in them since we use it as a delimiter
-        if eval_name.contains("::") {
+        // evaluation names cannot have "::" in them since we use it as a delimiter
+        if evaluation_name.contains("::") {
             return Err(ErrorDetails::Config {
                 message: format!(
-                    "Eval names cannot contain \"::\" (referenced in `[evaluations.{eval_name}]`)"
+                    "evaluation names cannot contain \"::\" (referenced in `[evaluations.{evaluation_name}]`)"
                 ),
             }
             .into());
@@ -164,9 +167,9 @@ impl UninitializedEvalConfig {
             .evaluators
             .into_iter()
             .map(|(name, config)| {
-                config.load(&base_path, eval_name, &name).map(
-                    |(eval_config, func_config, metric_config)| {
-                        (name, eval_config, func_config, metric_config)
+                config.load(&base_path, evaluation_name, &name).map(
+                    |(evaluation_config, func_config, metric_config)| {
+                        (name, evaluation_config, func_config, metric_config)
                     },
                 )
             })
@@ -184,19 +187,19 @@ impl UninitializedEvalConfig {
             // Add to function_configs map if Some
             if let Some(config) = function_config {
                 function_configs.insert(
-                    get_llm_judge_function_name(eval_name, &evaluator_name),
+                    get_llm_judge_function_name(evaluation_name, &evaluator_name),
                     Arc::new(config),
                 );
             }
 
             // Add to metric_configs map
             metric_configs.insert(
-                get_evaluator_metric_name(eval_name, &evaluator_name),
+                get_evaluator_metric_name(evaluation_name, &evaluator_name),
                 metric_config,
             );
         }
         Ok((
-            EvalConfig {
+            EvaluationConfig {
                 evaluators,
                 dataset_name: self.dataset_name,
                 function_name: self.function_name,
@@ -231,14 +234,14 @@ impl UninitializedEvaluatorConfig {
     pub fn load<P: AsRef<Path>>(
         self,
         base_path: &P,
-        eval_name: &str,
+        evaluation_name: &str,
         evaluator_name: &str,
     ) -> Result<(EvaluatorConfig, Option<FunctionConfig>, MetricConfig), Error> {
         // Evaluator names cannot have "::" in them since we use it as a delimiter in our function names later on
         if evaluator_name.contains("::") {
             return Err(ErrorDetails::Config {
                 message: format!(
-                    "Evaluator names cannot contain \"::\" (referenced in `[evaluations.{eval_name}.{evaluator_name}]`)"
+                    "Evaluator names cannot contain \"::\" (referenced in `[evaluations.{evaluation_name}.{evaluator_name}]`)"
                 ),
             }
             .into());
@@ -259,7 +262,7 @@ impl UninitializedEvaluatorConfig {
                     .into_iter()
                     .map(|(name, variant)| {
                         variant
-                            .load(base_path, eval_name, evaluator_name)
+                            .load(base_path, evaluation_name, evaluator_name)
                             .map(|v| (name, v))
                     })
                     .collect::<Result<HashMap<_, _>, Error>>()?;
@@ -271,7 +274,7 @@ impl UninitializedEvaluatorConfig {
                 if nonzero_weights != 1 && variants.len() > 1 {
                     return Err(ErrorDetails::Config {
                         message: format!(
-                            "Evaluator `{evaluator_name}` in `[evaluations.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."
+                            "Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."
                         ),
                     }
                     .into());
@@ -282,14 +285,14 @@ impl UninitializedEvaluatorConfig {
                         variant
                     } else {
                         return Err(ErrorDetails::Config {
-                            message: format!("Evaluator `{evaluator_name}` in `[evaluations.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."),
+                            message: format!("Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."),
                         }
                         .into());
                     };
                     if let Some(weight) = variant.weight {
                         if weight != 1.0 {
                             return Err(ErrorDetails::Config {
-                                message: format!("Evaluator `{evaluator_name}` in `[evaluations.{eval_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
+                                message: format!("Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
                             }
                             .into());
                         }
@@ -374,7 +377,7 @@ impl UninitializedLLMJudgeVariantConfig {
     pub fn load<P: AsRef<Path>>(
         self,
         base_path: &P,
-        eval_name: &str,
+        evaluation_name: &str,
         evaluator_name: &str,
     ) -> Result<VariantConfig, Error> {
         match self {
@@ -388,13 +391,13 @@ impl UninitializedLLMJudgeVariantConfig {
                 let system_template = PathWithContents {
                     // Not a real path but this is used as the handle everywhere as the content is already provided below
                     path: PathBuf::from(format!(
-                        "tensorzero::llm_judge::{eval_name}::{evaluator_name}::system"
+                        "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::system"
                     )),
                     contents: templated_system_instructions,
                 };
                 let user_template = PathWithContents {
                     path: PathBuf::from(format!(
-                        "tensorzero::llm_judge::{eval_name}::{evaluator_name}::user"
+                        "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::user"
                     )),
                     contents: include_str!("llm_judge_user_template.minijinja").to_string(),
                 };
@@ -481,10 +484,10 @@ mod tests {
     }
 
     #[test]
-    fn test_uninitialized_eval_config_load() {
+    fn test_uninitialized_evaluation_config_load() {
         // Setup test fixtures
         let base_path = PathBuf::from("fixtures/config");
-        let eval_name = "test_eval";
+        let evaluation_name = "test_evaluation";
 
         // Prepare function configs map with a function referenced in the eval
         let mut functions = HashMap::new();
@@ -507,13 +510,13 @@ mod tests {
                 UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.4) }),
             );
 
-            let uninitialized_config = UninitializedEvalConfig {
+            let uninitialized_config = UninitializedEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
             assert!(result.is_ok());
 
             let (config, additional_functions, metric_configs) = result.unwrap();
@@ -531,10 +534,10 @@ mod tests {
             assert_eq!(metric_configs.len(), 1);
 
             // Check the metric name follows expected format
-            let metric_config_name = get_evaluator_metric_name(eval_name, "em_evaluator");
+            let metric_config_name = get_evaluator_metric_name(evaluation_name, "em_evaluator");
             assert_eq!(
                 metric_config_name,
-                "tensorzero::eval_name::test_eval::evaluator_name::em_evaluator"
+                "tensorzero::evaluation_name::test_evaluation::evaluator_name::em_evaluator"
             );
             assert!(metric_configs.contains_key(&metric_config_name));
 
@@ -586,13 +589,13 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedEvalConfig {
+            let uninitialized_config = UninitializedEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
             assert!(result.is_ok());
 
             let (config, additional_functions, metric_configs) = result.unwrap();
@@ -613,7 +616,7 @@ mod tests {
 
             // Verify additional function config was created
             assert_eq!(additional_functions.len(), 1);
-            let function_name = get_llm_judge_function_name(eval_name, "llm_judge_eval");
+            let function_name = get_llm_judge_function_name(evaluation_name, "llm_judge_eval");
             assert!(additional_functions.contains_key(&function_name));
 
             // Verify the function config has the correct type
@@ -632,10 +635,10 @@ mod tests {
             assert_eq!(metric_configs.len(), 1);
 
             // Check the metric name follows expected format
-            let metric_config_name = get_evaluator_metric_name(eval_name, "llm_judge_eval");
+            let metric_config_name = get_evaluator_metric_name(evaluation_name, "llm_judge_eval");
             assert_eq!(
                 metric_config_name,
-                "tensorzero::eval_name::test_eval::evaluator_name::llm_judge_eval"
+                "tensorzero::evaluation_name::test_evaluation::evaluator_name::llm_judge_eval"
             );
             assert!(metric_configs.contains_key(&metric_config_name));
 
@@ -646,18 +649,18 @@ mod tests {
             assert_eq!(metric_config.level, MetricConfigLevel::Inference);
 
             // Verify the type conversion from LLMJudgeOutputType to MetricConfigType
-            let llm_judge_eval = match config.evaluators.get("llm_judge_eval").unwrap() {
+            let llm_judge_evaluation = match config.evaluators.get("llm_judge_eval").unwrap() {
                 EvaluatorConfig::LLMJudge(config) => config,
                 _ => panic!("Expected LLMJudge evaluator"),
             };
             assert_eq!(
-                MetricConfigType::from(llm_judge_eval.output_type),
+                MetricConfigType::from(llm_judge_evaluation.output_type),
                 metric_config.r#type
             );
 
             // Verify the optimize conversion from LLMJudgeOptimize to MetricConfigOptimize
             assert_eq!(
-                MetricConfigOptimize::from(llm_judge_eval.optimize),
+                MetricConfigOptimize::from(llm_judge_evaluation.optimize),
                 metric_config.optimize
             );
         }
@@ -703,13 +706,13 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedEvalConfig {
+            let uninitialized_config = UninitializedEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
             assert!(result.is_ok());
 
             let (config, additional_functions, metric_configs) = result.unwrap();
@@ -730,17 +733,17 @@ mod tests {
 
             // Verify additional function config was created
             assert_eq!(additional_functions.len(), 1);
-            let function_name = get_llm_judge_function_name(eval_name, "llm_judge_float");
+            let function_name = get_llm_judge_function_name(evaluation_name, "llm_judge_float");
             assert!(additional_functions.contains_key(&function_name));
 
             // Verify the metrics
             assert_eq!(metric_configs.len(), 1);
 
             // Check the metric name follows expected format
-            let metric_config_name = get_evaluator_metric_name(eval_name, "llm_judge_float");
+            let metric_config_name = get_evaluator_metric_name(evaluation_name, "llm_judge_float");
             assert_eq!(
                 metric_config_name,
-                "tensorzero::eval_name::test_eval::evaluator_name::llm_judge_float"
+                "tensorzero::evaluation_name::test_evaluation::evaluator_name::llm_judge_float"
             );
             assert!(metric_configs.contains_key(&metric_config_name));
 
@@ -751,18 +754,18 @@ mod tests {
             assert_eq!(metric_config.level, MetricConfigLevel::Inference);
 
             // Verify the type conversion from LLMJudgeOutputType to MetricConfigType
-            let llm_judge_eval = match config.evaluators.get("llm_judge_float").unwrap() {
+            let llm_judge_evaluation = match config.evaluators.get("llm_judge_float").unwrap() {
                 EvaluatorConfig::LLMJudge(config) => config,
                 _ => panic!("Expected LLMJudge evaluator"),
             };
             assert_eq!(
-                MetricConfigType::from(llm_judge_eval.output_type),
+                MetricConfigType::from(llm_judge_evaluation.output_type),
                 metric_config.r#type
             );
 
             // Verify the optimize conversion from LLMJudgeOptimize to MetricConfigOptimize
             assert_eq!(
-                MetricConfigOptimize::from(llm_judge_eval.optimize),
+                MetricConfigOptimize::from(llm_judge_evaluation.optimize),
                 metric_config.optimize
             );
         }
@@ -775,13 +778,13 @@ mod tests {
                 UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
-            let uninitialized_config = UninitializedEvalConfig {
+            let uninitialized_config = UninitializedEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: "nonexistent_function".to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
             assert!(result.is_err());
             assert!(matches!(
                 *result.unwrap_err().get_details(),
@@ -789,7 +792,7 @@ mod tests {
             ));
         }
 
-        // Test case 4: Error when eval name contains "::"
+        // Test case 4: Error when evaluation name contains "::"
         {
             let mut evaluators = HashMap::new();
             evaluators.insert(
@@ -797,7 +800,7 @@ mod tests {
                 UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
-            let uninitialized_config = UninitializedEvalConfig {
+            let uninitialized_config = UninitializedEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
@@ -884,18 +887,18 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedEvalConfig {
+            let uninitialized_config = UninitializedEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
             assert!(result.is_err());
             assert_eq!(
                 *result.unwrap_err().get_details(),
                 ErrorDetails::Config {
-                    message: "Evaluator `multiple_active_variants` in `[evaluations.test_eval]` must have exactly 1 variant that is active. Found 2 variants with nonzero weights.".to_string(),
+                    message: "Evaluator `multiple_active_variants` in `[evaluations.test_evaluation]` must have exactly 1 variant that is active. Found 2 variants with nonzero weights.".to_string(),
                 }
             );
         }
@@ -903,7 +906,7 @@ mod tests {
         // Test case 6: Error when evaluator name contains "::"
         {
             let base_path = PathBuf::from(".");
-            let eval_name = "test_eval";
+            let evaluation_name = "test_evaluation";
             let function_name = "test_function";
 
             let mut functions = HashMap::new();
@@ -927,19 +930,19 @@ mod tests {
                 UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
-            let uninitialized_config = UninitializedEvalConfig {
+            let uninitialized_config = UninitializedEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
             assert!(result.is_err());
             assert_eq!(
                 *result.unwrap_err().get_details(),
                 ErrorDetails::Config {
                     message:
-                        "Evaluator names cannot contain \"::\" (referenced in `[evaluations.test_eval.foo::invalid_name]`)"
+                        "Evaluator names cannot contain \"::\" (referenced in `[evaluations.test_evaluation.foo::invalid_name]`)"
                             .to_string(),
                 }
             );
@@ -986,13 +989,13 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedEvalConfig {
+            let uninitialized_config = UninitializedEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
             assert!(result.is_ok());
 
             let (config, _additional_functions, _metric_configs) = result.unwrap();
@@ -1050,18 +1053,18 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedEvalConfig {
+            let uninitialized_config = UninitializedEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
             assert!(result.is_ok());
 
             let (_config, additional_functions, _metric_configs) = result.unwrap();
             let function_config_name =
-                get_llm_judge_function_name(eval_name, "llm_judge_default_active");
+                get_llm_judge_function_name(evaluation_name, "llm_judge_default_active");
             let function_config = additional_functions.get(&function_config_name).unwrap();
             match function_config.as_ref() {
                 FunctionConfig::Json(json_config) => {
@@ -1120,18 +1123,18 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedEvalConfig {
+            let uninitialized_config = UninitializedEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, eval_name);
+            let result = uninitialized_config.load(&functions, &base_path, evaluation_name);
             assert!(result.is_err());
             assert_eq!(
                 *result.unwrap_err().get_details(),
                 ErrorDetails::Config {
-                    message: format!("Evaluator `llm_judge_inactive` in `[evaluations.{eval_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
+                    message: format!("Evaluator `llm_judge_inactive` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
                 }
             );
         }

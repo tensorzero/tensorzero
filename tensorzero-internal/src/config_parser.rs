@@ -10,7 +10,7 @@ use tracing::instrument;
 
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
-use crate::evaluations::{EvalConfig, UninitializedEvalConfig};
+use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -33,7 +33,7 @@ pub struct Config<'c> {
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
-    pub evaluations: HashMap<String, Arc<EvalConfig>>, // eval name => eval config
+    pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
 }
@@ -356,21 +356,23 @@ impl<'c> Config<'c> {
         // We add the evaluations after validation since we will be writing tensorzero:: functions to the functions map
         // and tensorzero:: metrics to the metrics map
         let mut evaluations = HashMap::new();
-        for (name, eval_config) in uninitialized_config.evaluations {
-            let (eval_config, eval_function_configs, eval_metric_configs) =
-                eval_config.load(&config.functions, &base_path, &name)?;
-            evaluations.insert(name, Arc::new(eval_config));
-            for (eval_function_name, eval_function_config) in eval_function_configs {
-                if config.functions.contains_key(&eval_function_name) {
+        for (name, evaluation_config) in uninitialized_config.evaluations {
+            let (evaluation_config, evaluation_function_configs, evaluation_metric_configs) =
+                evaluation_config.load(&config.functions, &base_path, &name)?;
+            evaluations.insert(name, Arc::new(evaluation_config));
+            for (evaluation_function_name, evaluation_function_config) in
+                evaluation_function_configs
+            {
+                if config.functions.contains_key(&evaluation_function_name) {
                     return Err(ErrorDetails::Config {
                         message: format!(
                             "Duplicate evaluator function name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
-                            eval_function_name
+                            evaluation_function_name
                         ),
                     }
                     .into());
                 }
-                for variant in eval_function_config.variants().values() {
+                for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
                         config.templates.add_template(
                             template.path.to_string_lossy().as_ref(),
@@ -378,25 +380,27 @@ impl<'c> Config<'c> {
                         )?;
                     }
                 }
-                eval_function_config.validate(
+                evaluation_function_config.validate(
                     &config.tools,
                     &mut config.models,
                     &config.embedding_models,
                     &config.templates,
-                    &eval_function_name,
+                    &evaluation_function_name,
                 )?;
                 config
                     .functions
-                    .insert(eval_function_name, eval_function_config);
+                    .insert(evaluation_function_name, evaluation_function_config);
             }
-            for (eval_metric_name, eval_metric_config) in eval_metric_configs {
-                if config.metrics.contains_key(&eval_metric_name) {
+            for (evaluation_metric_name, evaluation_metric_config) in evaluation_metric_configs {
+                if config.metrics.contains_key(&evaluation_metric_name) {
                     return Err(ErrorDetails::Config {
-                        message: format!("Duplicate evaluator metric name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.", eval_metric_name),
+                        message: format!("Duplicate evaluator metric name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.", evaluation_metric_name),
                     }
                     .into());
                 }
-                config.metrics.insert(eval_metric_name, eval_metric_config);
+                config
+                    .metrics
+                    .insert(evaluation_metric_name, evaluation_metric_config);
             }
         }
         config.evaluations = evaluations;
@@ -529,7 +533,7 @@ impl<'c> Config<'c> {
     /// Get all templates from the config
     /// The HashMap returned is a mapping from the path as given in the TOML file
     /// (relative to the directory containing the TOML file) to the file contents.
-    /// The former path is used as the name of the template for retrieval by variants later.
+    /// The former path is used as the name of the template for retrievaluation by variants later.
     pub fn get_templates(&self) -> HashMap<String, String> {
         let mut templates = HashMap::new();
 
@@ -575,7 +579,7 @@ struct UninitializedConfig {
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
     #[serde(default)]
-    pub evaluations: HashMap<String, UninitializedEvalConfig>, // eval name => eval config
+    pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation config
     pub object_storage: Option<StorageKind>,
 }
 
@@ -978,7 +982,7 @@ mod tests {
         let provider = embedding_model.providers.get("openai").unwrap();
         assert!(matches!(provider, EmbeddingProviderConfig::OpenAI(_)));
 
-        // Check that the function for the LLM Judge eval is added to the functions table
+        // Check that the function for the LLM Judge evaluation is added to the functions table
         let function = config
             .functions
             .get("tensorzero::llm_judge::eval1::llm_judge_bool")
@@ -1013,25 +1017,25 @@ mod tests {
         // Check that the metric for the LLM Judge evaluator is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::eval_name::eval1::evaluator_name::llm_judge_bool")
+            .get("tensorzero::evaluation_name::eval1::evaluator_name::llm_judge_bool")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Boolean);
         assert_eq!(metric.optimize, MetricConfigOptimize::Min);
         assert_eq!(metric.level, MetricConfigLevel::Inference);
 
-        // Check that the metric for the exact match eval is added to the metrics table
+        // Check that the metric for the exact match evaluation is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::eval_name::eval1::evaluator_name::em_evaluator")
+            .get("tensorzero::evaluation_name::eval1::evaluator_name::em_evaluator")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Boolean);
         assert_eq!(metric.optimize, MetricConfigOptimize::Max);
         assert_eq!(metric.level, MetricConfigLevel::Inference);
 
-        // Check that the metric for the LLM Judge float eval is added to the metrics table
+        // Check that the metric for the LLM Judge float evaluation is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::eval_name::eval1::evaluator_name::llm_judge_float")
+            .get("tensorzero::evaluation_name::eval1::evaluator_name::llm_judge_float")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Float);
         assert_eq!(metric.optimize, MetricConfigOptimize::Min);
@@ -1669,9 +1673,9 @@ mod tests {
         );
     }
 
-    /// Ensure that the config validation fails when an eval points at a nonexistent function
+    /// Ensure that the config validation fails when an evaluation points at a nonexistent function
     #[test]
-    fn test_config_validate_eval_function_nonexistent() {
+    fn test_config_validate_evaluation_function_nonexistent() {
         let mut config = get_sample_valid_config();
         config["evaluations"]["eval1"]["function_name"] = "nonexistent_function".into();
         let base_path = PathBuf::new();
@@ -1688,9 +1692,9 @@ mod tests {
         );
     }
 
-    /// Ensure that the config validation fails when an eval name contains `::`
+    /// Ensure that the config validation fails when an evaluation name contains `::`
     #[test]
-    fn test_config_validate_eval_name_contains_double_colon() {
+    fn test_config_validate_evaluation_name_contains_double_colon() {
         let mut config = get_sample_valid_config();
         let eval1 = config["evaluations"]["eval1"].clone();
         config
@@ -1706,7 +1710,7 @@ mod tests {
             result.unwrap_err(),
             ErrorDetails::Config {
                 message:
-                    "Eval names cannot contain \"::\" (referenced in `[evaluations.bad::eval]`)"
+                    "evaluation names cannot contain \"::\" (referenced in `[evaluations.bad::eval]`)"
                         .to_string()
             }
             .into()

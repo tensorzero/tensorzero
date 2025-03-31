@@ -42,24 +42,27 @@ export default function EvalRunsTable({
             </TableRow>
           ) : (
             evalRuns.map((evalRun) => (
-              <TableRow key={evalRun.eval_run_id} id={evalRun.eval_run_id}>
+              <TableRow
+                key={evalRun.evaluation_run_id}
+                id={evalRun.evaluation_run_id}
+              >
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/evaluations/${evalRun.eval_name}?eval_run_ids=${evalRun.eval_run_id}`}
+                    to={`/evaluations/${evalRun.evaluation_name}?evaluation_run_ids=${evalRun.evaluation_run_id}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {evalRun.eval_run_id}
+                      {evalRun.evaluation_run_id}
                     </code>
                   </Link>
                 </TableCell>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/evaluations/${evalRun.eval_name}`}
+                    to={`/evaluations/${evalRun.evaluation_name}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {evalRun.eval_name}
+                      {evalRun.evaluation_name}
                     </code>
                   </Link>
                 </TableCell>

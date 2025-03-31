@@ -29,47 +29,48 @@ import {
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
-  const dataset_name = config.evaluations[params.eval_name].dataset_name;
-  const function_name = config.evaluations[params.eval_name].function_name;
+  const dataset_name = config.evaluations[params.evaluation_name].dataset_name;
+  const function_name =
+    config.evaluations[params.evaluation_name].function_name;
   const function_type = config.functions[function_name].type;
 
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
 
-  const selected_eval_run_ids = searchParams.get("eval_run_ids");
-  const selected_eval_run_ids_array = selected_eval_run_ids
-    ? selected_eval_run_ids.split(",")
+  const selected_evaluation_run_ids = searchParams.get("evaluation_run_ids");
+  const selected_evaluation_run_ids_array = selected_evaluation_run_ids
+    ? selected_evaluation_run_ids.split(",")
     : [];
 
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
 
   const evaluator_names = Object.keys(
-    config.evaluations[params.eval_name].evaluators,
+    config.evaluations[params.evaluation_name].evaluators,
   );
 
   const metric_names = evaluator_names.map((evaluatorName) =>
-    getEvaluatorMetricName(params.eval_name, evaluatorName),
+    getEvaluatorMetricName(params.evaluation_name, evaluatorName),
   );
 
   // Set up all promises to run concurrently
   const evalRunInfosPromise = getEvalRunInfos(
-    selected_eval_run_ids_array,
+    selected_evaluation_run_ids_array,
     function_name,
   );
 
   const mostRecentEvalInferenceDatePromise =
-    getMostRecentEvaluationInferenceDate(selected_eval_run_ids_array);
+    getMostRecentEvaluationInferenceDate(selected_evaluation_run_ids_array);
 
   // Create placeholder promises for results and statistics that will be used conditionally
   let resultsPromise;
-  if (selected_eval_run_ids_array.length > 0) {
+  if (selected_evaluation_run_ids_array.length > 0) {
     resultsPromise = getEvaluationResults(
       dataset_name,
       function_name,
       function_type,
       metric_names,
-      selected_eval_run_ids_array,
+      selected_evaluation_run_ids_array,
       pageSize,
       offset,
     );
@@ -78,25 +79,25 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   let statisticsPromise;
-  if (selected_eval_run_ids_array.length > 0) {
+  if (selected_evaluation_run_ids_array.length > 0) {
     statisticsPromise = getEvaluationStatistics(
       dataset_name,
       function_name,
       function_type,
       metric_names,
-      selected_eval_run_ids_array,
+      selected_evaluation_run_ids_array,
     );
   } else {
     statisticsPromise = Promise.resolve([]);
   }
 
   let total_datapoints_promise;
-  if (selected_eval_run_ids_array.length > 0) {
+  if (selected_evaluation_run_ids_array.length > 0) {
     total_datapoints_promise = countDatapointsForEvaluation(
       dataset_name,
       function_name,
       function_type,
-      selected_eval_run_ids_array,
+      selected_evaluation_run_ids_array,
     );
   } else {
     total_datapoints_promise = Promise.resolve(0);
@@ -104,9 +105,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // Wait for all promises to complete concurrently
   const [
-    selected_eval_run_infos,
-    eval_results,
-    eval_statistics,
+    selected_evaluation_run_infos,
+    evaluation_results,
+    evaluation_statistics,
     total_datapoints,
     mostRecentEvalInferenceDates,
   ] = await Promise.all([
@@ -117,25 +118,25 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     mostRecentEvalInferenceDatePromise,
   ]);
 
-  const any_eval_is_running = Object.values(selected_eval_run_ids_array).some(
-    (evalRunId) => {
-      const runningEval = getRunningEvaluation(evalRunId);
-      if (!runningEval) {
+  const any_evaluation_is_running = Object.values(
+    selected_evaluation_run_ids_array,
+  ).some((evalRunId) => {
+    const runningEvaluation = getRunningEvaluation(evalRunId);
+    if (!runningEvaluation) {
+      return false;
+    }
+    if (runningEvaluation.completed) {
+      // If the evaluation has completed and the completion time is at least 5 seconds ago,
+      // return false
+      if (runningEvaluation.completed.getTime() + 5000 < Date.now()) {
         return false;
       }
-      if (runningEval.completed) {
-        // If the eval has completed and the completion time is at least 5 seconds ago,
-        // return false
-        if (runningEval.completed.getTime() + 5000 < Date.now()) {
-          return false;
-        }
-      }
-      return true;
-    },
-  );
+    }
+    return true;
+  });
 
   const errors: Record<string, EvaluationErrorDisplayInfo> =
-    selected_eval_run_ids_array.reduce(
+    selected_evaluation_run_ids_array.reduce(
       (acc, evalRunId) => {
         const evalRunInfo = getRunningEvaluation(evalRunId);
         if (evalRunInfo?.errors) {
@@ -155,34 +156,34 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     );
 
   return {
-    eval_name: params.eval_name,
-    selected_eval_run_infos,
-    eval_results,
-    eval_statistics,
-    has_selected_runs: selected_eval_run_ids_array.length > 0,
+    evaluation_name: params.evaluation_name,
+    selected_evaluation_run_infos,
+    evaluation_results,
+    evaluation_statistics,
+    has_selected_runs: selected_evaluation_run_ids_array.length > 0,
     offset,
     pageSize,
     total_datapoints,
     evaluator_names,
     mostRecentEvalInferenceDates,
-    any_eval_is_running,
+    any_evaluation_is_running,
     errors,
   };
 }
 
 export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const {
-    eval_name,
-    selected_eval_run_infos,
-    eval_results,
-    eval_statistics,
+    evaluation_name,
+    selected_evaluation_run_infos,
+    evaluation_results,
+    evaluation_statistics,
     has_selected_runs,
     offset,
     pageSize,
     total_datapoints,
     evaluator_names,
     mostRecentEvalInferenceDates,
-    any_eval_is_running,
+    any_evaluation_is_running,
     errors,
   } = loaderData;
   const navigate = useNavigate();
@@ -198,18 +199,18 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   };
 
   // Use that time for auto-refreshing
-  useAutoRefresh(any_eval_is_running);
+  useAutoRefresh(any_evaluation_is_running);
 
   const config = useConfig();
-  const eval_config = config.evaluations[eval_name];
+  const evaluation_config = config.evaluations[evaluation_name];
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
   );
 
   return (
     <PageLayout>
-      <PageHeader label="Evaluation" name={eval_name}>
-        <BasicInfo eval_config={eval_config} />
+      <PageHeader label="Evaluation" name={evaluation_name}>
+        <BasicInfo evaluation_config={evaluation_config} />
       </PageHeader>
 
       <SectionsGroup>
@@ -222,13 +223,13 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
           )}
           <div className="flex items-center justify-between">
             <SectionHeader heading="Results" />
-            <AutoRefreshIndicator isActive={any_eval_is_running} />
+            <AutoRefreshIndicator isActive={any_evaluation_is_running} />
           </div>
           <EvaluationTable
-            eval_name={eval_name}
-            selected_eval_run_infos={selected_eval_run_infos}
-            eval_results={eval_results}
-            eval_statistics={eval_statistics}
+            evaluation_name={evaluation_name}
+            selected_evaluation_run_infos={selected_evaluation_run_infos}
+            evaluation_results={evaluation_results}
+            evaluation_statistics={evaluation_statistics}
             evaluator_names={evaluator_names}
             mostRecentEvalInferenceDates={mostRecentEvalInferenceDates}
           />

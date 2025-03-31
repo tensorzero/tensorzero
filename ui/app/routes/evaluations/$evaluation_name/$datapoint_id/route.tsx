@@ -12,7 +12,7 @@ import Input from "~/components/inference/Input";
 import { data, isRouteErrorResponse, redirect } from "react-router";
 import Output from "~/components/inference/Output";
 import {
-  consolidate_eval_results,
+  consolidate_evaluation_results,
   getEvaluatorMetricName,
   type ConsolidatedMetric,
 } from "~/utils/clickhouse/evaluations";
@@ -33,31 +33,35 @@ import {
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
-  const eval_name = params.eval_name;
+  const evaluation_name = params.evaluation_name;
   const datapoint_id = params.datapoint_id;
-  const dataset_name = config.evaluations[eval_name].dataset_name;
+  const dataset_name = config.evaluations[evaluation_name].dataset_name;
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
 
-  const selected_eval_run_ids = searchParams.get("eval_run_ids");
-  const selected_eval_run_ids_array = selected_eval_run_ids
-    ? selected_eval_run_ids.split(",")
+  const selected_evaluation_run_ids = searchParams.get("evaluation_run_ids");
+  const selected_evaluation_run_ids_array = selected_evaluation_run_ids
+    ? selected_evaluation_run_ids.split(",")
     : [];
-  if (selected_eval_run_ids_array.length === 0) {
+  if (selected_evaluation_run_ids_array.length === 0) {
     return redirect(`/datasets/${dataset_name}/datapoint/${datapoint_id}`);
   }
-  const evalResults = await getEvaluationsForDatapoint(
-    eval_name,
+  const EvaluationResults = await getEvaluationsForDatapoint(
+    evaluation_name,
     datapoint_id,
-    selected_eval_run_ids_array,
+    selected_evaluation_run_ids_array,
   );
-  const consolidatedEvalResults = consolidate_eval_results(evalResults);
-  if (consolidatedEvalResults.length !== selected_eval_run_ids_array.length) {
-    // Find which eval run IDs are missing from the results
+  const consolidatedEvaluationResults =
+    consolidate_evaluation_results(EvaluationResults);
+  if (
+    consolidatedEvaluationResults.length !==
+    selected_evaluation_run_ids_array.length
+  ) {
+    // Find which evaluation run IDs are missing from the results
     const foundEvalRunIds = new Set(
-      consolidatedEvalResults.map((result) => result.eval_run_id),
+      consolidatedEvaluationResults.map((result) => result.evaluation_run_id),
     );
-    const missingEvalRunIds = selected_eval_run_ids_array.filter(
+    const missingEvalRunIds = selected_evaluation_run_ids_array.filter(
       (id) => !foundEvalRunIds.has(id),
     );
 
@@ -67,8 +71,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     );
   }
   return {
-    consolidatedEvalResults,
-    eval_name,
+    consolidatedEvaluationResults,
+    evaluation_name,
     datapoint_id,
   };
 }
@@ -76,18 +80,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function EvaluationDatapointPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { consolidatedEvalResults, eval_name, datapoint_id } = loaderData;
+  const { consolidatedEvaluationResults, evaluation_name, datapoint_id } =
+    loaderData;
   const config = useConfig();
-  const eval_config = config.evaluations[eval_name];
+  const evaluation_config = config.evaluations[evaluation_name];
   const outputsToDisplay = [
     {
       id: "Reference",
-      output: consolidatedEvalResults[0].reference_output,
+      output: consolidatedEvaluationResults[0].reference_output,
       metrics: [],
       variant_name: "Reference",
     },
-    ...consolidatedEvalResults.map((result) => ({
-      id: result.eval_run_id,
+    ...consolidatedEvaluationResults.map((result) => ({
+      id: result.evaluation_run_id,
       variant_name: result.variant_name,
       output: result.generated_output,
       metrics: result.metrics,
@@ -103,13 +108,16 @@ export default function EvaluationDatapointPage({
   return (
     <PageLayout>
       <PageHeader label="Datapoint" name={datapoint_id}>
-        <BasicInfo eval_name={eval_name} eval_config={eval_config} />
+        <BasicInfo
+          evaluation_name={evaluation_name}
+          evaluation_config={evaluation_config}
+        />
       </PageHeader>
 
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <Input input={consolidatedEvalResults[0].input} />
+          <Input input={consolidatedEvaluationResults[0].input} />
         </SectionLayout>
         <SectionLayout>
           <SectionHeader heading="Output" />
@@ -124,7 +132,7 @@ export default function EvaluationDatapointPage({
                     {result.id === "Reference" ? (
                       <EvalRunBadge
                         runInfo={{
-                          eval_run_id: "",
+                          evaluation_run_id: "",
                           variant_name: result.variant_name,
                         }}
                         getColor={() => "bg-gray-100 text-gray-700"}
@@ -132,7 +140,7 @@ export default function EvaluationDatapointPage({
                     ) : (
                       <EvalRunBadge
                         runInfo={{
-                          eval_run_id: result.id,
+                          evaluation_run_id: result.id,
                           variant_name: result.variant_name,
                         }}
                         getColor={getColor}
@@ -145,9 +153,9 @@ export default function EvaluationDatapointPage({
                   result.metrics &&
                   result.metrics.length > 0 && (
                     <MetricsDisplay
-                      eval_name={eval_name}
+                      evaluation_name={evaluation_name}
                       metrics={result.metrics}
-                      evaluatorsConfig={eval_config.evaluators}
+                      evaluatorsConfig={evaluation_config.evaluators}
                     />
                   )}
               </div>
@@ -162,11 +170,11 @@ export default function EvaluationDatapointPage({
 // Component to display metrics for a result
 const MetricsDisplay = ({
   metrics,
-  eval_name,
+  evaluation_name,
   evaluatorsConfig,
 }: {
   metrics: ConsolidatedMetric[];
-  eval_name: string;
+  evaluation_name: string;
   evaluatorsConfig: Record<string, EvaluatorConfig>;
 }) => {
   return (
@@ -179,7 +187,7 @@ const MetricsDisplay = ({
           return (
             <MetricRow
               key={metricObj.evaluator_name}
-              eval_name={eval_name}
+              evaluation_name={evaluation_name}
               evaluatorName={metricObj.evaluator_name}
               metricValue={metricObj.metric_value}
               evaluatorConfig={evaluatorConfig}
@@ -194,17 +202,17 @@ const MetricsDisplay = ({
 // Component for a single metric row
 const MetricRow = ({
   evaluatorName,
-  eval_name,
+  evaluation_name,
   metricValue,
   evaluatorConfig,
 }: {
   evaluatorName: string;
-  eval_name: string;
+  evaluation_name: string;
   metricValue: string;
   evaluatorConfig: EvaluatorConfig;
 }) => {
   const config = useConfig();
-  const metric_name = getEvaluatorMetricName(eval_name, evaluatorName);
+  const metric_name = getEvaluatorMetricName(evaluation_name, evaluatorName);
   const metricProperties = config.metrics[metric_name];
   if (
     metricProperties.type === "comment" ||
