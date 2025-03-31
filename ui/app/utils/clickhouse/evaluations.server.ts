@@ -8,8 +8,8 @@ import {
   type EvaluationResult,
   type EvaluationRunInfo,
   type EvaluationStatistics,
-  type EvalInfoResult,
-  evalInfoResultSchema,
+  type EvaluationInfoResult,
+  evaluationInfoResultSchema,
   getEvaluatorMetricName,
   type EvaluationResultWithVariant,
   type ParsedEvaluationResultWithVariant,
@@ -21,7 +21,7 @@ import {
 } from "./evaluations";
 import { uuidv7ToTimestamp } from "./helpers";
 
-export async function getEvalRunInfos(
+export async function getEvaluationRunInfos(
   evaluation_run_ids: string[],
   function_name: string,
 ): Promise<EvaluationRunInfo[]> {
@@ -360,8 +360,8 @@ GROUP BY
       offset: offset,
     },
   });
-  const rows = await result.json<EvalInfoResult>();
-  return rows.map((row) => evalInfoResultSchema.parse(row));
+  const rows = await result.json<EvaluationInfoResult>();
+  return rows.map((row) => evaluationInfoResultSchema.parse(row));
 }
 
 /*

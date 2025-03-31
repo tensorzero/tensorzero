@@ -154,9 +154,11 @@ export const RawConfig = z
         const loadedMetrics: Record<string, MetricConfig> = {};
         const loadedFunctions: Record<string, FunctionConfig> = {};
         const loadedEvaluations: Record<string, EvaluationConfig> = {};
-        for (const [key, evalItem] of Object.entries(config.evaluations)) {
+        for (const [key, evaluationItem] of Object.entries(
+          config.evaluations,
+        )) {
           const { EvaluationConfig, functionConfigs, metricConfigs } =
-            await evalItem.load(config_path, key, config.functions);
+            await evaluationItem.load(config_path, key, config.functions);
           loadedEvaluations[key] = EvaluationConfig;
           for (const [funcKey, funcConfig] of Object.entries(functionConfigs)) {
             loadedFunctions[funcKey] = funcConfig;

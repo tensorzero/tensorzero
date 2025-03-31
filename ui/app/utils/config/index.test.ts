@@ -195,7 +195,7 @@ test("parse fixture config with evaluations", async () => {
   expect(validatedConfig).toBeDefined();
   expect(validatedConfig.evaluations).toBeDefined();
 
-  // Check entity_extraction eval
+  // Check entity_extraction evaluation
   const entityExtractionEvaluation =
     validatedConfig.evaluations["entity_extraction"];
   expect(entityExtractionEvaluation).toBeDefined();
@@ -251,7 +251,7 @@ test("parse fixture config with evaluations", async () => {
     expect(countSportsMetric.level).toBe("inference");
   }
 
-  // Check haiku eval
+  // Check haiku evaluation
   const haikuEvaluation = validatedConfig.evaluations["haiku"];
   expect(haikuEvaluation).toBeDefined();
   expect(haikuEvaluation.function_name).toBe("write_haiku");

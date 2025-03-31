@@ -9,7 +9,7 @@ import { Badge } from "../ui/badge";
 import { X } from "lucide-react";
 import { formatDate } from "~/utils/date";
 
-interface EvalRunBadgeProps {
+interface EvaluationRunBadgeProps {
   runInfo: EvaluationRunInfo;
   getColor: (runId: string) => string;
   lastUpdateDate?: Date;
@@ -21,12 +21,12 @@ export function getLastUuidSegment(uuid: string): string {
   return uuid.slice(-6);
 }
 
-export default function EvalRunBadge({
+export default function EvaluationRunBadge({
   runInfo,
   getColor,
   lastUpdateDate,
   onRemove,
-}: EvalRunBadgeProps) {
+}: EvaluationRunBadgeProps) {
   const runId = runInfo.evaluation_run_id;
   const variantColor = getColor(runId);
   const runIdSegment = getLastUuidSegment(runId);

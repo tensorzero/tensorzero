@@ -3,7 +3,7 @@ import { getConfig } from "~/utils/config/index.server";
 import {
   getEvaluationStatistics,
   getEvaluationResults,
-  getEvalRunInfos,
+  getEvaluationRunInfos,
   countDatapointsForEvaluation,
   getMostRecentEvaluationInferenceDate,
 } from "~/utils/clickhouse/evaluations.server";
@@ -54,12 +54,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   );
 
   // Set up all promises to run concurrently
-  const evalRunInfosPromise = getEvalRunInfos(
+  const evaluationRunInfosPromise = getEvaluationRunInfos(
     selected_evaluation_run_ids_array,
     function_name,
   );
 
-  const mostRecentEvalInferenceDatePromise =
+  const mostRecentEvaluationInferenceDatePromise =
     getMostRecentEvaluationInferenceDate(selected_evaluation_run_ids_array);
 
   // Create placeholder promises for results and statistics that will be used conditionally
@@ -109,19 +109,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     evaluation_results,
     evaluation_statistics,
     total_datapoints,
-    mostRecentEvalInferenceDates,
+    mostRecentEvaluationInferenceDates,
   ] = await Promise.all([
-    evalRunInfosPromise,
+    evaluationRunInfosPromise,
     resultsPromise,
     statisticsPromise,
     total_datapoints_promise,
-    mostRecentEvalInferenceDatePromise,
+    mostRecentEvaluationInferenceDatePromise,
   ]);
 
   const any_evaluation_is_running = Object.values(
     selected_evaluation_run_ids_array,
-  ).some((evalRunId) => {
-    const runningEvaluation = getRunningEvaluation(evalRunId);
+  ).some((evaluationRunId) => {
+    const runningEvaluation = getRunningEvaluation(evaluationRunId);
     if (!runningEvaluation) {
       return false;
     }
@@ -137,16 +137,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const errors: Record<string, EvaluationErrorDisplayInfo> =
     selected_evaluation_run_ids_array.reduce(
-      (acc, evalRunId) => {
-        const evalRunInfo = getRunningEvaluation(evalRunId);
-        if (evalRunInfo?.errors) {
-          acc[evalRunId] = {
-            variantName: evalRunInfo.variantName,
-            errors: evalRunInfo.errors,
+      (acc, evaluationRunId) => {
+        const evaluationRunInfo = getRunningEvaluation(evaluationRunId);
+        if (evaluationRunInfo?.errors) {
+          acc[evaluationRunId] = {
+            variantName: evaluationRunInfo.variantName,
+            errors: evaluationRunInfo.errors,
           };
         } else {
-          acc[evalRunId] = {
-            variantName: evalRunId,
+          acc[evaluationRunId] = {
+            variantName: evaluationRunId,
             errors: [],
           };
         }
@@ -165,7 +165,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     pageSize,
     total_datapoints,
     evaluator_names,
-    mostRecentEvalInferenceDates,
+    mostRecentEvaluationInferenceDates,
     any_evaluation_is_running,
     errors,
   };
@@ -182,7 +182,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     pageSize,
     total_datapoints,
     evaluator_names,
-    mostRecentEvalInferenceDates,
+    mostRecentEvaluationInferenceDates,
     any_evaluation_is_running,
     errors,
   } = loaderData;
@@ -231,7 +231,9 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             evaluation_results={evaluation_results}
             evaluation_statistics={evaluation_statistics}
             evaluator_names={evaluator_names}
-            mostRecentEvalInferenceDates={mostRecentEvalInferenceDates}
+            mostRecentEvaluationInferenceDates={
+              mostRecentEvaluationInferenceDates
+            }
           />
           <PageButtons
             onPreviousPage={handlePreviousPage}

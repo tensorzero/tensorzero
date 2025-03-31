@@ -103,10 +103,10 @@ export const EvaluationStatisticsSchema = z.object({
 export type EvaluationStatistics = z.infer<typeof EvaluationStatisticsSchema>;
 
 export function getEvaluatorMetricName(
-  evalName: string,
+  evaluationName: string,
   evaluatorName: string,
 ): string {
-  return `tensorzero::evaluation_name::${evalName}::evaluator_name::${evaluatorName}`;
+  return `tensorzero::evaluation_name::${evaluationName}::evaluator_name::${evaluatorName}`;
 }
 
 function getEvaluatorNameFromMetricName(metricName: string): string {
@@ -114,7 +114,7 @@ function getEvaluatorNameFromMetricName(metricName: string): string {
   return parts[parts.length - 1];
 }
 
-export const evalInfoResultSchema = z.object({
+export const evaluationInfoResultSchema = z.object({
   evaluation_run_id: z.string().uuid(),
   evaluation_name: z.string(),
   function_name: z.string(),
@@ -122,9 +122,9 @@ export const evalInfoResultSchema = z.object({
   last_inference_timestamp: z.string().datetime(),
 });
 
-export type EvalInfoResult = z.infer<typeof evalInfoResultSchema>;
+export type EvaluationInfoResult = z.infer<typeof evaluationInfoResultSchema>;
 
-export const EvalRunInfoSchema = z.object({
+export const EvaluationRunRowInfoSchema = z.object({
   evaluation_run_id: z.string().uuid(),
   evaluation_name: z.string(),
   function_name: z.string(),
@@ -133,7 +133,7 @@ export const EvalRunInfoSchema = z.object({
   dataset: z.string(),
 });
 
-export type EvalRunInfo = z.infer<typeof EvalRunInfoSchema>;
+export type EvaluationRunRowInfo = z.infer<typeof EvaluationRunRowInfoSchema>;
 
 // Define a type for consolidated metrics
 export type ConsolidatedMetric = {

@@ -1,9 +1,12 @@
-import type { DisplayEvalError, EvalError } from "~/utils/evaluations";
-import EvalRunBadge from "~/components/evaluations/EvalRunBadge";
+import type {
+  DisplayEvaluationError,
+  EvaluationError,
+} from "~/utils/evaluations";
+import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 
 export interface EvaluationErrorDisplayInfo {
   variantName: string;
-  errors: DisplayEvalError[];
+  errors: DisplayEvaluationError[];
 }
 
 export interface EvaluationErrorInfoProps {
@@ -30,11 +33,11 @@ export function EvaluationErrorInfo({ errors }: EvaluationErrorInfoProps) {
         return (
           <div key={key} className="mt-2">
             <h3 className="flex items-center gap-2 text-sm font-medium">
-              <EvalRunBadge runInfo={runInfo} getColor={getColor} />
+              <EvaluationRunBadge runInfo={runInfo} getColor={getColor} />
             </h3>
             <div className="mb-2 mt-1 max-h-64 overflow-y-auto rounded border p-2">
               {errors.map((error, index) => (
-                <EvalError key={index} error={error} />
+                <EvaluationError key={index} error={error} />
               ))}
             </div>
           </div>
@@ -44,7 +47,7 @@ export function EvaluationErrorInfo({ errors }: EvaluationErrorInfoProps) {
   );
 }
 
-function EvalError({ error }: { error: DisplayEvalError }) {
+function EvaluationError({ error }: { error: DisplayEvaluationError }) {
   return (
     <div className="font-mono text-xs">
       {error.datapoint_id && <h3>{error.datapoint_id}</h3>}

@@ -985,7 +985,7 @@ mod tests {
         // Check that the function for the LLM Judge evaluation is added to the functions table
         let function = config
             .functions
-            .get("tensorzero::llm_judge::eval1::llm_judge_bool")
+            .get("tensorzero::llm_judge::evaluation1::llm_judge_bool")
             .unwrap();
         match &**function {
             FunctionConfig::Json(json_config) => {
@@ -1000,7 +1000,7 @@ mod tests {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
                                 path: PathBuf::from(
-                                    "tensorzero::llm_judge::eval1::llm_judge_bool::system"
+                                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::system"
                                 ),
                                 contents:
                                     "Return True if there is NSFW content in this generation.\n\n"
@@ -1017,7 +1017,7 @@ mod tests {
         // Check that the metric for the LLM Judge evaluator is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::evaluation_name::eval1::evaluator_name::llm_judge_bool")
+            .get("tensorzero::evaluation_name::evaluation1::evaluator_name::llm_judge_bool")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Boolean);
         assert_eq!(metric.optimize, MetricConfigOptimize::Min);
@@ -1026,7 +1026,7 @@ mod tests {
         // Check that the metric for the exact match evaluation is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::evaluation_name::eval1::evaluator_name::em_evaluator")
+            .get("tensorzero::evaluation_name::evaluation1::evaluator_name::em_evaluator")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Boolean);
         assert_eq!(metric.optimize, MetricConfigOptimize::Max);
@@ -1035,7 +1035,7 @@ mod tests {
         // Check that the metric for the LLM Judge float evaluation is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::evaluation_name::eval1::evaluator_name::llm_judge_float")
+            .get("tensorzero::evaluation_name::evaluation1::evaluator_name::llm_judge_float")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Float);
         assert_eq!(metric.optimize, MetricConfigOptimize::Min);
@@ -1210,7 +1210,7 @@ mod tests {
             result.unwrap_err(),
             ErrorDetails::Config {
                 message:
-                    "Function `generate_draft` not found (referenced in `[evaluations.eval1]`)"
+                    "Function `generate_draft` not found (referenced in `[evaluations.evaluation1]`)"
                         .to_string()
             }
             .into()
@@ -1677,7 +1677,7 @@ mod tests {
     #[test]
     fn test_config_validate_evaluation_function_nonexistent() {
         let mut config = get_sample_valid_config();
-        config["evaluations"]["eval1"]["function_name"] = "nonexistent_function".into();
+        config["evaluations"]["evaluation1"]["function_name"] = "nonexistent_function".into();
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
 
@@ -1685,7 +1685,7 @@ mod tests {
             result.unwrap_err(),
             ErrorDetails::Config {
                 message:
-                    "Function `nonexistent_function` not found (referenced in `[evaluations.eval1]`)"
+                    "Function `nonexistent_function` not found (referenced in `[evaluations.evaluation1]`)"
                         .to_string()
             }
             .into()
@@ -1696,13 +1696,13 @@ mod tests {
     #[test]
     fn test_config_validate_evaluation_name_contains_double_colon() {
         let mut config = get_sample_valid_config();
-        let eval1 = config["evaluations"]["eval1"].clone();
+        let evaluation1 = config["evaluations"]["evaluation1"].clone();
         config
             .get_mut("evaluations")
             .unwrap()
             .as_table_mut()
             .unwrap()
-            .insert("bad::eval".to_string(), eval1);
+            .insert("bad::evaluation".to_string(), evaluation1);
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
 
@@ -1710,7 +1710,7 @@ mod tests {
             result.unwrap_err(),
             ErrorDetails::Config {
                 message:
-                    "evaluation names cannot contain \"::\" (referenced in `[evaluations.bad::eval]`)"
+                    "evaluation names cannot contain \"::\" (referenced in `[evaluations.bad::evaluation]`)"
                         .to_string()
             }
             .into()
@@ -2053,27 +2053,27 @@ mod tests {
 
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::eval1::llm_judge_bool::system")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::system")
                 .unwrap(),
             "Return True if there is NSFW content in this generation.\n\n".to_string(),
         );
 
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::eval1::llm_judge_float::system")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_float::system")
                 .unwrap(),
             "Return a number between 0 and 1 where 1 is very NSFW and 0 is the least NSFW content.\n\n"
                 .to_string(),
         );
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::eval1::llm_judge_bool::user")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::user")
                 .unwrap(),
             include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
         );
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::eval1::llm_judge_float::user")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_float::user")
                 .unwrap(),
             include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
         );

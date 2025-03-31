@@ -237,7 +237,7 @@ interface EvaluationTableProps {
   evaluation_statistics: EvaluationStatistics[];
   evaluator_names: string[];
   evaluation_name: string;
-  mostRecentEvalInferenceDates: Map<string, Date>;
+  mostRecentEvaluationInferenceDates: Map<string, Date>;
 }
 
 export function EvaluationTable({
@@ -246,7 +246,7 @@ export function EvaluationTable({
   evaluation_statistics,
   evaluator_names,
   evaluation_name,
-  mostRecentEvalInferenceDates,
+  mostRecentEvaluationInferenceDates,
 }: EvaluationTableProps) {
   const selectedRunIds = selected_evaluation_run_infos.map(
     (info) => info.evaluation_run_id,
@@ -336,9 +336,11 @@ export function EvaluationTable({
       <div>
         {/* Variant selector */}
         <VariantSelector
-          evalName={evaluation_name}
+          evaluationName={evaluation_name}
           selectedRunIdInfos={selected_evaluation_run_infos}
-          mostRecentEvalInferenceDates={mostRecentEvalInferenceDates}
+          mostRecentEvaluationInferenceDates={
+            mostRecentEvaluationInferenceDates
+          }
         />
 
         {selectedRunIds.length > 0 && (

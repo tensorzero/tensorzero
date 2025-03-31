@@ -19,16 +19,18 @@ import { useDatasetCountFetcher } from "~/routes/api/datasets/count_dataset_func
 import { useConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
 
-interface LaunchEvalModalProps {
+interface LaunchEvaluationModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-function EvalForm() {
+function EvaluationForm() {
   const fetcher = useFetcher();
   const config = useConfig();
   const evaluation_names = Object.keys(config.evaluations);
-  const [selectedEvalName, setSelectedEvalName] = useState<string | null>(null);
+  const [selectedEvaluationName, setSelectedEvaluationName] = useState<
+    string | null
+  >(null);
   const [selectedVariantName, setSelectedVariantName] = useState<string | null>(
     null,
   );
@@ -37,9 +39,9 @@ function EvalForm() {
   let isLoading = false;
   let dataset = null;
   let function_name = null;
-  if (selectedEvalName) {
-    dataset = config.evaluations[selectedEvalName]?.dataset_name;
-    function_name = config.evaluations[selectedEvalName]?.function_name;
+  if (selectedEvaluationName) {
+    dataset = config.evaluations[selectedEvaluationName]?.dataset_name;
+    function_name = config.evaluations[selectedEvaluationName]?.function_name;
   }
   const { count: datasetCount, isLoading: datasetLoading } =
     useDatasetCountFetcher(dataset, function_name);
@@ -48,7 +50,7 @@ function EvalForm() {
 
   // Check if all fields are filled
   const isFormValid =
-    selectedEvalName !== null &&
+    selectedEvaluationName !== null &&
     selectedVariantName !== null &&
     concurrencyLimit !== "";
 
@@ -65,7 +67,7 @@ function EvalForm() {
       <Select
         name="evaluation_name"
         onValueChange={(value) => {
-          setSelectedEvalName(value);
+          setSelectedEvaluationName(value);
           setSelectedVariantName(null); // Reset variant selection when evaluation changes
         }}
       >
@@ -122,7 +124,7 @@ function EvalForm() {
       </div>
       <Select
         name="variant_name"
-        disabled={!selectedEvalName}
+        disabled={!selectedEvaluationName}
         onValueChange={(value) => setSelectedVariantName(value)}
       >
         <SelectTrigger>
@@ -130,10 +132,10 @@ function EvalForm() {
         </SelectTrigger>
         <SelectContent>
           {(() => {
-            if (!selectedEvalName) return null;
+            if (!selectedEvaluationName) return null;
 
             const evaluation_function =
-              config.evaluations[selectedEvalName].function_name;
+              config.evaluations[selectedEvaluationName].function_name;
             const variant_names = Object.keys(
               config.functions[evaluation_function].variants,
             );
@@ -173,10 +175,10 @@ function EvalForm() {
   );
 }
 
-export default function LaunchEvalModal({
+export default function LaunchEvaluationModal({
   isOpen,
   onClose,
-}: LaunchEvalModalProps) {
+}: LaunchEvaluationModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
@@ -184,7 +186,7 @@ export default function LaunchEvalModal({
           <DialogTitle>Launch Evaluation</DialogTitle>
         </DialogHeader>
 
-        <EvalForm />
+        <EvaluationForm />
       </DialogContent>
     </Dialog>
   );

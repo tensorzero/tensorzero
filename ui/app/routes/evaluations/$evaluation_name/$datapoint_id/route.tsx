@@ -22,7 +22,7 @@ import {
   getMetricType,
   type EvaluatorConfig,
 } from "~/utils/config/evaluations";
-import EvalRunBadge from "~/components/evaluations/EvalRunBadge";
+import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 import BasicInfo from "./EvaluationDatapointBasicInfo";
 import {
   Tooltip,
@@ -58,15 +58,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     selected_evaluation_run_ids_array.length
   ) {
     // Find which evaluation run IDs are missing from the results
-    const foundEvalRunIds = new Set(
+    const foundEvaluationRunIds = new Set(
       consolidatedEvaluationResults.map((result) => result.evaluation_run_id),
     );
-    const missingEvalRunIds = selected_evaluation_run_ids_array.filter(
-      (id) => !foundEvalRunIds.has(id),
+    const missingEvaluationRunIds = selected_evaluation_run_ids_array.filter(
+      (id) => !foundEvaluationRunIds.has(id),
     );
 
     throw data(
-      `Evaluation run ID(s) not found: ${missingEvalRunIds.join(", ")}`,
+      `Evaluation run ID(s) not found: ${missingEvaluationRunIds.join(", ")}`,
       { status: 404 },
     );
   }
@@ -130,7 +130,7 @@ export default function EvaluationDatapointPage({
                 <div>
                   <div className="mb-2 flex">
                     {result.id === "Reference" ? (
-                      <EvalRunBadge
+                      <EvaluationRunBadge
                         runInfo={{
                           evaluation_run_id: "",
                           variant_name: result.variant_name,
@@ -138,7 +138,7 @@ export default function EvaluationDatapointPage({
                         getColor={() => "bg-gray-100 text-gray-700"}
                       />
                     ) : (
-                      <EvalRunBadge
+                      <EvaluationRunBadge
                         runInfo={{
                           evaluation_run_id: result.id,
                           variant_name: result.variant_name,

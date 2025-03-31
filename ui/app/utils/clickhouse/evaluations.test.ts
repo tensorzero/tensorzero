@@ -4,7 +4,7 @@ import {
   countTotalEvaluationRuns,
   getEvaluationResults,
   getEvaluationRunInfo,
-  getEvalRunInfos,
+  getEvaluationRunInfos,
   getEvaluationsForDatapoint,
   getEvaluationStatistics,
   getMostRecentEvaluationInferenceDate,
@@ -13,9 +13,9 @@ import {
 import type { ChatEvaluationResultWithVariant } from "./evaluations";
 import { fail } from "assert";
 
-describe("getEvalRunInfos", () => {
+describe("getEvaluationRunInfos", () => {
   test("should return correct run infos for specific evaluation run ids", async () => {
-    const runInfos = await getEvalRunInfos(
+    const runInfos = await getEvaluationRunInfos(
       [
         "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
         "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
@@ -35,7 +35,7 @@ describe("getEvalRunInfos", () => {
   });
 
   test("should return empty array when no matching run ids are found", async () => {
-    const runInfos = await getEvalRunInfos(
+    const runInfos = await getEvaluationRunInfos(
       ["non-existent-id"],
       "extract_entities",
     );
@@ -43,7 +43,7 @@ describe("getEvalRunInfos", () => {
   });
 
   test("should handle a single run id correctly", async () => {
-    const runInfos = await getEvalRunInfos(
+    const runInfos = await getEvaluationRunInfos(
       ["0195aef7-ec99-7312-924f-32b71c3496ee"],
       "extract_entities",
     );
@@ -56,7 +56,7 @@ describe("getEvalRunInfos", () => {
   });
 });
 
-describe("searchEvalRuns", () => {
+describe("searchEvaluationRuns", () => {
   test("should return matching run ids when searching by evaluation_run_id prefix", async () => {
     const runIds = await searchEvaluationRuns(
       "entity_extraction",
@@ -132,7 +132,7 @@ describe("searchEvalRuns", () => {
 });
 
 describe("getEvaluationResults", () => {
-  test("should return correct results for haiku eval", async () => {
+  test("should return correct results for haiku evaluation", async () => {
     const results = await getEvaluationResults(
       "foo",
       "write_haiku",
@@ -221,7 +221,7 @@ describe("getEvaluationResults", () => {
     expect(datapointIds.size).toBe(2);
   });
 
-  test("should return correct results for ragged haiku eval", async () => {
+  test("should return correct results for ragged haiku evaluation", async () => {
     const results = await getEvaluationResults(
       "foo",
       "write_haiku",
@@ -282,7 +282,7 @@ describe("getEvaluationResults", () => {
 });
 
 describe("getEvaluationStatistics", () => {
-  test("should return correct statistics for haiku eval", async () => {
+  test("should return correct statistics for haiku evaluation", async () => {
     const statistics = await getEvaluationStatistics(
       "foo",
       "write_haiku",
@@ -314,7 +314,7 @@ describe("getEvaluationStatistics", () => {
     expect(statistics[1].stderr_metric).toBeCloseTo(0.02428);
   });
 
-  test("should return correct statistics for entity_extraction eval", async () => {
+  test("should return correct statistics for entity_extraction evaluation", async () => {
     const statistics = await getEvaluationStatistics(
       "foo",
       "extract_entities",
@@ -371,8 +371,8 @@ describe("getEvaluationStatistics", () => {
   });
 });
 
-describe("countDatapointsForEval", () => {
-  test("should return correct number of datapoints for haiku eval", async () => {
+describe("countDatapointsForEvaluation", () => {
+  test("should return correct number of datapoints for haiku evaluation", async () => {
     const datapoints = await countDatapointsForEvaluation(
       "foo",
       "write_haiku",
@@ -383,7 +383,7 @@ describe("countDatapointsForEval", () => {
     expect(datapoints).toBe(75);
   });
 
-  test("should return correct number of datapoints for entity_extraction eval", async () => {
+  test("should return correct number of datapoints for entity_extraction evaluation", async () => {
     const datapoints = await countDatapointsForEvaluation(
       "foo",
       "extract_entities",
@@ -397,14 +397,14 @@ describe("countDatapointsForEval", () => {
   });
 });
 
-describe("countTotalEvalRuns", () => {
+describe("countTotalEvaluationRuns", () => {
   test("should return correct number of evaluation runs", async () => {
     const runs = await countTotalEvaluationRuns();
     expect(runs).toBe(6);
   });
 });
 
-describe("getEvalRunInfo", () => {
+describe("getEvaluationRunInfo", () => {
   test("should return correct evaluation run info", async () => {
     const runs = await getEvaluationRunInfo();
 
@@ -449,9 +449,9 @@ describe("getEvalRunInfo", () => {
     expect(runs[0].evaluation_run_id > runs[1].evaluation_run_id).toBe(true);
 
     // Check for specific evaluation_names in the dataset
-    const evalNames = runs.map((run) => run.evaluation_name);
-    expect(evalNames).toContain("entity_extraction");
-    expect(evalNames).toContain("haiku");
+    const evaluationNames = runs.map((run) => run.evaluation_name);
+    expect(evaluationNames).toContain("entity_extraction");
+    expect(evaluationNames).toContain("haiku");
 
     // Check for specific function_names in the dataset
     const functionNames = runs.map((run) => run.function_name);
@@ -468,7 +468,7 @@ describe("getEvalRunInfo", () => {
   });
 });
 
-describe("getMostRecentEvalInferenceDate", () => {
+describe("getmostRecentEvaluationInferenceDate", () => {
   test("should return correct last inference timestamp", async () => {
     const timestamps = await getMostRecentEvaluationInferenceDate([
       "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",

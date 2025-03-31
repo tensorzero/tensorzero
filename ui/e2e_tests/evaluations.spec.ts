@@ -8,7 +8,7 @@ test("should show the evaluation result page", async ({ page }) => {
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
 
-test("push the new run button, launch an eval", async ({ page }) => {
+test("push the new run button, launch an evaluation", async ({ page }) => {
   await page.goto("/evaluations");
   await page.waitForTimeout(500);
   await page.getByText("New Run").click();

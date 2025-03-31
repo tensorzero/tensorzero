@@ -129,7 +129,7 @@ pub struct UninitializedEvaluationConfig {
     function_name: String,
 }
 
-type EvalLoadResult = Result<
+type EvaluationLoadResult = Result<
     (
         EvaluationConfig,                     // The evaluation itself
         HashMap<String, Arc<FunctionConfig>>, // All functions which the evaluation needs {function_name -> function_config}
@@ -144,7 +144,7 @@ impl UninitializedEvaluationConfig {
         functions: &HashMap<String, Arc<FunctionConfig>>,
         base_path: P,
         evaluation_name: &str,
-    ) -> EvalLoadResult {
+    ) -> EvaluationLoadResult {
         if !functions.contains_key(&self.function_name) {
             return Err(ErrorDetails::Config {
                 message: format!(
@@ -463,7 +463,7 @@ mod tests {
     #[test]
     fn test_read_system_instructions() {
         let system_instructions = read_system_instructions(
-            PathBuf::from("evaluations/eval1/llm_judge_bool/system_instructions.txt"),
+            PathBuf::from("evaluations/evaluation1/llm_judge_bool/system_instructions.txt"),
             &PathBuf::from("fixtures/config"),
         )
         .unwrap();
@@ -474,12 +474,12 @@ mod tests {
 
         // Nonexistent file
         let result = read_system_instructions(
-            PathBuf::from("evaluations/eval1/llm_judge_bool/nonexistent.txt"),
+            PathBuf::from("evaluations/evaluation1/llm_judge_bool/nonexistent.txt"),
             &PathBuf::from("fixtures/config"),
         );
         assert_eq!(*result.unwrap_err().get_details(), ErrorDetails::FileRead {
             message: "Failed to open system instructions file: No such file or directory (os error 2)".to_string(),
-            file_path: "fixtures/config/evaluations/eval1/llm_judge_bool/nonexistent.txt".to_string(),
+            file_path: "fixtures/config/evaluations/evaluation1/llm_judge_bool/nonexistent.txt".to_string(),
         });
     }
 
@@ -489,7 +489,7 @@ mod tests {
         let base_path = PathBuf::from("fixtures/config");
         let evaluation_name = "test_evaluation";
 
-        // Prepare function configs map with a function referenced in the eval
+        // Prepare function configs map with a function referenced in the evaluation
         let mut functions = HashMap::new();
         let function_name = "generate_draft";
         let function_config = FunctionConfig::Json(FunctionConfigJson {
@@ -558,7 +558,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -585,7 +585,7 @@ mod tests {
 
             let mut evaluators = HashMap::new();
             evaluators.insert(
-                "llm_judge_eval".to_string(),
+                "llm_judge_evaluation".to_string(),
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
@@ -602,7 +602,7 @@ mod tests {
             assert_eq!(config.evaluators.len(), 1);
 
             // Verify LLM judge evaluator config
-            match config.evaluators.get("llm_judge_eval").unwrap() {
+            match config.evaluators.get("llm_judge_evaluation").unwrap() {
                 EvaluatorConfig::LLMJudge(judge_config) => {
                     assert!(matches!(
                         judge_config.output_type,
@@ -616,7 +616,8 @@ mod tests {
 
             // Verify additional function config was created
             assert_eq!(additional_functions.len(), 1);
-            let function_name = get_llm_judge_function_name(evaluation_name, "llm_judge_eval");
+            let function_name =
+                get_llm_judge_function_name(evaluation_name, "llm_judge_evaluation");
             assert!(additional_functions.contains_key(&function_name));
 
             // Verify the function config has the correct type
@@ -635,10 +636,11 @@ mod tests {
             assert_eq!(metric_configs.len(), 1);
 
             // Check the metric name follows expected format
-            let metric_config_name = get_evaluator_metric_name(evaluation_name, "llm_judge_eval");
+            let metric_config_name =
+                get_evaluator_metric_name(evaluation_name, "llm_judge_evaluation");
             assert_eq!(
                 metric_config_name,
-                "tensorzero::evaluation_name::test_evaluation::evaluator_name::llm_judge_eval"
+                "tensorzero::evaluation_name::test_evaluation::evaluator_name::llm_judge_evaluation"
             );
             assert!(metric_configs.contains_key(&metric_config_name));
 
@@ -649,7 +651,8 @@ mod tests {
             assert_eq!(metric_config.level, MetricConfigLevel::Inference);
 
             // Verify the type conversion from LLMJudgeOutputType to MetricConfigType
-            let llm_judge_evaluation = match config.evaluators.get("llm_judge_eval").unwrap() {
+            let llm_judge_evaluation = match config.evaluators.get("llm_judge_evaluation").unwrap()
+            {
                 EvaluatorConfig::LLMJudge(config) => config,
                 _ => panic!("Expected LLMJudge evaluator"),
             };
@@ -675,7 +678,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -806,7 +809,8 @@ mod tests {
                 function_name: function_name.to_string(),
             };
 
-            let result = uninitialized_config.load(&functions, &base_path, "invalid::eval::name");
+            let result =
+                uninitialized_config.load(&functions, &base_path, "invalid::evaluation::name");
             assert!(result.is_err());
             assert!(matches!(
                 *result.unwrap_err().get_details(),
@@ -824,7 +828,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -847,7 +851,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-4"),
                         system_instructions: PathBuf::from(
-                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.5),
                         top_p: None,
@@ -958,7 +962,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -1024,7 +1028,7 @@ mod tests {
                         active: None, // No 'active' field specified
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -1094,7 +1098,7 @@ mod tests {
                         active: Some(false), // Explicitly inactive
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
