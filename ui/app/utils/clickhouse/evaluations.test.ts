@@ -1,14 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
-  countDatapointsForEval,
-  countTotalEvalRuns,
-  getEvalResults,
-  getEvalRunInfo,
+  countDatapointsForEvaluation,
+  countTotalEvaluationRuns,
+  getEvaluationResults,
+  getEvaluationRunInfo,
   getEvalRunInfos,
-  getEvalsForDatapoint,
-  getEvalStatistics,
-  getMostRecentEvalInferenceDate,
-  searchEvalRuns,
+  getEvaluationsForDatapoint,
+  getEvaluationStatistics,
+  getMostRecentEvaluationInferenceDate,
+  searchEvaluationRuns,
 } from "./evaluations.server";
 import type { ChatEvaluationResultWithVariant } from "./evaluations";
 import { fail } from "assert";
@@ -58,7 +58,7 @@ describe("getEvalRunInfos", () => {
 
 describe("searchEvalRuns", () => {
   test("should return matching run ids when searching by eval_run_id prefix", async () => {
-    const runIds = await searchEvalRuns(
+    const runIds = await searchEvaluationRuns(
       "entity_extraction",
       "extract_entities",
       "0195c5",
@@ -72,7 +72,7 @@ describe("searchEvalRuns", () => {
   });
 
   test("should return matching run ids when searching by variant_name for models", async () => {
-    const runIds = await searchEvalRuns(
+    const runIds = await searchEvaluationRuns(
       "entity_extraction",
       "extract_entities",
       "gpt4o",
@@ -90,7 +90,11 @@ describe("searchEvalRuns", () => {
   });
 
   test("should return matching run ids when searching by partial variant_name", async () => {
-    const runIds = await searchEvalRuns("haiku", "write_haiku", "initial");
+    const runIds = await searchEvaluationRuns(
+      "haiku",
+      "write_haiku",
+      "initial",
+    );
     expect(runIds).toMatchObject([
       {
         eval_run_id: "0195aef7-96fe-7d60-a2e6-5a6ea990c425",
@@ -104,7 +108,7 @@ describe("searchEvalRuns", () => {
   });
 
   test("should handle case-insensitive search", async () => {
-    const runIds = await searchEvalRuns(
+    const runIds = await searchEvaluationRuns(
       "entity_extraction",
       "extract_entities",
       "llama",
@@ -118,7 +122,7 @@ describe("searchEvalRuns", () => {
   });
 
   test("should return empty array when no matches found", async () => {
-    const runIds = await searchEvalRuns(
+    const runIds = await searchEvaluationRuns(
       "entity_extraction",
       "extract_entities",
       "nonexistent",
@@ -129,7 +133,7 @@ describe("searchEvalRuns", () => {
 
 describe("getEvalResults", () => {
   test("should return correct results for haiku eval", async () => {
-    const results = await getEvalResults(
+    const results = await getEvaluationResults(
       "foo",
       "write_haiku",
       "chat",
@@ -183,7 +187,7 @@ describe("getEvalResults", () => {
     // There is a datapoint that was inserted and deleted before the last eval run after the first two.
     // We test here that it is not included and the data is ragged due to the datapoint at the top of the
     // table only having one eval run.
-    const results = await getEvalResults(
+    const results = await getEvaluationResults(
       "foo",
       "extract_entities",
       "json",
@@ -218,7 +222,7 @@ describe("getEvalResults", () => {
   });
 
   test("should return correct results for ragged haiku eval", async () => {
-    const results = await getEvalResults(
+    const results = await getEvaluationResults(
       "foo",
       "write_haiku",
       "chat",
@@ -279,7 +283,7 @@ describe("getEvalResults", () => {
 
 describe("getEvalStatistics", () => {
   test("should return correct statistics for haiku eval", async () => {
-    const statistics = await getEvalStatistics(
+    const statistics = await getEvaluationStatistics(
       "foo",
       "write_haiku",
       "chat",
@@ -311,7 +315,7 @@ describe("getEvalStatistics", () => {
   });
 
   test("should return correct statistics for entity_extraction eval", async () => {
-    const statistics = await getEvalStatistics(
+    const statistics = await getEvaluationStatistics(
       "foo",
       "extract_entities",
       "json",
@@ -368,7 +372,7 @@ describe("getEvalStatistics", () => {
 
 describe("countDatapointsForEval", () => {
   test("should return correct number of datapoints for haiku eval", async () => {
-    const datapoints = await countDatapointsForEval(
+    const datapoints = await countDatapointsForEvaluation(
       "foo",
       "write_haiku",
       "chat",
@@ -379,7 +383,7 @@ describe("countDatapointsForEval", () => {
   });
 
   test("should return correct number of datapoints for entity_extraction eval", async () => {
-    const datapoints = await countDatapointsForEval(
+    const datapoints = await countDatapointsForEvaluation(
       "foo",
       "extract_entities",
       "json",
@@ -394,14 +398,14 @@ describe("countDatapointsForEval", () => {
 
 describe("countTotalEvalRuns", () => {
   test("should return correct number of eval runs", async () => {
-    const runs = await countTotalEvalRuns();
+    const runs = await countTotalEvaluationRuns();
     expect(runs).toBe(6);
   });
 });
 
 describe("getEvalRunInfo", () => {
   test("should return correct eval run info", async () => {
-    const runs = await getEvalRunInfo();
+    const runs = await getEvaluationRunInfo();
 
     // Check the total number of runs
     expect(runs.length).toBe(6);
@@ -465,7 +469,7 @@ describe("getEvalRunInfo", () => {
 
 describe("getMostRecentEvalInferenceDate", () => {
   test("should return correct last inference timestamp", async () => {
-    const timestamps = await getMostRecentEvalInferenceDate([
+    const timestamps = await getMostRecentEvaluationInferenceDate([
       "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
     ]);
     expect(timestamps).toEqual(
@@ -479,7 +483,7 @@ describe("getMostRecentEvalInferenceDate", () => {
   });
 
   test("should return run timestamp if no inference id is found", async () => {
-    const timestamps = await getMostRecentEvalInferenceDate([
+    const timestamps = await getMostRecentEvaluationInferenceDate([
       "0195c501-8e6b-76f2-aa2c-ffffffffffff",
     ]);
     expect(timestamps).toEqual(
@@ -493,7 +497,7 @@ describe("getMostRecentEvalInferenceDate", () => {
   });
 
   test("handles multiple eval run ids", async () => {
-    const timestamps = await getMostRecentEvalInferenceDate([
+    const timestamps = await getMostRecentEvaluationInferenceDate([
       "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
       "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
     ]);
@@ -514,7 +518,7 @@ describe("getMostRecentEvalInferenceDate", () => {
 
 describe("getEvalsForDatapoint", () => {
   test("should return empty array for nonexistent datapoint", async () => {
-    const evals = await getEvalsForDatapoint(
+    const evals = await getEvaluationsForDatapoint(
       "haiku",
       "0195d806-e43d-7f7e-bb05-f6dd0d95846f", // Nonexistent datapoint
       ["0195aef7-96fe-7d60-a2e6-5a6ea990c425"],
@@ -523,7 +527,7 @@ describe("getEvalsForDatapoint", () => {
   });
 
   test("should return correct array for chat datapoint", async () => {
-    const evals = await getEvalsForDatapoint(
+    const evals = await getEvaluationsForDatapoint(
       "haiku",
       "01936551-ffc8-7372-8991-0a2929d3f5b0", // Real datapoint
       ["0195aef7-96fe-7d60-a2e6-5a6ea990c425"],
@@ -573,7 +577,7 @@ describe("getEvalsForDatapoint", () => {
   });
 
   test("should return correct array for json datapoint", async () => {
-    const evals = await getEvalsForDatapoint(
+    const evals = await getEvaluationsForDatapoint(
       "entity_extraction",
       "019373bc-e6e0-7e50-8822-af9bacfafe9a", // Real json datapoint
       ["0195aef7-ec99-7312-924f-32b71c3496ee"],

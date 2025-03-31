@@ -8,7 +8,9 @@ use tensorzero::{
 };
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::endpoints::datasets::Datapoint;
-use tensorzero_internal::evals::{get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeOutputType};
+use tensorzero_internal::evaluations::{
+    get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeOutputType,
+};
 use tensorzero_internal::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessageContent,
     TextKind,

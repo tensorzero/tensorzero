@@ -21,7 +21,7 @@ import {
 import { getConfig } from "~/utils/config/index.server";
 import { useLoaderData } from "react-router";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
-import { countTotalEvalRuns } from "~/utils/clickhouse/evaluations.server";
+import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import { useConfig } from "~/context/config";
 
 const FF_ENABLE_DATASETS =
@@ -78,7 +78,7 @@ export async function loader() {
   const numEpisodes = await countEpisodes();
   const datasetCounts = await getDatasetCounts();
   const numDatasets = datasetCounts.length;
-  const numEvalRuns = await countTotalEvalRuns();
+  const numEvalRuns = await countTotalEvaluationRuns();
 
   return {
     totalInferences,
@@ -98,7 +98,7 @@ export default function Home() {
     numEvalRuns,
   } = useLoaderData<typeof loader>();
   const config = useConfig();
-  const numEvals = Object.keys(config.evals).length;
+  const numEvals = Object.keys(config.evaluations).length;
 
   return (
     <div className="flex flex-col">

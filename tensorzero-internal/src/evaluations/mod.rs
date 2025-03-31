@@ -145,7 +145,7 @@ impl UninitializedEvalConfig {
         if !functions.contains_key(&self.function_name) {
             return Err(ErrorDetails::Config {
                 message: format!(
-                    "Function `{}` not found (referenced in `[evals.{eval_name}]`)",
+                    "Function `{}` not found (referenced in `[evaluations.{eval_name}]`)",
                     self.function_name
                 ),
             }
@@ -155,7 +155,7 @@ impl UninitializedEvalConfig {
         if eval_name.contains("::") {
             return Err(ErrorDetails::Config {
                 message: format!(
-                    "Eval names cannot contain \"::\" (referenced in `[evals.{eval_name}]`)"
+                    "Eval names cannot contain \"::\" (referenced in `[evaluations.{eval_name}]`)"
                 ),
             }
             .into());
@@ -460,7 +460,7 @@ mod tests {
     #[test]
     fn test_read_system_instructions() {
         let system_instructions = read_system_instructions(
-            PathBuf::from("evals/eval1/llm_judge_bool/system_instructions.txt"),
+            PathBuf::from("evaluations/eval1/llm_judge_bool/system_instructions.txt"),
             &PathBuf::from("fixtures/config"),
         )
         .unwrap();
@@ -471,12 +471,12 @@ mod tests {
 
         // Nonexistent file
         let result = read_system_instructions(
-            PathBuf::from("evals/eval1/llm_judge_bool/nonexistent.txt"),
+            PathBuf::from("evaluations/eval1/llm_judge_bool/nonexistent.txt"),
             &PathBuf::from("fixtures/config"),
         );
         assert_eq!(*result.unwrap_err().get_details(), ErrorDetails::FileRead {
             message: "Failed to open system instructions file: No such file or directory (os error 2)".to_string(),
-            file_path: "fixtures/config/evals/eval1/llm_judge_bool/nonexistent.txt".to_string(),
+            file_path: "fixtures/config/evaluations/eval1/llm_judge_bool/nonexistent.txt".to_string(),
         });
     }
 
@@ -555,7 +555,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -672,7 +672,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -821,7 +821,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -844,7 +844,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-4"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.5),
                         top_p: None,
@@ -955,7 +955,7 @@ mod tests {
                         active: Some(true),
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -1021,7 +1021,7 @@ mod tests {
                         active: None, // No 'active' field specified
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,
@@ -1091,7 +1091,7 @@ mod tests {
                         active: Some(false), // Explicitly inactive
                         model: Arc::from("gpt-3.5-turbo"),
                         system_instructions: PathBuf::from(
-                            "evals/eval1/llm_judge_bool/system_instructions.txt",
+                            "evaluations/eval1/llm_judge_bool/system_instructions.txt",
                         ),
                         temperature: Some(0.7),
                         top_p: None,

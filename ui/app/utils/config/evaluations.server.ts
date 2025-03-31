@@ -370,14 +370,14 @@ export const RawEvalConfigSchema = UninitializedEvalConfigSchema.transform(
         // Check for valid eval name
         if (evalName.includes("::")) {
           throw new Error(
-            `Eval names cannot contain "::" (referenced in [evals.${evalName}])`,
+            `Eval names cannot contain "::" (referenced in [evaluations.${evalName}])`,
           );
         }
 
         // Check if referenced function exists
         if (!functions[raw.function_name]) {
           throw new Error(
-            `Function \`${raw.function_name}\` not found (referenced in \`[evals.${evalName}]\`)`,
+            `Function \`${raw.function_name}\` not found (referenced in \`[evaluations.${evalName}]\`)`,
           );
         }
 

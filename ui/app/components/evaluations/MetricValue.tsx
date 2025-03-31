@@ -1,8 +1,8 @@
 import { Check } from "lucide-react";
-import type { EvaluatorConfig } from "~/utils/config/evals";
+import type { EvaluatorConfig } from "~/utils/config/evaluations";
 
 import { X } from "lucide-react";
-import { getOptimize } from "~/utils/config/evals";
+import { getOptimize } from "~/utils/config/evaluations";
 
 // Format metric value display component
 export default function MetricValue({

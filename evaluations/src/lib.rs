@@ -15,7 +15,7 @@ use tensorzero::{
 };
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::config_parser::MetricConfigOptimize;
-use tensorzero_internal::evals::EvaluatorConfig;
+use tensorzero_internal::evaluations::EvaluatorConfig;
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo, config_parser::Config, endpoints::datasets::Datapoint,
     function::FunctionConfig,
@@ -76,7 +76,7 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
 
     let config = Config::load_and_verify_from_path(&args.config_file).await?;
     let eval_config = config
-        .evals
+        .evaluations
         .get(&args.name)
         .ok_or(anyhow!("Eval not found"))?;
     let function_config = config.get_function(&eval_config.function_name)?;
@@ -385,7 +385,7 @@ impl ThrottledTensorZeroClient {
 
 #[cfg(test)]
 mod tests {
-    use tensorzero_internal::evals::ExactMatchConfig;
+    use tensorzero_internal::evaluations::ExactMatchConfig;
 
     use super::*;
 

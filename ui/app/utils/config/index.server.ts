@@ -11,8 +11,8 @@ import { z } from "zod";
 import { EmbeddingModelConfigSchema, ModelConfigSchema } from "./models";
 import { ToolConfigSchema } from "./tool";
 import type { FunctionConfig } from "./function";
-import type { EvalConfig } from "./evals";
-import { RawEvalConfigSchema } from "./evals.server";
+import type { EvaluationConfig } from "./evaluations";
+import { RawEvalConfigSchema } from "./evaluations.server";
 
 const DEFAULT_CONFIG_PATH = "config/tensorzero.toml";
 const ENV_CONFIG_PATH = process.env.TENSORZERO_UI_CONFIG_PATH;
@@ -76,7 +76,7 @@ export async function loadConfig(config_path?: string): Promise<Config> {
         functions: {},
         metrics: {},
         tools: {},
-        evals: {},
+        evaluations: {},
       };
     }
   }
@@ -150,7 +150,7 @@ export const RawConfig = z
       load: async function (config_path: string): Promise<Config> {
         const loadedMetrics: Record<string, MetricConfig> = {};
         const loadedFunctions: Record<string, FunctionConfig> = {};
-        const loadedEvals: Record<string, EvalConfig> = {};
+        const loadedEvals: Record<string, EvaluationConfig> = {};
         for (const [key, evalItem] of Object.entries(config.evals)) {
           const { evalConfig, functionConfigs, metricConfigs } =
             await evalItem.load(config_path, key, config.functions);
@@ -177,7 +177,7 @@ export const RawConfig = z
           functions: loadedFunctions,
           metrics: loadedMetrics,
           tools: config.tools,
-          evals: loadedEvals,
+          evaluations: loadedEvals,
         };
       },
     };

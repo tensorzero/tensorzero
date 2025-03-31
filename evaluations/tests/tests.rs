@@ -8,7 +8,7 @@ use evals::evaluators::llm_judge::run_llm_judge_evaluator;
 use evals::ThrottledTensorZeroClient;
 use serde_json::json;
 use tensorzero_internal::endpoints::datasets::Datapoint;
-use tensorzero_internal::evals::{LLMJudgeConfig, LLMJudgeOutputType};
+use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeOutputType};
 use tensorzero_internal::inference::types::{
     ResolvedInputMessage, ResolvedInputMessageContent, Text,
 };
@@ -32,7 +32,7 @@ use tensorzero_internal::{
         datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint},
         inference::{ChatInferenceResponse, JsonInferenceResponse},
     },
-    evals::{LLMJudgeIncludeConfig, LLMJudgeOptimize},
+    evaluations::{LLMJudgeIncludeConfig, LLMJudgeOptimize},
 };
 use tokio::sync::Semaphore;
 use uuid::Uuid;

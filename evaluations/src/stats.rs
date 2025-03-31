@@ -5,7 +5,7 @@ use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero::InferenceResponse;
-use tensorzero_internal::{endpoints::datasets::Datapoint, evals::EvaluatorConfig};
+use tensorzero_internal::{endpoints::datasets::Datapoint, evaluations::EvaluatorConfig};
 use uuid::Uuid;
 
 use crate::{evaluators, OutputFormat};
