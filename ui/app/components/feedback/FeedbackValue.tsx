@@ -1,6 +1,5 @@
 import { Code } from "~/components/ui/code";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
-import { X, Check } from "lucide-react";
 import type { MetricConfig } from "~/utils/config/metric";
 
 export default function FeedbackValue({
@@ -18,15 +17,13 @@ export default function FeedbackValue({
       (feedback.value === false && optimize === "min");
 
     return (
-      <div className="flex items-center">
-        <span className="flex items-center">
-          {feedback.value ? "True" : "False"}
-          {success ? (
-            <Check className="ml-1 h-3 w-3 flex-shrink-0 text-green-700" />
-          ) : (
-            <X className="ml-1 h-3 w-3 flex-shrink-0 text-red-700" />
-          )}
-        </span>
+      <div className="flex items-center gap-2">
+        <div
+          className={`h-2 w-2 rounded-full ${
+            success ? "bg-green-700" : "bg-red-700"
+          }`}
+        />
+        <span>{feedback.value ? "True" : "False"}</span>
       </div>
     );
   }
@@ -46,7 +43,7 @@ export default function FeedbackValue({
   if (feedback.type === "demonstration" && typeof feedback.value === "string") {
     // truncate to 1000 characters
     return (
-      <Code>
+      <Code className="text-sm">
         {feedback.value.length > 1000
           ? feedback.value.slice(0, 1000) + "..."
           : feedback.value}

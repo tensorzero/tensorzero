@@ -1,7 +1,4 @@
-import { Check } from "lucide-react";
 import type { EvaluatorConfig } from "~/utils/config/evals";
-
-import { X } from "lucide-react";
 import { getOptimize } from "~/utils/config/evals";
 
 // Format metric value display component
@@ -21,17 +18,16 @@ export default function MetricValue({
     const optimize = getOptimize(evaluatorConfig);
     const failed =
       (!boolValue && optimize === "max") || (boolValue && optimize === "min");
-    const icon = failed ? (
-      <X className="mr-1 h-3 w-3 flex-shrink-0" />
-    ) : (
-      <Check className="mr-1 h-3 w-3 flex-shrink-0" />
-    );
 
     return (
       <span
-        className={`flex items-center whitespace-nowrap ${failed ? "text-red-700" : "text-gray-700"} ${className}`}
+        className={`flex items-center gap-2 whitespace-nowrap ${failed ? "text-red-700" : "text-gray-700"} ${className}`}
       >
-        {icon}
+        <div
+          className={`h-2 w-2 rounded-full ${
+            failed ? "bg-red-700" : "bg-gray-700"
+          }`}
+        />
         {boolValue ? "True" : "False"}
       </span>
     );
