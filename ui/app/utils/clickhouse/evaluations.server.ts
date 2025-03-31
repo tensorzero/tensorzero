@@ -328,24 +328,24 @@ export async function countTotalEvalRuns() {
 export async function getEvalRunInfo(limit: number = 100, offset: number = 0) {
   const query = `
     SELECT
-    t1.value AS eval_run_id,
-    t2.value AS eval_name,
-    t1.function_name,
-    t1.variant_name,
-    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(toUInt128(t1.inference_id)))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
-FROM tensorzero_ui_fixtures.TagInference t1
-JOIN tensorzero_ui_fixtures.TagInference t2
-    ON t1.inference_id = t2.inference_id
-WHERE t1.key = 'tensorzero::eval_run_id'
-  AND t2.key = 'tensorzero::eval_name'
-GROUP BY
-    t1.value,
-    t2.value,
-      t1.function_name,
-      t1.variant_name
-    ORDER BY toUInt128(toUUID(t1.value)) DESC
-    LIMIT {limit:UInt32}
-    OFFSET {offset:UInt32}
+        t1.value AS eval_run_id,
+        t2.value AS eval_name,
+        t1.function_name,
+        t1.variant_name,
+        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(toUInt128(t1.inference_id)))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
+    FROM TagInference t1
+    JOIN TagInference t2
+        ON t1.inference_id = t2.inference_id
+    WHERE t1.key = 'tensorzero::eval_run_id'
+      AND t2.key = 'tensorzero::eval_name'
+    GROUP BY
+        t1.value,
+        t2.value,
+          t1.function_name,
+          t1.variant_name
+        ORDER BY toUInt128(toUUID(t1.value)) DESC
+        LIMIT {limit:UInt32}
+        OFFSET {offset:UInt32}
   `;
   const result = await clickhouseClient.query({
     query,
