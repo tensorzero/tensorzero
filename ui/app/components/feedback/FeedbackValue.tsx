@@ -47,7 +47,7 @@ export default function FeedbackValue({
   if (feedback.type === "demonstration" && typeof feedback.value === "string") {
     // truncate to 1000 characters
     return (
-      <Code className="text-sm">
+      <Code className="text-sm font-normal">
         {feedback.value.length > 1000
           ? feedback.value.slice(0, 1000) + "..."
           : feedback.value}

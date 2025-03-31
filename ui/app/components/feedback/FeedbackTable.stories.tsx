@@ -35,6 +35,11 @@ const config: Config = {
 const meta = {
   title: "FeedbackTable",
   component: FeedbackTable,
+  render: (args) => (
+    <StoryWrapper>
+      <FeedbackTable feedback={args.feedback} />
+    </StoryWrapper>
+  ),
 } satisfies Meta<typeof FeedbackTable>;
 
 export default meta;
@@ -131,22 +136,12 @@ export const Empty: Story = {
   args: {
     feedback: [],
   },
-  render: (args) => (
-    <StoryWrapper>
-      <FeedbackTable feedback={args.feedback} />
-    </StoryWrapper>
-  ),
 };
 
 export const WithData: Story = {
   args: {
     feedback: mockFeedback,
   },
-  render: (args) => (
-    <StoryWrapper>
-      <FeedbackTable feedback={args.feedback} />
-    </StoryWrapper>
-  ),
 };
 
 export const WithLongComment: Story = {
@@ -191,9 +186,4 @@ export const WithLongDemonstration: Story = {
       },
     ],
   },
-  render: (args) => (
-    <StoryWrapper>
-      <FeedbackTable feedback={args.feedback} />
-    </StoryWrapper>
-  ),
 };
