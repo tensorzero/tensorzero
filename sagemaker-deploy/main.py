@@ -4,7 +4,7 @@ import sagemaker
 from sagemaker import image_uris
 import boto3
 
-HF_MODEL_NAME = "unsloth/gemma-3-1b-it-GGUF"
+HF_MODEL_NAME = "unsloth/Llama-3.2-1B-Instruct-GGUF"
 SAGEMAKER_ROLE = "arn:aws:iam::637423354485:role/service-role/AmazonSageMaker-ExecutionRole-20250328T164731"
 
 def main():
@@ -51,7 +51,7 @@ def main():
 
     print(f"Environment variables are ---- > {env}")
     print(f"Image going to be used is ---- > {inference_image_uri}")
-    model_name = sagemaker.utils.name_from_base("lmi-llama3-1b")
+    model_name = sagemaker.utils.name_from_base(HF_MODEL_NAME.replace("/", "-"))
     print(model_name)
 
     create_model_response = sm_client.create_model(
