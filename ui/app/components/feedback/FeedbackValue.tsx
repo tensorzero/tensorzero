@@ -11,16 +11,20 @@ export default function FeedbackValue({
 }) {
   // Handle boolean metrics
   if (feedback.type === "boolean" && typeof feedback.value === "boolean") {
-    const optimize = metric?.type === "boolean" ? metric.optimize : "max";
+    const optimize = metric?.type === "boolean" ? metric.optimize : "unknown";
     const success =
       (feedback.value === true && optimize === "max") ||
       (feedback.value === false && optimize === "min");
+
+    const failure =
+      (feedback.value === true && optimize === "min") ||
+      (feedback.value === false && optimize === "max");
 
     return (
       <div className="flex items-center gap-2">
         <div
           className={`h-2 w-2 rounded-full ${
-            success ? "bg-green-700" : "bg-red-700"
+            success ? "bg-green-700" : failure ? "bg-red-700" : "bg-gray-700"
           }`}
         />
         <span>{feedback.value ? "True" : "False"}</span>
