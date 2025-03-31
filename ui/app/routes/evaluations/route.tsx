@@ -15,7 +15,7 @@ import EvalRunsTable from "./EvalRunsTable";
 import { useState } from "react";
 import { EvaluationsActions } from "./EvaluationsActions";
 import LaunchEvalModal from "./LaunchEvalModal";
-import { runEval } from "~/utils/evaluations.server";
+import { runEvaluation } from "~/utils/evaluations.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const totalEvalRuns = await countTotalEvaluationRuns();
@@ -48,7 +48,7 @@ export async function action({ request }: Route.ActionArgs) {
   const concurrency_limit = formData.get("concurrency_limit");
   let eval_start_info;
   try {
-    eval_start_info = await runEval(
+    eval_start_info = await runEvaluation(
       eval_name as string,
       variant_name as string,
       parseInt(concurrency_limit as string),

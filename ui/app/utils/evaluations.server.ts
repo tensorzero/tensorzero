@@ -3,11 +3,11 @@ import { z } from "zod";
 import { getConfigPath } from "./config/index.server";
 import { EvalErrorSchema, type DisplayEvalError } from "./evaluations";
 /**
- * Get the path to the evals binary from environment variables.
- * Defaults to 'evals' if not specified.
+ * Get the path to the evaluations binary from environment variables.
+ * Defaults to 'evaluations' if not specified.
  */
 function getEvaluationsPath(): string {
-  return process.env.TENSORZERO_EVALUATIONS_PATH || "evals";
+  return process.env.TENSORZERO_EVALUATIONS_PATH || "evaluations";
 }
 
 function getGatewayURL(): string {
@@ -37,15 +37,15 @@ export function getRunningEval(evalRunId: string): RunningEvalInfo | undefined {
   return runningEvals[evalRunId];
 }
 
-export function runEval(
+export function runEvaluation(
   evalName: string,
   variantName: string,
   concurrency: number,
-): Promise<EvalStartInfo> {
+): Promise<EvaluationStartInfo> {
   const evalsPath = getEvaluationsPath();
   const gatewayURL = getGatewayURL();
-  // Construct the command to run the evals binary
-  // Example: evals --gateway-url http://localhost:3000 --name entity_extraction --variant llama_8b_initial_prompt --concurrency 10 --format jsonl
+  // Construct the command to run the evaluations binary
+  // Example: evaluations --gateway-url http://localhost:3000 --name entity_extraction --variant llama_8b_initial_prompt --concurrency 10 --format jsonl
   const command = [
     evalsPath,
     "--gateway-url",
@@ -62,7 +62,7 @@ export function runEval(
     "jsonl",
   ];
 
-  return new Promise<EvalStartInfo>((resolve, reject) => {
+  return new Promise<EvaluationStartInfo>((resolve, reject) => {
     // Spawn a child process to run the evals command
     const child = spawn(command[0], command.slice(1));
 
@@ -91,7 +91,7 @@ export function runEval(
           parsedLine.num_datapoints
         ) {
           try {
-            const evalStartInfo = evalStartInfoSchema.parse(parsedLine);
+            const evalStartInfo = evaluationStartInfoSchema.parse(parsedLine);
             evalRunId = evalStartInfo.eval_run_id;
 
             // Initialize the tracking entry in our runningEvals map
@@ -185,11 +185,11 @@ export function runEval(
   });
 }
 
-const evalStartInfoSchema = z.object({
+const evaluationStartInfoSchema = z.object({
   eval_run_id: z.string(),
   num_datapoints: z.number(),
 });
-export type EvalStartInfo = z.infer<typeof evalStartInfoSchema>;
+export type EvaluationStartInfo = z.infer<typeof evaluationStartInfoSchema>;
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
