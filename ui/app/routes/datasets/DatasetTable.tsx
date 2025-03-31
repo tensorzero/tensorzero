@@ -32,7 +32,7 @@ export default function DatasetTable({
                 colSpan={3}
                 className="px-3 py-8 text-center text-fg-muted"
               >
-                No datasets found
+                No datasets found.
               </TableCell>
             </TableRow>
           ) : (

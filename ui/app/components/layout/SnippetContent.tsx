@@ -14,7 +14,7 @@ export function EmptyMessage({
   return (
     <div
       className={cn(
-        "flex items-center justify-center py-16 text-sm text-fg-secondary",
+        "flex items-center justify-center py-16 text-sm text-fg-muted",
         className,
       )}
     >
