@@ -23,7 +23,7 @@ const getBadgeStyle = (
       if (!value) return "";
       return value === "max"
         ? "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900 dark:text-fuchsia-300"
-        : "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900 dark:text-fuchsia-300";
+        : "bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-300";
 
     case "level":
       return value === "episode"
