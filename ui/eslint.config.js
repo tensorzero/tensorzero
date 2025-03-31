@@ -12,6 +12,7 @@ export default [
       "**/.venv/**",
       "**/playwright-report/**",
       "**/test-results/**",
+      "eslint.config.js",
     ],
   },
   {
@@ -44,6 +45,14 @@ export default [
       "react/jsx-uses-react": "error",
       "react/jsx-uses-vars": "error",
       "react/react-in-jsx-scope": "off",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            ":matches(Literal, TemplateElement)[value.raw=/tensorzero_ui_fixtures/]",
+          message: "The string 'tensorzero_ui_fixtures' is not allowed.",
+        },
+      ],
     },
   },
   pluginJs.configs.recommended,
