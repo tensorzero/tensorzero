@@ -16,7 +16,7 @@ use url::Url;
 
 use crate::common::write_json_fixture_to_dataset;
 use common::write_chat_fixture_to_dataset;
-use evaluations::{run_eval, stats::EvalUpdate, Args, OutputFormat};
+use evaluations::{run_eval, stats::EvaluationUpdate, Args, OutputFormat};
 use std::{path::PathBuf, sync::Arc};
 use tensorzero::{ClientBuilder, ClientBuilderMode};
 use tensorzero::{InferenceResponse, Role};
@@ -38,7 +38,7 @@ use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn run_evals_json() {
+async fn run_evaluations_json() {
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(&PathBuf::from(&format!(
         "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
@@ -67,11 +67,11 @@ async fn run_evals_json() {
     let mut parsed_output = Vec::new();
     let mut total_the = 0;
     for line in output_lines {
-        let parsed: EvalUpdate =
+        let parsed: EvaluationUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
         let parsed = match parsed {
-            EvalUpdate::Success(eval_info) => eval_info,
-            EvalUpdate::Error(eval_error) => {
+            EvaluationUpdate::Success(eval_info) => eval_info,
+            EvaluationUpdate::Error(eval_error) => {
                 panic!("Eval error: {}", eval_error.message);
             }
         };
@@ -203,11 +203,11 @@ async fn run_exact_match_eval_chat() {
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
     for line in output_lines {
-        let parsed: EvalUpdate =
+        let parsed: EvaluationUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
         let parsed = match parsed {
-            EvalUpdate::Success(eval_info) => eval_info,
-            EvalUpdate::Error(eval_error) => {
+            EvaluationUpdate::Success(eval_info) => eval_info,
+            EvaluationUpdate::Error(eval_error) => {
                 panic!("Eval error: {}", eval_error.message);
             }
         };
@@ -307,11 +307,11 @@ async fn run_llm_judge_eval_chat() {
     let mut parsed_output = Vec::new();
     let mut total_topic_fs = 0;
     for line in output_lines {
-        let parsed: EvalUpdate =
+        let parsed: EvaluationUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
         let parsed = match parsed {
-            EvalUpdate::Success(eval_info) => eval_info,
-            EvalUpdate::Error(eval_error) => {
+            EvaluationUpdate::Success(eval_info) => eval_info,
+            EvaluationUpdate::Error(eval_error) => {
                 panic!("Eval error: {}", eval_error.message);
             }
         };
@@ -546,10 +546,10 @@ async fn test_parse_args() {
 
 #[tokio::test]
 async fn test_run_eval_binary() {
-    let bin_path = std::env::var("CARGO_BIN_EXE_evaluations").unwrap();
+    let bin_path = env!("CARGO_BIN_EXE_evaluations");
     let output = std::process::Command::new(bin_path)
         .output()
-        .expect("Failed to execute evals binary");
+        .expect("Failed to execute evaluations binary");
     let output_str = String::from_utf8(output.stdout).unwrap();
     assert!(output_str.is_empty());
     let stderr_str = String::from_utf8(output.stderr).unwrap();
@@ -557,7 +557,7 @@ async fn test_run_eval_binary() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn run_evals_errors() {
+async fn run_evaluations_errors() {
     let clickhouse = get_clickhouse().await;
     write_json_fixture_to_dataset(&PathBuf::from(&format!(
         "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
@@ -584,14 +584,14 @@ async fn run_evals_errors() {
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     for line in output_lines {
-        let parsed: EvalUpdate =
+        let parsed: EvaluationUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
         let error = match parsed {
-            EvalUpdate::Success(eval_info) => panic!(
+            EvaluationUpdate::Success(eval_info) => panic!(
                 "Eval success shouldn't happen: {}",
                 serde_json::to_string_pretty(&eval_info).unwrap()
             ),
-            EvalUpdate::Error(eval_error) => eval_error,
+            EvaluationUpdate::Error(eval_error) => eval_error,
         };
         assert!(error
             .message

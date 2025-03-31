@@ -98,7 +98,7 @@ export default function Home() {
     numEvalRuns,
   } = useLoaderData<typeof loader>();
   const config = useConfig();
-  const numEvals = Object.keys(config.evaluations).length;
+  const numEvaluations = Object.keys(config.evaluations).length;
 
   return (
     <div className="flex flex-col">
@@ -163,7 +163,7 @@ export default function Home() {
                 source="/evaluations"
                 icon={Evaluation}
                 title="Evaluations"
-                description={`${numEvals} evaluations, ${numEvalRuns} runs`}
+                description={`${numEvaluations} evaluations, ${numEvalRuns} runs`}
               />
             </div>
           </div>

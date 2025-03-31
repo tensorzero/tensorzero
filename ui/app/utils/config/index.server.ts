@@ -153,11 +153,11 @@ export const RawConfig = z
       load: async function (config_path: string): Promise<Config> {
         const loadedMetrics: Record<string, MetricConfig> = {};
         const loadedFunctions: Record<string, FunctionConfig> = {};
-        const loadedEvals: Record<string, EvaluationConfig> = {};
+        const loadedEvaluations: Record<string, EvaluationConfig> = {};
         for (const [key, evalItem] of Object.entries(config.evaluations)) {
           const { evalConfig, functionConfigs, metricConfigs } =
             await evalItem.load(config_path, key, config.functions);
-          loadedEvals[key] = evalConfig;
+          loadedEvaluations[key] = evalConfig;
           for (const [funcKey, funcConfig] of Object.entries(functionConfigs)) {
             loadedFunctions[funcKey] = funcConfig;
           }
@@ -180,7 +180,7 @@ export const RawConfig = z
           functions: loadedFunctions,
           metrics: loadedMetrics,
           tools: config.tools,
-          evaluations: loadedEvals,
+          evaluations: loadedEvaluations,
         };
       },
     };

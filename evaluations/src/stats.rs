@@ -10,14 +10,14 @@ use uuid::Uuid;
 
 use crate::{evaluators, OutputFormat};
 
-pub(crate) struct EvalStats {
+pub(crate) struct EvaluationStats {
     pub output_format: OutputFormat,
-    pub eval_infos: Vec<EvalInfo>,
-    pub eval_errors: Vec<EvalError>,
+    pub eval_infos: Vec<EvaluationInfo>,
+    pub eval_errors: Vec<EvaluationError>,
     pub progress_bar: Option<ProgressBar>,
 }
 
-impl EvalStats {
+impl EvaluationStats {
     pub(crate) fn new(output_format: OutputFormat, dataset_len: usize) -> Self {
         let progress_bar = match output_format {
             OutputFormat::Jsonl => None,
@@ -31,7 +31,11 @@ impl EvalStats {
         }
     }
 
-    pub(crate) fn push(&mut self, eval_update: EvalUpdate, writer: &mut impl Write) -> Result<()> {
+    pub(crate) fn push(
+        &mut self,
+        eval_update: EvaluationUpdate,
+        writer: &mut impl Write,
+    ) -> Result<()> {
         match self.output_format {
             OutputFormat::Jsonl => {
                 writeln!(writer, "{}", serde_json::to_string(&eval_update)?)?;
@@ -43,15 +47,15 @@ impl EvalStats {
             }
         }
         match eval_update {
-            EvalUpdate::Success(eval_info) => self.eval_infos.push(eval_info),
-            EvalUpdate::Error(eval_error) => {
+            EvaluationUpdate::Success(eval_info) => self.eval_infos.push(eval_info),
+            EvaluationUpdate::Error(eval_error) => {
                 self.eval_errors.push(eval_error);
             }
         }
         Ok(())
     }
 
-    /// Computes the mean and stderr for each of the evals observed
+    /// Computes the mean and stderr for each of the evaluations observed
     pub(crate) fn compute_stats(
         &self,
         evaluators: &HashMap<String, EvaluatorConfig>,
@@ -101,20 +105,20 @@ impl EvalStats {
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
-pub enum EvalUpdate {
-    Success(EvalInfo),
-    Error(EvalError),
+pub enum EvaluationUpdate {
+    Success(EvaluationInfo),
+    Error(EvaluationError),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct EvalInfo {
+pub struct EvaluationInfo {
     pub datapoint: Datapoint,
     pub response: InferenceResponse,
     pub evaluations: HashMap<String, Option<Value>>,
     pub evaluator_errors: HashMap<String, String>,
 }
 
-impl EvalInfo {
+impl EvaluationInfo {
     pub fn new(
         datapoint: Datapoint,
         response: InferenceResponse,
@@ -142,7 +146,7 @@ impl EvalInfo {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct EvalError {
+pub struct EvaluationError {
     pub datapoint_id: Uuid,
     pub message: String,
 }

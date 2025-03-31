@@ -115,7 +115,7 @@ test("parse e2e config", async () => {
   );
 
   // Test eval configs are properly generated
-  // Test that evals from the config are present
+  // Test that evaluations from the config are present
   expect(validatedConfig.evaluations).toBeDefined();
   expect(Object.keys(validatedConfig.evaluations).length).toBeGreaterThan(0);
 
@@ -190,7 +190,7 @@ test("parse empty config", async () => {
   expect(validatedConfig).toBeDefined();
 });
 
-test("parse fixture config with evals", async () => {
+test("parse fixture config with evaluations", async () => {
   const validatedConfig = await loadConfig("fixtures/config/tensorzero.toml");
   expect(validatedConfig).toBeDefined();
   expect(validatedConfig.evaluations).toBeDefined();

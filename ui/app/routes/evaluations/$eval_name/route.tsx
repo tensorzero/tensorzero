@@ -21,7 +21,7 @@ import { useNavigate } from "react-router";
 import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 import BasicInfo from "./EvaluationBasicInfo";
 import { useConfig } from "~/context/config";
-import { getRunningEval } from "~/utils/evaluations.server";
+import { getRunningEvaluation } from "~/utils/evaluations.server";
 import {
   EvaluationErrorInfo,
   type EvaluationErrorDisplayInfo,
@@ -119,7 +119,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const any_eval_is_running = Object.values(selected_eval_run_ids_array).some(
     (evalRunId) => {
-      const runningEval = getRunningEval(evalRunId);
+      const runningEval = getRunningEvaluation(evalRunId);
       if (!runningEval) {
         return false;
       }
@@ -137,7 +137,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const errors: Record<string, EvaluationErrorDisplayInfo> =
     selected_eval_run_ids_array.reduce(
       (acc, evalRunId) => {
-        const evalRunInfo = getRunningEval(evalRunId);
+        const evalRunInfo = getRunningEvaluation(evalRunId);
         if (evalRunInfo?.errors) {
           acc[evalRunId] = {
             variantName: evalRunInfo.variantName,

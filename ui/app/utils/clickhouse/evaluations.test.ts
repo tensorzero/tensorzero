@@ -281,7 +281,7 @@ describe("getEvalResults", () => {
   });
 });
 
-describe("getEvalStatistics", () => {
+describe("getEvaluationStatistics", () => {
   test("should return correct statistics for haiku eval", async () => {
     const statistics = await getEvaluationStatistics(
       "foo",
@@ -516,26 +516,26 @@ describe("getMostRecentEvalInferenceDate", () => {
   });
 });
 
-describe("getEvalsForDatapoint", () => {
+describe("getEvaluationsForDatapoint", () => {
   test("should return empty array for nonexistent datapoint", async () => {
-    const evals = await getEvaluationsForDatapoint(
+    const evaluations = await getEvaluationsForDatapoint(
       "haiku",
       "0195d806-e43d-7f7e-bb05-f6dd0d95846f", // Nonexistent datapoint
       ["0195aef7-96fe-7d60-a2e6-5a6ea990c425"],
     );
-    expect(evals).toEqual([]);
+    expect(evaluations).toEqual([]);
   });
 
   test("should return correct array for chat datapoint", async () => {
-    const evals = await getEvaluationsForDatapoint(
+    const evaluations = await getEvaluationsForDatapoint(
       "haiku",
       "01936551-ffc8-7372-8991-0a2929d3f5b0", // Real datapoint
       ["0195aef7-96fe-7d60-a2e6-5a6ea990c425"],
     );
-    expect(evals.length).toBe(2);
+    expect(evaluations.length).toBe(2);
 
     // Check first evaluation result
-    const first_eval = evals[0] as ChatEvaluationResultWithVariant;
+    const first_eval = evaluations[0] as ChatEvaluationResultWithVariant;
     expect(first_eval.datapoint_id).toBe(
       "01936551-ffc8-7372-8991-0a2929d3f5b0",
     );
@@ -554,7 +554,7 @@ describe("getEvalsForDatapoint", () => {
     }
 
     // Check second evaluation result
-    const second_eval = evals[1] as ChatEvaluationResultWithVariant;
+    const second_eval = evaluations[1] as ChatEvaluationResultWithVariant;
     expect(second_eval.datapoint_id).toBe(
       "01936551-ffc8-7372-8991-0a2929d3f5b0",
     );
@@ -577,20 +577,20 @@ describe("getEvalsForDatapoint", () => {
   });
 
   test("should return correct array for json datapoint", async () => {
-    const evals = await getEvaluationsForDatapoint(
+    const evaluations = await getEvaluationsForDatapoint(
       "entity_extraction",
       "019373bc-e6e0-7e50-8822-af9bacfafe9a", // Real json datapoint
       ["0195aef7-ec99-7312-924f-32b71c3496ee"],
     );
-    expect(evals.length).toBe(2);
+    expect(evaluations.length).toBe(2);
 
     // Sort evaluations by metric name to ensure consistent order
-    const sortedEvals = [...evals].sort((a, b) =>
+    const sortedEvaluations = [...evaluations].sort((a, b) =>
       a.metric_name.localeCompare(b.metric_name),
     );
 
     // Check first evaluation result
-    const first_eval = sortedEvals[0];
+    const first_eval = sortedEvaluations[0];
     expect(first_eval.datapoint_id).toBe(
       "019373bc-e6e0-7e50-8822-af9bacfafe9a",
     );
@@ -607,7 +607,7 @@ describe("getEvalsForDatapoint", () => {
     expect(typeof first_eval.generated_output).toBe("object");
 
     // Check second evaluation result
-    const second_eval = sortedEvals[1];
+    const second_eval = sortedEvaluations[1];
     expect(second_eval.datapoint_id).toBe(
       "019373bc-e6e0-7e50-8822-af9bacfafe9a",
     );

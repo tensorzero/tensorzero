@@ -15,7 +15,7 @@ import type { RawFunctionConfig } from "./function.server";
 
 // User template for LLM judge
 // This is problematic because we would ideally want an automated way
-// to keep this in sync with tensorzero-internal/src/evals/llm_judge_user_template.minijinja
+// to keep this in sync with tensorzero-internal/src/evaluations/llm_judge_user_template.minijinja
 const llm_judge_user_template = `# Input
 
 {{input}}
@@ -234,7 +234,7 @@ async function loadLLMJudgeEvaluator(
   // Check for valid evaluator name
   if (evaluatorName.includes("::")) {
     throw new Error(
-      `Evaluator names cannot contain "::" (referenced in [evals.${evalName}.${evaluatorName}])`,
+      `Evaluator names cannot contain "::" (referenced in [evaluations.${evalName}.${evaluatorName}])`,
     );
   }
 
@@ -260,7 +260,7 @@ async function loadLLMJudgeEvaluator(
   // Validate that exactly one variant is active
   if (activeVariantCount !== 1) {
     throw new Error(
-      `Evaluator \`${evaluatorName}\` in \`[evals.${evalName}]\` must have exactly 1 variant that is active. Found ${activeVariantCount} variants with nonzero weights.`,
+      `Evaluator \`${evaluatorName}\` in \`[evaluations.${evalName}]\` must have exactly 1 variant that is active. Found ${activeVariantCount} variants with nonzero weights.`,
     );
   }
 
@@ -315,7 +315,7 @@ async function loadEvaluator(
 }> {
   if (evaluatorName.includes("::")) {
     throw new Error(
-      `Evaluator names cannot contain "::" (referenced in [evals.${evalName}.${evaluatorName}])`,
+      `Evaluator names cannot contain "::" (referenced in [evaluations.${evalName}.${evaluatorName}])`,
     );
   }
   switch (config.type) {
