@@ -34,10 +34,10 @@ export default function EvalRunsTable({
           {evalRuns.length === 0 ? (
             <TableRow className="hover:bg-bg-primary">
               <TableCell
-                colSpan={5}
+                colSpan={6}
                 className="px-3 py-8 text-center text-fg-muted"
               >
-                No evaluation runs found
+                No evaluation runs found.
               </TableCell>
             </TableRow>
           ) : (
