@@ -122,8 +122,31 @@ pub fn get_evaluator_metric_name(evaluation_name: &str, evaluator_name: &str) ->
     )
 }
 
+#[derive(Debug, TensorZeroDeserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+pub enum UninitializedEvaluationConfig {
+    Static(UninitializedStaticEvaluationConfig),
+}
+
+impl UninitializedEvaluationConfig {
+    pub fn load<P: AsRef<Path>>(
+        self,
+        functions: &HashMap<String, Arc<FunctionConfig>>,
+        base_path: P,
+        evaluation_name: &str,
+    ) -> EvaluationLoadResult {
+        match self {
+            UninitializedEvaluationConfig::Static(config) => {
+                config.load(functions, base_path, evaluation_name)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
-pub struct UninitializedEvaluationConfig {
+pub struct UninitializedStaticEvaluationConfig {
     evaluators: HashMap<String, UninitializedEvaluatorConfig>,
     dataset_name: String,
     function_name: String,
@@ -138,7 +161,7 @@ type EvaluationLoadResult = Result<
     Error,
 >;
 
-impl UninitializedEvaluationConfig {
+impl UninitializedStaticEvaluationConfig {
     pub fn load<P: AsRef<Path>>(
         self,
         functions: &HashMap<String, Arc<FunctionConfig>>,
@@ -510,7 +533,7 @@ mod tests {
                 UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.4) }),
             );
 
-            let uninitialized_config = UninitializedEvaluationConfig {
+            let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
@@ -589,7 +612,7 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedEvaluationConfig {
+            let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
@@ -709,7 +732,7 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedEvaluationConfig {
+            let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
@@ -781,7 +804,7 @@ mod tests {
                 UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
-            let uninitialized_config = UninitializedEvaluationConfig {
+            let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: "nonexistent_function".to_string(),
@@ -803,7 +826,7 @@ mod tests {
                 UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
-            let uninitialized_config = UninitializedEvaluationConfig {
+            let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
@@ -891,7 +914,7 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedEvaluationConfig {
+            let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
@@ -934,7 +957,7 @@ mod tests {
                 UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
-            let uninitialized_config = UninitializedEvaluationConfig {
+            let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
@@ -993,7 +1016,7 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedEvaluationConfig {
+            let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
@@ -1057,7 +1080,7 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedEvaluationConfig {
+            let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
@@ -1127,7 +1150,7 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedEvaluationConfig {
+            let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
                 dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
