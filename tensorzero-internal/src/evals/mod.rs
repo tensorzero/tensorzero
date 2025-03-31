@@ -254,7 +254,7 @@ impl UninitializedEvaluatorConfig {
                 },
             )),
             UninitializedEvaluatorConfig::LLMJudge(params) => {
-                let variants = params
+                let mut variants = params
                     .variants
                     .into_iter()
                     .map(|(name, variant)| {
@@ -268,13 +268,34 @@ impl UninitializedEvaluatorConfig {
                     // Treat a None weight as 0.0 for this check - we only care if we have multiple variants with an explicit positive weight
                     .filter(|(_, variant)| variant.weight().unwrap_or(0.0) > 0.0)
                     .count();
-                if nonzero_weights != 1 {
+                if nonzero_weights != 1 && variants.len() > 1 {
                     return Err(ErrorDetails::Config {
                         message: format!(
                             "Evaluator `{evaluator_name}` in `[evals.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."
                         ),
                     }
                     .into());
+                } else if variants.len() == 1 {
+                    // If there is only one variant, it should have weight 1.0
+                    let res = variants.iter_mut().next();
+                    let variant = if let Some((_, VariantConfig::ChatCompletion(variant))) = res {
+                        variant
+                    } else {
+                        return Err(ErrorDetails::Config {
+                            message: format!("Evaluator `{evaluator_name}` in `[evals.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."),
+                        }
+                        .into());
+                    };
+                    if let Some(weight) = variant.weight {
+                        if weight != 1.0 {
+                            return Err(ErrorDetails::Config {
+                                message: format!("Evaluator `{evaluator_name}` in `[evals.{eval_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
+                            }
+                            .into());
+                        }
+                    } else {
+                        variant.weight = Some(1.0);
+                    }
                 }
                 let user_schema_value = serde_json::from_str(LLM_JUDGE_USER_SCHEMA_TEXT)
                     .map_err(|e| {
@@ -333,7 +354,7 @@ pub enum UninitializedLLMJudgeVariantConfig {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedLLMJudgeChatCompletionVariantConfig {
     #[serde(default)]
-    pub active: bool,
+    pub active: Option<bool>,
     pub model: Arc<str>,
     pub system_instructions: PathBuf,
     pub temperature: Option<f32>,
@@ -377,8 +398,18 @@ impl UninitializedLLMJudgeVariantConfig {
                     )),
                     contents: include_str!("llm_judge_user_template.minijinja").to_string(),
                 };
+                let weight = match params.active {
+                    Some(active) => {
+                        if active {
+                            Some(1.0)
+                        } else {
+                            Some(0.0)
+                        }
+                    }
+                    None => None,
+                };
                 Ok(VariantConfig::ChatCompletion(ChatCompletionConfig {
-                    weight: Some(if params.active { 1.0 } else { 0.0 }),
+                    weight,
                     model: params.model,
                     system_template: Some(system_template),
                     user_template: Some(user_template),
@@ -979,6 +1010,8 @@ mod tests {
                 _ => panic!("Expected LLMJudge evaluator config"),
             }
         }
+
+        // Test case 8: a single variant with active = false
     }
 
     // Helper functions for tests
