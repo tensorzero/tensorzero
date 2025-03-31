@@ -48,7 +48,7 @@ pub struct Args {
     #[arg(long, default_value = "./config/tensorzero.toml")]
     pub config_file: PathBuf,
 
-    /// URL of a running TensorZero HTTP gateway server to use for requests. This runs evals using that gateway.
+    /// URL of a running TensorZero HTTP gateway server to use for requests. This runs evaluations using that gateway.
     #[arg(long)]
     pub gateway_url: Option<Url>,
 
@@ -333,7 +333,7 @@ async fn infer_datapoint(
     match inference_result {
         InferenceOutput::NonStreaming(inference_response) => Ok(inference_response),
         InferenceOutput::Streaming(_inference_stream) => {
-            bail!("Streaming inference should never happen in evals")
+            bail!("Streaming inference should never happen in evaluations")
         }
     }
 }

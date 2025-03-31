@@ -238,7 +238,7 @@ impl UninitializedEvaluatorConfig {
         if evaluator_name.contains("::") {
             return Err(ErrorDetails::Config {
                 message: format!(
-                    "Evaluator names cannot contain \"::\" (referenced in `[evals.{eval_name}.{evaluator_name}]`)"
+                    "Evaluator names cannot contain \"::\" (referenced in `[evaluations.{eval_name}.{evaluator_name}]`)"
                 ),
             }
             .into());
@@ -271,7 +271,7 @@ impl UninitializedEvaluatorConfig {
                 if nonzero_weights != 1 && variants.len() > 1 {
                     return Err(ErrorDetails::Config {
                         message: format!(
-                            "Evaluator `{evaluator_name}` in `[evals.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."
+                            "Evaluator `{evaluator_name}` in `[evaluations.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."
                         ),
                     }
                     .into());
@@ -282,14 +282,14 @@ impl UninitializedEvaluatorConfig {
                         variant
                     } else {
                         return Err(ErrorDetails::Config {
-                            message: format!("Evaluator `{evaluator_name}` in `[evals.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."),
+                            message: format!("Evaluator `{evaluator_name}` in `[evaluations.{eval_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."),
                         }
                         .into());
                     };
                     if let Some(weight) = variant.weight {
                         if weight != 1.0 {
                             return Err(ErrorDetails::Config {
-                                message: format!("Evaluator `{evaluator_name}` in `[evals.{eval_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
+                                message: format!("Evaluator `{evaluator_name}` in `[evaluations.{eval_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
                             }
                             .into());
                         }
@@ -895,7 +895,7 @@ mod tests {
             assert_eq!(
                 *result.unwrap_err().get_details(),
                 ErrorDetails::Config {
-                    message: "Evaluator `multiple_active_variants` in `[evals.test_eval]` must have exactly 1 variant that is active. Found 2 variants with nonzero weights.".to_string(),
+                    message: "Evaluator `multiple_active_variants` in `[evaluations.test_eval]` must have exactly 1 variant that is active. Found 2 variants with nonzero weights.".to_string(),
                 }
             );
         }
@@ -939,7 +939,7 @@ mod tests {
                 *result.unwrap_err().get_details(),
                 ErrorDetails::Config {
                     message:
-                        "Evaluator names cannot contain \"::\" (referenced in `[evals.test_eval.foo::invalid_name]`)"
+                        "Evaluator names cannot contain \"::\" (referenced in `[evaluations.test_eval.foo::invalid_name]`)"
                             .to_string(),
                 }
             );
@@ -1131,7 +1131,7 @@ mod tests {
             assert_eq!(
                 *result.unwrap_err().get_details(),
                 ErrorDetails::Config {
-                    message: format!("Evaluator `llm_judge_inactive` in `[evals.{eval_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
+                    message: format!("Evaluator `llm_judge_inactive` in `[evaluations.{eval_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
                 }
             );
         }

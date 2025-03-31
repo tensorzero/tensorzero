@@ -84,12 +84,12 @@ pub async fn run_llm_judge_evaluator(
     let response = match result {
         InferenceOutput::NonStreaming(response) => response,
         InferenceOutput::Streaming(..) => {
-            bail!("Streaming not supported for LLM judge evals. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
+            bail!("Streaming not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
         }
     };
     let output = match response {
         InferenceResponse::Chat(..) => {
-            bail!("Chat output not supported for LLM judge evals. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
+            bail!("Chat output not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
         }
         InferenceResponse::Json(json_response) => json_response
             .output
@@ -111,10 +111,10 @@ pub fn prepare_serialized_input(resolved_input: &ResolvedInput) -> Result<String
         for content in &message.content {
             match content {
                 ResolvedInputMessageContent::Image(..) => {
-                    bail!("Image content not supported for LLM judge evals")
+                    bail!("Image content not supported for LLM judge evaluations")
                 }
                 ResolvedInputMessageContent::Unknown { .. } => {
-                    bail!("Unknown content not supported for LLM judge evals")
+                    bail!("Unknown content not supported for LLM judge evaluations")
                 }
                 ResolvedInputMessageContent::Text { .. }
                 | ResolvedInputMessageContent::ToolCall { .. }
@@ -256,7 +256,7 @@ mod tests {
         let error = prepare_serialized_input(&resolved_input).unwrap_err();
         assert_eq!(
             error.to_string(),
-            "Image content not supported for LLM judge evals"
+            "Image content not supported for LLM judge evaluations"
         );
     }
 
