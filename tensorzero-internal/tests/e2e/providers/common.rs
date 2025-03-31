@@ -1361,10 +1361,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "anthropic" => {
             assert!(
-                res["error"]
-                    .as_str()
-                    .unwrap()
-                    .contains("authentication_error"),
+                res["error"].as_str().unwrap().contains("invalid x-api-key"),
                 "Unexpected error: {res}"
             );
         }

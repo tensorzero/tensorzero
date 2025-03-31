@@ -76,7 +76,7 @@ routing = ["anthropic-extra-body"]
 type = "anthropic"
 model_name = "claude-3-7-sonnet-20250219"
 extra_body = [
-    { pointer = "/thinking", value = { type = "enabled", budget_tokens = 128000 } },
+    { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
 ]
 
 [models."claude-3-7-sonnet-20250219-thinking-128k"]
@@ -89,6 +89,9 @@ extra_headers = [
     { name = "anthropic-beta", value = "output-128k-2025-02-19"}
 ]
 extra_body = [
+    # We use a budget tokens of 1024 to make sure that it doesn't think for too long,
+    # since 'stop_sequences' does not seem to apply to thinking. We set 'max_tokens'
+    # to 128k in 'test_thinking_128k'
     { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
     { pointer = "/stop_sequences", value = ["my_custom_stop"]}
 ]
@@ -560,7 +563,7 @@ type = "chat_completion"
 model = "claude-3-haiku-20240307-anthropic"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
-extra_headers = [{ name = "Authorization", value = "invalid_anthropic_auth" }]
+extra_headers = [{ name = "x-api-key", value = "invalid_anthropic_auth" }]
 
 [functions.basic_test.variants.anthropic-dynamic]
 type = "chat_completion"
