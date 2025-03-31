@@ -1040,6 +1040,7 @@ mod tests {
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
             );
@@ -1110,6 +1111,7 @@ mod tests {
                         json_mode: JsonMode::ImplicitTool,
                         retries: RetryConfig::default(),
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
             );
