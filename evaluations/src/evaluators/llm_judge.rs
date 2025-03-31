@@ -24,9 +24,9 @@ pub async fn run_llm_judge_evaluator(
     datapoint: &Datapoint,
     tensorzero_client: &ThrottledTensorZeroClient,
     llm_judge_config: &LLMJudgeConfig,
-    eval_name: &str,
+    evaluation_name: &str,
     evaluator_name: &str,
-    eval_run_id: Uuid,
+    evaluation_run_id: Uuid,
 ) -> Result<Option<Value>> {
     let resolved_input = datapoint.input();
     let serialized_datapoint_input = prepare_serialized_input(resolved_input)?;
@@ -57,7 +57,7 @@ pub async fn run_llm_judge_evaluator(
     };
 
     let params = ClientInferenceParams {
-        function_name: Some(get_llm_judge_function_name(eval_name, evaluator_name)),
+        function_name: Some(get_llm_judge_function_name(evaluation_name, evaluator_name)),
         model_name: None,
         episode_id: None,
         input,
@@ -68,8 +68,8 @@ pub async fn run_llm_judge_evaluator(
         dryrun: Some(false),
         internal: true,
         tags: HashMap::from([(
-            "tensorzero::eval_run_id".to_string(),
-            eval_run_id.to_string(),
+            "tensorzero::evaluation_run_id".to_string(),
+            evaluation_run_id.to_string(),
         )]),
         dynamic_tool_params: DynamicToolParams::default(),
         output_schema: None,

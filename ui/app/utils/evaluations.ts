@@ -1,12 +1,12 @@
 import { z } from "zod";
 
-export const EvalErrorSchema = z.object({
+export const EvaluationErrorSchema = z.object({
   datapoint_id: z.string(),
   message: z.string(),
 });
-export type EvalError = z.infer<typeof EvalErrorSchema>;
+export type EvaluationError = z.infer<typeof EvaluationErrorSchema>;
 
-export interface DisplayEvalError {
+export interface DisplayEvaluationError {
   datapoint_id?: string;
   message: string;
 }

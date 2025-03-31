@@ -2380,108 +2380,108 @@ parameters = "../../fixtures/config/tools/get_humidity.json"
 # │                                EVALUATIONS                                 │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[evaluations.test_eval]
+[evaluations.test_evaluation]
 dataset_name = "test_dataset"
 function_name = "basic_test"
 
-[evaluations.test_eval.evaluators.happy_bool]
+[evaluations.test_evaluation.evaluators.happy_bool]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "max"
 
-[evaluations.test_eval.evaluators.happy_bool.variants.dummy]
+[evaluations.test_evaluation.evaluators.happy_bool.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::true"
 active = true
-system_instructions = "../../fixtures/config/evaluations/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evaluations.test_eval.evaluators.sad_bool]
+[evaluations.test_evaluation.evaluators.sad_bool]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "max"
 
-[evaluations.test_eval.evaluators.sad_bool.variants.dummy]
+[evaluations.test_evaluation.evaluators.sad_bool.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::false"
 active = true
-system_instructions = "../../fixtures/config/evaluations/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evaluations.test_eval.evaluators.zero]
+[evaluations.test_evaluation.evaluators.zero]
 type = "llm_judge"
 output_type = "float"
 optimize = "max"
 
-[evaluations.test_eval.evaluators.zero.variants.dummy]
+[evaluations.test_evaluation.evaluators.zero.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::zero"
 active = true
-system_instructions = "../../fixtures/config/evaluations/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evaluations.test_eval.evaluators.one]
+[evaluations.test_evaluation.evaluators.one]
 type = "llm_judge"
 output_type = "float"
 optimize = "max"
 
-[evaluations.test_eval.evaluators.one.variants.dummy]
+[evaluations.test_evaluation.evaluators.one.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::one"
 active = true
-system_instructions = "../../fixtures/config/evaluations/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evaluations.json_eval]
+[evaluations.json_evaluation]
 dataset_name = "test_dataset"
 function_name = "json_success"
 
-[evaluations.json_eval.evaluators.happy_bool]
+[evaluations.json_evaluation.evaluators.happy_bool]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "max"
 
-[evaluations.json_eval.evaluators.happy_bool.variants.dummy]
+[evaluations.json_evaluation.evaluators.happy_bool.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::true"
 active = true
-system_instructions = "../../fixtures/config/evaluations/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evaluations.json_eval.evaluators.sad_bool]
+[evaluations.json_evaluation.evaluators.sad_bool]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "max"
 
-[evaluations.json_eval.evaluators.sad_bool.variants.dummy]
+[evaluations.json_evaluation.evaluators.sad_bool.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::false"
 active = true
-system_instructions = "../../fixtures/config/evaluations/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evaluations.json_eval.evaluators.zero]
+[evaluations.json_evaluation.evaluators.zero]
 type = "llm_judge"
 output_type = "float"
 optimize = "max"
 
-[evaluations.json_eval.evaluators.zero.variants.dummy]
+[evaluations.json_evaluation.evaluators.zero.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::zero"
 active = true
-system_instructions = "../../fixtures/config/evaluations/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evaluations.json_eval.evaluators.one]
+[evaluations.json_evaluation.evaluators.one]
 type = "llm_judge"
 output_type = "float"
 optimize = "max"
 
-[evaluations.json_eval.evaluators.one.variants.dummy]
+[evaluations.json_evaluation.evaluators.one.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::one"
 active = true
-system_instructions = "../../fixtures/config/evaluations/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
 
@@ -2518,7 +2518,7 @@ optimize = "max"
 type = "chat_completion"
 model = "dummy::llm_judge::error"
 active = true
-system_instructions = "../../fixtures/config/evaluations/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
 [evaluations.haiku_with_outputs]

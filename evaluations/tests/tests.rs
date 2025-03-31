@@ -16,7 +16,7 @@ use url::Url;
 
 use crate::common::write_json_fixture_to_dataset;
 use common::write_chat_fixture_to_dataset;
-use evaluations::{run_eval, stats::EvaluationUpdate, Args, OutputFormat};
+use evaluations::{run_evaluation, stats::EvaluationUpdate, Args, OutputFormat};
 use std::{path::PathBuf, sync::Arc};
 use tensorzero::{ClientBuilder, ClientBuilderMode};
 use tensorzero::{InferenceResponse, Role};
@@ -49,7 +49,7 @@ async fn run_evaluations_json() {
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
-    let eval_run_id = Uuid::now_v7();
+    let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
         gateway_url: None,
@@ -60,7 +60,9 @@ async fn run_evaluations_json() {
     };
 
     let mut output = Vec::new();
-    run_eval(args, eval_run_id, &mut output).await.unwrap();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -70,9 +72,9 @@ async fn run_evaluations_json() {
         let parsed: EvaluationUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
         let parsed = match parsed {
-            EvaluationUpdate::Success(eval_info) => eval_info,
-            EvaluationUpdate::Error(eval_error) => {
-                panic!("Eval error: {}", eval_error.message);
+            EvaluationUpdate::Success(evaluation_info) => evaluation_info,
+            EvaluationUpdate::Error(evaluation_error) => {
+                panic!("evaluation error: {}", evaluation_error.message);
             }
         };
         assert_eq!(parsed.evaluator_errors.len(), 1);
@@ -96,15 +98,15 @@ async fn run_evaluations_json() {
         assert_eq!(clickhouse_output, parsed_response.output);
         // Check the inference is properly tagged
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::eval_run_id"],
-            eval_run_id.to_string()
+            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
         );
         assert_eq!(
             clickhouse_inference["tags"]["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::eval_name"],
+            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
             "entity_extraction"
         );
         // Check boolean feedback was recorded
@@ -118,7 +120,7 @@ async fn run_evaluations_json() {
 
         assert_eq!(
             feedback["metric_name"].as_str().unwrap(),
-            "tensorzero::eval_name::entity_extraction::evaluator_name::exact_match"
+            "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match"
         );
         assert_eq!(
             feedback["value"],
@@ -129,8 +131,8 @@ async fn run_evaluations_json() {
                 .unwrap()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::eval_run_id"],
-            eval_run_id.to_string()
+            feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
         );
         assert_eq!(
             feedback["tags"]["tensorzero::datapoint_id"],
@@ -148,7 +150,7 @@ async fn run_evaluations_json() {
 
         assert_eq!(
             feedback["metric_name"].as_str().unwrap(),
-            "tensorzero::eval_name::entity_extraction::evaluator_name::count_sports"
+            "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
         );
         assert_eq!(
             feedback["value"],
@@ -159,8 +161,8 @@ async fn run_evaluations_json() {
                 .unwrap()
         );
         assert_eq!(
-            feedback["tags"]["tensorzero::eval_run_id"],
-            eval_run_id.to_string()
+            feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
         );
         assert_eq!(
             feedback["tags"]["tensorzero::datapoint_id"],
@@ -175,7 +177,7 @@ async fn run_evaluations_json() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn run_exact_match_eval_chat() {
+async fn run_exact_match_evaluation_chat() {
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(&PathBuf::from(&format!(
         "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
@@ -186,7 +188,7 @@ async fn run_exact_match_eval_chat() {
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
-    let eval_run_id = Uuid::now_v7();
+    let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
         gateway_url: None,
@@ -197,7 +199,9 @@ async fn run_exact_match_eval_chat() {
     };
 
     let mut output = Vec::new();
-    run_eval(args, eval_run_id, &mut output).await.unwrap();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -206,9 +210,9 @@ async fn run_exact_match_eval_chat() {
         let parsed: EvaluationUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
         let parsed = match parsed {
-            EvaluationUpdate::Success(eval_info) => eval_info,
-            EvaluationUpdate::Error(eval_error) => {
-                panic!("Eval error: {}", eval_error.message);
+            EvaluationUpdate::Success(evaluation_info) => evaluation_info,
+            EvaluationUpdate::Error(evaluation_error) => {
+                panic!("evaluation error: {}", evaluation_error.message);
             }
         };
         assert!(parsed.evaluator_errors.is_empty());
@@ -230,15 +234,15 @@ async fn run_exact_match_eval_chat() {
         assert_eq!(clickhouse_output, parsed_response.content);
         // Check the inference is properly tagged
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::eval_run_id"],
-            eval_run_id.to_string()
+            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
         );
         assert_eq!(
             clickhouse_inference["tags"]["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::eval_name"],
+            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
             "haiku_with_outputs"
         );
         let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
@@ -250,7 +254,7 @@ async fn run_exact_match_eval_chat() {
         .unwrap();
         assert_eq!(
             clickhouse_feedback["metric_name"].as_str().unwrap(),
-            "tensorzero::eval_name::haiku_with_outputs::evaluator_name::exact_match"
+            "tensorzero::evaluation_name::haiku_with_outputs::evaluator_name::exact_match"
         );
         assert_eq!(
             clickhouse_feedback["value"],
@@ -261,15 +265,15 @@ async fn run_exact_match_eval_chat() {
                 .unwrap()
         );
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::eval_run_id"],
-            eval_run_id.to_string()
+            clickhouse_feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
         );
         assert_eq!(
             clickhouse_feedback["tags"]["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::eval_name"],
+            clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
             "haiku_with_outputs"
         );
         parsed_output.push(parsed);
@@ -278,7 +282,7 @@ async fn run_exact_match_eval_chat() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn run_llm_judge_eval_chat() {
+async fn run_llm_judge_evaluation_chat() {
     let clickhouse = get_clickhouse().await;
     write_chat_fixture_to_dataset(&PathBuf::from(&format!(
         "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
@@ -289,7 +293,7 @@ async fn run_llm_judge_eval_chat() {
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
-    let eval_run_id = Uuid::now_v7();
+    let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
         gateway_url: None,
@@ -300,7 +304,9 @@ async fn run_llm_judge_eval_chat() {
     };
 
     let mut output = Vec::new();
-    run_eval(args, eval_run_id, &mut output).await.unwrap();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -310,9 +316,9 @@ async fn run_llm_judge_eval_chat() {
         let parsed: EvaluationUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
         let parsed = match parsed {
-            EvaluationUpdate::Success(eval_info) => eval_info,
-            EvaluationUpdate::Error(eval_error) => {
-                panic!("Eval error: {}", eval_error.message);
+            EvaluationUpdate::Success(evaluation_info) => evaluation_info,
+            EvaluationUpdate::Error(evaluation_error) => {
+                panic!("evaluation error: {}", evaluation_error.message);
             }
         };
         assert!(parsed.evaluator_errors.is_empty());
@@ -334,19 +340,19 @@ async fn run_llm_judge_eval_chat() {
         assert_eq!(clickhouse_output, parsed_response.content);
         // Check the inference is properly tagged
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::eval_run_id"],
-            eval_run_id.to_string()
+            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
         );
         assert_eq!(
             clickhouse_inference["tags"]["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            clickhouse_inference["tags"]["tensorzero::eval_name"],
+            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
             "haiku_without_outputs"
         );
 
-        // There should be no Float feedback for this eval
+        // There should be no Float feedback for this evaluation
         assert!(select_feedback_by_target_id_clickhouse(
             &clickhouse,
             "FloatMetricFeedback",
@@ -354,10 +360,10 @@ async fn run_llm_judge_eval_chat() {
         )
         .await
         .is_none());
-        // The exact match eval should have value None since there is no output in any of these
+        // The exact match evaluation should have value None since there is no output in any of these
         assert!(parsed.evaluations["exact_match"].is_none());
 
-        // There should be Boolean feedback for this eval
+        // There should be Boolean feedback for this evaluation
         let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
             &clickhouse,
             "BooleanMetricFeedback",
@@ -367,7 +373,7 @@ async fn run_llm_judge_eval_chat() {
         .unwrap();
         assert_eq!(
             clickhouse_feedback["metric_name"].as_str().unwrap(),
-            "tensorzero::eval_name::haiku_without_outputs::evaluator_name::topic_starts_with_f"
+            "tensorzero::evaluation_name::haiku_without_outputs::evaluator_name::topic_starts_with_f"
         );
         assert_eq!(
             clickhouse_feedback["value"],
@@ -379,15 +385,15 @@ async fn run_llm_judge_eval_chat() {
         );
         total_topic_fs += clickhouse_feedback["value"].as_bool().unwrap() as u32;
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::eval_run_id"],
-            eval_run_id.to_string()
+            clickhouse_feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
         );
         assert_eq!(
             clickhouse_feedback["tags"]["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
         assert_eq!(
-            clickhouse_feedback["tags"]["tensorzero::eval_name"],
+            clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
             "haiku_without_outputs"
         );
         parsed_output.push(parsed);
@@ -397,7 +403,7 @@ async fn run_llm_judge_eval_chat() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn run_llm_judge_eval_chat_human_readable() {
+async fn run_llm_judge_evaluation_chat_human_readable() {
     write_chat_fixture_to_dataset(&PathBuf::from(&format!(
         "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -407,7 +413,7 @@ async fn run_llm_judge_eval_chat_human_readable() {
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
-    let eval_run_id = Uuid::now_v7();
+    let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
         gateway_url: None,
@@ -419,7 +425,9 @@ async fn run_llm_judge_eval_chat_human_readable() {
 
     let mut output = Vec::new();
     // Let's make sure this threshold passes and the output is reasonable
-    run_eval(args, eval_run_id, &mut output).await.unwrap();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
     let output_str = String::from_utf8(output).unwrap();
     // Check for run info at the beginning
     assert!(output_str.contains("Run ID:"));
@@ -430,7 +438,7 @@ async fn run_llm_judge_eval_chat_human_readable() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn run_llm_judge_eval_json_human_readable() {
+async fn run_llm_judge_evaluation_json_human_readable() {
     write_json_fixture_to_dataset(&PathBuf::from(&format!(
         "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
@@ -440,7 +448,7 @@ async fn run_llm_judge_eval_json_human_readable() {
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
-    let eval_run_id = Uuid::now_v7();
+    let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
         gateway_url: None,
@@ -452,7 +460,9 @@ async fn run_llm_judge_eval_json_human_readable() {
 
     let mut output = Vec::new();
     // Let's make sure this threshold fails and the output is reasonable
-    let err = run_eval(args, eval_run_id, &mut output).await.unwrap_err();
+    let err = run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap_err();
     let output_str = String::from_utf8(output).unwrap();
     // Check for run info at the beginning
     assert!(output_str.contains("Run ID:"));
@@ -477,9 +487,9 @@ async fn test_parse_args() {
     assert!(args.to_string().contains("--variant <VARIANT>"));
 
     // Test required arguments
-    let args =
-        Args::try_parse_from(["test", "--name", "my-eval", "--variant", "my-variant"]).unwrap();
-    assert_eq!(args.name, "my-eval");
+    let args = Args::try_parse_from(["test", "--name", "my-evaluation", "--variant", "my-variant"])
+        .unwrap();
+    assert_eq!(args.name, "my-evaluation");
     assert_eq!(args.variant, "my-variant");
     assert_eq!(args.config_file, PathBuf::from("./config/tensorzero.toml"));
     assert_eq!(args.concurrency, 1);
@@ -490,7 +500,7 @@ async fn test_parse_args() {
     let args = Args::try_parse_from([
         "test",
         "--name",
-        "my-eval",
+        "my-evaluation",
         "--variant",
         "my-variant",
         "--config-file",
@@ -503,7 +513,7 @@ async fn test_parse_args() {
         "jsonl",
     ])
     .unwrap();
-    assert_eq!(args.name, "my-eval");
+    assert_eq!(args.name, "my-evaluation");
     assert_eq!(args.variant, "my-variant");
     assert_eq!(args.config_file, PathBuf::from("/path/to/config.toml"));
     assert_eq!(
@@ -517,7 +527,7 @@ async fn test_parse_args() {
     let args = Args::try_parse_from([
         "test",
         "--name",
-        "my-eval",
+        "my-evaluation",
         "--variant",
         "my-variant",
         "--gateway-url",
@@ -532,7 +542,7 @@ async fn test_parse_args() {
     let args = Args::try_parse_from([
         "test",
         "--name",
-        "my-eval",
+        "my-evaluation",
         "--variant",
         "my-variant",
         "--format",
@@ -545,7 +555,7 @@ async fn test_parse_args() {
 }
 
 #[tokio::test]
-async fn test_run_eval_binary() {
+async fn test_run_evaluation_binary() {
     let bin_path = env!("CARGO_BIN_EXE_evaluations");
     let output = std::process::Command::new(bin_path)
         .output()
@@ -568,7 +578,7 @@ async fn run_evaluations_errors() {
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
-    let eval_run_id = Uuid::now_v7();
+    let evaluation_run_id = Uuid::now_v7();
     let args = Args {
         config_file: config_path,
         gateway_url: None,
@@ -579,7 +589,9 @@ async fn run_evaluations_errors() {
     };
 
     let mut output = Vec::new();
-    run_eval(args, eval_run_id, &mut output).await.unwrap();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
@@ -587,11 +599,11 @@ async fn run_evaluations_errors() {
         let parsed: EvaluationUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
         let error = match parsed {
-            EvaluationUpdate::Success(eval_info) => panic!(
-                "Eval success shouldn't happen: {}",
-                serde_json::to_string_pretty(&eval_info).unwrap()
+            EvaluationUpdate::Success(evaluation_info) => panic!(
+                "evaluation success shouldn't happen: {}",
+                serde_json::to_string_pretty(&evaluation_info).unwrap()
             ),
-            EvaluationUpdate::Error(eval_error) => eval_error,
+            EvaluationUpdate::Error(evaluation_error) => evaluation_error,
         };
         assert!(error
             .message
@@ -665,7 +677,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         &datapoint,
         &tensorzero_client,
         &llm_judge_config,
-        "test_eval",
+        "test_evaluation",
         "happy_bool",
         Uuid::now_v7(),
     )
@@ -678,7 +690,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         &datapoint,
         &tensorzero_client,
         &llm_judge_config,
-        "test_eval",
+        "test_evaluation",
         "sad_bool",
         Uuid::now_v7(),
     )
@@ -691,7 +703,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         &datapoint,
         &tensorzero_client,
         &llm_judge_config,
-        "test_eval",
+        "test_evaluation",
         "zero",
         Uuid::now_v7(),
     )
@@ -704,7 +716,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         &datapoint,
         &tensorzero_client,
         &llm_judge_config,
-        "test_eval",
+        "test_evaluation",
         "one",
         Uuid::now_v7(),
     )
@@ -739,7 +751,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         &datapoint,
         &tensorzero_client,
         &llm_judge_config,
-        "test_eval",
+        "test_evaluation",
         "happy_bool",
         Uuid::now_v7(),
     )
@@ -816,7 +828,7 @@ async fn test_run_llm_judge_evaluator_json() {
         &datapoint,
         &tensorzero_client,
         &llm_judge_config,
-        "test_eval",
+        "test_evaluation",
         "happy_bool",
         Uuid::now_v7(),
     )
@@ -829,7 +841,7 @@ async fn test_run_llm_judge_evaluator_json() {
         &datapoint,
         &tensorzero_client,
         &llm_judge_config,
-        "test_eval",
+        "test_evaluation",
         "sad_bool",
         Uuid::now_v7(),
     )
@@ -842,7 +854,7 @@ async fn test_run_llm_judge_evaluator_json() {
         &datapoint,
         &tensorzero_client,
         &llm_judge_config,
-        "test_eval",
+        "test_evaluation",
         "zero",
         Uuid::now_v7(),
     )
@@ -855,7 +867,7 @@ async fn test_run_llm_judge_evaluator_json() {
         &datapoint,
         &tensorzero_client,
         &llm_judge_config,
-        "test_eval",
+        "test_evaluation",
         "one",
         Uuid::now_v7(),
     )
@@ -890,7 +902,7 @@ async fn test_run_llm_judge_evaluator_json() {
         &datapoint,
         &tensorzero_client,
         &llm_judge_config,
-        "test_eval",
+        "test_evaluation",
         "happy_bool",
         Uuid::now_v7(),
     )

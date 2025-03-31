@@ -160,25 +160,25 @@ async function readSystemInstructions(
 
 // Get LLM judge function name
 function getLLMJudgeFunctionName(
-  evalName: string,
+  evaluationName: string,
   evaluatorName: string,
 ): string {
-  return `tensorzero::llm_judge::${evalName}::${evaluatorName}`;
+  return `tensorzero::llm_judge::${evaluationName}::${evaluatorName}`;
 }
 
 // Get evaluator metric name
 function getEvaluatorMetricName(
-  evalName: string,
+  evaluationName: string,
   evaluatorName: string,
 ): string {
-  return `tensorzero::eval_name::${evalName}::evaluator_name::${evaluatorName}`;
+  return `tensorzero::evaluation_name::${evaluationName}::evaluator_name::${evaluatorName}`;
 }
 
 // Transform an uninitialized LLM judge variant config into a variant config
 async function loadLLMJudgeVariant(
   variantConfig: z.infer<typeof UnintializedLLMJudgeVariantConfigSchema>,
   basePath: string,
-  evalName: string,
+  evaluationName: string,
   evaluatorName: string,
 ): Promise<VariantConfig> {
   if (variantConfig.type !== "chat_completion") {
@@ -197,11 +197,11 @@ async function loadLLMJudgeVariant(
     weight: variantConfig.active ? 1.0 : 0.0,
     model: variantConfig.model,
     system_template: {
-      path: `tensorzero::llm_judge::${evalName}::${evaluatorName}::system`,
+      path: `tensorzero::llm_judge::${evaluationName}::${evaluatorName}::system`,
       content: systemInstructions,
     },
     user_template: {
-      path: `tensorzero::llm_judge::${evalName}::${evaluatorName}::user`,
+      path: `tensorzero::llm_judge::${evaluationName}::${evaluatorName}::user`,
       content: llm_judge_user_template,
     },
     temperature: variantConfig.temperature,
@@ -219,7 +219,7 @@ async function loadLLMJudgeVariant(
 async function loadLLMJudgeEvaluator(
   config: z.infer<typeof UninitializedLLMJudgeConfigSchema>,
   basePath: string,
-  evalName: string,
+  evaluationName: string,
   evaluatorName: string,
 ): Promise<{
   evaluatorConfig: {
@@ -234,7 +234,7 @@ async function loadLLMJudgeEvaluator(
   // Check for valid evaluator name
   if (evaluatorName.includes("::")) {
     throw new Error(
-      `Evaluator names cannot contain "::" (referenced in [evaluations.${evalName}.${evaluatorName}])`,
+      `Evaluator names cannot contain "::" (referenced in [evaluations.${evaluationName}.${evaluatorName}])`,
     );
   }
 
@@ -246,7 +246,7 @@ async function loadLLMJudgeEvaluator(
     const loadedVariant = await loadLLMJudgeVariant(
       variant,
       basePath,
-      evalName,
+      evaluationName,
       evaluatorName,
     );
     loadedVariants[name] = loadedVariant;
@@ -260,7 +260,7 @@ async function loadLLMJudgeEvaluator(
   // Validate that exactly one variant is active
   if (activeVariantCount !== 1) {
     throw new Error(
-      `Evaluator \`${evaluatorName}\` in \`[evaluations.${evalName}]\` must have exactly 1 variant that is active. Found ${activeVariantCount} variants with nonzero weights.`,
+      `Evaluator \`${evaluatorName}\` in \`[evaluations.${evaluationName}]\` must have exactly 1 variant that is active. Found ${activeVariantCount} variants with nonzero weights.`,
     );
   }
 
@@ -275,12 +275,12 @@ async function loadLLMJudgeEvaluator(
     type: "json",
     variants: loadedVariants,
     output_schema: {
-      path: `tensorzero::llm_judge::${evalName}::${evaluatorName}::output_schema`,
+      path: `tensorzero::llm_judge::${evaluationName}::${evaluatorName}::output_schema`,
       content: outputSchema,
     },
     system_schema: undefined,
     user_schema: {
-      path: `tensorzero::llm_judge::${evalName}::${evaluatorName}::user_schema`,
+      path: `tensorzero::llm_judge::${evaluationName}::${evaluatorName}::user_schema`,
       content: llm_judge_user_schema,
     },
     assistant_schema: undefined,
@@ -302,7 +302,7 @@ async function loadLLMJudgeEvaluator(
 async function loadEvaluator(
   config: z.infer<typeof UninitializedEvaluatorConfigSchema>,
   basePath: string,
-  evalName: string,
+  evaluationName: string,
   evaluatorName: string,
 ): Promise<{
   evaluatorConfig: EvaluatorConfig;
@@ -315,7 +315,7 @@ async function loadEvaluator(
 }> {
   if (evaluatorName.includes("::")) {
     throw new Error(
-      `Evaluator names cannot contain "::" (referenced in [evaluations.${evalName}.${evaluatorName}])`,
+      `Evaluator names cannot contain "::" (referenced in [evaluations.${evaluationName}.${evaluatorName}])`,
     );
   }
   switch (config.type) {
@@ -336,7 +336,7 @@ async function loadEvaluator(
       const { evaluatorConfig, functionConfig } = await loadLLMJudgeEvaluator(
         config,
         basePath,
-        evalName,
+        evaluationName,
         evaluatorName,
       );
 
@@ -353,31 +353,31 @@ async function loadEvaluator(
   }
 }
 
-// Transform the raw eval config
-export const RawEvalConfigSchema =
+// Transform the raw evaluation config
+export const RawEvaluationConfigSchema =
   UninitializedEvaluationConfigSchema.transform((raw) => {
     return {
       ...raw,
       load: async function (
         configPath: string,
-        evalName: string,
+        evaluationName: string,
         functions: Record<string, RawFunctionConfig>,
       ): Promise<{
-        evalConfig: EvaluationConfig;
+        EvaluationConfig: EvaluationConfig;
         functionConfigs: Record<string, FunctionConfig>;
         metricConfigs: Record<string, MetricConfig>;
       }> {
-        // Check for valid eval name
-        if (evalName.includes("::")) {
+        // Check for valid evaluation name
+        if (evaluationName.includes("::")) {
           throw new Error(
-            `Eval names cannot contain "::" (referenced in [evaluations.${evalName}])`,
+            `evaluation names cannot contain "::" (referenced in [evaluations.${evaluationName}])`,
           );
         }
 
         // Check if referenced function exists
         if (!functions[raw.function_name]) {
           throw new Error(
-            `Function \`${raw.function_name}\` not found (referenced in \`[evaluations.${evalName}]\`)`,
+            `Function \`${raw.function_name}\` not found (referenced in \`[evaluations.${evaluationName}]\`)`,
           );
         }
 
@@ -395,23 +395,24 @@ export const RawEvalConfigSchema =
 
         for (const [name, config] of Object.entries(raw.evaluators)) {
           const { evaluatorConfig, functionConfig, metricConfig } =
-            await loadEvaluator(config, configPath, evalName, name);
+            await loadEvaluator(config, configPath, evaluationName, name);
 
           // Add evaluator config
           evaluators[name] = evaluatorConfig;
 
           // Add function config if it exists
           if (functionConfig) {
-            functionConfigs[getLLMJudgeFunctionName(evalName, name)] =
+            functionConfigs[getLLMJudgeFunctionName(evaluationName, name)] =
               functionConfig;
           }
 
           // Add metric config
-          metricConfigs[getEvaluatorMetricName(evalName, name)] = metricConfig;
+          metricConfigs[getEvaluatorMetricName(evaluationName, name)] =
+            metricConfig;
         }
 
         return {
-          evalConfig: {
+          EvaluationConfig: {
             evaluators,
             dataset_name: raw.dataset_name,
             function_name: raw.function_name,
@@ -423,4 +424,4 @@ export const RawEvalConfigSchema =
     };
   });
 
-export type RawEvalConfig = z.infer<typeof RawEvalConfigSchema>;
+export type RawEvaluationConfig = z.infer<typeof RawEvaluationConfigSchema>;

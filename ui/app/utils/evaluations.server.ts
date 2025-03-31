@@ -1,7 +1,10 @@
 import { spawn } from "node:child_process";
 import { z } from "zod";
 import { getConfigPath } from "./config/index.server";
-import { EvalErrorSchema, type DisplayEvalError } from "./evaluations";
+import {
+  EvaluationErrorSchema,
+  type DisplayEvaluationError,
+} from "./evaluations";
 /**
  * Get the path to the evaluations binary from environment variables.
  * Defaults to 'evaluations' if not specified.
@@ -18,29 +21,29 @@ function getGatewayURL(): string {
   }
   return gatewayURL;
 }
-interface RunningEvalInfo {
-  errors: DisplayEvalError[];
+interface RunningEvaluationInfo {
+  errors: DisplayEvaluationError[];
   variantName: string;
   completed?: Date;
   started: Date;
 }
 
-// This is a map of eval run id to running eval info
-const runningEvaluations: Record<string, RunningEvalInfo> = {};
+// This is a map of evaluation run id to running evaluation info
+const runningEvaluations: Record<string, RunningEvaluationInfo> = {};
 
 /**
  * Returns the running information for a specific evaluation run.
- * @param evalRunId The ID of the evaluation run to retrieve.
+ * @param evaluationRunId The ID of the evaluation run to retrieve.
  * @returns The running information for the specified evaluation run, or undefined if not found.
  */
 export function getRunningEvaluation(
-  evalRunId: string,
-): RunningEvalInfo | undefined {
-  return runningEvaluations[evalRunId];
+  evaluationRunId: string,
+): RunningEvaluationInfo | undefined {
+  return runningEvaluations[evaluationRunId];
 }
 
 export function runEvaluation(
-  evalName: string,
+  evaluationName: string,
   variantName: string,
   concurrency: number,
 ): Promise<EvaluationStartInfo> {
@@ -55,7 +58,7 @@ export function runEvaluation(
     "--config-file",
     getConfigPath(),
     "--name",
-    evalName,
+    evaluationName,
     "--variant",
     variantName,
     "--concurrency",
@@ -69,7 +72,7 @@ export function runEvaluation(
     const child = spawn(command[0], command.slice(1));
 
     // Variables to track state
-    let evalRunId: string | null = null;
+    let evaluationRunId: string | null = null;
     let initialDataReceived = false;
 
     // Buffer for incomplete lines
@@ -86,19 +89,19 @@ export function runEvaluation(
         // Try to parse the line as JSON
         const parsedLine = JSON.parse(line);
 
-        // Check if this is the initial data containing eval_run_id
+        // Check if this is the initial data containing evaluation_run_id
         if (
           !initialDataReceived &&
-          parsedLine.eval_run_id &&
+          parsedLine.evaluation_run_id &&
           parsedLine.num_datapoints
         ) {
           try {
             const evaluationStartInfo =
               evaluationStartInfoSchema.parse(parsedLine);
-            evalRunId = evaluationStartInfo.eval_run_id;
+            evaluationRunId = evaluationStartInfo.evaluation_run_id;
 
             // Initialize the tracking entry in our runningEvaluations map
-            runningEvaluations[evalRunId] = {
+            runningEvaluations[evaluationRunId] = {
               variantName,
               errors: [],
               started: startTime,
@@ -107,20 +110,24 @@ export function runEvaluation(
             // Mark that we've received the initial data
             initialDataReceived = true;
 
-            // Resolve the promise with the eval start info
+            // Resolve the promise with the evaluation start info
             resolve(evaluationStartInfo);
           } catch (error) {
             reject(error);
           }
         }
-        // Check if this is an EvalError using the Zod schema
-        else if (evalRunId && parsedLine.datapoint_id && parsedLine.message) {
+        // Check if this is an EvaluationError using the Zod schema
+        else if (
+          evaluationRunId &&
+          parsedLine.datapoint_id &&
+          parsedLine.message
+        ) {
           try {
             // Parse using the Zod schema to validate
-            const evalError = EvalErrorSchema.parse(parsedLine);
+            const evaluationError = EvaluationErrorSchema.parse(parsedLine);
 
             // Add to the beginning of the errors list
-            runningEvaluations[evalRunId].errors.unshift(evalError);
+            runningEvaluations[evaluationRunId].errors.unshift(evaluationError);
           } catch {
             // If it doesn't match our schema, just ignore it
           }
@@ -165,13 +172,13 @@ export function runEvaluation(
         processCompleteLine(stdoutBuffer.trim());
       }
 
-      if (evalRunId) {
-        // Mark the eval as completed
-        runningEvaluations[evalRunId].completed = new Date();
+      if (evaluationRunId) {
+        // Mark the evaluation as completed
+        runningEvaluations[evaluationRunId].completed = new Date();
 
         // Add exit code info if not successful
         if (code !== 0) {
-          runningEvaluations[evalRunId].errors.push({
+          runningEvaluations[evaluationRunId].errors.push({
             message: `Process exited with code ${code}`,
           });
         }
@@ -189,7 +196,7 @@ export function runEvaluation(
 }
 
 const evaluationStartInfoSchema = z.object({
-  eval_run_id: z.string(),
+  evaluation_run_id: z.string(),
   num_datapoints: z.number(),
 });
 export type EvaluationStartInfo = z.infer<typeof evaluationStartInfoSchema>;
@@ -204,21 +211,24 @@ const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 export function cleanupOldEvaluations(): void {
   const now = new Date();
 
-  Object.keys(runningEvaluations).forEach((evalRunId) => {
-    const evalInfo = runningEvaluations[evalRunId];
+  Object.keys(runningEvaluations).forEach((evaluationRunId) => {
+    const evaluationInfo = runningEvaluations[evaluationRunId];
 
     // Remove completed evaluations older than 1 hour
     if (
-      evalInfo.completed &&
-      now.getTime() - evalInfo.completed.getTime() > ONE_HOUR_MS
+      evaluationInfo.completed &&
+      now.getTime() - evaluationInfo.completed.getTime() > ONE_HOUR_MS
     ) {
-      delete runningEvaluations[evalRunId];
+      delete runningEvaluations[evaluationRunId];
       return;
     }
 
     // Remove stalled evaluations older than 24 hours
-    if (now.getTime() - evalInfo.started.getTime() > TWENTY_FOUR_HOURS_MS) {
-      delete runningEvaluations[evalRunId];
+    if (
+      now.getTime() - evaluationInfo.started.getTime() >
+      TWENTY_FOUR_HOURS_MS
+    ) {
+      delete runningEvaluations[evaluationRunId];
     }
   });
 }
