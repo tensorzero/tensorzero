@@ -1,0 +1,1 @@
+Evaluate if the text follows the haiku structure of exactly three lines with a 5-7-5 syllable pattern, totaling 17 syllables. Verify only this specific syllable structure of a haiku without making content assumptions.

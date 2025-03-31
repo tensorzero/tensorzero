@@ -173,6 +173,7 @@ parameters = "fixtures/config/tools/get_temperature.json"
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   EVALS                                    │
 # └────────────────────────────────────────────────────────────────────────────┘
+
 [evals.eval1]
 dataset_name = "dataset1"
 function_name = "generate_draft"
@@ -184,7 +185,6 @@ type = "exact_match"
 type = "llm_judge"
 output_type = "boolean"
 optimize = "min"
-
 
 [evals.eval1.evaluators.llm_judge_bool.variants.anthropic_promptA]
 type = "chat_completion"
