@@ -84,6 +84,7 @@ async fn main() {
         Arc::new(
             Config::load_and_verify_from_path(Path::new(&path))
                 .await
+                .ok() // Don't print the erorr here, since it was already printed when it was constructed
                 .expect_pretty("Failed to load config"),
         )
     } else {

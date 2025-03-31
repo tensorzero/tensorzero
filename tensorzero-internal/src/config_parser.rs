@@ -593,11 +593,12 @@ impl UninitializedConfig {
                     })
                 })?
                 .parse::<toml::Table>()
-                .map_err(|_| {
+                .map_err(|e| {
                     Error::new(ErrorDetails::Config {
                         message: format!(
-                            "Failed to parse config file as valid TOML: {}",
-                            path.to_string_lossy()
+                            "Failed to parse config file `{}` as valid TOML: {}",
+                            path.to_string_lossy(),
+                            e
                         ),
                     })
                 })?,
