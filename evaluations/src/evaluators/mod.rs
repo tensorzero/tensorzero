@@ -6,7 +6,7 @@ use serde_json::Value;
 use tensorzero::{FeedbackParams, InferenceResponse};
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{
-    get_evaluator_metric_name, EvaluatorConfig, StaticEvaluationConfig,
+    get_evaluator_metric_name, EvaluationConfig, EvaluatorConfig,
 };
 
 mod exact_match;
@@ -29,13 +29,14 @@ pub type EvaluationResult = HashMap<String, Result<Option<Value>>>;
 pub(crate) async fn evaluate_inference(
     inference_response: Arc<InferenceResponse>,
     datapoint: Arc<Datapoint>,
-    evaluation_config: Arc<StaticEvaluationConfig>,
+    evaluation_config: Arc<EvaluationConfig>,
     evaluation_name: Arc<String>,
     tensorzero_client: Arc<ThrottledTensorZeroClient>,
     evaluation_run_id: Uuid,
 ) -> Result<EvaluationResult> {
+    let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
     let results: EvaluationResult =
-        FuturesUnordered::from_iter(evaluation_config.evaluators.keys().map(
+        FuturesUnordered::from_iter(static_evaluation_config.evaluators.keys().map(
             |evaluator_name| async {
                 let inference_response = inference_response.clone();
                 let evaluation_config = evaluation_config.clone();
@@ -107,7 +108,7 @@ pub(crate) async fn evaluate_inference(
 ///
 /// NOTE: Each evaluator we implement in the match statement below should follow this contract.
 async fn run_evaluator(
-    evaluation_config: &StaticEvaluationConfig,
+    evaluation_config: &EvaluationConfig,
     evaluator_name: String,
     inference_response: &InferenceResponse,
     tensorzero_client: &ThrottledTensorZeroClient,
@@ -115,7 +116,8 @@ async fn run_evaluator(
     evaluation_name: &str,
     evaluation_run_id: Uuid,
 ) -> Result<Option<Value>> {
-    let evaluator_config = match evaluation_config.evaluators.get(&evaluator_name) {
+    let EvaluationConfig::Static(static_evaluation_config) = evaluation_config;
+    let evaluator_config = match static_evaluation_config.evaluators.get(&evaluator_name) {
         Some(evaluator_config) => evaluator_config,
         None => {
             return Err(anyhow::anyhow!("Evaluator config not found for {}. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports.", evaluator_name));

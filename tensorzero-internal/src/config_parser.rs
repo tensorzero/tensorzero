@@ -10,7 +10,7 @@ use tracing::instrument;
 
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
-use crate::evaluations::{StaticEvaluationConfig, UninitializedEvaluationConfig};
+use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -33,7 +33,7 @@ pub struct Config<'c> {
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
-    pub evaluations: HashMap<String, Arc<StaticEvaluationConfig>>, // evaluation name => evaluation config
+    pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
 }
@@ -359,7 +359,7 @@ impl<'c> Config<'c> {
         for (name, evaluation_config) in uninitialized_config.evaluations {
             let (evaluation_config, evaluation_function_configs, evaluation_metric_configs) =
                 evaluation_config.load(&config.functions, &base_path, &name)?;
-            evaluations.insert(name, Arc::new(evaluation_config));
+            evaluations.insert(name, Arc::new(EvaluationConfig::Static(evaluation_config)));
             for (evaluation_function_name, evaluation_function_config) in
                 evaluation_function_configs
             {

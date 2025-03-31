@@ -35,6 +35,11 @@ pub struct StaticEvaluationConfig {
 }
 
 #[derive(Debug)]
+pub enum EvaluationConfig {
+    Static(StaticEvaluationConfig),
+}
+
+#[derive(Debug)]
 pub enum EvaluatorConfig {
     ExactMatch(ExactMatchConfig),
     LLMJudge(LLMJudgeConfig),
