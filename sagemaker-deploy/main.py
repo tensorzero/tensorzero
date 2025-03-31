@@ -4,7 +4,7 @@ import sagemaker
 from sagemaker import image_uris
 import boto3
 
-HF_MODEL_NAME = "unsloth/Llama-3.2-1B"
+HF_MODEL_NAME = "unsloth/gemma-3-1b-it-GGUF"
 SAGEMAKER_ROLE = "arn:aws:iam::637423354485:role/service-role/AmazonSageMaker-ExecutionRole-20250328T164731"
 
 def main():
@@ -28,13 +28,13 @@ def main():
     #     region=sess.boto_session.region_name, 
     #     version="0.29.0"
     # )
-    deepspeed_image_uri = "763104351884.dkr.ecr.us-east-2.amazonaws.com/huggingface-pytorch-inference:2.1.0-transformers4.37.0-cpu-py310-ubuntu22.04"
+    deepspeed_image_uri = "763104351884.dkr.ecr.us-east-2.amazonaws.com/huggingface-pytorch-inference:2.3.0-transformers4.48.0-cpu-py311-ubuntu22.04-v2.0"
     print("Got url: ", deepspeed_image_uri)
 
     env_generation = {"HUGGINGFACE_HUB_CACHE": "/tmp",
                   "TRANSFORMERS_CACHE": "/tmp",
                   "SERVING_LOAD_MODELS": "test::Python=/opt/ml/model",
-                  "OPTION_MODEL_ID": HF_MODEL_NAME,
+                  "HF_MODEL_ID": HF_MODEL_NAME,
                   "OPTION_TRUST_REMOTE_CODE": "true",
                   "OPTION_TENSOR_PARALLEL_DEGREE": "max",
                   "OPTION_MAX_ROLLING_BATCH_SIZE": "32",
@@ -77,7 +77,7 @@ def main():
                 "ModelName": model_name,
                 'ServerlessConfig': {
                     'MemorySizeInMB': 3072,
-                    'MaxConcurrency': 2,
+                    'MaxConcurrency': 1,
                 },
             },
         ],
