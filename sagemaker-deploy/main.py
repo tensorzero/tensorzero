@@ -28,7 +28,8 @@ def main():
     #     region=sess.boto_session.region_name, 
     #     version="0.29.0"
     # )
-    deepspeed_image_uri = "763104351884.dkr.ecr.us-east-2.amazonaws.com/huggingface-pytorch-inference:2.3.0-transformers4.48.0-cpu-py311-ubuntu22.04-v2.0"
+    #deepspeed_image_uri = "763104351884.dkr.ecr.us-east-2.amazonaws.com/huggingface-pytorch-inference:2.3.0-transformers4.48.0-cpu-py311-ubuntu22.04-v2.0"
+    deepspeed_image_uri = "637423354485.dkr.ecr.us-east-2.amazonaws.com/custom-sagemaker:latest"
     print("Got url: ", deepspeed_image_uri)
 
     env_generation = {"HUGGINGFACE_HUB_CACHE": "/tmp",
