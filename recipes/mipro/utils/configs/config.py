@@ -26,7 +26,7 @@ class TensorZeroConfig(BaseModel):
 
     def write(self, base_dir: Optional[Path] = None) -> Path:
         if base_dir is None:
-            base_temp_dir: Path = Path(tempfile.mkdtemp(prefix="sipro_"))
+            base_temp_dir: Path = Path(tempfile.mkdtemp(prefix="mipro_"))
         else:
             base_temp_dir: Path = Path(base_dir)
             base_temp_dir.mkdir(exist_ok=True, parents=True)
