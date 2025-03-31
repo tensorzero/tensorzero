@@ -67,6 +67,9 @@ importers:
       "@react-router/serve":
         specifier: ^7.4.0
         version: 7.4.0(react-router@7.4.0(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(typescript@5.8.2)
+      "@vitejs/plugin-react":
+        specifier: ^4.3.4
+        version: 4.3.4(vite@6.2.3(@types/node@22.13.13)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.0))
       ajv:
         specifier: ^8.17.1
         version: 8.17.1
@@ -417,6 +420,24 @@ packages:
     resolution:
       {
         integrity: sha512-MgR55l4q9KddUDITEzEFYn5ZsGDXMSsU9E+kh7fjRXTIC3RHqfCo8RPRbyReYJh44HQ/yomFkqbOFohXvDCiIQ==,
+      }
+    engines: { node: ">=6.9.0" }
+    peerDependencies:
+      "@babel/core": ^7.0.0-0
+
+  "@babel/plugin-transform-react-jsx-self@7.25.9":
+    resolution:
+      {
+        integrity: sha512-y8quW6p0WHkEhmErnfe58r7x0A70uKphQm8Sp8cV7tjNQwK56sNVK0M73LK3WuYmsuyrftut4xAkjjgU0twaMg==,
+      }
+    engines: { node: ">=6.9.0" }
+    peerDependencies:
+      "@babel/core": ^7.0.0-0
+
+  "@babel/plugin-transform-react-jsx-source@7.25.9":
+    resolution:
+      {
+        integrity: sha512-+iqjT8xmXhhYv4/uiYd8FNQsraMFZIfxVSqxxVSZP0WbbSAWvBXAul0m/zu+7Vv4O/3WtApy9pmaTMiumEZgfg==,
       }
     engines: { node: ">=6.9.0" }
     peerDependencies:
@@ -2431,6 +2452,15 @@ packages:
         integrity: sha512-hbn8SZ8w4u2pRwgQ1GlUrPKE+t2XvcCW5tTRF7j6SMYIuYG37XuzIW44JCZPa36evi0Oy2SnM664BlIaAuQcvg==,
       }
     engines: { node: ^18.18.0 || ^20.9.0 || >=21.1.0 }
+
+  "@vitejs/plugin-react@4.3.4":
+    resolution:
+      {
+        integrity: sha512-SCCPBJtYLdE8PX/7ZQAs1QAZ8Jqwih+0VBLum1EGqmCCQal+MIUqLCzj3ZUy8ufbC0cAM4LRlSTm7IQJwWT4ug==,
+      }
+    engines: { node: ^14.18.0 || >=16.0.0 }
+    peerDependencies:
+      vite: ^4.2.0 || ^5.0.0 || ^6.0.0
 
   "@vitest/browser@3.0.9":
     resolution:
@@ -7064,6 +7094,16 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  "@babel/plugin-transform-react-jsx-self@7.25.9(@babel/core@7.26.10)":
+    dependencies:
+      "@babel/core": 7.26.10
+      "@babel/helper-plugin-utils": 7.26.5
+
+  "@babel/plugin-transform-react-jsx-source@7.25.9(@babel/core@7.26.10)":
+    dependencies:
+      "@babel/core": 7.26.10
+      "@babel/helper-plugin-utils": 7.26.5
+
   "@babel/plugin-transform-typescript@7.27.0(@babel/core@7.26.10)":
     dependencies:
       "@babel/core": 7.26.10
@@ -8484,6 +8524,17 @@ snapshots:
     dependencies:
       "@typescript-eslint/types": 8.28.0
       eslint-visitor-keys: 4.2.0
+
+  "@vitejs/plugin-react@4.3.4(vite@6.2.3(@types/node@22.13.13)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.0))":
+    dependencies:
+      "@babel/core": 7.26.10
+      "@babel/plugin-transform-react-jsx-self": 7.25.9(@babel/core@7.26.10)
+      "@babel/plugin-transform-react-jsx-source": 7.25.9(@babel/core@7.26.10)
+      "@types/babel__core": 7.20.5
+      react-refresh: 0.14.2
+      vite: 6.2.3(@types/node@22.13.13)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.0)
+    transitivePeerDependencies:
+      - supports-color
 
   "@vitest/browser@3.0.9(@types/node@22.13.13)(playwright@1.51.1)(typescript@5.8.2)(vite@6.2.3(@types/node@22.13.13)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.0))(vitest@3.0.9)":
     dependencies:

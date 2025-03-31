@@ -36,6 +36,7 @@
     "@radix-ui/react-tooltip": "^1.1.8",
     "@react-router/node": "^7.4.0",
     "@react-router/serve": "^7.4.0",
+    "@vitejs/plugin-react": "^4.3.4",
     "ajv": "^8.17.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

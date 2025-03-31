@@ -2,41 +2,42 @@ import type { Meta, StoryObj } from "@storybook/react";
 import FeedbackTable from "./FeedbackTable";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
 import { ConfigProvider } from "~/context/config";
+import type { Config } from "~/utils/config";
+
+const config: Config = {
+  gateway: {
+    disable_observability: false,
+  },
+  models: {},
+  embedding_models: {},
+  functions: {},
+  metrics: {
+    accuracy: {
+      type: "float" as const,
+      optimize: "max" as const,
+      level: "inference" as const,
+    },
+    exact_match: {
+      type: "boolean" as const,
+      optimize: "max" as const,
+      level: "episode" as const,
+    },
+    nsfw_detected: {
+      type: "boolean" as const,
+      optimize: "min" as const,
+      level: "inference" as const,
+    },
+  },
+  tools: {},
+  evals: {},
+};
 
 const meta = {
   title: "FeedbackTable",
   component: FeedbackTable,
   decorators: [
     (Story) => (
-      <ConfigProvider
-        value={{
-          gateway: {
-            disable_observability: false,
-          },
-          models: {},
-          embedding_models: {},
-          functions: {},
-          metrics: {
-            accuracy: {
-              type: "float",
-              optimize: "max",
-              level: "inference",
-            },
-            exact_match: {
-              type: "boolean",
-              optimize: "max",
-              level: "episode",
-            },
-            nsfw_detected: {
-              type: "boolean",
-              optimize: "min",
-              level: "inference",
-            },
-          },
-          tools: {},
-          evals: {},
-        }}
-      >
+      <ConfigProvider value={config}>
         <div className="w-[80vw] p-4">
           <Story />
         </div>
