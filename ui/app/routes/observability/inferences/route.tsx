@@ -47,20 +47,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const { inferences, pageSize, bounds, totalInferences } = loaderData;
   const navigate = useNavigate();
 
-  if (inferences.length === 0) {
-    return (
-      <PageLayout>
-        <PageHeader heading="Inferences" count={totalInferences} />
-        <SectionLayout>
-          <InferenceSearchBar />
-          <div className="py-8 text-center text-gray-500">
-            No inferences found
-          </div>
-        </SectionLayout>
-      </PageLayout>
-    );
-  }
-
   const topInference = inferences[0];
   const bottomInference = inferences[inferences.length - 1];
 

@@ -41,7 +41,7 @@ export default function FunctionVariantTable({
               colSpan={5}
               className="px-3 py-8 text-center text-fg-muted"
             >
-              No variants found
+              No variants found.
             </TableCell>
           </TableRow>
         ) : (

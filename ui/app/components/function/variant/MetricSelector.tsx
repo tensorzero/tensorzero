@@ -23,8 +23,8 @@ export function MetricSelector({
 }: MetricSelectorProps) {
   if (!metricsWithFeedback.metrics?.length) {
     return (
-      <div className="flex flex-col justify-center">
-        <div>No metrics available</div>
+      <div className="flex flex-col justify-center text-sm text-fg-muted">
+        No metrics available.
       </div>
     );
   }
