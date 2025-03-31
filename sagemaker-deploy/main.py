@@ -4,7 +4,7 @@ import sagemaker
 from sagemaker import image_uris
 import boto3
 
-HF_MODEL_NAME = "unsloth/Llama-3.2-1B-bnb-4bit"
+HF_MODEL_NAME = "unsloth/Llama-3.2-1B"
 SAGEMAKER_ROLE = "arn:aws:iam::637423354485:role/service-role/AmazonSageMaker-ExecutionRole-20250328T164731"
 
 def main():
