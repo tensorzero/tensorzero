@@ -775,57 +775,57 @@ async fn put_deduped_chat_datapoint(
         })
     })?;
 
-    // let query = r#"
-    //     INSERT INTO ChatInferenceDatapoint (
-    //     dataset_name,
-    //     function_name,
-    //     id,
-    //     episode_id,
-    //     input,
-    //     output,
-    //     tool_params,
-    //     tags,
-    //     auxiliary,
-    //     is_deleted,
-    //     source_inference_id
-    //     )
-    //     SELECT
-    //         new_data.dataset_name,
-    //         new_data.function_name,
-    //         new_data.id,
-    //         new_data.episode_id,
-    //         new_data.input,
-    //         new_data.output,
-    //         new_data.tool_params,
-    //         new_data.tags,
-    //         new_data.auxiliary,
-    //         new_data.is_deleted,
-    //         new_data.source_inference_id
-    //     FROM (
-    //         SELECT *
-    //         FROM input(
-    //             'dataset_name LowCardinality(String),
-    //                 function_name LowCardinality(String),
-    //                 id UUID,
-    //                 episode_id Nullable(UUID),
-    //                 input String,
-    //                 output Nullable(String),
-    //                 tool_params String,
-    //                 tags Map(String, String),
-    //                 auxiliary String,
-    //                 is_deleted Bool,
-    //                 source_inference_id Nullable(UUID)'
-    //         )
-    //     ) AS new_data
-    //     LEFT JOIN ChatInferenceDatapoint AS existing
-    //         ON new_data.source_inference_id IS NOT NULL
-    //             AND new_data.dataset_name = existing.dataset_name
-    //             AND new_data.function_name = existing.function_name
-    //             AND new_data.source_inference_id = existing.source_inference_id
-    //     WHERE new_data.source_inference_id IS NULL
-    //         OR existing.id IS NULL
-    //         FORMAT JSONEachRow
-    //     "#;
+    let query = r#"
+        INSERT INTO ChatInferenceDatapoint (
+        dataset_name,
+        function_name,
+        id,
+        episode_id,
+        input,
+        output,
+        tool_params,
+        tags,
+        auxiliary,
+        is_deleted,
+        source_inference_id
+        )
+        SELECT
+            new_data.dataset_name,
+            new_data.function_name,
+            new_data.id,
+            new_data.episode_id,
+            new_data.input,
+            new_data.output,
+            new_data.tool_params,
+            new_data.tags,
+            new_data.auxiliary,
+            new_data.is_deleted,
+            new_data.source_inference_id
+        FROM (
+            SELECT *
+            FROM input(
+                'dataset_name LowCardinality(String),
+                    function_name LowCardinality(String),
+                    id UUID,
+                    episode_id Nullable(UUID),
+                    input String,
+                    output Nullable(String),
+                    tool_params String,
+                    tags Map(String, String),
+                    auxiliary String,
+                    is_deleted Bool,
+                    source_inference_id Nullable(UUID)'
+            )
+        ) AS new_data
+        LEFT JOIN ChatInferenceDatapoint AS existing
+            ON new_data.source_inference_id IS NOT NULL
+                AND new_data.dataset_name = existing.dataset_name
+                AND new_data.function_name = existing.function_name
+                AND new_data.source_inference_id = existing.source_inference_id
+        WHERE new_data.source_inference_id IS NULL
+            OR existing.id IS NULL
+            FORMAT JSONEachRow
+        "#;
     // let query = r#"
     //     INSERT INTO ChatInferenceDatapoint (
     //     dataset_name,
