@@ -277,7 +277,7 @@ jobs:
         if: always()
         run: cat e2e_logs.txt
 
-=
+
   ui-tests:
     runs-on: ubuntu-latest
     strategy:
