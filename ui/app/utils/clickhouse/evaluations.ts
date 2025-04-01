@@ -18,6 +18,7 @@ export const EvaluationResultSchema = z.object({
   input: z.string(),
   generated_output: z.string(),
   reference_output: z.string(),
+  dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
 });
@@ -38,6 +39,7 @@ export const JsonEvaluationResultSchema = z.object({
   input: resolvedInputSchema,
   generated_output: jsonInferenceOutputSchema,
   reference_output: jsonInferenceOutputSchema,
+  dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
 });
@@ -50,6 +52,7 @@ export const ChatEvaluationResultSchema = z.object({
   input: resolvedInputSchema,
   generated_output: z.array(contentBlockOutputSchema),
   reference_output: z.array(contentBlockOutputSchema),
+  dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
 });

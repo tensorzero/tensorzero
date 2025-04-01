@@ -10,7 +10,6 @@ import {
   countTotalEvaluationRuns,
   getEvaluationRunInfo,
 } from "~/utils/clickhouse/evaluations.server";
-import { getConfig } from "~/utils/config/index.server";
 import EvaluationRunsTable from "./EvaluationRunsTable";
 import { useState } from "react";
 import { EvaluationsActions } from "./EvaluationsActions";

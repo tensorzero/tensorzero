@@ -15,7 +15,6 @@ import {
   type ParsedEvaluationResultWithVariant,
   type ParsedEvaluationResult,
   JsonEvaluationResultSchema,
-  ParsedEvaluationResultSchema,
   ChatEvaluationResultSchema,
   ParsedEvaluationResultWithVariantSchema,
 } from "./evaluations";
@@ -50,40 +49,31 @@ export async function getEvaluationRunInfos(
 async function parseEvaluationResult(
   result: EvaluationResult,
 ): Promise<ParsedEvaluationResult> {
-  try {
-    // Parse the input field
-    const parsedInput = inputSchema.parse(JSON.parse(result.input));
-    const resolvedInput = await resolveInput(parsedInput);
+  // Parse the input field
+  const parsedInput = inputSchema.parse(JSON.parse(result.input));
+  const resolvedInput = await resolveInput(parsedInput);
 
-    // Parse the outputs
-    const generatedOutput = JSON.parse(result.generated_output);
-    const referenceOutput = JSON.parse(result.reference_output);
+  // Parse the outputs
+  const generatedOutput = JSON.parse(result.generated_output);
+  const referenceOutput = JSON.parse(result.reference_output);
 
-    // Determine if this is a chat result by checking if generated_output is an array
-    if (Array.isArray(generatedOutput)) {
-      // This is likely a chat evaluation result
-      return ChatEvaluationResultSchema.parse({
-        ...result,
-        input: resolvedInput,
-        generated_output: generatedOutput,
-        reference_output: referenceOutput,
-      });
-    } else {
-      // This is likely a JSON evaluation result
-      return JsonEvaluationResultSchema.parse({
-        ...result,
-        input: resolvedInput,
-        generated_output: generatedOutput,
-        reference_output: referenceOutput,
-      });
-    }
-  } catch (error) {
-    console.warn(
-      "Failed to parse evaluation result using structure-based detection:",
-      error,
-    );
-    // If structure-based detection fails, try the original parsing as fallback
-    return ParsedEvaluationResultSchema.parse(result);
+  // Determine if this is a chat result by checking if generated_output is an array
+  if (Array.isArray(generatedOutput)) {
+    // This is likely a chat evaluation result
+    return ChatEvaluationResultSchema.parse({
+      ...result,
+      input: resolvedInput,
+      generated_output: generatedOutput,
+      reference_output: referenceOutput,
+    });
+  } else {
+    // This is likely a JSON evaluation result
+    return JsonEvaluationResultSchema.parse({
+      ...result,
+      input: resolvedInput,
+      generated_output: generatedOutput,
+      reference_output: referenceOutput,
+    });
   }
 }
 
@@ -127,15 +117,13 @@ const getEvaluationResultDatapointIdsQuery = `
   INNER JOIN {inference_table_name:Identifier} ci
     ON ci.id = datapoint_tag.inference_id
     AND ci.function_name = {function_name:String}
-  WHERE dp.dataset_name = {dataset_name:String}
-    AND dp.function_name = {function_name:String}
+  WHERE dp.function_name = {function_name:String}
     AND (ci.tags['tensorzero::evaluation_run_id'] IS NULL OR
          ci.tags['tensorzero::evaluation_run_id'] IN ({evaluation_run_ids:Array(String)}))
   ORDER BY toUInt128(toUUID(dp.id)) DESC
 `;
 
 export async function getEvaluationResults(
-  dataset_name: string,
   function_name: string,
   function_type: "chat" | "json",
   metric_names: string[],
@@ -156,6 +144,7 @@ export async function getEvaluationResults(
     dp.output as reference_output,
     ci.output as generated_output,
     ci.tags['tensorzero::evaluation_run_id'] as evaluation_run_id,
+    ci.tags['tensorzero::dataset_name'] as dataset_name,
     feedback.metric_name as metric_name,
     feedback.value as metric_value
   FROM (
@@ -193,7 +182,6 @@ export async function getEvaluationResults(
     query,
     format: "JSONEachRow",
     query_params: {
-      dataset_name: dataset_name,
       evaluation_run_ids: evaluation_run_ids,
       metric_names: metric_names,
       function_name: function_name,
@@ -213,7 +201,6 @@ For each evaluation run and metric, we want to know:
  - what was the mean and stderr of the metric value
 */
 export async function getEvaluationStatistics(
-  dataset_name: string,
   function_name: string,
   function_type: "chat" | "json",
   metric_names: string[],
@@ -268,7 +255,6 @@ export async function getEvaluationStatistics(
     query,
     format: "JSONEachRow",
     query_params: {
-      dataset_name: dataset_name,
       evaluation_run_ids: evaluation_run_ids,
       metric_names: metric_names,
       function_name: function_name,
@@ -281,7 +267,6 @@ export async function getEvaluationStatistics(
 }
 
 export async function countDatapointsForEvaluation(
-  dataset_name: string,
   function_name: string,
   function_type: "chat" | "json",
   evaluation_run_ids: string[],
@@ -304,7 +289,6 @@ export async function countDatapointsForEvaluation(
     query,
     format: "JSONEachRow",
     query_params: {
-      dataset_name: dataset_name,
       function_name: function_name,
       datapoint_table_name: datapoint_table_name,
       inference_table_name: inference_table_name,
@@ -335,22 +319,23 @@ export async function getEvaluationRunInfo(
     SELECT
     evaluation_run_id,
     any(evaluation_name) AS evaluation_name,
-    any(function_name) AS function_name,
+    any(inference_function_name) AS function_name,
     any(variant_name) AS variant_name,
     any(dataset_name) AS dataset_name,
-    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max_inference_id)), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
+    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
 FROM (
     SELECT
         maxIf(value, key = 'tensorzero::evaluation_run_id') AS evaluation_run_id,
         maxIf(value, key = 'tensorzero::evaluation_name') AS evaluation_name,
         maxIf(value, key = 'tensorzero::dataset_name') AS dataset_name,
-        any(function_name) AS function_name,
+        any(function_name) AS inference_function_name,
         any(variant_name) AS variant_name,
         max(toUInt128(inference_id)) AS max_inference_id
     FROM TagInference
     WHERE key IN ('tensorzero::evaluation_run_id', 'tensorzero::evaluation_name', 'tensorzero::dataset_name')
     GROUP BY inference_id
 )
+WHERE NOT startsWith(inference_function_name, 'tensorzero::')
 GROUP BY evaluation_run_id
 ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
 LIMIT {limit:UInt32}
@@ -466,7 +451,6 @@ export async function searchEvaluationRuns(
 
 export async function getEvaluationsForDatapoint(
   evaluation_name: string,
-  dataset_name: string,
   datapoint_id: string,
   evaluation_run_ids: string[],
 ): Promise<ParsedEvaluationResultWithVariant[]> {
@@ -497,6 +481,7 @@ export async function getEvaluationsForDatapoint(
     inference.output as generated_output,
     inference.tags['tensorzero::evaluation_run_id'] as evaluation_run_id,
     inference.variant_name as variant_name,
+    inference.tags['tensorzero::dataset_name'] as dataset_name,
     feedback.metric_name as metric_name,
     feedback.value as metric_value
   FROM TagInference datapoint_tag FINAL
@@ -508,7 +493,7 @@ export async function getEvaluationsForDatapoint(
   JOIN {datapoint_table_name:Identifier} dp
     ON dp.id = toUUIDOrNull(datapoint_tag.value)
     AND dp.function_name = {function_name:String}
-    AND dp.dataset_name = {dataset_name:String}
+    AND dp.dataset_name = inference.tags['tensorzero::dataset_name']
   LEFT JOIN (
     SELECT target_id, metric_name, toString(value) as value
     FROM BooleanMetricFeedback
@@ -534,7 +519,6 @@ export async function getEvaluationsForDatapoint(
       evaluation_run_ids,
       inference_table_name,
       datapoint_table_name,
-      dataset_name,
     },
   });
   const rows = await result.json<EvaluationResultWithVariant>();
