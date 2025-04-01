@@ -198,7 +198,6 @@ optimize = "min"
 
 [evaluations.entity_extraction]
 function_name = "extract_entities"
-dataset_name = "foo"
 
 [evaluations.entity_extraction.evaluators.exact_match]
 type = "exact_match"
@@ -221,7 +220,6 @@ temperature = 0.1
 
 [evaluations.haiku]
 function_name = "write_haiku"
-dataset_name = "foo"
 
 [evaluations.haiku.evaluators.exact_match]
 type = "exact_match"
