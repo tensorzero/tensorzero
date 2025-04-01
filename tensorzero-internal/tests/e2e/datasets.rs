@@ -13,12 +13,13 @@ use tensorzero_internal::clickhouse::test_helpers::{
 };
 
 #[tokio::test]
-async fn test_datapoint_insert_synthetic_chat() {
+async fn test_datapoint_insert_synthetic_chat_foo() {
     let clickhouse = get_clickhouse().await;
     let client = Client::new();
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
 
     let datapoint_id = Uuid::now_v7();
+    let source_inference_id = Uuid::now_v7();
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
@@ -28,6 +29,7 @@ async fn test_datapoint_insert_synthetic_chat() {
             "function_name": "basic_test",
             "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
             "output": [{"type": "text", "text": "My synthetic output"}],
+            "source_inference_id": source_inference_id.to_string(),
         }))
         .send()
         .await
@@ -49,6 +51,7 @@ async fn test_datapoint_insert_synthetic_chat() {
         .unwrap();
 
     assert_eq!(id, datapoint_id);
+    println!("ID: {}", id);
 
     let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, id)
         .await
@@ -87,6 +90,21 @@ async fn test_datapoint_insert_synthetic_chat() {
       "staled_at": null
     });
     assert_eq!(datapoint, expected);
+
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&json!({
+            "function_name": "basic_test",
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My other synthetic input"}]}]},
+            "output": [{"type": "text", "text": "My other synthetic output"}],
+            "source_inference_id": source_inference_id.to_string(),
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
