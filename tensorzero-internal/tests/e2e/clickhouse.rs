@@ -26,6 +26,7 @@ use tensorzero_internal::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0019::Migration0019;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0020::Migration0020;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0021::Migration0021;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0022::Migration0022;
 use tensorzero_internal::clickhouse::migration_manager::{self};
 use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
@@ -136,6 +137,9 @@ async fn test_clickhouse_migration_manager() {
             clickhouse: &clickhouse,
             clean_start: true,
         }),
+        Box::new(Migration0022 {
+            clickhouse: &clickhouse,
+        }),
     ];
 
     // This runs all migrations up to and including the given migration number,
@@ -211,7 +215,7 @@ async fn test_clickhouse_migration_manager() {
         // will throw an error if it doesn't.
         // This must be an array literal, so that the macro can generate a function
         // for each element in the array.
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     );
     run_all(migrations).await;
 
