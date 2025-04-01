@@ -34,7 +34,6 @@ export type EvaluatorConfig = z.infer<typeof EvaluatorConfigSchema>;
 
 export const EvaluationConfigSchema = z.object({
   evaluators: z.record(z.string(), EvaluatorConfigSchema),
-  dataset_name: z.string(),
   function_name: z.string(),
 });
 export type EvaluationConfig = z.infer<typeof EvaluationConfigSchema>;
