@@ -99,5 +99,15 @@
     "extends": [
       "plugin:storybook/recommended"
     ]
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "esbuild",
+      "msw"
+    ],
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "msw"
+    ]
   }
 }

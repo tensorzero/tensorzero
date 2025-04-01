@@ -1,0 +1,60 @@
+from fastapi import HTTPException
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
+from .sft.openai_sft import BaseSFTJob, OpenAISFTJob
+from .sft.common import FineTuningRequest
+import typing as t
+import os
+from tensorzero import AsyncTensorZeroGateway
+
+CONFIG_PATH = os.environ["TENSORZERO_UI_CONFIG_PATH"]
+CLICKHOUSE_URL = os.environ["TENSORZERO_CLICKHOUSE_URL"]
+
+_tensorzero_client = AsyncTensorZeroGateway.build_embedded(
+    config_file=CONFIG_PATH, clickhouse_url=CLICKHOUSE_URL, async_setup=False
+)
+assert isinstance(_tensorzero_client, AsyncTensorZeroGateway)
+TENSORZERO_CLIENT = _tensorzero_client
+
+app = FastAPI()
+
+
+# @app.exception_handler(RequestValidationError)
+# async def validation_exception_handler(request, exc):
+#    print("Got validation exception: %s" % exc)
+#    return PlainTextResponse(str(exc), status_code=400)
+
+
+class OptimizationRequest(BaseModel):
+    # Turn this into 'Union[FineTuningRequest, OtherRequest]' when we have more optimizations implemented
+    data: FineTuningRequest = Field(discriminator="kind")
+
+
+JOB_STORE: t.Dict[str, BaseSFTJob] = {}
+
+
+async def start_sft_job(data: FineTuningRequest):
+    if data.model.provider == "openai":
+        job = await OpenAISFTJob.from_form_data(TENSORZERO_CLIENT, data)
+    else:
+        raise RuntimeError("Unsupported model provider: %s" % data.model.provider)
+
+    JOB_STORE[job.jobId] = job
+    return job
+
+
+@app.get("/optimizations/poll/{job_id}")
+async def poll_optimization(job_id: str):
+    job = JOB_STORE.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    JOB_STORE[job_id] = await job.poll()
+    return job.status()
+
+
+@app.post("/optimizations/")
+async def start_optimization(request: OptimizationRequest):
+    if request.data.kind == "sft":
+        return await start_sft_job(request.data)
+    raise ValueError("Unsupported optimization kind: %s" % request.data.kind)

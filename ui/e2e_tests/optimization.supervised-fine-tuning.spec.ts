@@ -19,14 +19,27 @@ test("should fine-tune with a mocked OpenAI server", async ({ page }) => {
   await page.getByRole('combobox').filter({ hasText: 'Select a model...' }).click();
   await page.getByRole('option', { name: 'gpt-4o-2024-08-06 OpenAI' }).click();
   await page.getByRole('button', { name: 'Start Fine-tuning Job' }).click();
+  // Expect redirect
+  await page.waitForURL('/optimization/supervised-fine-tuning/mock-inference-finetune-*');
+
+  let regex;
+  if (process.env.TENSORZERO_UI_FF_ENABLE_PYTHON === '1') {
+    regex = /\?backend=python$/;
+  } else {
+    regex = /\?backend=node$/;
+  }
+
+  // Verify that we used the correct fine-tuning backend
+  expect(page.url()).toEqual(expect.stringMatching(regex));
+
   await page.getByText('running', { exact: true }).waitFor({ timeout: 3000 });
   await expect(page.locator('body')).toContainText('Base Model: gpt-4o-2024-08-06');
   await expect(page.locator('body')).toContainText('Function: extract_entities');
   await expect(page.locator('body')).toContainText('Metric: exact_match');
   await expect(page.locator('body')).toContainText('Prompt: gpt4o_mini_initial_prompt');
 
-  // We poll every 10 seconds, so wait for up to 20 seconds to see the completion status
-  await page.getByText('completed', { exact: true }).waitFor({ timeout: 20000 });
+  // We poll every 10 seconds, so give this plenty of time to complete.
+  await page.getByText('completed', { exact: true }).waitFor({ timeout: 30000 });
   await expect(page.locator('body')).toContainText('Configuration');
   await expect(page.locator('body')).toContainText(`
 [models.mock-inference-finetune-1234]

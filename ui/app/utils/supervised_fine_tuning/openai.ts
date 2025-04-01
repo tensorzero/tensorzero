@@ -30,20 +30,20 @@ export const client = process.env.OPENAI_API_KEY
       baseURL: process.env.OPENAI_BASE_URL || undefined,
     })
   : (() => {
-      console.warn("OPENAI_API_KEY environment variable is not set");
-      return undefined;
-    })();
+    console.warn("OPENAI_API_KEY environment variable is not set");
+    return undefined;
+  })();
 
 type JobInfo =
   | {
-      status: "ok";
-      info: OpenAI.FineTuning.Jobs.FineTuningJob;
-    }
+    status: "ok";
+    info: OpenAI.FineTuning.Jobs.FineTuningJob;
+  }
   | {
-      status: "error";
-      message: string;
-      info: OpenAI.FineTuning.Jobs.FineTuningJob;
-    };
+    status: "error";
+    message: string;
+    info: OpenAI.FineTuning.Jobs.FineTuningJob;
+  };
 
 interface OpenAISFTJobParams {
   jobId: string;
@@ -106,8 +106,7 @@ export class OpenAISFTJob extends SFTJob {
       );
     } catch (error) {
       throw new Error(
-        `Failed to start OpenAI SFT job: ${
-          error instanceof Error ? error.message : String(error)
+        `Failed to start OpenAI SFT job: ${error instanceof Error ? error.message : String(error)
         }`,
       );
     }
@@ -153,9 +152,7 @@ export class OpenAISFTJob extends SFTJob {
       formData: this.formData,
       rawData: this.job,
       jobUrl: this.jobUrl,
-      estimatedCompletionTime: estimatedCompletionTime
-        ? new Date(estimatedCompletionTime * 1000)
-        : undefined,
+      estimatedCompletionTime: estimatedCompletionTime || undefined,
       analysisData: this.analysisData,
     };
   }

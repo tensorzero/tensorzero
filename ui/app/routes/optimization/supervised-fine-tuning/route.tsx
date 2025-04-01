@@ -1,13 +1,11 @@
 import { data, type MetaFunction } from "react-router";
 import { useEffect, useState } from "react";
-import { SFTFormValuesSchema } from "./types";
 import type {
   SFTJob,
   SFTJobStatus,
 } from "~/utils/supervised_fine_tuning/common";
 import { useRevalidator } from "react-router";
 import { redirect } from "react-router";
-import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
 import { useConfig } from "~/context/config";
 import {
   dump_model_config,
@@ -22,6 +20,12 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { SFTFormValuesSchema } from "./types";
+import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
+
+const FF_ENABLE_PYTHON = process.env.TENSORZERO_UI_FF_ENABLE_PYTHON === "1";
+
+console.log("FF_ENABLE_PYTHON: " + FF_ENABLE_PYTHON);
 
 export const meta: MetaFunction = () => {
   return [
@@ -49,6 +53,10 @@ export async function loader({
     };
   }
 
+  if (FF_ENABLE_PYTHON) {
+    return await loadPythonFineTuneJob(job_id);
+  }
+
   const storedJob = jobStore[job_id];
   if (!storedJob) {
     throw new Response(JSON.stringify({ error: "Job not found" }), {
@@ -63,6 +71,22 @@ export async function loader({
   return status;
 }
 
+async function loadPythonFineTuneJob(job_id: string) {
+  const res = await fetch(`http://localhost:7000/optimizations/poll/${job_id}`);
+  if (!res.ok) {
+    if (res.status === 404) {
+      throw new Response(JSON.stringify({ error: await res.text() }), {
+        status: 404,
+      });
+    } else {
+      throw new Response(JSON.stringify({ error: await res.text() }), {
+        status: 500,
+      });
+    }
+  }
+  return await res.json();
+}
+
 // The action actually launches the fine-tuning job.
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
@@ -70,8 +94,12 @@ export async function action({ request }: Route.ActionArgs) {
   if (!serializedFormData || typeof serializedFormData !== "string") {
     throw new Error("Form data must be provided");
   }
-
   const jsonData = JSON.parse(serializedFormData);
+
+  if (FF_ENABLE_PYTHON) {
+    return await startPythonFineTune(jsonData);
+  }
+  
   const validatedData = SFTFormValuesSchema.parse(jsonData);
   let job;
   try {
@@ -87,8 +115,40 @@ export async function action({ request }: Route.ActionArgs) {
   }
   jobStore[validatedData.jobId] = job;
 
+  // The query parameter is currently just used by e2e tests to check that we're
+  // using the expected backend
   return redirect(
-    `/optimization/supervised-fine-tuning/${validatedData.jobId}`,
+    `/optimization/supervised-fine-tuning/${validatedData.jobId}?backend=nodejs`,
+  );
+}
+
+
+async function startPythonFineTune(parsedFormData: any) {
+  let job;
+  try {
+    const res = await fetch("http://localhost:7000/optimizations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        "data": {
+          "kind": "sft",
+          ...parsedFormData
+        }
+      }),
+    });
+    job = await res.json();
+  } catch (error) {
+    const errors = {
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unknown error occurred while launching fine-tuning job",
+    };
+    return data({ errors }, { status: 500 });
+  }
+
+  return redirect(
+    `/optimization/supervised-fine-tuning/${job["jobId"]}?backend=python`,
   );
 }
 
@@ -128,8 +188,8 @@ export default function SupervisedFineTuning({
   const finalResult =
     status.status === "completed"
       ? dump_model_config(
-          get_fine_tuned_model_config(status.result, status.modelProvider),
-        )
+        get_fine_tuned_model_config(status.result, status.modelProvider),
+      )
       : null;
   if (finalResult && submissionPhase !== "complete") {
     setSubmissionPhase("complete");

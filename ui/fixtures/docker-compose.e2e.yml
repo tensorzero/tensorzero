@@ -27,6 +27,8 @@ services:
     build:
       context: ../..
       dockerfile: tensorzero-internal/tests/mock-inference-provider/Dockerfile
+    environment:
+      - RUST_LOG=debug
     ports:
       - "3030:3030"
     healthcheck:

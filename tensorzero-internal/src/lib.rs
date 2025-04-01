@@ -16,4 +16,4 @@ pub mod observability; // utilities for observability (logs, metrics, etc.)
 mod testing;
 pub mod tool; // types and methods for working with TensorZero tools
 mod uuid_util; // utilities for working with UUIDs
-mod variant; // types and methods for working with TensorZero variants
+pub mod variant; // types and methods for working with TensorZero variants
