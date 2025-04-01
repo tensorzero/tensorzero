@@ -10,7 +10,7 @@ import {
 import { PageLayout } from "~/components/layout/PageLayout";
 import Input from "~/components/inference/Input";
 import { data, isRouteErrorResponse, redirect } from "react-router";
-import Output from "~/components/inference/Output";
+import Output from "~/components/inference/NewOutput";
 import {
   consolidate_evaluation_results,
   getEvaluatorMetricName,
