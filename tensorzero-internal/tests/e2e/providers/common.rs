@@ -1302,6 +1302,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
     provider: &E2ETestProvider,
     stream: bool,
 ) {
+    // Inject randomness to prevent this from being cached, since provider-proxy will ignore the (invalid) auth header
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -1311,7 +1312,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the name of the capital city of Japan?"
+                    "content": format!("If you see this, something has gone wrong - the request should have failed: {}", Uuid::now_v7())
                 }
             ]},
         "stream": stream,
