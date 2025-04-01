@@ -74,6 +74,35 @@ DOCKER_BUILDKIT=1 docker buildx build \
 > [!IMPORTANT]
 > Make sure to replace the `XXXX.XX.X` placeholder with the actual version of the Docker container you are building.
 
+## Evaluations Docker container
+
+Before building the Docker container for the first time, you need to set up your container builder:
+
+```bash
+docker buildx create \
+  --name container-builder \
+  --driver docker-container \
+  --use \
+  --bootstrap
+```
+
+Every time you want to build the Docker container, you need to run from the root of the repository:
+
+```bash
+DOCKER_BUILDKIT=1 docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t tensorzero/evaluations:latest \
+  -t tensorzero/evaluations:XXXX.XX.X \
+  -f evaluations/Dockerfile \
+  --attest type=provenance,mode=max \
+  --attest type=sbom \
+  --push \
+  .
+```
+
+> [!IMPORTANT]
+> Make sure to replace the `XXXX.XX.X` placeholder with the actual version of the Docker container you are building.
+
 ## Documentation
 
 Make sure to merge every PR with the `merge-on-release` label.
