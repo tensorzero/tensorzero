@@ -333,24 +333,28 @@ export async function getEvaluationRunInfo(
 ) {
   const query = `
     SELECT
-    t1.value AS evaluation_run_id,
-    t2.value AS evaluation_name,
-    t1.function_name,
-    t1.variant_name,
-    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(toUInt128(t1.inference_id)))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
-FROM TagInference t1
-JOIN TagInference t2
-    ON t1.inference_id = t2.inference_id
-WHERE t1.key = 'tensorzero::evaluation_run_id'
-  AND t2.key = 'tensorzero::evaluation_name'
-GROUP BY
-    t1.value,
-    t2.value,
-      t1.function_name,
-      t1.variant_name
-    ORDER BY toUInt128(toUUID(t1.value)) DESC
-    LIMIT {limit:UInt32}
-    OFFSET {offset:UInt32}
+    evaluation_run_id,
+    any(evaluation_name) AS evaluation_name,
+    any(function_name) AS function_name,
+    any(variant_name) AS variant_name,
+    any(dataset_name) AS dataset_name,
+    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max_inference_id)), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
+FROM (
+    SELECT
+        maxIf(value, key = 'tensorzero::evaluation_run_id') AS evaluation_run_id,
+        maxIf(value, key = 'tensorzero::evaluation_name') AS evaluation_name,
+        maxIf(value, key = 'tensorzero::dataset_name') AS dataset_name,
+        any(function_name) AS function_name,
+        any(variant_name) AS variant_name,
+        max(toUInt128(inference_id)) AS max_inference_id
+    FROM TagInference
+    WHERE key IN ('tensorzero::evaluation_run_id', 'tensorzero::evaluation_name', 'tensorzero::dataset_name')
+    GROUP BY inference_id
+)
+GROUP BY evaluation_run_id
+ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
+LIMIT {limit:UInt32}
+OFFSET {offset:UInt32}
   `;
   const result = await clickhouseClient.query({
     query,
@@ -462,12 +466,12 @@ export async function searchEvaluationRuns(
 
 export async function getEvaluationsForDatapoint(
   evaluation_name: string,
+  dataset_name: string,
   datapoint_id: string,
   evaluation_run_ids: string[],
 ): Promise<ParsedEvaluationResultWithVariant[]> {
   const config = await getConfig();
   const function_name = config.evaluations[evaluation_name].function_name;
-  const dataset_name = config.evaluations[evaluation_name].dataset_name;
   if (!function_name) {
     throw new Error(`evaluation ${evaluation_name} not found in config`);
   }

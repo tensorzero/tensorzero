@@ -35,7 +35,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
   const evaluation_name = params.evaluation_name;
   const datapoint_id = params.datapoint_id;
-  const dataset_name = config.evaluations[evaluation_name].dataset_name;
+  // const dataset_name = config.evaluations[evaluation_name].dataset_name;
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
 

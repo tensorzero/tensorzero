@@ -117,23 +117,13 @@ function getEvaluatorNameFromMetricName(metricName: string): string {
 export const evaluationInfoResultSchema = z.object({
   evaluation_run_id: z.string().uuid(),
   evaluation_name: z.string(),
+  dataset_name: z.string(),
   function_name: z.string(),
   variant_name: z.string(),
   last_inference_timestamp: z.string().datetime(),
 });
 
 export type EvaluationInfoResult = z.infer<typeof evaluationInfoResultSchema>;
-
-export const EvaluationRunRowInfoSchema = z.object({
-  evaluation_run_id: z.string().uuid(),
-  evaluation_name: z.string(),
-  function_name: z.string(),
-  variant_name: z.string(),
-  last_inference_timestamp: z.string().datetime(),
-  dataset: z.string(),
-});
-
-export type EvaluationRunRowInfo = z.infer<typeof EvaluationRunRowInfoSchema>;
 
 // Define a type for consolidated metrics
 export type ConsolidatedMetric = {

@@ -10,12 +10,12 @@ import {
 import { formatDate } from "~/utils/date";
 import { FunctionLink } from "~/components/function/FunctionLink";
 import { VariantLink } from "~/components/function/variant/VariantLink";
-import type { EvaluationRunRowInfo } from "~/utils/clickhouse/evaluations";
+import type { EvaluationInfoResult } from "~/utils/clickhouse/evaluations";
 
 export default function EvaluationRunsTable({
   evaluationRuns,
 }: {
-  evaluationRuns: EvaluationRunRowInfo[];
+  evaluationRuns: EvaluationInfoResult[];
 }) {
   return (
     <div>
@@ -68,11 +68,11 @@ export default function EvaluationRunsTable({
                 </TableCell>
                 <TableCell>
                   <Link
-                    to={`/datasets/${evaluationRun.dataset}`}
+                    to={`/datasets/${evaluationRun.dataset_name}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {evaluationRun.dataset}
+                      {evaluationRun.dataset_name}
                     </code>
                   </Link>
                 </TableCell>
