@@ -87,6 +87,7 @@ async fn test_datapoint_insert_synthetic_chat_foo() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
+      "source_inference_id": source_inference_id.to_string(),
       "staled_at": null
     });
     assert_eq!(datapoint, expected);
