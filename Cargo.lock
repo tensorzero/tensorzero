@@ -2448,6 +2448,7 @@ dependencies = [
 name = "mock-inference-provider"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-stream",
  "axum",
  "chrono",

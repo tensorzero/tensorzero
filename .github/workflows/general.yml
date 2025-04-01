@@ -463,6 +463,7 @@ jobs:
         working-directory: ui
         run: |
           echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai" >> fixtures/.env
+          echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks" >> fixtures/.env
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
           echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
