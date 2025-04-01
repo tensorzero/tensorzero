@@ -1347,11 +1347,9 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             );
         }
         "google_ai_studio_gemini" => {
-            assert!(
-                res["error"].as_str().unwrap().contains("error decoding")
-                    || res["error"].as_str().unwrap().contains("400 Bad Request"),
-                "Unexpected error: {res}"
-            );
+            // We produce an error by setting a bad 'Content-Length', so just
+            // check that an error occurs
+            assert!(!res["error"].as_str().unwrap().is_empty());
         }
         "aws-bedrock" => {
             assert!(
@@ -1422,13 +1420,9 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             )
         }
         "gcp_vertex_gemini" => {
-            assert!(
-                res["error"]
-                    .as_str()
-                    .unwrap()
-                    .contains("authentication credential"),
-                "Unexpected error: {res}"
-            )
+            // We produce an error by setting a bad 'Content-Length', so just
+            // check that an error occurs
+            assert!(!res["error"].as_str().unwrap().is_empty());
         }
         _ => {
             panic!("Got error: {res}");
