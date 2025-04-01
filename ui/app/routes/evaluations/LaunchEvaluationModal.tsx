@@ -54,6 +54,9 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
   const isFormValid =
     selectedEvaluationName !== null &&
     selectedVariantName !== null &&
+    selectedDatasetName !== null &&
+    datasetCount !== null &&
+    datasetCount > 0 &&
     concurrencyLimit !== "";
 
   return (
@@ -84,6 +87,14 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
           ))}
         </SelectContent>
       </Select>
+      <div className="mt-4">
+        <label
+          htmlFor="evaluation_name"
+          className="mb-1 block text-sm font-medium"
+        >
+          Dataset
+        </label>
+      </div>
       <Select
         name="dataset_name"
         onValueChange={(value) => setSelectedDatasetName(value)}
@@ -99,19 +110,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
           ))}
         </SelectContent>
       </Select>
-      <div className="my-1 text-xs text-muted-foreground">
-        Dataset:{" "}
-        {selectedDatasetName ? (
-          <span className="font-medium">
-            <Link to={`/datasets/${selectedDatasetName}`}>
-              {selectedDatasetName}
-            </Link>
-          </span>
-        ) : (
-          <Skeleton className="inline-block h-3 w-16 align-middle" />
-        )}
-      </div>
-      <div className="mb-1 text-xs text-muted-foreground">
+      <div className="mb-1 mt-2 text-xs text-muted-foreground">
         Function:{" "}
         {function_name ? (
           <span className="font-medium">

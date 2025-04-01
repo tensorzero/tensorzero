@@ -15,7 +15,7 @@ use tensorzero::{
 };
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::config_parser::MetricConfigOptimize;
-use tensorzero_internal::evaluations::EvaluatorConfig;
+use tensorzero_internal::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo, config_parser::Config, endpoints::datasets::Datapoint,
     function::FunctionConfig,
@@ -86,8 +86,10 @@ pub async fn run_evaluation(
     let evaluation_config = config
         .evaluations
         .get(&args.evaluation_name)
-        .ok_or(anyhow!("evaluation not found"))?;
-    let function_config = config.get_function(&evaluation_config.function_name)?;
+        .ok_or(anyhow!("evaluation not found"))?
+        .clone();
+    let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
+    let function_config = config.get_function(&static_evaluation_config.function_name)?;
     #[allow(unused)]
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
@@ -111,7 +113,7 @@ pub async fn run_evaluation(
     let dataset = query_dataset(
         &clickhouse_client,
         &args.dataset_name,
-        &evaluation_config.function_name,
+        &static_evaluation_config.function_name,
         function_config,
     )
     .await?;
@@ -137,6 +139,7 @@ pub async fn run_evaluation(
         let function_config = function_config.clone();
         let evaluation_config = evaluation_config.clone();
         let dataset_name = dataset_name.clone();
+        let function_name = static_evaluation_config.function_name.clone();
         let evaluation_name = evaluation_name.clone();
         let evaluation_run_id_clone = evaluation_run_id;
         let datapoint = Arc::new(datapoint);
@@ -145,7 +148,7 @@ pub async fn run_evaluation(
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
                     tensorzero_client: &client_clone,
-                    function_name: &evaluation_config.function_name,
+                    function_name: &function_name,
                     variant_name: &variant,
                     evaluation_run_id: evaluation_run_id_clone,
                     dataset_name: &dataset_name,
@@ -215,7 +218,7 @@ pub async fn run_evaluation(
     }
 
     if evaluation_stats.output_format == OutputFormat::HumanReadable {
-        let stats = evaluation_stats.compute_stats(&evaluation_config.evaluators);
+        let stats = evaluation_stats.compute_stats(&static_evaluation_config.evaluators);
 
         // Print all stats
         for (evaluator_name, evaluator_stats) in &stats {
@@ -223,7 +226,7 @@ pub async fn run_evaluation(
         }
 
         // Check cutoffs and handle failures
-        let failures = check_evaluator_cutoffs(&stats, &evaluation_config.evaluators)?;
+        let failures = check_evaluator_cutoffs(&stats, &static_evaluation_config.evaluators)?;
 
         // Print failure messages
         for (name, cutoff, actual) in &failures {

@@ -34,8 +34,9 @@ pub(crate) async fn evaluate_inference(
     tensorzero_client: Arc<ThrottledTensorZeroClient>,
     evaluation_run_id: Uuid,
 ) -> Result<EvaluationResult> {
+    let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
     let results: EvaluationResult =
-        FuturesUnordered::from_iter(evaluation_config.evaluators.keys().map(
+        FuturesUnordered::from_iter(static_evaluation_config.evaluators.keys().map(
             |evaluator_name| async {
                 let inference_response = inference_response.clone();
                 let evaluation_config = evaluation_config.clone();
@@ -115,7 +116,8 @@ async fn run_evaluator(
     evaluation_name: &str,
     evaluation_run_id: Uuid,
 ) -> Result<Option<Value>> {
-    let evaluator_config = match evaluation_config.evaluators.get(&evaluator_name) {
+    let EvaluationConfig::Static(static_evaluation_config) = evaluation_config;
+    let evaluator_config = match static_evaluation_config.evaluators.get(&evaluator_name) {
         Some(evaluator_config) => evaluator_config,
         None => {
             return Err(anyhow::anyhow!("Evaluator config not found for {}. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports.", evaluator_name));

@@ -7,11 +7,11 @@ import {
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
-import type { EvaluationConfig } from "~/utils/config/evaluations";
+import type { StaticEvaluationConfig } from "~/utils/config/evaluations";
 
 interface BasicInfoProps {
   evaluation_name: string;
-  evaluation_config: EvaluationConfig;
+  evaluation_config: StaticEvaluationConfig;
   dataset_name: string;
 }
 

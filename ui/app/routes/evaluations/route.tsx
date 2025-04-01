@@ -41,12 +41,14 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const evaluation_name = formData.get("evaluation_name");
+  const dataset_name = formData.get("dataset_name");
   const variant_name = formData.get("variant_name");
   const concurrency_limit = formData.get("concurrency_limit");
   let evaluation_start_info;
   try {
     evaluation_start_info = await runEvaluation(
       evaluation_name as string,
+      dataset_name as string,
       variant_name as string,
       parseInt(concurrency_limit as string),
     );

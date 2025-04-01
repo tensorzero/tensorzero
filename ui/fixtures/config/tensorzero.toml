@@ -197,6 +197,7 @@ optimize = "min"
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [evaluations.entity_extraction]
+type = "static"
 function_name = "extract_entities"
 
 [evaluations.entity_extraction.evaluators.exact_match]
@@ -219,6 +220,7 @@ json_mode = "strict"
 temperature = 0.1
 
 [evaluations.haiku]
+type = "static"
 function_name = "write_haiku"
 
 [evaluations.haiku.evaluators.exact_match]
