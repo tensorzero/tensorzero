@@ -37,6 +37,8 @@ pub(super) fn run_exact_match_evaluator(
 #[cfg(test)]
 mod tests {
 
+    use std::collections::HashMap;
+
     use super::*;
     use serde_json::json;
     use tensorzero::Role;
@@ -73,7 +75,7 @@ mod tests {
                 text: "hello world".to_string(),
             })]),
             tool_params: None,
-            tags: None,
+            tags: HashMap::new(),
             auxiliary: "".to_string(),
             is_deleted: false,
             source_inference_id: None,
@@ -130,7 +132,7 @@ mod tests {
             episode_id: Some(Uuid::now_v7()),
             output: None,
             tool_params: None,
-            tags: None,
+            tags: HashMap::new(),
             auxiliary: "".to_string(),
             is_deleted: false,
             source_inference_id: None,

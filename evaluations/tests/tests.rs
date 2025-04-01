@@ -17,6 +17,7 @@ use url::Url;
 use crate::common::write_json_fixture_to_dataset;
 use common::write_chat_fixture_to_dataset;
 use evaluations::{run_evaluation, stats::EvaluationUpdate, Args, OutputFormat};
+use std::collections::HashMap;
 use std::{path::PathBuf, sync::Arc};
 use tensorzero::{ClientBuilder, ClientBuilderMode};
 use tensorzero::{InferenceResponse, Role};
@@ -661,7 +662,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "Hello, world!".to_string(),
         })]),
-        tags: None,
+        tags: HashMap::new(),
         tool_params: None,
         source_inference_id: None,
     });
@@ -743,7 +744,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         is_deleted: false,
         function_name: "test_function".to_string(),
         output: None,
-        tags: None,
+        tags: HashMap::new(),
         tool_params: None,
         source_inference_id: None,
     });
@@ -896,7 +897,7 @@ async fn test_run_llm_judge_evaluator_json() {
         is_deleted: false,
         function_name: "test_function".to_string(),
         output: None,
-        tags: None,
+        tags: HashMap::new(),
         tool_params: None,
         source_inference_id: None,
     });
