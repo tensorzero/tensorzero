@@ -2149,6 +2149,30 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         ))
     }
 
+    #[tokio::test]
+    async fn test_invalid_toml() {
+        let config_str = r#"
+        [models.my-model]
+        routing = ["dummy"]
+
+        [models.my-model]
+        routing = ["other"]
+        "#;
+
+        let tmpfile = NamedTempFile::new().unwrap();
+        std::fs::write(tmpfile.path(), config_str).unwrap();
+
+        let err = Config::load_and_verify_from_path(tmpfile.path())
+            .await
+            .unwrap_err()
+            .to_string();
+
+        assert!(
+            err.contains("duplicate key `my-model` in table `models`"),
+            "Unexpected error: {err:?}"
+        );
+    }
+
     #[test]
     fn test_model_provider_unknown_field() {
         let config_str = r#"
