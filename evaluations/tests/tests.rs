@@ -54,7 +54,7 @@ async fn run_evaluations_json() {
         config_file: config_path,
         gateway_url: None,
         name: "entity_extraction".to_string(),
-        variant: "gpt_4o_mini".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
     };
@@ -193,7 +193,7 @@ async fn run_exact_match_evaluation_chat() {
         config_file: config_path,
         gateway_url: None,
         name: "haiku_with_outputs".to_string(),
-        variant: "gpt_4o_mini".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
     };
@@ -298,7 +298,7 @@ async fn run_llm_judge_evaluation_chat() {
         config_file: config_path,
         gateway_url: None,
         name: "haiku_without_outputs".to_string(),
-        variant: "gpt_4o_mini".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
     };
@@ -418,7 +418,7 @@ async fn run_llm_judge_evaluation_chat_human_readable() {
         config_file: config_path,
         gateway_url: None,
         name: "haiku_without_outputs".to_string(),
-        variant: "gpt_4o_mini".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::HumanReadable,
     };
@@ -453,7 +453,7 @@ async fn run_llm_judge_evaluation_json_human_readable() {
         config_file: config_path,
         gateway_url: None,
         name: "entity_extraction".to_string(),
-        variant: "gpt_4o_mini".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::HumanReadable,
     };
@@ -484,13 +484,19 @@ async fn test_parse_args() {
         .to_string()
         .contains("the following required arguments were not provided:"));
     assert!(args.to_string().contains("--name <NAME>"));
-    assert!(args.to_string().contains("--variant <VARIANT>"));
+    assert!(args.to_string().contains("--variant-name <VARIANT_NAME>"));
 
     // Test required arguments
-    let args = Args::try_parse_from(["test", "--name", "my-evaluation", "--variant", "my-variant"])
-        .unwrap();
+    let args = Args::try_parse_from([
+        "test",
+        "--name",
+        "my-evaluation",
+        "--variant-name",
+        "my-variant",
+    ])
+    .unwrap();
     assert_eq!(args.name, "my-evaluation");
-    assert_eq!(args.variant, "my-variant");
+    assert_eq!(args.variant_name, "my-variant");
     assert_eq!(args.config_file, PathBuf::from("./config/tensorzero.toml"));
     assert_eq!(args.concurrency, 1);
     assert_eq!(args.gateway_url, None);
@@ -501,7 +507,7 @@ async fn test_parse_args() {
         "test",
         "--name",
         "my-evaluation",
-        "--variant",
+        "--variant-name",
         "my-variant",
         "--config-file",
         "/path/to/config.toml",
@@ -514,7 +520,7 @@ async fn test_parse_args() {
     ])
     .unwrap();
     assert_eq!(args.name, "my-evaluation");
-    assert_eq!(args.variant, "my-variant");
+    assert_eq!(args.variant_name, "my-variant");
     assert_eq!(args.config_file, PathBuf::from("/path/to/config.toml"));
     assert_eq!(
         args.gateway_url,
@@ -528,7 +534,7 @@ async fn test_parse_args() {
         "test",
         "--name",
         "my-evaluation",
-        "--variant",
+        "--variant-name",
         "my-variant",
         "--gateway-url",
         "not-a-url",
@@ -543,7 +549,7 @@ async fn test_parse_args() {
         "test",
         "--name",
         "my-evaluation",
-        "--variant",
+        "--variant-name",
         "my-variant",
         "--format",
         "invalid",
@@ -583,7 +589,7 @@ async fn run_evaluations_errors() {
         config_file: config_path,
         gateway_url: None,
         name: "entity_extraction".to_string(),
-        variant: "dummy_error".to_string(),
+        variant_name: "dummy_error".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
     };
