@@ -15,7 +15,7 @@ use tensorzero::{
 };
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::config_parser::MetricConfigOptimize;
-use tensorzero_internal::evaluations::EvaluatorConfig;
+use tensorzero_internal::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo, config_parser::Config, endpoints::datasets::Datapoint,
     function::FunctionConfig,
@@ -52,7 +52,7 @@ pub struct Args {
     #[arg(long)]
     pub gateway_url: Option<Url>,
 
-    /// Name of the eval to run.
+    /// Name of the evaluation to run.
     #[arg(short, long)]
     pub name: String,
 
@@ -68,18 +68,24 @@ pub struct Args {
     pub format: OutputFormat,
 }
 
-pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> Result<()> {
+pub async fn run_evaluation(
+    args: Args,
+    evaluation_run_id: Uuid,
+    mut writer: impl Write,
+) -> Result<()> {
     setup_logging(&args)?;
     let semaphore = Semaphore::new(args.concurrency);
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
 
     let config = Config::load_and_verify_from_path(&args.config_file).await?;
-    let eval_config = config
+    let evaluation_config = config
         .evaluations
         .get(&args.name)
-        .ok_or(anyhow!("Eval not found"))?;
-    let function_config = config.get_function(&eval_config.function_name)?;
+        .ok_or(anyhow!("evaluation not found"))?
+        .clone();
+    let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
+    let function_config = config.get_function(&static_evaluation_config.function_name)?;
     #[allow(unused)]
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
@@ -102,20 +108,20 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
 
     let dataset = query_dataset(
         &clickhouse_client,
-        &eval_config.dataset_name,
-        &eval_config.function_name,
+        &static_evaluation_config.dataset_name,
+        &static_evaluation_config.function_name,
         function_config,
     )
     .await?;
     let variant = Arc::new(args.variant);
-    let eval_name = Arc::new(args.name);
+    let evaluation_name = Arc::new(args.name);
     let dataset_len = dataset.len();
     let mut task_id_to_datapoint_id = HashMap::new();
 
     write_run_info(
         &mut writer,
         &RunInfo {
-            eval_run_id,
+            evaluation_run_id,
             num_datapoints: dataset_len,
         },
         &args.format,
@@ -126,62 +132,63 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
         let client_clone = tensorzero_client_with_semaphore.clone();
         let variant = variant.clone();
         let function_config = function_config.clone();
-        let eval_config = eval_config.clone();
-        let eval_name = eval_name.clone();
-        let eval_run_id_clone = eval_run_id;
+        let evaluation_config = evaluation_config.clone();
+        let function_name = static_evaluation_config.function_name.clone();
+        let evaluation_name = evaluation_name.clone();
+        let evaluation_run_id_clone = evaluation_run_id;
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let abort_handle = join_set.spawn(async move {
             let inference_response = Arc::new(
                 infer_datapoint(
                     &client_clone,
-                    &eval_config.function_name,
+                    &function_name,
                     &variant,
-                    eval_run_id_clone,
+                    evaluation_run_id_clone,
                     &datapoint,
-                    &eval_name,
+                    &evaluation_name,
                     &function_config,
                 )
                 .await?,
             );
 
-            let eval_result = evaluate_inference(
+            let evaluation_result = evaluate_inference(
                 inference_response.clone(),
                 datapoint.clone(),
-                eval_config,
-                eval_name,
+                evaluation_config,
+                evaluation_name,
                 client_clone,
-                eval_run_id_clone,
+                evaluation_run_id_clone,
             )
             .await?;
 
-            Ok::<(Datapoint, InferenceResponse, evaluators::EvalResult), anyhow::Error>((
+            Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
                 Arc::into_inner(datapoint).ok_or_else(|| anyhow!("Failed to get datapoint for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
                 Arc::into_inner(inference_response).ok_or_else(|| anyhow!("Failed to get inference response for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
-                eval_result,
+                evaluation_result,
             ))
         });
         task_id_to_datapoint_id.insert(abort_handle.id(), datapoint_id);
     }
 
     // Collect results
-    let mut eval_stats = EvaluationStats::new(args.format, dataset_len);
+    let mut evaluation_stats = EvaluationStats::new(args.format, dataset_len);
 
     while let Some(result) = join_set.join_next_with_id().await {
         match result {
-            Ok((_, Ok((datapoint, inference_response, eval_result)))) => {
-                eval_stats.push(
+            Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
+                evaluation_stats.push(
                     EvaluationUpdate::Success(EvaluationInfo::new(
                         datapoint,
                         inference_response,
-                        eval_result,
+                        evaluation_result,
                     )),
                     &mut writer,
                 )?;
             }
             Ok((task_id, Err(e))) => {
                 tracing::warn!("Task error: {}", e);
-                eval_stats.push(
+                evaluation_stats.push(
                     EvaluationUpdate::Error(EvaluationError {
                         datapoint_id: task_id_to_datapoint_id[&task_id],
                         message: e.to_string(),
@@ -189,7 +196,7 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
                     &mut writer,
                 )?;
             }
-            Err(e) => eval_stats.push(
+            Err(e) => evaluation_stats.push(
                 EvaluationUpdate::Error(EvaluationError {
                     datapoint_id: task_id_to_datapoint_id[&e.id()],
                     message: e.to_string(),
@@ -199,12 +206,12 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
         }
     }
 
-    if let Some(progress_bar) = &eval_stats.progress_bar {
+    if let Some(progress_bar) = &evaluation_stats.progress_bar {
         progress_bar.finish_with_message("Done");
     }
 
-    if eval_stats.output_format == OutputFormat::HumanReadable {
-        let stats = eval_stats.compute_stats(&eval_config.evaluators);
+    if evaluation_stats.output_format == OutputFormat::HumanReadable {
+        let stats = evaluation_stats.compute_stats(&static_evaluation_config.evaluators);
 
         // Print all stats
         for (evaluator_name, evaluator_stats) in &stats {
@@ -212,7 +219,7 @@ pub async fn run_eval(args: Args, eval_run_id: Uuid, mut writer: impl Write) -> 
         }
 
         // Check cutoffs and handle failures
-        let failures = check_evaluator_cutoffs(&stats, &eval_config.evaluators)?;
+        let failures = check_evaluator_cutoffs(&stats, &static_evaluation_config.evaluators)?;
 
         // Print failure messages
         for (name, cutoff, actual) in &failures {
@@ -281,9 +288,9 @@ async fn infer_datapoint(
     tensorzero_client: &ThrottledTensorZeroClient,
     function_name: &str,
     variant_name: &str,
-    eval_run_id: Uuid,
+    evaluation_run_id: Uuid,
     datapoint: &Datapoint,
-    eval_name: &str,
+    evaluation_name: &str,
     function_config: &FunctionConfig,
 ) -> Result<InferenceResponse> {
     let input = resolved_input_to_input(datapoint.input().clone()).await?;
@@ -311,14 +318,17 @@ async fn infer_datapoint(
         input,
         tags: HashMap::from([
             (
-                "tensorzero::eval_run_id".to_string(),
-                eval_run_id.to_string(),
+                "tensorzero::evaluation_run_id".to_string(),
+                evaluation_run_id.to_string(),
             ),
             (
                 "tensorzero::datapoint_id".to_string(),
                 datapoint.id().to_string(),
             ),
-            ("tensorzero::eval_name".to_string(), eval_name.to_string()),
+            (
+                "tensorzero::evaluation_name".to_string(),
+                evaluation_name.to_string(),
+            ),
         ]),
         dynamic_tool_params,
         output_schema: output_schema.cloned(),
@@ -352,7 +362,7 @@ fn write_run_info(
             writeln!(writer, "{}", serde_json::to_string(run_info)?)?;
         }
         OutputFormat::HumanReadable => {
-            writeln!(writer, "Run ID: {}", run_info.eval_run_id)?;
+            writeln!(writer, "Run ID: {}", run_info.evaluation_run_id)?;
             writeln!(writer, "Number of datapoints: {}", run_info.num_datapoints)?;
         }
     }
@@ -361,7 +371,7 @@ fn write_run_info(
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RunInfo {
-    pub eval_run_id: Uuid,
+    pub evaluation_run_id: Uuid,
     pub num_datapoints: usize,
 }
 

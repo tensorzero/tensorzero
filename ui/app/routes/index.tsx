@@ -78,14 +78,14 @@ export async function loader() {
   const numEpisodes = await countEpisodes();
   const datasetCounts = await getDatasetCounts();
   const numDatasets = datasetCounts.length;
-  const numEvalRuns = await countTotalEvaluationRuns();
+  const numEvaluationRuns = await countTotalEvaluationRuns();
 
   return {
     totalInferences,
     numFunctions,
     numEpisodes,
     numDatasets,
-    numEvalRuns,
+    numEvaluationRuns,
   };
 }
 
@@ -95,7 +95,7 @@ export default function Home() {
     numFunctions,
     numEpisodes,
     numDatasets,
-    numEvalRuns,
+    numEvaluationRuns,
   } = useLoaderData<typeof loader>();
   const config = useConfig();
   const numEvaluations = Object.keys(config.evaluations).length;
@@ -163,7 +163,7 @@ export default function Home() {
                 source="/evaluations"
                 icon={Evaluation}
                 title="Evaluations"
-                description={`${numEvaluations} evaluations, ${numEvalRuns} runs`}
+                description={`${numEvaluations} evaluations, ${numEvaluationRuns} runs`}
               />
             </div>
           </div>

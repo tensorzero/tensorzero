@@ -232,24 +232,24 @@ const VariantCircle = ({
 };
 
 interface EvaluationTableProps {
-  selected_eval_run_infos: EvaluationRunInfo[];
-  eval_results: ParsedEvaluationResult[];
-  eval_statistics: EvaluationStatistics[];
+  selected_evaluation_run_infos: EvaluationRunInfo[];
+  evaluation_results: ParsedEvaluationResult[];
+  evaluation_statistics: EvaluationStatistics[];
   evaluator_names: string[];
-  eval_name: string;
-  mostRecentEvalInferenceDates: Map<string, Date>;
+  evaluation_name: string;
+  mostRecentEvaluationInferenceDates: Map<string, Date>;
 }
 
 export function EvaluationTable({
-  selected_eval_run_infos,
-  eval_results,
-  eval_statistics,
+  selected_evaluation_run_infos,
+  evaluation_results,
+  evaluation_statistics,
   evaluator_names,
-  eval_name,
-  mostRecentEvalInferenceDates,
+  evaluation_name,
+  mostRecentEvaluationInferenceDates,
 }: EvaluationTableProps) {
-  const selectedRunIds = selected_eval_run_infos.map(
-    (info) => info.eval_run_id,
+  const selectedRunIds = selected_evaluation_run_infos.map(
+    (info) => info.evaluation_run_id,
   );
 
   // Get all unique datapoints from the results
@@ -263,7 +263,7 @@ export function EvaluationTable({
       }
     >();
 
-    eval_results.forEach((result) => {
+    evaluation_results.forEach((result) => {
       if (!datapoints.has(result.datapoint_id)) {
         datapoints.set(result.datapoint_id, {
           id: result.datapoint_id,
@@ -277,7 +277,7 @@ export function EvaluationTable({
     return Array.from(datapoints.values()).sort((a, b) =>
       b.id.localeCompare(a.id),
     );
-  }, [eval_results]);
+  }, [evaluation_results]);
 
   // Organize results by datapoint and run ID
   const organizedResults = useMemo(() => {
@@ -298,36 +298,36 @@ export function EvaluationTable({
     });
 
     // Fill in the results
-    eval_results.forEach((result) => {
-      if (!result.datapoint_id || !result.eval_run_id) return;
+    evaluation_results.forEach((result) => {
+      if (!result.datapoint_id || !result.evaluation_run_id) return;
 
       const datapointMap = organized.get(result.datapoint_id);
       if (!datapointMap) return;
 
-      if (!datapointMap.has(result.eval_run_id)) {
-        datapointMap.set(result.eval_run_id, {
+      if (!datapointMap.has(result.evaluation_run_id)) {
+        datapointMap.set(result.evaluation_run_id, {
           generated_output: result.generated_output,
           metrics: new Map(),
         });
       }
 
-      const runData = datapointMap.get(result.eval_run_id);
+      const runData = datapointMap.get(result.evaluation_run_id);
       if (runData && result.metric_name) {
         runData.metrics.set(result.metric_name, result.metric_value);
       }
     });
 
     return organized;
-  }, [eval_results, uniqueDatapoints]);
+  }, [evaluation_results, uniqueDatapoints]);
 
   // Map run ID to variant name
   const runIdToVariant = useMemo(() => {
     const map = new Map<string, string>();
-    selected_eval_run_infos.forEach((info) => {
-      map.set(info.eval_run_id, info.variant_name);
+    selected_evaluation_run_infos.forEach((info) => {
+      map.set(info.evaluation_run_id, info.variant_name);
     });
     return map;
-  }, [selected_eval_run_infos]);
+  }, [selected_evaluation_run_infos]);
 
   const config = useConfig();
   const navigate = useNavigate();
@@ -336,9 +336,11 @@ export function EvaluationTable({
       <div>
         {/* Variant selector */}
         <VariantSelector
-          evalName={eval_name}
-          selectedRunIdInfos={selected_eval_run_infos}
-          mostRecentEvalInferenceDates={mostRecentEvalInferenceDates}
+          evaluationName={evaluation_name}
+          selectedRunIdInfos={selected_evaluation_run_infos}
+          mostRecentEvaluationInferenceDates={
+            mostRecentEvaluationInferenceDates
+          }
         />
 
         {selectedRunIds.length > 0 && (
@@ -365,12 +367,12 @@ export function EvaluationTable({
                     {evaluator_names.map((evaluator_name) => {
                       // Get the metric name for this evaluator
                       const metric_name = getEvaluatorMetricName(
-                        eval_name,
+                        evaluation_name,
                         evaluator_name,
                       );
 
                       // Filter statistics for this specific metric
-                      const filteredStats = eval_statistics.filter(
+                      const filteredStats = evaluation_statistics.filter(
                         (stat) => stat.metric_name === metric_name,
                       );
 
@@ -380,7 +382,7 @@ export function EvaluationTable({
                           className="py-2 text-center"
                         >
                           <EvaluatorHeader
-                            eval_name={eval_name}
+                            evaluation_name={evaluation_name}
                             evaluator_name={evaluator_name}
                             summaryStats={filteredStats}
                           />
@@ -424,11 +426,11 @@ export function EvaluationTable({
                                 : "cursor-pointer"
                             }
                             onClick={() => {
-                              const eval_run_ids = filteredVariants
+                              const evaluation_run_ids = filteredVariants
                                 .map(([runId]) => runId)
                                 .join(",");
                               navigate(
-                                `/evaluations/${eval_name}/${datapoint.id}?eval_run_ids=${eval_run_ids}`,
+                                `/evaluations/${evaluation_name}/${datapoint.id}?evaluation_run_ids=${evaluation_run_ids}`,
                               );
                             }}
                           >
@@ -481,14 +483,14 @@ export function EvaluationTable({
                             {/* Metrics cells */}
                             {evaluator_names.map((evaluator_name) => {
                               const metric_name = getEvaluatorMetricName(
-                                eval_name,
+                                evaluation_name,
                                 evaluator_name,
                               );
                               const metricValue = data.metrics.get(metric_name);
                               const metricType =
                                 config.metrics[metric_name].type;
                               const evaluatorConfig =
-                                config.evaluations[eval_name].evaluators[
+                                config.evaluations[evaluation_name].evaluators[
                                   evaluator_name
                                 ];
 
@@ -527,18 +529,18 @@ export function EvaluationTable({
 }
 
 const EvaluatorHeader = ({
-  eval_name,
+  evaluation_name,
   evaluator_name,
   summaryStats,
 }: {
-  eval_name: string;
+  evaluation_name: string;
   evaluator_name: string;
   summaryStats: EvaluationStatistics[];
 }) => {
   const config = useConfig();
-  const evalConfig = config.evaluations[eval_name];
-  const evaluatorConfig = evalConfig.evaluators[evaluator_name];
-  const metric_name = getEvaluatorMetricName(eval_name, evaluator_name);
+  const EvaluationConfig = config.evaluations[evaluation_name];
+  const evaluatorConfig = EvaluationConfig.evaluators[evaluator_name];
+  const metric_name = getEvaluatorMetricName(evaluation_name, evaluator_name);
   const metricProperties = config.metrics[metric_name];
   if (
     metricProperties.type === "comment" ||
@@ -596,14 +598,14 @@ const EvaluatorProperties = ({
   evaluatorConfig: EvaluatorConfig;
 }) => {
   const [searchParams] = useSearchParams();
-  const selectedRunIdsParam = searchParams.get("eval_run_ids") || "";
+  const selectedRunIdsParam = searchParams.get("evaluation_run_ids") || "";
   const selectedRunIds = selectedRunIdsParam
     ? selectedRunIdsParam.split(",")
     : [];
 
   // Create a map of stats by run ID for easy lookup
   const statsByRunId = new Map(
-    summaryStats.map((stat) => [stat.eval_run_id, stat]),
+    summaryStats.map((stat) => [stat.evaluation_run_id, stat]),
   );
 
   // Filter and sort stats according to the order in URL parameters
@@ -618,13 +620,13 @@ const EvaluatorProperties = ({
           {orderedStats.map((stat) => {
             // Get the variant color for the circle using the run ID from the stat
             const variantColorClass = useColorAssigner().getColor(
-              stat.eval_run_id,
+              stat.evaluation_run_id,
               false,
             ); // Pass 'false' to get non-hover version
 
             return (
               <div
-                key={stat.eval_run_id}
+                key={stat.evaluation_run_id}
                 className={`mt-1 flex items-center justify-center gap-1.5 ${
                   isCutoffFailed(stat.mean_metric, evaluatorConfig)
                     ? "text-red-700"

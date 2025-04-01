@@ -86,9 +86,9 @@ async fn resolved_input_message_content_to_input_message_content(
     }
 }
 
-/// Given the function config for the eval and the tool call config that was written to the database,
+/// Given the function config for the evaluation and the tool call config that was written to the database,
 /// recover the dynamic tool params that were used to generate the tool call config.
-/// This will be used to help full out the params for the inference request in this eval.
+/// This will be used to help full out the params for the inference request in this evaluation.
 pub async fn get_tool_params_args(
     tool_params: &ToolCallConfigDatabaseInsert,
     function_config: &FunctionConfig,

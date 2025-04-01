@@ -19,16 +19,18 @@ import { useDatasetCountFetcher } from "~/routes/api/datasets/count_dataset_func
 import { useConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
 
-interface LaunchEvalModalProps {
+interface LaunchEvaluationModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-function EvalForm() {
+function EvaluationForm() {
   const fetcher = useFetcher();
   const config = useConfig();
-  const eval_names = Object.keys(config.evaluations);
-  const [selectedEvalName, setSelectedEvalName] = useState<string | null>(null);
+  const evaluation_names = Object.keys(config.evaluations);
+  const [selectedEvaluationName, setSelectedEvaluationName] = useState<
+    string | null
+  >(null);
   const [selectedVariantName, setSelectedVariantName] = useState<string | null>(
     null,
   );
@@ -37,9 +39,9 @@ function EvalForm() {
   let isLoading = false;
   let dataset = null;
   let function_name = null;
-  if (selectedEvalName) {
-    dataset = config.evaluations[selectedEvalName]?.dataset_name;
-    function_name = config.evaluations[selectedEvalName]?.function_name;
+  if (selectedEvaluationName) {
+    dataset = config.evaluations[selectedEvaluationName]?.dataset_name;
+    function_name = config.evaluations[selectedEvaluationName]?.function_name;
   }
   const { count: datasetCount, isLoading: datasetLoading } =
     useDatasetCountFetcher(dataset, function_name);
@@ -48,31 +50,34 @@ function EvalForm() {
 
   // Check if all fields are filled
   const isFormValid =
-    selectedEvalName !== null &&
+    selectedEvaluationName !== null &&
     selectedVariantName !== null &&
     concurrencyLimit !== "";
 
   return (
     <fetcher.Form method="post">
       <div className="mt-4">
-        <label htmlFor="eval_name" className="mb-1 block text-sm font-medium">
+        <label
+          htmlFor="evaluation_name"
+          className="mb-1 block text-sm font-medium"
+        >
           Evaluation
         </label>
       </div>
       <Select
-        name="eval_name"
+        name="evaluation_name"
         onValueChange={(value) => {
-          setSelectedEvalName(value);
-          setSelectedVariantName(null); // Reset variant selection when eval changes
+          setSelectedEvaluationName(value);
+          setSelectedVariantName(null); // Reset variant selection when evaluation changes
         }}
       >
         <SelectTrigger>
           <SelectValue placeholder="Select an evaluation" />
         </SelectTrigger>
         <SelectContent>
-          {eval_names.map((eval_name) => (
-            <SelectItem key={eval_name} value={eval_name}>
-              {eval_name}
+          {evaluation_names.map((evaluation_name) => (
+            <SelectItem key={evaluation_name} value={evaluation_name}>
+              {evaluation_name}
             </SelectItem>
           ))}
         </SelectContent>
@@ -119,7 +124,7 @@ function EvalForm() {
       </div>
       <Select
         name="variant_name"
-        disabled={!selectedEvalName}
+        disabled={!selectedEvaluationName}
         onValueChange={(value) => setSelectedVariantName(value)}
       >
         <SelectTrigger>
@@ -127,12 +132,12 @@ function EvalForm() {
         </SelectTrigger>
         <SelectContent>
           {(() => {
-            if (!selectedEvalName) return null;
+            if (!selectedEvaluationName) return null;
 
-            const eval_function =
-              config.evaluations[selectedEvalName].function_name;
+            const evaluation_function =
+              config.evaluations[selectedEvaluationName].function_name;
             const variant_names = Object.keys(
-              config.functions[eval_function].variants,
+              config.functions[evaluation_function].variants,
             );
 
             return variant_names.map((variant_name) => (
@@ -170,10 +175,10 @@ function EvalForm() {
   );
 }
 
-export default function LaunchEvalModal({
+export default function LaunchEvaluationModal({
   isOpen,
   onClose,
-}: LaunchEvalModalProps) {
+}: LaunchEvaluationModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent>
@@ -181,7 +186,7 @@ export default function LaunchEvalModal({
           <DialogTitle>Launch Evaluation</DialogTitle>
         </DialogHeader>
 
-        <EvalForm />
+        <EvaluationForm />
       </DialogContent>
     </Dialog>
   );

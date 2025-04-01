@@ -10,12 +10,12 @@ import {
 import { formatDate } from "~/utils/date";
 import { FunctionLink } from "~/components/function/FunctionLink";
 import { VariantLink } from "~/components/function/variant/VariantLink";
-import type { EvalRunInfo } from "~/utils/clickhouse/evaluations";
+import type { EvaluationRunRowInfo } from "~/utils/clickhouse/evaluations";
 
-export default function EvalRunsTable({
-  evalRuns,
+export default function EvaluationRunsTable({
+  evaluationRuns,
 }: {
-  evalRuns: EvalRunInfo[];
+  evaluationRuns: EvaluationRunRowInfo[];
 }) {
   return (
     <div>
@@ -31,7 +31,7 @@ export default function EvalRunsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {evalRuns.length === 0 ? (
+          {evaluationRuns.length === 0 ? (
             <TableRow className="hover:bg-bg-primary">
               <TableCell
                 colSpan={6}
@@ -41,57 +41,60 @@ export default function EvalRunsTable({
               </TableCell>
             </TableRow>
           ) : (
-            evalRuns.map((evalRun) => (
-              <TableRow key={evalRun.eval_run_id} id={evalRun.eval_run_id}>
+            evaluationRuns.map((evaluationRun) => (
+              <TableRow
+                key={evaluationRun.evaluation_run_id}
+                id={evaluationRun.evaluation_run_id}
+              >
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/evaluations/${evalRun.eval_name}?eval_run_ids=${evalRun.eval_run_id}`}
+                    to={`/evaluations/${evaluationRun.evaluation_name}?evaluation_run_ids=${evaluationRun.evaluation_run_id}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {evalRun.eval_run_id}
+                      {evaluationRun.evaluation_run_id}
                     </code>
                   </Link>
                 </TableCell>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={`/evaluations/${evalRun.eval_name}`}
+                    to={`/evaluations/${evaluationRun.evaluation_name}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {evalRun.eval_name}
+                      {evaluationRun.evaluation_name}
                     </code>
                   </Link>
                 </TableCell>
                 <TableCell>
                   <Link
-                    to={`/datasets/${evalRun.dataset}`}
+                    to={`/datasets/${evaluationRun.dataset}`}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {evalRun.dataset}
+                      {evaluationRun.dataset}
                     </code>
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <FunctionLink functionName={evalRun.function_name}>
+                  <FunctionLink functionName={evaluationRun.function_name}>
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {evalRun.function_name}
+                      {evaluationRun.function_name}
                     </code>
                   </FunctionLink>
                 </TableCell>
                 <TableCell>
                   <VariantLink
-                    variantName={evalRun.variant_name}
-                    functionName={evalRun.function_name}
+                    variantName={evaluationRun.variant_name}
+                    functionName={evaluationRun.function_name}
                   >
                     <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
-                      {evalRun.variant_name}
+                      {evaluationRun.variant_name}
                     </code>
                   </VariantLink>
                 </TableCell>
                 <TableCell>
-                  {formatDate(new Date(evalRun.last_inference_timestamp))}
+                  {formatDate(new Date(evaluationRun.last_inference_timestamp))}
                 </TableCell>
               </TableRow>
             ))
