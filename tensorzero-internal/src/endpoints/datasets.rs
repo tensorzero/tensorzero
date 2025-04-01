@@ -200,9 +200,7 @@ async fn insert_from_existing(
                 is_deleted: false,
                 source_inference_id: Some(existing.inference_id),
             };
-            clickhouse
-                .write(&[datapoint], "JsonInferenceDatapoint")
-                .await?;
+            put_deduped_json_datapoint(clickhouse, &datapoint).await?;
         }
         TaggedInferenceDatabaseInsert::Chat(inference) => {
             let output = match existing.output {
@@ -234,9 +232,7 @@ async fn insert_from_existing(
                 is_deleted: false,
                 source_inference_id: Some(existing.inference_id),
             };
-            clickhouse
-                .write(&[datapoint], "ChatInferenceDatapoint")
-                .await?;
+            put_deduped_chat_datapoint(clickhouse, &datapoint).await?;
         }
     }
     Ok(datapoint_id)
