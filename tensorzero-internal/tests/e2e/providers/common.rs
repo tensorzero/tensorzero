@@ -1395,7 +1395,9 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "sglang" | "tgi" => {
             assert!(
-                res["error"].as_str().unwrap().contains("401 Authorization"),
+                res["error"]
+                    .as_str()
+                    .is_some_and(|e| e.contains("401 Authorization")),
                 "Unexpected error: {res}"
             )
         }
