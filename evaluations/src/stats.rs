@@ -12,8 +12,8 @@ use crate::{evaluators, OutputFormat};
 
 pub(crate) struct EvaluationStats {
     pub output_format: OutputFormat,
-    pub eval_infos: Vec<EvaluationInfo>,
-    pub eval_errors: Vec<EvaluationError>,
+    pub evaluation_infos: Vec<EvaluationInfo>,
+    pub evaluation_errors: Vec<EvaluationError>,
     pub progress_bar: Option<ProgressBar>,
 }
 
@@ -25,20 +25,20 @@ impl EvaluationStats {
         };
         Self {
             output_format,
-            eval_infos: Vec::new(),
-            eval_errors: Vec::new(),
+            evaluation_infos: Vec::new(),
+            evaluation_errors: Vec::new(),
             progress_bar,
         }
     }
 
     pub(crate) fn push(
         &mut self,
-        eval_update: EvaluationUpdate,
+        evaluation_update: EvaluationUpdate,
         writer: &mut impl Write,
     ) -> Result<()> {
         match self.output_format {
             OutputFormat::Jsonl => {
-                writeln!(writer, "{}", serde_json::to_string(&eval_update)?)?;
+                writeln!(writer, "{}", serde_json::to_string(&evaluation_update)?)?;
             }
             OutputFormat::HumanReadable => {
                 if let Some(progress_bar) = &mut self.progress_bar {
@@ -46,10 +46,12 @@ impl EvaluationStats {
                 }
             }
         }
-        match eval_update {
-            EvaluationUpdate::Success(eval_info) => self.eval_infos.push(eval_info),
-            EvaluationUpdate::Error(eval_error) => {
-                self.eval_errors.push(eval_error);
+        match evaluation_update {
+            EvaluationUpdate::Success(evaluation_info) => {
+                self.evaluation_infos.push(evaluation_info)
+            }
+            EvaluationUpdate::Error(evaluation_error) => {
+                self.evaluation_errors.push(evaluation_error);
             }
         }
         Ok(())
@@ -64,19 +66,19 @@ impl EvaluationStats {
             .keys()
             .map(|key| (key.clone(), Vec::new()))
             .collect();
-        // Collect eval inference data into vectors by eval (all as floats)
-        for eval_info in self.eval_infos.iter() {
-            for (eval_name, eval_result) in eval_info.evaluations.iter() {
-                match eval_result {
+        // Collect evaluation inference data into vectors by evaluation (all as floats)
+        for evaluation_info in self.evaluation_infos.iter() {
+            for (evaluation_name, evaluation_result) in evaluation_info.evaluations.iter() {
+                match evaluation_result {
                     Some(Value::Number(n)) => {
-                        if let Some(data_vec) = data.get_mut(eval_name) {
+                        if let Some(data_vec) = data.get_mut(evaluation_name) {
                             if let Some(num) = n.as_f64() {
                                 data_vec.push(num as f32);
                             }
                         }
                     }
                     Some(Value::Bool(b)) => {
-                        if let Some(data_vec) = data.get_mut(eval_name) {
+                        if let Some(data_vec) = data.get_mut(evaluation_name) {
                             data_vec.push(if *b { 1.0 } else { 0.0 });
                         }
                     }
@@ -122,17 +124,17 @@ impl EvaluationInfo {
     pub fn new(
         datapoint: Datapoint,
         response: InferenceResponse,
-        eval_result: evaluators::EvalResult,
+        evaluation_result: evaluators::EvaluationResult,
     ) -> Self {
         let mut evaluations = HashMap::new();
         let mut evaluator_errors = HashMap::new();
-        for (eval_name, eval_result) in eval_result {
-            match eval_result {
-                Ok(eval_result) => {
-                    evaluations.insert(eval_name, eval_result);
+        for (evaluation_name, evaluation_result) in evaluation_result {
+            match evaluation_result {
+                Ok(evaluation_result) => {
+                    evaluations.insert(evaluation_name, evaluation_result);
                 }
                 Err(e) => {
-                    evaluator_errors.insert(eval_name, e.to_string());
+                    evaluator_errors.insert(evaluation_name, e.to_string());
                 }
             }
         }

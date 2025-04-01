@@ -7,35 +7,24 @@ import {
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
-import type { EvaluationConfig } from "~/utils/config/evaluations";
+import type { StaticEvaluationConfig } from "~/utils/config/evaluations";
 
 interface BasicInfoProps {
-  eval_name: string;
-  eval_config: EvaluationConfig;
+  evaluation_config: StaticEvaluationConfig;
 }
 
-export default function BasicInfo({ eval_name, eval_config }: BasicInfoProps) {
+export default function BasicInfo({ evaluation_config }: BasicInfoProps) {
   const config = useConfig();
 
-  const functionName = eval_config.function_name;
+  const functionName = evaluation_config.function_name;
   const functionConfig = config.functions[functionName];
   const functionType = functionConfig?.type;
   const functionIconConfig = getFunctionTypeIcon(functionType);
 
-  const datasetName = eval_config.dataset_name;
+  const datasetName = evaluation_config.dataset_name;
 
   return (
     <BasicInfoLayout>
-      <BasicInfoItem>
-        <BasicInfoItemTitle>Evaluation</BasicInfoItemTitle>
-        <BasicInfoItemContent>
-          <Chip
-            label={eval_name}
-            link={`/evaluations/${eval_name}`}
-            font="mono"
-          />
-        </BasicInfoItemContent>
-      </BasicInfoItem>
       <BasicInfoItem>
         <BasicInfoItemTitle>Function</BasicInfoItemTitle>
         <BasicInfoItemContent>

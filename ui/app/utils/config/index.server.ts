@@ -12,7 +12,7 @@ import { EmbeddingModelConfigSchema, ModelConfigSchema } from "./models";
 import { ToolConfigSchema } from "./tool";
 import type { FunctionConfig } from "./function";
 import type { EvaluationConfig } from "./evaluations";
-import { RawEvalConfigSchema } from "./evaluations.server";
+import { RawEvaluationConfigSchema } from "./evaluations.server";
 
 const DEFAULT_CONFIG_PATH = "config/tensorzero.toml";
 const ENV_CONFIG_PATH = process.env.TENSORZERO_UI_CONFIG_PATH;
@@ -142,7 +142,7 @@ export const RawConfig = z
     metrics: z.record(z.string(), MetricConfigSchema).optional().default({}),
     tools: z.record(z.string(), ToolConfigSchema).optional().default({}),
     evaluations: z
-      .record(z.string(), RawEvalConfigSchema)
+      .record(z.string(), RawEvaluationConfigSchema)
       .optional()
       .default({}),
   })
@@ -154,10 +154,12 @@ export const RawConfig = z
         const loadedMetrics: Record<string, MetricConfig> = {};
         const loadedFunctions: Record<string, FunctionConfig> = {};
         const loadedEvaluations: Record<string, EvaluationConfig> = {};
-        for (const [key, evalItem] of Object.entries(config.evaluations)) {
-          const { evalConfig, functionConfigs, metricConfigs } =
-            await evalItem.load(config_path, key, config.functions);
-          loadedEvaluations[key] = evalConfig;
+        for (const [key, evaluationItem] of Object.entries(
+          config.evaluations,
+        )) {
+          const { EvaluationConfig, functionConfigs, metricConfigs } =
+            await evaluationItem.load(config_path, key, config.functions);
+          loadedEvaluations[key] = EvaluationConfig;
           for (const [funcKey, funcConfig] of Object.entries(functionConfigs)) {
             loadedFunctions[funcKey] = funcConfig;
           }

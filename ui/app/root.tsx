@@ -36,7 +36,7 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export async function loader() {
-  // Initialize eval cleanup when the app loads
+  // Initialize evaluation cleanup when the app loads
   startPeriodicCleanup();
   return await getConfig();
 }
