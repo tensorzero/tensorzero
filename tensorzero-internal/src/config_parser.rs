@@ -359,7 +359,7 @@ impl<'c> Config<'c> {
         for (name, evaluation_config) in uninitialized_config.evaluations {
             let (evaluation_config, evaluation_function_configs, evaluation_metric_configs) =
                 evaluation_config.load(&config.functions, &base_path, &name)?;
-            evaluations.insert(name, Arc::new(evaluation_config));
+            evaluations.insert(name, Arc::new(EvaluationConfig::Static(evaluation_config)));
             for (evaluation_function_name, evaluation_function_config) in
                 evaluation_function_configs
             {
