@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 echo "Fetching databases"
-# Get all 'tensorzero_e2e_tests_migration_manager' databases older than 1 day (to avoid deleting dbs used by currently running tests)
+# Get all 'tensorzero_e2e_tests_migration_manager' databases older than 1 hour (to avoid deleting dbs used by currently running tests)
 # We use the 'metadata_modification_time' of a known table ('ChatInference') to get a lower bound on the database age.
 databases=$(curl -X POST $TENSORZERO_CLICKHOUSE_URL \
-    --data-binary "select database from system.tables where name = 'ChatInference' and startsWith(database, 'tensorzero_e2e_tests_migration_manager') and metadata_modification_time < subtractDays(now(), 1);")
+    --data-binary "select database from system.tables where name = 'ChatInference' and startsWith(database, 'tensorzero_e2e_tests_migration_manager') and metadata_modification_time < subtractHours(now(), 1);")
 
 echo "The following databases will be deleted:"
 echo "$databases"
