@@ -45,20 +45,6 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
   const { episodes, pageSize, bounds, totalCount } = loaderData;
   const navigate = useNavigate();
 
-  if (episodes.length === 0) {
-    return (
-      <PageLayout>
-        <PageHeader heading="Episodes" count={totalCount} />
-        <SectionLayout>
-          <EpisodeSearchBar />
-          <div className="py-8 text-center text-gray-500">
-            No episodes found
-          </div>
-        </SectionLayout>
-      </PageLayout>
-    );
-  }
-
   const topEpisode = episodes[0];
   const bottomEpisode = episodes[episodes.length - 1];
 

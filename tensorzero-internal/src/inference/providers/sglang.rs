@@ -508,7 +508,7 @@ mod tests {
             json_mode: ModelInferenceRequestJsonMode::Off,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let sglang_request = SGLangRequest::new(&model_name, &basic_request).unwrap();
@@ -545,7 +545,7 @@ mod tests {
             tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         SGLangRequest::new(&model_name, &request_with_tools).expect_err("requires a schema");
@@ -569,7 +569,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         SGLangRequest::new(&model_name, &request_with_tools).expect_err("requires a schema");
@@ -594,7 +594,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: Some(&output_schema),
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -646,7 +646,7 @@ mod tests {
             tool_config: None,
             function_type: FunctionType::Chat,
             output_schema: None,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
         let sglang_response_with_metadata = SGLangResponseWithMetadata {

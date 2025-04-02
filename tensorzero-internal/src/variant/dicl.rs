@@ -513,6 +513,10 @@ impl DiclConfig {
             }
             .into());
         }
+        let extra_body = FullExtraBodyConfig {
+            extra_body: self.extra_body.clone(),
+            inference_extra_body: Default::default(),
+        };
         prepare_model_inference_request(
             messages,
             system,
@@ -521,12 +525,7 @@ impl DiclConfig {
             stream,
             inference_params,
             self.json_mode,
-            self.extra_body
-                .clone()
-                .map(|extra_body| FullExtraBodyConfig {
-                    extra_body,
-                    inference_extra_body: Default::default(),
-                }),
+            extra_body,
         )
     }
 }

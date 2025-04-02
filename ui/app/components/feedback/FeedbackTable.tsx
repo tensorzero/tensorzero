@@ -38,7 +38,7 @@ export default function FeedbackTable({
                 colSpan={4}
                 className="px-3 py-8 text-center text-fg-muted"
               >
-                No feedback found
+                No feedback found.
               </TableCell>
             </TableRow>
           ) : (

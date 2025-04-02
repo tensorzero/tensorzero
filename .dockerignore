@@ -1,3 +1,13 @@
-**/target/
-**/.venv/
-**/node_modules/
+target
+target-rust-analyzer
+**/target-rust-analyzer
+**/target
+**/build
+**/dist
+**/.venv
+**/node_modules
+**/.env*
+**/.vscode
+.git
+/recipes
+/examples

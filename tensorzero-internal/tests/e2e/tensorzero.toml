@@ -2377,175 +2377,180 @@ parameters = "../../fixtures/config/tools/get_humidity.json"
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                                  EVALS                                     │
+# │                                EVALUATIONS                                 │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[evals.test_eval]
+[evaluations.test_evaluation]
+type = "static"
 dataset_name = "test_dataset"
 function_name = "basic_test"
 
-[evals.test_eval.evaluators.happy_bool]
+[evaluations.test_evaluation.evaluators.happy_bool]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "max"
 
-[evals.test_eval.evaluators.happy_bool.variants.dummy]
+[evaluations.test_evaluation.evaluators.happy_bool.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::true"
 active = true
-system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evals.test_eval.evaluators.sad_bool]
+[evaluations.test_evaluation.evaluators.sad_bool]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "max"
 
-[evals.test_eval.evaluators.sad_bool.variants.dummy]
+[evaluations.test_evaluation.evaluators.sad_bool.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::false"
 active = true
-system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evals.test_eval.evaluators.zero]
+[evaluations.test_evaluation.evaluators.zero]
 type = "llm_judge"
 output_type = "float"
 optimize = "max"
 
-[evals.test_eval.evaluators.zero.variants.dummy]
+[evaluations.test_evaluation.evaluators.zero.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::zero"
 active = true
-system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evals.test_eval.evaluators.one]
+[evaluations.test_evaluation.evaluators.one]
 type = "llm_judge"
 output_type = "float"
 optimize = "max"
 
-[evals.test_eval.evaluators.one.variants.dummy]
+[evaluations.test_evaluation.evaluators.one.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::one"
 active = true
-system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evals.json_eval]
+[evaluations.json_evaluation]
+type = "static"
 dataset_name = "test_dataset"
 function_name = "json_success"
 
-[evals.json_eval.evaluators.happy_bool]
+[evaluations.json_evaluation.evaluators.happy_bool]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "max"
 
-[evals.json_eval.evaluators.happy_bool.variants.dummy]
+[evaluations.json_evaluation.evaluators.happy_bool.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::true"
 active = true
-system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evals.json_eval.evaluators.sad_bool]
+[evaluations.json_evaluation.evaluators.sad_bool]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "max"
 
-[evals.json_eval.evaluators.sad_bool.variants.dummy]
+[evaluations.json_evaluation.evaluators.sad_bool.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::false"
 active = true
-system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evals.json_eval.evaluators.zero]
+[evaluations.json_evaluation.evaluators.zero]
 type = "llm_judge"
 output_type = "float"
 optimize = "max"
 
-[evals.json_eval.evaluators.zero.variants.dummy]
+[evaluations.json_evaluation.evaluators.zero.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::zero"
 active = true
-system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evals.json_eval.evaluators.one]
+[evaluations.json_evaluation.evaluators.one]
 type = "llm_judge"
 output_type = "float"
 optimize = "max"
 
-[evals.json_eval.evaluators.one.variants.dummy]
+[evaluations.json_evaluation.evaluators.one.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::one"
 active = true
-system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
 
-[evals.entity_extraction]
+[evaluations.entity_extraction]
+type = "static"
 function_name = "extract_entities"
 dataset_name = "extract_entities_0.8"
 
-[evals.entity_extraction.evaluators.exact_match]
+[evaluations.entity_extraction.evaluators.exact_match]
 type = "exact_match"
 # expected to fail
 cutoff = 0.6
 
-[evals.entity_extraction.evaluators.count_sports]
+[evaluations.entity_extraction.evaluators.count_sports]
 type = "llm_judge"
 output_type = "float"
 optimize = "min"
 include = { reference_output = false }
 cutoff = 0.5
 
-[evals.entity_extraction.evaluators.count_sports.variants.mini]
+[evaluations.entity_extraction.evaluators.count_sports.variants.mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 active = true
-system_instructions = "../../fixtures/config/evals/entity_extraction/count_sports/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/entity_extraction/count_sports/system_instructions.txt"
 json_mode = "strict"
 temperature = 0.1
 
-[evals.entity_extraction.evaluators.error]
+[evaluations.entity_extraction.evaluators.error]
 type = "llm_judge"
 output_type = "float"
 optimize = "max"
 
-[evals.entity_extraction.evaluators.error.variants.dummy]
+[evaluations.entity_extraction.evaluators.error.variants.dummy]
 type = "chat_completion"
 model = "dummy::llm_judge::error"
 active = true
-system_instructions = "../../fixtures/config/evals/test_eval/llm_judge_bool/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-[evals.haiku_with_outputs]
+[evaluations.haiku_with_outputs]
+type = "static"
 function_name = "write_haiku"
 dataset_name = "good-haiku-data"
 
-[evals.haiku_with_outputs.evaluators.exact_match]
+[evaluations.haiku_with_outputs.evaluators.exact_match]
 type = "exact_match"
 
-[evals.haiku_without_outputs]
+[evaluations.haiku_without_outputs]
+type = "static"
 function_name = "write_haiku"
 dataset_name = "good-haikus-no-output"
 
-[evals.haiku_without_outputs.evaluators.exact_match]
+[evaluations.haiku_without_outputs.evaluators.exact_match]
 type = "exact_match"
 
-[evals.haiku_without_outputs.evaluators.topic_starts_with_f]
+[evaluations.haiku_without_outputs.evaluators.topic_starts_with_f]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "min"
 include = { reference_output = false }
 cutoff = 0.5
 
-[evals.haiku_without_outputs.evaluators.topic_starts_with_f.variants.mini]
+[evaluations.haiku_without_outputs.evaluators.topic_starts_with_f.variants.mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 active = true
-system_instructions = "../../fixtures/config/evals/haiku_without_outputs/topic_starts_with_f/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/haiku_without_outputs/topic_starts_with_f/system_instructions.txt"
 json_mode = "strict"
 temperature = 0

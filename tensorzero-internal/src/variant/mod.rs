@@ -409,7 +409,7 @@ fn prepare_model_inference_request<'a, 'request>(
     stream: bool,
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
-    extra_body: Option<FullExtraBodyConfig>,
+    extra_body: FullExtraBodyConfig,
 ) -> Result<ModelInferenceRequest<'request>, Error>
 where
     'a: 'request,
@@ -707,7 +707,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            None,
+            Default::default(),
         )
         .unwrap();
 
@@ -755,7 +755,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            None,
+            Default::default(),
         )
         .unwrap();
 
@@ -802,7 +802,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            None,
+            Default::default(),
         )
         .unwrap();
 
@@ -825,7 +825,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            None,
+            Default::default(),
         )
         .unwrap();
 
@@ -844,7 +844,7 @@ mod tests {
             stream,
             &inference_params,
             Some(json_mode),
-            None,
+            Default::default(),
         )
         .unwrap();
 
@@ -916,7 +916,7 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -934,7 +934,7 @@ mod tests {
                 ModelProvider {
                     name: model_name.into(),
                     config: dummy_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1021,7 +1021,7 @@ mod tests {
             output_schema: Some(&output_schema),
             tool_config: None,
             function_type: FunctionType::Json,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -1038,7 +1038,7 @@ mod tests {
                 ModelProvider {
                     name: model_name_json.into(),
                     config: dummy_provider_config_json,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1092,7 +1092,7 @@ mod tests {
                 ModelProvider {
                     name: error_model_name.into(),
                     config: error_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         };
@@ -1184,7 +1184,7 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -1209,7 +1209,7 @@ mod tests {
                     ModelProvider {
                         name: error_model_name.into(),
                         config: error_provider_config,
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
                 (
@@ -1217,7 +1217,7 @@ mod tests {
                     ModelProvider {
                         name: model_name.into(),
                         config: dummy_provider_config,
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             ]),
@@ -1312,7 +1312,7 @@ mod tests {
                 ModelProvider {
                     name: "good_provider".into(),
                     config: dummy_provider_config,
-                    extra_body: None,
+                    extra_body: Default::default(),
                 },
             )]),
         }));
@@ -1333,7 +1333,7 @@ mod tests {
             seed: None,
             tool_config: None,
             function_type: FunctionType::Chat,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -1454,7 +1454,7 @@ mod tests {
             output_schema: None,
             tool_config: None,
             function_type: FunctionType::Chat,
-            extra_body: None,
+            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -1479,7 +1479,7 @@ mod tests {
                     ModelProvider {
                         name: error_model_name.into(),
                         config: error_provider_config,
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
                 (
@@ -1487,7 +1487,7 @@ mod tests {
                     ModelProvider {
                         name: model_name.into(),
                         config: dummy_provider_config,
-                        extra_body: None,
+                        extra_body: Default::default(),
                     },
                 ),
             ]),

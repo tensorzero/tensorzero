@@ -257,6 +257,7 @@ pub async fn create_datapoint_handler(
     Path(path_params): Path<CreatePathParams>,
     StructuredJson(existing_inference): StructuredJson<ExistingInference>,
 ) -> Result<Json<CreateDatapointResponse>, Error> {
+    validate_dataset_name(&path_params.dataset)?;
     let datapoint_id = insert_from_existing(
         &app_state.clickhouse_connection_info,
         path_params,
@@ -281,6 +282,7 @@ pub async fn update_datapoint_handler(
     StructuredJson(params): StructuredJson<serde_json::Value>,
 ) -> Result<Json<CreateDatapointResponse>, Error> {
     validate_tensorzero_uuid(path_params.id, "Datapoint")?;
+    validate_dataset_name(&path_params.dataset)?;
     let fetch_context = FetchContext {
         client: &app_state.http_client,
         object_store_info: &app_state.config.object_store_info,
@@ -730,6 +732,16 @@ fn get_possibly_default_function(
     }
 }
 
+fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
+    if dataset_name == "builder" || dataset_name.starts_with("tensorzero::") {
+        Err(Error::new(ErrorDetails::InvalidDatasetName {
+            dataset_name: dataset_name.to_string(),
+        }))
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -840,5 +852,22 @@ mod test {
             Some(HashMap::from([("source".to_string(), "test".to_string())]))
         );
         assert_eq!(datapoint.auxiliary, "extra data");
+    }
+
+    #[test]
+    fn test_validate_dataset_name_builder() {
+        let err = validate_dataset_name("builder").unwrap_err();
+        assert_eq!(err.to_string(), "Invalid dataset name: builder. Datasets cannot be named \"builder\" or begin with \"tensorzero::\"");
+    }
+
+    #[test]
+    fn test_validate_dataset_name_tensorzero_prefix() {
+        let err = validate_dataset_name("tensorzero::test").unwrap_err();
+        assert_eq!(err.to_string(), "Invalid dataset name: tensorzero::test. Datasets cannot be named \"builder\" or begin with \"tensorzero::\"");
+    }
+
+    #[test]
+    fn test_validate_dataset_name_valid() {
+        validate_dataset_name("test").unwrap();
     }
 }

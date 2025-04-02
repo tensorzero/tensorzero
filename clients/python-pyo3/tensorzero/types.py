@@ -281,6 +281,21 @@ class JsonChunk:
 InferenceChunk = Union[ChatChunk, JsonChunk]
 
 
+class VariantExtraBody(TypedDict):
+    variant_name: str
+    pointer: str
+    value: t.Any
+
+
+class ProviderExtraBody(TypedDict):
+    model_provider_name: str
+    pointer: str
+    value: t.Any
+
+
+ExtraBody = Union[VariantExtraBody, ProviderExtraBody]
+
+
 def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
     finish_reason = chunk.get("finish_reason")
     finish_reason_enum = FinishReason(finish_reason) if finish_reason else None

@@ -114,27 +114,27 @@ test("parse e2e config", async () => {
     "../../fixtures/config/tools/get_temperature.json",
   );
 
-  // Test eval configs are properly generated
-  // Test that evals from the config are present
-  expect(validatedConfig.evals).toBeDefined();
-  expect(Object.keys(validatedConfig.evals).length).toBeGreaterThan(0);
+  // Test evaluation configs are properly generated
+  // Test that evaluations from the config are present
+  expect(validatedConfig.evaluations).toBeDefined();
+  expect(Object.keys(validatedConfig.evaluations).length).toBeGreaterThan(0);
 
-  // Get a sample eval and check its structure
-  const sampleEval = validatedConfig.evals["entity_test"]; // Using an eval from the test config
-  if (sampleEval) {
-    expect(sampleEval.function_name).toBeDefined();
-    expect(sampleEval.dataset_name).toBeDefined();
-    expect(sampleEval.evaluators).toBeDefined();
+  // Get a sample evaluation and check its structure
+  const sampleEvaluation = validatedConfig.evaluations["entity_test"]; // Using an evaluation from the test config
+  if (sampleEvaluation) {
+    expect(sampleEvaluation.function_name).toBeDefined();
+    expect(sampleEvaluation.dataset_name).toBeDefined();
+    expect(sampleEvaluation.evaluators).toBeDefined();
 
     // Check if evaluators are properly loaded
-    expect(Object.keys(sampleEval.evaluators).length).toBeGreaterThan(0);
+    expect(Object.keys(sampleEvaluation.evaluators).length).toBeGreaterThan(0);
 
     // If there's an exact_match evaluator, check its properties
-    const exactMatchEval = Object.entries(sampleEval.evaluators).find(
-      ([, eval_config]) => eval_config.type === "exact_match",
-    );
-    if (exactMatchEval) {
-      const [name, config] = exactMatchEval;
+    const exactMatchevaluation = Object.entries(
+      sampleEvaluation.evaluators,
+    ).find(([, evaluation_config]) => evaluation_config.type === "exact_match");
+    if (exactMatchevaluation) {
+      const [name, config] = exactMatchevaluation;
       expect(name).toBeDefined();
       expect(config.type).toBe("exact_match");
       if ("cutoff" in config) {
@@ -143,11 +143,11 @@ test("parse e2e config", async () => {
     }
 
     // If there's an llm_judge evaluator, check its properties
-    const llmJudgeEval = Object.entries(sampleEval.evaluators).find(
-      ([, eval_config]) => eval_config.type === "llm_judge",
+    const llmJudgeEvaluation = Object.entries(sampleEvaluation.evaluators).find(
+      ([, evaluation_config]) => evaluation_config.type === "llm_judge",
     );
-    if (llmJudgeEval) {
-      const [name, config] = llmJudgeEval;
+    if (llmJudgeEvaluation) {
+      const [name, config] = llmJudgeEvaluation;
       expect(name).toBeDefined();
       expect(config.type).toBe("llm_judge");
 
@@ -168,7 +168,7 @@ test("parse e2e config", async () => {
       }
 
       // Check for the generated metric
-      const metricName = `tensorzero::eval_name::entity_test::evaluator_name::${name}`;
+      const metricName = `tensorzero::evaluation_name::entity_test::evaluator_name::${name}`;
       expect(validatedConfig.metrics[metricName]).toBeDefined();
 
       if (validatedConfig.metrics[metricName]) {
@@ -190,25 +190,28 @@ test("parse empty config", async () => {
   expect(validatedConfig).toBeDefined();
 });
 
-test("parse fixture config with evals", async () => {
+test("parse fixture config with evaluations", async () => {
   const validatedConfig = await loadConfig("fixtures/config/tensorzero.toml");
   expect(validatedConfig).toBeDefined();
-  expect(validatedConfig.evals).toBeDefined();
+  expect(validatedConfig.evaluations).toBeDefined();
 
-  // Check entity_extraction eval
-  const entityExtractionEval = validatedConfig.evals["entity_extraction"];
-  expect(entityExtractionEval).toBeDefined();
-  expect(entityExtractionEval.function_name).toBe("extract_entities");
-  expect(entityExtractionEval.dataset_name).toBe("foo");
+  // Check entity_extraction evaluation
+  const entityExtractionEvaluation =
+    validatedConfig.evaluations["entity_extraction"];
+  expect(entityExtractionEvaluation).toBeDefined();
+  expect(entityExtractionEvaluation.function_name).toBe("extract_entities");
+  expect(entityExtractionEvaluation.dataset_name).toBe("foo");
 
   // Check exact_match evaluator
-  const exactMatchEvaluator = entityExtractionEval.evaluators["exact_match"];
+  const exactMatchEvaluator =
+    entityExtractionEvaluation.evaluators["exact_match"];
   expect(exactMatchEvaluator).toBeDefined();
   expect(exactMatchEvaluator.type).toBe("exact_match");
   expect(exactMatchEvaluator.cutoff).toBe(0.6);
 
   // Check count_sports evaluator (llm_judge)
-  const countSportsEvaluator = entityExtractionEval.evaluators["count_sports"];
+  const countSportsEvaluator =
+    entityExtractionEvaluation.evaluators["count_sports"];
   expect(countSportsEvaluator).toBeDefined();
   if (countSportsEvaluator.type === "llm_judge") {
     expect(countSportsEvaluator.output_type).toBe("float");
@@ -238,7 +241,7 @@ test("parse fixture config with evals", async () => {
 
   // Check for generated metric
   const countSportsMetricName =
-    "tensorzero::eval_name::entity_extraction::evaluator_name::count_sports";
+    "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports";
   expect(validatedConfig.metrics[countSportsMetricName]).toBeDefined();
 
   // Check metric properties
@@ -248,13 +251,14 @@ test("parse fixture config with evals", async () => {
     expect(countSportsMetric.level).toBe("inference");
   }
 
-  // Check haiku eval
-  const haikuEval = validatedConfig.evals["haiku"];
-  expect(haikuEval).toBeDefined();
-  expect(haikuEval.function_name).toBe("write_haiku");
+  // Check haiku evaluation
+  const haikuEvaluation = validatedConfig.evaluations["haiku"];
+  expect(haikuEvaluation).toBeDefined();
+  expect(haikuEvaluation.function_name).toBe("write_haiku");
 
   // Check topic_starts_with_f evaluator
-  const topicStartsWithFEvaluator = haikuEval.evaluators["topic_starts_with_f"];
+  const topicStartsWithFEvaluator =
+    haikuEvaluation.evaluators["topic_starts_with_f"];
   expect(topicStartsWithFEvaluator).toBeDefined();
   if (
     topicStartsWithFEvaluator &&
@@ -270,7 +274,7 @@ test("parse fixture config with evals", async () => {
 
   // Check for generated metric
   const topicStartsWithFMetricName =
-    "tensorzero::eval_name::haiku::evaluator_name::topic_starts_with_f";
+    "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f";
   expect(validatedConfig.metrics[topicStartsWithFMetricName]).toBeDefined();
 
   // Check metric properties

@@ -50,7 +50,7 @@ pub struct FilteredInferenceExtraBody {
 /// Holds the config-level and inference-level extra body options
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct FullExtraBodyConfig {
-    pub extra_body: ExtraBodyConfig,
+    pub extra_body: Option<ExtraBodyConfig>,
     pub inference_extra_body: FilteredInferenceExtraBody,
 }
 

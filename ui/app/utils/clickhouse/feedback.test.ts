@@ -86,7 +86,7 @@ test("queryCommentFeedbackByTargetId", async () => {
   checkSorting(secondBackwardPage);
   checkSorting(thirdBackwardPage);
 
-  // Check total number of items matches
+  // Check the total number of items matches
   expect(
     firstBackwardPage.length +
       secondBackwardPage.length +

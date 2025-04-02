@@ -310,6 +310,27 @@ export const Compare: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
+export const Evaluation: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <path
+      d="M8 2v11.33a.67.67 0 0 1-.67.67H3.33A1.33 1.33 0 0 1 2 12.67V3.33A1.33 1.33 0 0 1 3.33 2h9.34A1.33 1.33 0 0 1 14 3.33v4A.67.67 0 0 1 13.33 8H2"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.33"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="m10.67 12.67 1.33 1.33 2.67-2.67"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.33"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </IconWrapper>
+);
+
 export const iconComponents: Record<string, React.FC<IconProps>> = {
   TensorZeroLogo,
   Placeholder,

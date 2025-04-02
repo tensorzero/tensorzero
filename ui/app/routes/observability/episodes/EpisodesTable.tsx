@@ -46,9 +46,9 @@ export default function EpisodesTable({
             <TableRow className="hover:bg-bg-primary">
               <TableCell
                 colSpan={3}
-                className="px-3 py-2.5 text-center text-fg-muted"
+                className="px-3 py-8 text-center text-fg-muted"
               >
-                No episodes found
+                No episodes found.
               </TableCell>
             </TableRow>
           ) : (

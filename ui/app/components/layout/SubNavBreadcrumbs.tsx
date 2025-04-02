@@ -38,6 +38,7 @@ const breadcrumbConfig: BreadcrumbConfig = {
     datasets: "Datasets",
     datapoints: "Datapoints",
     datapoint: "Datapoint",
+    evaluations: "Evaluations",
   },
   specialPaths: {
     // Handle variants special case
@@ -128,6 +129,23 @@ export function SubNavBreadcrumbs() {
           });
           continue;
         }
+
+        if (prevSegment === "evaluations") {
+          breadcrumbs.push({
+            label: segment,
+            href: `/evaluations/${segment}`,
+          });
+          continue;
+        }
+
+        // Add handler for datapoint IDs within evaluations
+        if (i > 1 && pathSegments[i - 2] === "evaluations") {
+          breadcrumbs.push({
+            label: `${segment}`,
+            href: `/evaluations/${pathSegments[i - 1]}/${segment}`,
+          });
+          continue;
+        }
       }
 
       // Add standard breadcrumb if not handled by special cases
@@ -135,7 +153,7 @@ export function SubNavBreadcrumbs() {
         const category =
           segment === "supervised-fine-tuning"
             ? "optimization"
-            : segment === "datasets"
+            : segment === "datasets" || segment === "evaluations"
               ? ""
               : "observability";
         breadcrumbs.push({

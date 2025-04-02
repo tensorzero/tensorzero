@@ -11,6 +11,8 @@ import {
   GitHub,
   Globe,
   Documentation,
+  Dataset,
+  Evaluation,
 } from "~/components/icons/Icons";
 import {
   countInferencesByFunction,
@@ -18,6 +20,12 @@ import {
 } from "~/utils/clickhouse/inference";
 import { getConfig } from "~/utils/config/index.server";
 import { useLoaderData } from "react-router";
+import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
+import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
+import { useConfig } from "~/context/config";
+
+const FF_ENABLE_DATASETS =
+  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
 
 interface FeatureCardProps {
   source: string;
@@ -68,17 +76,29 @@ export async function loader() {
   const totalInferences = countsInfo.reduce((acc, curr) => acc + curr.count, 0);
   const numFunctions = Object.keys(config.functions).length;
   const numEpisodes = await countEpisodes();
+  const datasetCounts = await getDatasetCounts();
+  const numDatasets = datasetCounts.length;
+  const numEvaluationRuns = await countTotalEvaluationRuns();
 
   return {
     totalInferences,
     numFunctions,
     numEpisodes,
+    numDatasets,
+    numEvaluationRuns,
   };
 }
 
 export default function Home() {
-  const { totalInferences, numFunctions, numEpisodes } =
-    useLoaderData<typeof loader>();
+  const {
+    totalInferences,
+    numFunctions,
+    numEpisodes,
+    numDatasets,
+    numEvaluationRuns,
+  } = useLoaderData<typeof loader>();
+  const config = useConfig();
+  const numEvaluations = Object.keys(config.evaluations).length;
 
   return (
     <div className="flex flex-col">
@@ -94,7 +114,7 @@ export default function Home() {
               source="/observability/inferences"
               icon={Inferences}
               title="Inferences"
-              description={`${totalInferences.toLocaleString()} total inferences`}
+              description={`${totalInferences.toLocaleString()} inferences`}
             />
             <FeatureCard
               source="/observability/episodes"
@@ -111,7 +131,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div id="optimization" className="mb-12">
+        <div id="optimization" className="mb-16">
           <h2 className="mb-1 text-2xl font-medium">Optimization</h2>
           <p className="mb-6 max-w-[640px] text-sm text-fg-tertiary">
             Optimize your prompts, models, and inference strategies.
@@ -121,10 +141,33 @@ export default function Home() {
               source="/optimization/supervised-fine-tuning"
               icon={SupervisedFineTuning}
               title="Supervised Fine-tuning"
-              description={`${numFunctions} functions available`}
+              description={`${numFunctions} functions`}
             />
           </div>
         </div>
+
+        {FF_ENABLE_DATASETS && (
+          <div id="workflows" className="mb-12">
+            <h2 className="mb-1 text-2xl font-medium">Workflows</h2>
+            <p className="mb-6 max-w-[640px] text-sm text-fg-tertiary">
+              Manage your LLM engineering workflows.
+            </p>
+            <div className="grid gap-6 md:grid-cols-3">
+              <FeatureCard
+                source="/datasets"
+                icon={Dataset}
+                title="Datasets"
+                description={`${numDatasets} datasets`}
+              />
+              <FeatureCard
+                source="/evaluations"
+                icon={Evaluation}
+                title="Evaluations"
+                description={`${numEvaluations} evaluations, ${numEvaluationRuns} runs`}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="mt-16 border-t border-gray-200 pt-16">
           <div className="grid gap-8 md:grid-cols-3">

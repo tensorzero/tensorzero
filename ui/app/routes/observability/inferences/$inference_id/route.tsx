@@ -18,7 +18,7 @@ import {
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./InferenceBasicInfo";
 import Input from "~/components/inference/Input";
-import Output from "~/components/inference/Output";
+import Output from "./InferenceOutput";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { tensorZeroClient } from "~/utils/tensorzero.server";
 import { ParameterCard } from "./InferenceParameters";
@@ -26,7 +26,7 @@ import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesAccordion } from "./ModelInferencesAccordion";
 import { useState } from "react";
 import { useConfig } from "~/context/config";
-import { VariantResponseModal } from "./VariantResponseModal";
+import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
 import {
   PageHeader,
@@ -205,7 +205,14 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Output" />
-          <Output output={inference.output} />
+          <Output
+            output={inference.output}
+            outputSchema={
+              inference.function_type === "json"
+                ? inference.output_schema
+                : undefined
+            }
+          />
         </SectionLayout>
 
         <SectionLayout>
@@ -239,13 +246,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           </SectionLayout>
         )}
 
-        {inference.function_type === "json" && (
-          <SectionLayout>
-            <SectionHeader heading="Output Schema" />
-            <ParameterCard parameters={inference.output_schema} />
-          </SectionLayout>
-        )}
-
         {Object.keys(inference.tags).length > 0 && (
           <SectionLayout>
             <SectionHeader heading="Tags" />
@@ -265,9 +265,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           isLoading={variantInferenceIsLoading}
           setIsLoading={setVariantInferenceIsLoading}
           onClose={handleModalClose}
-          inference={inference}
+          item={inference}
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
           selectedVariant={selectedVariant}
+          source="inference"
         />
       )}
     </PageLayout>

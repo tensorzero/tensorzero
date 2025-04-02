@@ -7,7 +7,7 @@ import Output from "~/components/inference/Output";
 import { useEffect, useState, useMemo } from "react";
 import { useConfig } from "~/context/config";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
-import { VariantResponseModal } from "./VariantResponseModal";
+import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import type { Route } from "./+types/route";
 import type { ActionFunctionArgs } from "react-router";
 import {
@@ -28,21 +28,21 @@ import {
 } from "~/components/layout/PageLayout";
 import { DatapointActions } from "./DatapointActions";
 import type {
-  Input as ClickHouseInput,
-  InputMessage,
-  InputMessageContent,
+  ResolvedInput,
+  ResolvedInputMessage,
+  ResolvedInputMessageContent,
 } from "~/utils/clickhouse/common";
 import { getConfig } from "~/utils/config/index.server";
 
 /**
  * Transforms input from clickhouse format to TensorZero client format
  */
-function transformInputForTensorZero(input: ClickHouseInput) {
+function transformInputForTensorZero(input: ResolvedInput) {
   return {
     system: input.system,
-    messages: input.messages.map((msg: InputMessage) => ({
+    messages: input.messages.map((msg: ResolvedInputMessage) => ({
       role: msg.role as "system" | "user" | "assistant" | "tool",
-      content: msg.content.map((c: InputMessageContent) => {
+      content: msg.content.map((c: ResolvedInputMessageContent) => {
         if (c.type === "text") {
           return { type: "text" as const, value: c.value };
         } else if (c.type === "tool_call") {
@@ -235,7 +235,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setInput({ ...input, system });
   };
 
-  const handleMessagesChange = (messages: InputMessage[]) => {
+  const handleMessagesChange = (messages: ResolvedInputMessage[]) => {
     setInput({ ...input, messages });
   };
 
@@ -355,8 +355,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           isLoading={variantInferenceIsLoading}
           setIsLoading={setVariantInferenceIsLoading}
           onClose={handleModalClose}
-          datapoint={datapoint}
+          item={datapoint}
           selectedVariant={selectedVariant}
+          source="datapoint"
         />
       )}
     </PageLayout>
