@@ -22,13 +22,13 @@ const getBadgeStyle = (
     case "optimize":
       if (!value) return "";
       return value === "max"
-        ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-        : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
+        ? "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900 dark:text-fuchsia-300"
+        : "bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-300";
 
     case "level":
       return value === "episode"
         ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300"
-        : "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300";
+        : "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-300";
 
     default:
       return "";

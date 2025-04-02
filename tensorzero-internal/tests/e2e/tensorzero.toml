@@ -79,6 +79,23 @@ extra_body = [
     { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
 ]
 
+[models."claude-3-7-sonnet-20250219-thinking-128k"]
+routing = ["anthropic"]
+
+[models."claude-3-7-sonnet-20250219-thinking-128k".providers.anthropic]
+type = "anthropic"
+model_name = "claude-3-7-sonnet-20250219"
+extra_headers = [
+    { name = "anthropic-beta", value = "output-128k-2025-02-19"}
+]
+extra_body = [
+    # We use a budget tokens of 1024 to make sure that it doesn't think for too long,
+    # since 'stop_sequences' does not seem to apply to thinking. We set 'max_tokens'
+    # to 128k in 'test_thinking_128k'
+    { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
+    { pointer = "/stop_sequences", value = ["my_custom_stop"]}
+]
+
 [models.claude-3-haiku-20240307]
 routing = ["anthropic", "aws-bedrock"]
 
@@ -541,6 +558,13 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
+[functions.basic_test.variants.anthropic-extra-headers]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-anthropic"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "x-api-key", value = "invalid_anthropic_auth" }]
+
 [functions.basic_test.variants.anthropic-dynamic]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-anthropic-dynamic"
@@ -565,6 +589,13 @@ model = "claude-3-haiku-20240307-aws-bedrock"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/inferenceConfig/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.aws-bedrock-extra-headers]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-aws-bedrock"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Content-Length", value = "2" }]
 
 [functions.basic_test.variants.aws-bedrock-us-east-1]
 type = "chat_completion"
@@ -591,6 +622,13 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
+[functions.basic_test.variants.azure-extra-headers]
+type = "chat_completion"
+model = "gpt-4o-mini-azure"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "api-key", value = "invalid_azure_openai_auth" }]
+
 [functions.basic_test.variants.azure-dynamic]
 type = "chat_completion"
 model = "gpt-4o-mini-azure-dynamic"
@@ -609,6 +647,14 @@ model = "qwen2p5-72b-instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.fireworks-extra-headers]
+type = "chat_completion"
+model = "qwen2p5-72b-instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "invalid_fireworks_auth" }]
+
 [functions.basic_test.variants.fireworks-dynamic]
 type = "chat_completion"
 model = "llama3.3-70b-instruct-fireworks-dynamic"
@@ -634,6 +680,13 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 max_tokens = 100
 extra_body = [{ pointer = "/generationConfig/temperature", value = 0.123 }]
 
+[functions.basic_test.variants.gcp-vertex-gemini-flash-extra-headers]
+type = "chat_completion"
+model = "gemini-2.0-flash-001"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "invalid_gcp_vertex_auth" }]
+
 [functions.basic_test.variants.gcp-vertex-gemini-pro]
 type = "chat_completion"
 model = "gemini-1.5-pro-001"
@@ -652,6 +705,13 @@ model = "gemini-2.0-flash-lite"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/generationConfig/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.google-ai-studio-gemini-flash-8b-extra-headers]
+type = "chat_completion"
+model = "gemini-2.0-flash-lite"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Content-Length", value = "2" }]
 
 [functions.basic_test.variants.google-ai-studio-gemini-flash-8b-dynamic]
 type = "chat_completion"
@@ -690,6 +750,13 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
+[functions.basic_test.variants.gcp-vertex-haiku-extra-headers]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-gcp-vertex"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Content-Length", value = "2" }]
+
 [functions.basic_test.variants.mistral]
 type = "chat_completion"
 model = "open-mistral-nemo-2407"
@@ -702,6 +769,13 @@ model = "open-mistral-nemo-2407"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.mistral-extra-headers]
+type = "chat_completion"
+model = "open-mistral-nemo-2407"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "invalid_mistral_auth" }]
 
 [functions.basic_test.variants.mistral-dynamic]
 type = "chat_completion"
@@ -739,6 +813,13 @@ extra_body = [
     { pointer = "/max_completion_tokens", value = 123 },
 ]
 
+[functions.basic_test.variants.openai-extra-headers]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "Bearer: invalid_openai_auth" }]
+
 [functions.basic_test.variants.openai-o1]
 type = "chat_completion"
 model = "o1-2024-12-17"
@@ -775,6 +856,13 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
+[functions.basic_test.variants.tgi-extra-headers]
+type = "chat_completion"
+model = "phi-3.5-mini-instruct-tgi"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "invalid_tgi_auth" }]
+
 [functions.basic_test.variants.together]
 type = "chat_completion"
 model = "llama3.1-8b-instruct-together"
@@ -787,6 +875,13 @@ model = "llama3.1-8b-instruct-together"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.together-extra-headers]
+type = "chat_completion"
+model = "llama3.1-8b-instruct-together"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "Bearer invalid_together_auth" }]
 
 [functions.basic_test.variants.together-dynamic]
 type = "chat_completion"
@@ -819,6 +914,13 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
 
+[functions.basic_test.variants.sglang-extra-headers]
+type = "chat_completion"
+model = "HuggingFaceTB/SmolLM-1.7B-Instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "Bearer invalid_sglang_auth" }]
+
 [functions.basic_test.variants.vllm]
 type = "chat_completion"
 model = "microsoft/Phi-3.5-mini-instruct"
@@ -831,6 +933,14 @@ model = "microsoft/Phi-3.5-mini-instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.vllm-extra-headers]
+type = "chat_completion"
+model = "microsoft/Phi-3.5-mini-instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "invalid_vllm_auth" }]
+
 [functions.basic_test.variants.vllm-dynamic]
 type = "chat_completion"
 model = "microsoft/Phi-3.5-mini-instruct-dynamic"
@@ -849,6 +959,13 @@ model = "grok_2_1212"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.xai-extra-headers]
+type = "chat_completion"
+model = "grok_2_1212"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "Bearer invalid_xai_auth" }]
 
 [functions.basic_test.variants.xai-dynamic]
 type = "chat_completion"
@@ -874,6 +991,14 @@ model = "meta-llama/Meta-Llama-3-70B-Instruct"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.hyperbolic-extra-headers]
+type = "chat_completion"
+model = "meta-llama/Meta-Llama-3-70B-Instruct"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "Bearer invalid_hyperbolic_auth" }]
+
 [functions.basic_test.variants.hyperbolic-dynamic]
 type = "chat_completion"
 model = "meta-llama/Meta-Llama-3-70B-Instruct-dynamic"
@@ -898,6 +1023,13 @@ model = "deepseek-chat"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.deepseek-chat-extra-headers]
+type = "chat_completion"
+model = "deepseek-chat"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "Bearer sk-bad-tensorzero" }]
 
 [functions.basic_test.variants.deepseek-reasoner]
 type = "chat_completion"
@@ -2381,7 +2513,7 @@ parameters = "../../fixtures/config/tools/get_humidity.json"
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [evaluations.test_evaluation]
-dataset_name = "test_dataset"
+type = "static"
 function_name = "basic_test"
 
 [evaluations.test_evaluation.evaluators.happy_bool]
@@ -2433,6 +2565,7 @@ system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_jud
 json_mode = "on"
 
 [evaluations.json_evaluation]
+type = "static"
 dataset_name = "test_dataset"
 function_name = "json_success"
 
@@ -2486,8 +2619,8 @@ json_mode = "on"
 
 
 [evaluations.entity_extraction]
+type = "static"
 function_name = "extract_entities"
-dataset_name = "extract_entities_0.8"
 
 [evaluations.entity_extraction.evaluators.exact_match]
 type = "exact_match"
@@ -2522,15 +2655,15 @@ system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_jud
 json_mode = "on"
 
 [evaluations.haiku_with_outputs]
+type = "static"
 function_name = "write_haiku"
-dataset_name = "good-haiku-data"
 
 [evaluations.haiku_with_outputs.evaluators.exact_match]
 type = "exact_match"
 
 [evaluations.haiku_without_outputs]
+type = "static"
 function_name = "write_haiku"
-dataset_name = "good-haikus-no-output"
 
 [evaluations.haiku_without_outputs.evaluators.exact_match]
 type = "exact_match"

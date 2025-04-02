@@ -7,8 +7,8 @@ import { type VariantConfig } from "./variant";
 import {
   LLMJudgeIncludeConfigSchema,
   ExactMatchConfigSchema,
-  type EvaluationConfig,
   type EvaluatorConfig,
+  type EvaluationConfig,
 } from "./evaluations";
 import type { MetricConfig } from "./metric";
 import type { RawFunctionConfig } from "./function.server";
@@ -137,11 +137,20 @@ export const UninitializedEvaluatorConfigSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export const UninitializedEvaluationConfigSchema = z.object({
+export const UninitializedStaticEvaluationConfigSchema = z.object({
   evaluators: z.record(z.string(), UninitializedEvaluatorConfigSchema),
-  dataset_name: z.string(),
   function_name: z.string(),
 });
+
+export const UninitializedEvaluationConfigSchema = z.discriminatedUnion(
+  "type",
+  [
+    z.object({
+      type: z.literal("static"),
+      ...UninitializedStaticEvaluationConfigSchema.shape,
+    }),
+  ],
+);
 
 // Helper function to read system instructions from a file
 async function readSystemInstructions(
@@ -367,59 +376,65 @@ export const RawEvaluationConfigSchema =
         functionConfigs: Record<string, FunctionConfig>;
         metricConfigs: Record<string, MetricConfig>;
       }> {
-        // Check for valid evaluation name
-        if (evaluationName.includes("::")) {
-          throw new Error(
-            `evaluation names cannot contain "::" (referenced in [evaluations.${evaluationName}])`,
-          );
-        }
+        switch (raw.type) {
+          case "static": {
+            // Check for valid evaluation name
+            if (evaluationName.includes("::")) {
+              throw new Error(
+                `evaluation names cannot contain "::" (referenced in [evaluations.${evaluationName}])`,
+              );
+            }
 
-        // Check if referenced function exists
-        if (!functions[raw.function_name]) {
-          throw new Error(
-            `Function \`${raw.function_name}\` not found (referenced in \`[evaluations.${evaluationName}]\`)`,
-          );
-        }
+            // Check if referenced function exists
+            if (!functions[raw.function_name]) {
+              throw new Error(
+                `Function \`${raw.function_name}\` not found (referenced in \`[evaluations.${evaluationName}]\`)`,
+              );
+            }
 
-        // Load all evaluators
-        const evaluators: Record<string, EvaluatorConfig> = {};
-        const functionConfigs: Record<string, FunctionConfig> = {};
-        const metricConfigs: Record<
-          string,
-          {
-            type: "float" | "boolean";
-            optimize: "min" | "max";
-            level: "inference";
+            // Load all evaluators
+            const evaluators: Record<string, EvaluatorConfig> = {};
+            const functionConfigs: Record<string, FunctionConfig> = {};
+            const metricConfigs: Record<
+              string,
+              {
+                type: "float" | "boolean";
+                optimize: "min" | "max";
+                level: "inference";
+              }
+            > = {};
+
+            for (const [name, config] of Object.entries(raw.evaluators)) {
+              const { evaluatorConfig, functionConfig, metricConfig } =
+                await loadEvaluator(config, configPath, evaluationName, name);
+
+              // Add evaluator config
+              evaluators[name] = evaluatorConfig;
+
+              // Add function config if it exists
+              if (functionConfig) {
+                functionConfigs[getLLMJudgeFunctionName(evaluationName, name)] =
+                  functionConfig;
+              }
+
+              // Add metric config
+              metricConfigs[getEvaluatorMetricName(evaluationName, name)] =
+                metricConfig;
+            }
+
+            return {
+              EvaluationConfig: {
+                type: "static",
+                evaluators,
+                function_name: raw.function_name,
+              },
+              functionConfigs,
+              metricConfigs,
+            };
           }
-        > = {};
-
-        for (const [name, config] of Object.entries(raw.evaluators)) {
-          const { evaluatorConfig, functionConfig, metricConfig } =
-            await loadEvaluator(config, configPath, evaluationName, name);
-
-          // Add evaluator config
-          evaluators[name] = evaluatorConfig;
-
-          // Add function config if it exists
-          if (functionConfig) {
-            functionConfigs[getLLMJudgeFunctionName(evaluationName, name)] =
-              functionConfig;
-          }
-
-          // Add metric config
-          metricConfigs[getEvaluatorMetricName(evaluationName, name)] =
-            metricConfig;
+          default:
+            throw new Error(`Unsupported evaluation type: ${raw.type}`);
         }
-
-        return {
-          EvaluationConfig: {
-            evaluators,
-            dataset_name: raw.dataset_name,
-            function_name: raw.function_name,
-          },
-          functionConfigs,
-          metricConfigs,
-        };
       },
     };
   });

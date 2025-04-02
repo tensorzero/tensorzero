@@ -7,16 +7,18 @@ import {
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
-import type { EvaluationConfig } from "~/utils/config/evaluations";
+import type { StaticEvaluationConfig } from "~/utils/config/evaluations";
 
 interface BasicInfoProps {
   evaluation_name: string;
-  evaluation_config: EvaluationConfig;
+  evaluation_config: StaticEvaluationConfig;
+  dataset_name: string;
 }
 
 export default function BasicInfo({
   evaluation_name,
   evaluation_config,
+  dataset_name,
 }: BasicInfoProps) {
   const config = useConfig();
 
@@ -24,8 +26,6 @@ export default function BasicInfo({
   const functionConfig = config.functions[functionName];
   const functionType = functionConfig?.type;
   const functionIconConfig = getFunctionTypeIcon(functionType);
-
-  const datasetName = evaluation_config.dataset_name;
 
   return (
     <BasicInfoLayout>
@@ -57,8 +57,8 @@ export default function BasicInfo({
         <BasicInfoItemTitle>Dataset</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <Chip
-            label={datasetName}
-            link={`/datasets/${datasetName}`}
+            label={dataset_name}
+            link={`/datasets/${dataset_name}`}
             font="mono"
           />
         </BasicInfoItemContent>

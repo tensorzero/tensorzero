@@ -44,22 +44,27 @@ export function getRunningEvaluation(
 
 export function runEvaluation(
   evaluationName: string,
+  datasetName: string,
   variantName: string,
   concurrency: number,
 ): Promise<EvaluationStartInfo> {
   const evaluationsPath = getEvaluationsPath();
   const gatewayURL = getGatewayURL();
   // Construct the command to run the evaluations binary
-  // Example: evaluations --gateway-url http://localhost:3000 --name entity_extraction --variant llama_8b_initial_prompt --concurrency 10 --format jsonl
+  // Example: evaluations --gateway-url http://localhost:3000 --name entity_extraction --variant-name llama_8b_initial_prompt --concurrency 10 --format jsonl
+  // We do not need special escaping for the evaluation name or variant name because
+  // Node's spawn() does not use the shell to run the command.
   const command = [
     evaluationsPath,
     "--gateway-url",
     gatewayURL,
     "--config-file",
     getConfigPath(),
-    "--name",
+    "--evaluation-name",
     evaluationName,
-    "--variant",
+    "--dataset-name",
+    datasetName,
+    "--variant-name",
     variantName,
     "--concurrency",
     concurrency.toString(),

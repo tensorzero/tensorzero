@@ -541,6 +541,7 @@ impl FuserConfig {
         }
         let extra_body = FullExtraBodyConfig {
             extra_body: self.inner.extra_body.clone(),
+            variant_extra_headers: self.inner.extra_headers.clone(),
             inference_extra_body: Default::default(),
         };
         let model_inference_request = prepare_model_inference_request(
@@ -1032,6 +1033,7 @@ mod tests {
                             ..Default::default()
                         }),
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 )]),
             },
@@ -1126,6 +1128,7 @@ mod tests {
                                 ..Default::default()
                             }),
                             extra_body: Default::default(),
+                            extra_headers: Default::default(),
                         },
                     )]),
                 },
@@ -1190,6 +1193,7 @@ mod tests {
                                 ..Default::default()
                             }),
                             extra_body: Default::default(),
+                            extra_headers: Default::default(),
                         },
                     )]),
                 },

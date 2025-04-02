@@ -134,7 +134,6 @@ describe("searchEvaluationRuns", () => {
 describe("getEvaluationResults", () => {
   test("should return correct results for haiku evaluation", async () => {
     const results = await getEvaluationResults(
-      "foo",
       "write_haiku",
       "chat",
       [
@@ -188,7 +187,6 @@ describe("getEvaluationResults", () => {
     // We test here that it is not included and the data is ragged due to the datapoint at the top of the
     // table only having one evaluation run.
     const results = await getEvaluationResults(
-      "foo",
       "extract_entities",
       "json",
       [
@@ -223,7 +221,6 @@ describe("getEvaluationResults", () => {
 
   test("should return correct results for ragged haiku evaluation", async () => {
     const results = await getEvaluationResults(
-      "foo",
       "write_haiku",
       "chat",
       [
@@ -284,7 +281,6 @@ describe("getEvaluationResults", () => {
 describe("getEvaluationStatistics", () => {
   test("should return correct statistics for haiku evaluation", async () => {
     const statistics = await getEvaluationStatistics(
-      "foo",
       "write_haiku",
       "chat",
       [
@@ -316,7 +312,6 @@ describe("getEvaluationStatistics", () => {
 
   test("should return correct statistics for entity_extraction evaluation", async () => {
     const statistics = await getEvaluationStatistics(
-      "foo",
       "extract_entities",
       "json",
       [
@@ -374,7 +369,6 @@ describe("getEvaluationStatistics", () => {
 describe("countDatapointsForEvaluation", () => {
   test("should return correct number of datapoints for haiku evaluation", async () => {
     const datapoints = await countDatapointsForEvaluation(
-      "foo",
       "write_haiku",
       "chat",
       ["0195aef7-96fe-7d60-a2e6-5a6ea990c425"],
@@ -385,7 +379,6 @@ describe("countDatapointsForEvaluation", () => {
 
   test("should return correct number of datapoints for entity_extraction evaluation", async () => {
     const datapoints = await countDatapointsForEvaluation(
-      "foo",
       "extract_entities",
       "json",
       [
@@ -418,6 +411,7 @@ describe("getEvaluationRunInfo", () => {
       function_name: "extract_entities",
       variant_name: "llama_8b_initial_prompt",
       last_inference_timestamp: "2025-03-23T21:56:17Z",
+      dataset_name: "foo",
     });
 
     // Check structure and content of another row

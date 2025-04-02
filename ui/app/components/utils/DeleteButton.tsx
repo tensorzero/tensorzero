@@ -1,6 +1,12 @@
 import { Trash2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { useState } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 
 interface DeleteButtonProps {
   onClick: () => void;
@@ -54,14 +60,23 @@ export function DeleteButton({
   }
 
   return (
-    <Button
-      variant="outline"
-      size="iconSm"
-      className={className}
-      disabled={isLoading}
-      onClick={handleInitialClick}
-    >
-      <Trash2 className="h-4 w-4" />
-    </Button>
+    <TooltipProvider>
+      <Tooltip delayDuration={100}>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            size="iconSm"
+            className={className}
+            disabled={isLoading}
+            onClick={handleInitialClick}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Delete</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
