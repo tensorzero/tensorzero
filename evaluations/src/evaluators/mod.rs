@@ -46,7 +46,6 @@ pub(crate) async fn evaluate_inference(
                 let tensorzero_client = tensorzero_client.clone();
                 let evaluator_name_clone = evaluator_name.clone();
 
-                // Run directly without the inner spawn
                 let result = run_evaluator(
                     &evaluation_config,
                     evaluator_name_clone.clone(),
