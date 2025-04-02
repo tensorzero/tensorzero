@@ -907,12 +907,12 @@ async fn put_deduped_chat_datapoint(
            AND new_data.source_inference_id = existing.source_inference_id -- Match source_id
     -- No WHERE clause here, so we see all rows from new_data and their join results
         FORMAT JSONEachRow;
+    {}
         "#,
+        serialized_datapoint
     );
 
-    clickhouse
-        .run_query_with_body(query.to_string(), serialized_datapoint)
-        .await
+    clickhouse.run_query_all_body(query).await
 }
 
 async fn put_deduped_json_datapoint(

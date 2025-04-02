@@ -289,6 +289,52 @@ impl ClickHouseConnectionInfo {
         }
     }
 
+    pub async fn run_query_all_body(&self, body: String) -> Result<String, Error> {
+        match self {
+            Self::Disabled => Ok("".to_string()),
+            Self::Mock { .. } => Ok("".to_string()),
+            Self::Production {
+                database_url,
+                client,
+                ..
+            } => {
+                let database_url = Url::parse(database_url.expose_secret()).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: "Invalid ClickHouse database URL".to_string(),
+                    })
+                })?;
+                println!("database_url: {}", database_url.to_string());
+                println!("body: {}", body);
+
+                let response = client
+                    .post(database_url)
+                    .body(body)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: e.to_string(),
+                        })
+                    })?;
+                let status = response.status();
+
+                let response_body = response.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: e.to_string(),
+                    })
+                })?;
+                println!("response body: {}", response_body);
+
+                match status {
+                    reqwest::StatusCode::OK => Ok(response_body),
+                    _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
+                        message: response_body,
+                    })),
+                }
+            }
+        }
+    }
+
     pub async fn create_database(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
