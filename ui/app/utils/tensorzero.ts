@@ -299,6 +299,15 @@ export const DatapointResponseSchema = z.object({
 export type DatapointResponse = z.infer<typeof DatapointResponseSchema>;
 
 /**
+ * Schema for status response
+ */
+export const StatusResponseSchema = z.object({
+  status: z.string(),
+  version: z.string(),
+});
+export type StatusResponse = z.infer<typeof StatusResponseSchema>;
+
+/**
  * A client for calling the TensorZero Gateway inference and feedback endpoints.
  */
 export class TensorZeroClient {
@@ -509,5 +518,14 @@ export class TensorZeroClient {
       throw new Error(`Failed to get object: ${response.statusText}`);
     }
     return response.text();
+  }
+
+  async status(): Promise<StatusResponse> {
+    const url = `${this.baseUrl}/status`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to get status: ${response.statusText}`);
+    }
+    return StatusResponseSchema.parse(await response.json());
   }
 }
