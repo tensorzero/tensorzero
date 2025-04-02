@@ -200,7 +200,12 @@ async fn insert_from_existing(
                 is_deleted: false,
                 source_inference_id: Some(existing.inference_id),
             };
-            put_deduped_json_datapoint(clickhouse, &datapoint).await?;
+            let rows_written = put_deduped_json_datapoint(clickhouse, &datapoint).await?;
+            if rows_written == 0 {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Datapoint with this source_inference_id already exists".to_string(),
+                }));
+            }
         }
         TaggedInferenceDatabaseInsert::Chat(inference) => {
             let output = match existing.output {
@@ -232,7 +237,12 @@ async fn insert_from_existing(
                 is_deleted: false,
                 source_inference_id: Some(existing.inference_id),
             };
-            put_deduped_chat_datapoint(clickhouse, &datapoint).await?;
+            let rows_written = put_deduped_chat_datapoint(clickhouse, &datapoint).await?;
+            if rows_written == 0 {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Datapoint with this source_inference_id already exists".to_string(),
+                }));
+            }
         }
     }
     Ok(datapoint_id)
@@ -347,7 +357,14 @@ pub async fn update_datapoint_handler(
                 is_deleted: false,
                 source_inference_id: chat.source_inference_id,
             };
-            put_deduped_chat_datapoint(&app_state.clickhouse_connection_info, &datapoint).await?;
+            let rows_written =
+                put_deduped_chat_datapoint(&app_state.clickhouse_connection_info, &datapoint)
+                    .await?;
+            if rows_written == 0 {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Datapoint with this source_inference_id already exists".to_string(),
+                }));
+            }
         }
         FunctionConfig::Json(_) => {
             let json: SyntheticJsonInferenceDatapoint =
@@ -403,7 +420,14 @@ pub async fn update_datapoint_handler(
                 is_deleted: false,
                 source_inference_id: json.source_inference_id,
             };
-            put_deduped_json_datapoint(&app_state.clickhouse_connection_info, &datapoint).await?;
+            let rows_written =
+                put_deduped_json_datapoint(&app_state.clickhouse_connection_info, &datapoint)
+                    .await?;
+            if rows_written == 0 {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Datapoint with this source_inference_id already exists".to_string(),
+                }));
+            }
         }
     }
     Ok(Json(CreateDatapointResponse { id: path_params.id }))
@@ -793,6 +817,7 @@ async fn put_deduped_chat_datapoint(
           ON new_data.dataset_name = existing.dataset_name
              AND new_data.function_name = existing.function_name
              AND new_data.source_inference_id = existing.source_inference_id
+             AND new_data.id != existing.id
         WHERE existing.source_inference_id IS NULL
         "#;
 
@@ -850,6 +875,7 @@ async fn put_deduped_json_datapoint(
           ON new_data.dataset_name = existing.dataset_name
              AND new_data.function_name = existing.function_name
              AND new_data.source_inference_id = existing.source_inference_id
+             AND new_data.id != existing.id
         WHERE existing.source_inference_id IS NULL
         "#;
 

@@ -13,7 +13,7 @@ use tensorzero_internal::clickhouse::test_helpers::{
 };
 
 #[tokio::test]
-async fn test_datapoint_insert_synthetic_chat_foo() {
+async fn test_datapoint_insert_synthetic_chat() {
     let clickhouse = get_clickhouse().await;
     let client = Client::new();
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
@@ -106,7 +106,8 @@ async fn test_datapoint_insert_synthetic_chat_foo() {
         .send()
         .await.unwrap();
 
-    // TODO: later check that this is a 400
+    let status = resp.status();
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 
     // Check that the datapoint was not inserted into clickhouse
     let datapoint = select_chat_datapoint_clickhouse(&clickhouse, new_datapoint_id).await;
@@ -301,7 +302,8 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -312,6 +314,7 @@ async fn test_datapoint_insert_synthetic_json() {
     let client = Client::new();
     let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
+    let source_inference_id = Uuid::now_v7();
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
@@ -322,6 +325,7 @@ async fn test_datapoint_insert_synthetic_json() {
             "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
             "output": {"answer": "Hello"},
             "output_schema": {},
+            "source_inference_id": source_inference_id,
         }))
         .send()
         .await
@@ -377,7 +381,8 @@ async fn test_datapoint_insert_synthetic_json() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": source_inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
 
@@ -415,6 +420,8 @@ async fn test_datapoint_insert_synthetic_json() {
     tokio::time::sleep(Duration::from_millis(1500)).await;
 
     // Now try with the correct schema
+    // NOTE: This tests the case where the source_inference_id is the same as the existing datapoint
+    // but we are overwriting the same datapoint with a new one
     let new_resp = client
     .put(get_gateway_endpoint(&format!(
         "/datasets/{dataset_name}/datapoints/{datapoint_id}",
@@ -431,6 +438,7 @@ async fn test_datapoint_insert_synthetic_json() {
             "required": ["answer"],
             "additionalProperties": false
         },
+        "source_inference_id": source_inference_id,
     }))
     .send()
     .await
@@ -487,9 +495,42 @@ async fn test_datapoint_insert_synthetic_json() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": source_inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
+
+    // TODO: try with a new datapoint_id and the same source_inference_id
+    // and verify that you get 400 and there is no write
+    let new_datapoint_id = Uuid::now_v7();
+    let new_resp = client
+    .put(get_gateway_endpoint(&format!(
+        "/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
+    )))
+    .json(&json!({
+        "function_name": "json_success",
+        "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+        "output": {"answer": "New answer"},
+        "output_schema": {
+            "type": "object",
+            "properties": {
+                "answer": {"type": "string"}
+            },
+            "required": ["answer"],
+            "additionalProperties": false
+        },
+        "source_inference_id": source_inference_id,
+    }))
+    .send()
+    .await
+    .unwrap();
+    let status = new_resp.status();
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Check that the datapoint was not inserted into clickhouse
+    let datapoint = select_json_datapoint_clickhouse(&clickhouse, new_datapoint_id).await;
+    println!("datapoint: {:?}", datapoint);
+    assert!(datapoint.is_none());
 }
 
 #[tokio::test]
@@ -769,7 +810,8 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "tags": {},
       "auxiliary": "{}",
       "is_deleted": false,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
 
@@ -825,7 +867,8 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "tags": {},
       "auxiliary": "{}",
       "is_deleted": true,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
     assert_ne!(
@@ -945,7 +988,8 @@ async fn test_datapoint_insert_output_none_chat() {
       "tags": {},
       "auxiliary": "{}",
       "is_deleted": false,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
 }
@@ -1100,7 +1144,8 @@ async fn test_datapoint_insert_output_demonstration_chat() {
       "tags": {},
       "auxiliary": "{}",
       "is_deleted": false,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
 }
@@ -1187,7 +1232,8 @@ async fn test_datapoint_insert_output_inherit_json() {
       "tags": {},
       "auxiliary": "{}",
       "is_deleted": false,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
 
@@ -1243,7 +1289,8 @@ async fn test_datapoint_insert_output_inherit_json() {
       "tags": {},
       "auxiliary": "{}",
       "is_deleted": true,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": inference_id.to_string(),
     });
     assert_eq!(
         datapoint,
@@ -1339,7 +1386,8 @@ async fn test_datapoint_insert_output_none_json() {
       "tags": {},
       "auxiliary": "{}",
       "is_deleted": false,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
 }
@@ -1448,7 +1496,8 @@ async fn test_datapoint_insert_output_demonstration_json() {
       "tags": {},
       "auxiliary": "{}",
       "is_deleted": false,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": inference_id.to_string(),
     });
     assert_eq!(datapoint, expected);
 }
@@ -1581,7 +1630,8 @@ async fn test_datapoint_insert_missing_output_chat() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1644,7 +1694,8 @@ async fn test_datapoint_insert_null_output_chat() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1708,7 +1759,8 @@ async fn test_datapoint_insert_missing_output_json() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1772,7 +1824,8 @@ async fn test_datapoint_insert_null_output_json() {
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
-      "staled_at": null
+      "staled_at": null,
+      "source_inference_id": null,
     });
     assert_eq!(datapoint, expected);
 }

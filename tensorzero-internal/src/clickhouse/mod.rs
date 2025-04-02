@@ -314,15 +314,6 @@ impl ClickHouseConnectionInfo {
                         written_rows: 0,
                     }
                 };
-                // Print all response headers
-                println!("ClickHouse Response Headers:");
-                for (name, value) in res.headers() {
-                    println!(
-                        "  {}: {}",
-                        name,
-                        value.to_str().unwrap_or("<non-utf8 value>")
-                    );
-                }
 
                 let response_body = res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseQuery {
