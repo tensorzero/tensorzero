@@ -23,7 +23,7 @@ use crate::{
 };
 
 use super::{
-    helpers::inject_extra_body,
+    helpers::inject_extra_request_data,
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
         tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse,
@@ -147,7 +147,7 @@ impl InferenceProvider for FireworksProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -160,6 +160,7 @@ impl InferenceProvider for FireworksProvider {
             .post(request_url)
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
+            .headers(headers)
             .json(&request_body)
             .send()
             .await
@@ -237,7 +238,7 @@ impl InferenceProvider for FireworksProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -259,6 +260,7 @@ impl InferenceProvider for FireworksProvider {
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {

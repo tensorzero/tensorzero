@@ -58,7 +58,7 @@ pub struct Args {
 
     /// Name of the variant to run.
     #[arg(short, long)]
-    pub variant: String,
+    pub variant_name: String,
 
     /// Number of concurrent requests to make.
     #[arg(short, long, default_value = "1")]
@@ -113,7 +113,7 @@ pub async fn run_evaluation(
         function_config,
     )
     .await?;
-    let variant = Arc::new(args.variant);
+    let variant = Arc::new(args.variant_name);
     let evaluation_name = Arc::new(args.name);
     let dataset_len = dataset.len();
     let mut task_id_to_datapoint_id = HashMap::new();

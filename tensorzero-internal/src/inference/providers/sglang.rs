@@ -21,7 +21,7 @@ use crate::inference::types::{
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
@@ -127,7 +127,7 @@ impl InferenceProvider for SGLangProvider {
                     message: format!("Error serializing SGLang request: {e}"),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -144,6 +144,7 @@ impl InferenceProvider for SGLangProvider {
         }
         let res = request_builder
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
@@ -218,7 +219,7 @@ impl InferenceProvider for SGLangProvider {
                     message: format!("Error serializing SGLang request: {e}"),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -240,6 +241,7 @@ impl InferenceProvider for SGLangProvider {
         }
         let event_source = request_builder
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {

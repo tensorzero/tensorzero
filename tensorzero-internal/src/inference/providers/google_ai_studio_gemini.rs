@@ -32,7 +32,7 @@ use crate::model::{build_creds_caching_default, Credential, CredentialLocation, 
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::convert_stream_error;
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
@@ -154,7 +154,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 message: format!("Error serializing Gemini request: {e}"),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -168,6 +168,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         let res = http_client
             .post(url)
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
@@ -239,7 +240,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 message: format!("Error serializing Gemini request: {e}"),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -258,6 +259,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         let event_source = http_client
             .post(url)
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {

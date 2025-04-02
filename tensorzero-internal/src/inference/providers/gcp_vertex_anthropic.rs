@@ -34,7 +34,7 @@ use super::anthropic::{
     prefill_json_chunk_response, prefill_json_response, AnthropicMessageDelta, AnthropicStopReason,
 };
 use super::gcp_vertex_gemini::{default_api_key_location, GCPVertexCredentials};
-use super::helpers::{inject_extra_body, peek_first_chunk};
+use super::helpers::{inject_extra_request_data, peek_first_chunk};
 use super::openai::convert_stream_error;
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
@@ -101,7 +101,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 message: format!("Error serializing GCP Vertex Anthropic request: {e}"),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -115,6 +115,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             .post(&self.request_url)
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
@@ -190,7 +191,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
                 message: format!("Error serializing GCP Vertex Anthropic request: {e}"),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -209,6 +210,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             .post(&self.streaming_request_url)
             .bearer_auth(api_key.expose_secret())
             .header("content-type", "application/json")
+            .headers(headers)
             .json(&request_body)
             .eventsource()
             .map_err(|e| {
