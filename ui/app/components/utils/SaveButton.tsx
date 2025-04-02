@@ -1,5 +1,11 @@
 import { Save } from "lucide-react";
 import { Button } from "~/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 
 interface SaveButtonProps {
   onClick: () => void;
@@ -13,14 +19,23 @@ export function SaveButton({
   disabled = false,
 }: SaveButtonProps) {
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={onClick}
-      className={className}
-      disabled={disabled}
-    >
-      <Save className="h-4 w-4" />
-    </Button>
+    <TooltipProvider>
+      <Tooltip delayDuration={100}>
+        <TooltipTrigger asChild>
+          <Button
+            variant="outline"
+            size="iconSm"
+            onClick={onClick}
+            className={className}
+            disabled={disabled}
+          >
+            <Save className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Save</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

@@ -284,10 +284,12 @@ jobs:
         clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
     steps:
       - uses: actions/checkout@v4
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
