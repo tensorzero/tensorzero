@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    clickhouse::ClickHouseConnectionInfo,
+    clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     config_parser::Config,
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigChat},
@@ -748,19 +748,34 @@ fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
     }
 }
 
+/// Puts a chat datapoint into ClickHouse but only
+/// if it doesn't have a source_inference_id that already exists for this dataset.
+/// Returns the number of rows written to ClickHouse
 async fn put_deduped_chat_datapoint(
     clickhouse: &ClickHouseConnectionInfo,
     datapoint: &ChatInferenceDatapoint,
-) -> Result<(), Error> {
+) -> Result<u64, Error> {
     let serialized_datapoint = serde_json::to_string(datapoint).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
             message: format!("Failed to serialize datapoint: {}", e),
         })
     })?;
 
-    let query = format!(
-        r#"
-        INSERT INTO ChatInferenceDatapoint
+    let query = r#"
+    INSERT INTO ChatInferenceDatapoint
+        (
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            tool_params,
+            tags,
+            auxiliary,
+            is_deleted,
+            source_inference_id
+        )
         SELECT
             new_data.dataset_name,
             new_data.function_name,
@@ -772,54 +787,52 @@ async fn put_deduped_chat_datapoint(
             new_data.tags,
             new_data.auxiliary,
             new_data.is_deleted,
-            new_data.source_inference_id
-        FROM (
-            SELECT *
-            FROM input(
-                'dataset_name LowCardinality(String),
-                 function_name LowCardinality(String),
-                 id UUID,
-                 episode_id Nullable(UUID),
-                 input String,
-                 output Nullable(String),
-                 tool_params String,
-                 tags Map(String, String),
-                 auxiliary String,
-                 is_deleted Bool,
-                 source_inference_id Nullable(UUID)'
-            )
-            FORMAT JSONEachRow
-            {}
-        ) AS new_data
+            new_data.source_inference_id,
+        FROM new_data
         LEFT JOIN ChatInferenceDatapoint AS existing
-          ON new_data.source_inference_id IS NOT NULL
-             AND new_data.dataset_name = existing.dataset_name
+          ON new_data.dataset_name = existing.dataset_name
              AND new_data.function_name = existing.function_name
              AND new_data.source_inference_id = existing.source_inference_id
-        WHERE new_data.source_inference_id IS NULL
-           OR existing.id IS NULL;
-        "#,
-        serialized_datapoint
-    );
+        WHERE existing.source_inference_id IS NULL
+        "#;
 
-    clickhouse.run_query(query, None).await?;
-
-    Ok(())
+    let external_data = ExternalDataInfo {
+        external_data_name: "new_data".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, source_inference_id Nullable(UUID)".to_string(),
+        format: "JSONEachRow".to_string(),
+        data: serialized_datapoint,
+    };
+    let result = clickhouse
+        .run_query_with_external_data(external_data, query.to_string())
+        .await?;
+    Ok(result.metadata.written_rows)
 }
 
 async fn put_deduped_json_datapoint(
     clickhouse: &ClickHouseConnectionInfo,
     datapoint: &JsonInferenceDatapoint,
-) -> Result<(), Error> {
+) -> Result<u64, Error> {
     let serialized_datapoint = serde_json::to_string(datapoint).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
             message: format!("Failed to serialize datapoint: {}", e),
         })
     })?;
 
-    let query = format!(
-        r#"
-        INSERT INTO tensorzero_e2e_tests.JsonInferenceDatapoint
+    let query = r#"
+        INSERT INTO JsonInferenceDatapoint
+        (
+            dataset_name,
+            function_name,
+            id,
+            episode_id,
+            input,
+            output,
+            output_schema,
+            tags,
+            auxiliary,
+            is_deleted,
+            source_inference_id
+        )
         SELECT
             new_data.dataset_name,
             new_data.function_name,
@@ -832,38 +845,24 @@ async fn put_deduped_json_datapoint(
             new_data.auxiliary,
             new_data.is_deleted,
             new_data.source_inference_id
-        FROM (
-            SELECT *
-            FROM input(
-                'dataset_name LowCardinality(String),
-                 function_name LowCardinality(String),
-                 id UUID,
-                 episode_id Nullable(UUID),
-                 input String,
-                 output Nullable(String),
-                 output_schema String,
-                 tags Map(String, String),
-                 auxiliary String,
-                 is_deleted Bool,
-                 source_inference_id Nullable(UUID)'
-            )
-            FORMAT JSONEachRow
-            {}
-        ) AS new_data
-        LEFT JOIN tensorzero_e2e_tests.JsonInferenceDatapoint AS existing
-          ON new_data.source_inference_id IS NOT NULL
-             AND new_data.dataset_name = existing.dataset_name
+        FROM new_data
+        LEFT JOIN JsonInferenceDatapoint AS existing
+          ON new_data.dataset_name = existing.dataset_name
              AND new_data.function_name = existing.function_name
              AND new_data.source_inference_id = existing.source_inference_id
-        WHERE new_data.source_inference_id IS NULL
-           OR existing.id IS NULL;
-        "#,
-        serialized_datapoint
-    );
+        WHERE existing.source_inference_id IS NULL
+        "#;
 
-    clickhouse.run_query(query, None).await?;
-
-    Ok(())
+    let external_data = ExternalDataInfo {
+        external_data_name: "new_data".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, source_inference_id Nullable(UUID)".to_string(),
+        format: "JSONEachRow".to_string(),
+        data: serialized_datapoint,
+    };
+    let result = clickhouse
+        .run_query_with_external_data(external_data, query.to_string())
+        .await?;
+    Ok(result.metadata.written_rows)
 }
 
 #[cfg(test)]
