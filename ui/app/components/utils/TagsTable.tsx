@@ -9,9 +9,6 @@ import {
 import { Code } from "~/components/ui/code";
 import { useNavigate } from "react-router";
 
-const FF_ENABLE_DATASETS =
-  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
-
 interface TagsTableProps {
   tags: Record<string, string>;
 }
@@ -20,13 +17,11 @@ export function TagsTable({ tags }: TagsTableProps) {
   const navigate = useNavigate();
 
   // Hardcoded list of keys that should trigger navigation
-  const navigableKeys = FF_ENABLE_DATASETS
-    ? [
-        "tensorzero::evaluation_name",
-        "tensorzero::dataset_name",
-        "tensorzero::evaluator_inference_id",
-      ]
-    : [];
+  const navigableKeys = [
+    "tensorzero::evaluation_name",
+    "tensorzero::dataset_name",
+    "tensorzero::evaluator_inference_id",
+  ];
   // The following 2 keys only get links if the evaluation or dataset name is present
   // Since that information is not guaranteed to be present,
   // we shouldn't add a cursor pointer to the row if that is missing
