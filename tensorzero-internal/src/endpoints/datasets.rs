@@ -906,12 +906,13 @@ async fn put_deduped_chat_datapoint(
            AND new_data.function_name = existing.function_name -- Match function_name
            AND new_data.source_inference_id = existing.source_inference_id -- Match source_id
     -- No WHERE clause here, so we see all rows from new_data and their join results
-        FORMAT JSONEachRow {}
+        FORMAT JSONEachRow;
         "#,
-        serialized_datapoint
     );
 
-    clickhouse.run_query(query.to_string(), None).await
+    clickhouse
+        .run_query_with_body(query.to_string(), serialized_datapoint)
+        .await
 }
 
 async fn put_deduped_json_datapoint(

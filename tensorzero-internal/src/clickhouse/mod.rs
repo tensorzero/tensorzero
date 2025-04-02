@@ -257,6 +257,8 @@ impl ClickHouseConnectionInfo {
                 })?;
                 // URLEncode the query and set query=query as a parameter
                 database_url.query_pairs_mut().append_pair("query", &query);
+                println!("database_url: {}", database_url.to_string());
+                println!("body: {}", body);
 
                 let response = client
                     .post(database_url)
