@@ -23,7 +23,7 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::helpers::{inject_extra_body, peek_first_chunk};
+use super::helpers::{inject_extra_request_data, peek_first_chunk};
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
@@ -133,7 +133,7 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
                     message: format!("Failed to deserialize AWS Bedrock request body: {e}"),
                 })
             })?;
-            inject_extra_body(
+            let headers = inject_extra_request_data(
                 &self.extra_body,
                 self.model_provider_info.clone(),
                 &self.model_name,
@@ -161,6 +161,14 @@ fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
                 Err(e) => e.into_inner(),
             };
             *body = Some(raw_request);
+
+            // We iterate over a reference and clone, since `header.into_iter()`
+            // produces (Option<HeaderName>, HeaderValue)
+            for (name, value) in &headers {
+                http_request
+                    .headers_mut()
+                    .insert(name.clone(), value.clone());
+            }
             Ok(())
         }
     }
