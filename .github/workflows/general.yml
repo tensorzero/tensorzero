@@ -362,10 +362,6 @@ jobs:
         working-directory: ui
         run: pnpm install --frozen-lockfile
 
-      - name: Install playwright dependencies
-        working-directory: ui
-        run: pnpm exec playwright install --with-deps chromium
-
       - name: Start services for ui tests
         working-directory: ui
         run: |
