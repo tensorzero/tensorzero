@@ -28,7 +28,7 @@ test("countInferencesForFunction returns correct counts", async () => {
     type: "json",
     variants: {},
   });
-  expect(jsonCount).toBe(524);
+  expect(jsonCount).toBe(566);
 
   const chatCount = await countInferencesForFunction("write_haiku", {
     type: "chat",
@@ -118,7 +118,7 @@ test("queryInferenceTable pages through all results correctly using before", asy
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements
-  expect(totalElements).toBe(3179);
+  expect(totalElements).toBe(3263);
 
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
@@ -178,7 +178,7 @@ test("queryInferenceTable pages through all results correctly using after", asyn
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements matches the previous test
-  expect(totalElements).toBe(3178); // One less than with before because we excluded the first ID
+  expect(totalElements).toBe(3262); // One less than with before because we excluded the first ID
 
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
@@ -317,13 +317,13 @@ test("queryInferenceTableByEpisodeId pages through all results correctly using a
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0195e31b-68d6-7001-b7b7-fde770175c65");
+  expect(bounds.last_id).toBe("0195f845-a261-72d2-8686-774b967d938e");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0195e31b-68d6-7001-b7b7-fde770175c65");
+  expect(bounds.last_id).toBe("0195f845-a261-72d2-8686-774b967d938e");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -376,7 +376,7 @@ test("queryInferenceTableBoundsByFunctionName", async () => {
     function_name: "extract_entities",
   });
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0195c501-b126-7181-8bed-3558a7a7348e");
+  expect(bounds.last_id).toBe("0195f845-9862-7a53-b35e-1ee5fa8ae316");
 });
 
 test("queryInferenceTableByVariantName", async () => {
@@ -509,7 +509,7 @@ test("queryEpisodeTable pages through all results correctly using before", async
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements
-  expect(totalElements).toBe(1648);
+  expect(totalElements).toBe(1732);
 
   // We should have seen at least 9 full pages
   expect(numFullPages).toBeGreaterThan(8);
@@ -571,7 +571,7 @@ test("queryEpisodeTable pages through all results correctly using after", async 
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements matches the previous test
-  expect(totalElements).toBe(1647); // One less than with before because we excluded the first ID
+  expect(totalElements).toBe(1731); // One less than with before because we excluded the first ID
 
   // We should have seen at least 9 full pages
   expect(numFullPages).toBeGreaterThan(8);
@@ -624,19 +624,19 @@ test("countInferencesByFunction", async () => {
   const countsInfo = await countInferencesByFunction();
   expect(countsInfo).toEqual([
     {
+      count: 166,
+      function_name: "tensorzero::llm_judge::entity_extraction::count_sports",
+      max_timestamp: "2025-04-02T20:51:08Z",
+    },
+    {
+      count: 566,
+      function_name: "extract_entities",
+      max_timestamp: "2025-04-02T20:51:05Z",
+    },
+    {
       count: 3,
       function_name: "tensorzero::default",
       max_timestamp: "2025-03-29T18:12:59Z",
-    },
-    {
-      count: 124,
-      function_name: "tensorzero::llm_judge::entity_extraction::count_sports",
-      max_timestamp: "2025-03-23T21:56:27Z",
-    },
-    {
-      count: 524,
-      function_name: "extract_entities",
-      max_timestamp: "2025-03-23T21:56:17Z",
     },
     {
       count: 226,
