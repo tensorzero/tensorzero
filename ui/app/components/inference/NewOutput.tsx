@@ -11,6 +11,11 @@ import {
 } from "~/components/layout/SnippetLayout";
 import { CodeMessage, TextMessage } from "~/components/layout/SnippetContent";
 
+/*
+NOTE: This is the new output component but it is not editable yet so we are rolling
+it out across the UI incrementally.
+*/
+
 interface OutputProps {
   output: JsonInferenceOutput | ContentBlockOutput[];
   outputSchema?: Record<string, unknown>;
