@@ -49,8 +49,8 @@ export function DatapointActions({
       )}
       {isEditing ? (
         <>
-          <SaveButton disabled={!canSave} onClick={onSave} />
           <CancelButton onClick={handleCancel} />
+          <SaveButton disabled={!canSave} onClick={onSave} />
         </>
       ) : (
         <EditButton onClick={toggleEditing} />

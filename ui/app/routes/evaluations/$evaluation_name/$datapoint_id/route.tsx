@@ -1,6 +1,5 @@
 import { getEvaluationsForDatapoint } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/route";
-import { getConfig } from "~/utils/config/index.server";
 import {
   PageHeader,
   SectionHeader,
@@ -10,7 +9,7 @@ import {
 import { PageLayout } from "~/components/layout/PageLayout";
 import Input from "~/components/inference/Input";
 import { data, isRouteErrorResponse, redirect } from "react-router";
-import Output from "~/components/inference/Output";
+import Output from "~/components/inference/NewOutput";
 import {
   consolidate_evaluation_results,
   getEvaluatorMetricName,
@@ -32,10 +31,8 @@ import {
 } from "~/components/ui/tooltip";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const config = await getConfig();
   const evaluation_name = params.evaluation_name;
   const datapoint_id = params.datapoint_id;
-  const dataset_name = config.evaluations[evaluation_name].dataset_name;
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
 
@@ -44,7 +41,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ? selected_evaluation_run_ids.split(",")
     : [];
   if (selected_evaluation_run_ids_array.length === 0) {
-    return redirect(`/datasets/${dataset_name}/datapoint/${datapoint_id}`);
+    return redirect(`/evaluations/${evaluation_name}`);
   }
   const EvaluationResults = await getEvaluationsForDatapoint(
     evaluation_name,
@@ -111,6 +108,7 @@ export default function EvaluationDatapointPage({
         <BasicInfo
           evaluation_name={evaluation_name}
           evaluation_config={evaluation_config}
+          dataset_name={consolidatedEvaluationResults[0].dataset_name}
         />
       </PageHeader>
 

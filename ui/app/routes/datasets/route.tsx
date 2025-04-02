@@ -9,6 +9,7 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import { DatasetsActions } from "./DatasetsActions";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -38,6 +39,7 @@ export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
     <PageLayout>
       <PageHeader heading="Datasets" count={counts.length} />
       <SectionLayout>
+        <DatasetsActions onBuildDataset={() => navigate("/datasets/builder")} />
         <DatasetTable counts={counts} />
         <PageButtons
           onPreviousPage={handlePreviousPage}

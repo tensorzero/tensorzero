@@ -21,13 +21,16 @@ export function TagsTable({ tags }: TagsTableProps) {
 
   // Hardcoded list of keys that should trigger navigation
   const navigableKeys = FF_ENABLE_DATASETS
-    ? [
-        "tensorzero::evaluation_run_id",
-        "tensorzero::datapoint_id",
-        "tensorzero::evaluation_name",
-        "tensorzero::dataset_name",
-      ]
+    ? ["tensorzero::evaluation_name", "tensorzero::dataset_name"]
     : [];
+  // The following 2 keys only get links if the evaluation or dataset name is present
+  // Since that information is not guaranteed to be present, we shouldn't add a cursor pointer to the row
+  if (tags["tensorzero::evaluation_name"]) {
+    navigableKeys.push("tensorzero::evaluation_run_id");
+  }
+  if (tags["tensorzero::dataset_name"]) {
+    navigableKeys.push("tensorzero::datapoint_id");
+  }
 
   // Function to handle row click and navigation
   const handleRowClick = (key: string, value: string) => {
@@ -35,6 +38,7 @@ export function TagsTable({ tags }: TagsTableProps) {
       switch (key) {
         case "tensorzero::evaluation_run_id": {
           const evaluationName = tags["tensorzero::evaluation_name"];
+          // Guaranteed to be present by the check above
           if (!evaluationName) {
             return;
           }
@@ -45,6 +49,7 @@ export function TagsTable({ tags }: TagsTableProps) {
         }
         case "tensorzero::datapoint_id": {
           const datasetName = tags["tensorzero::dataset_name"];
+          // Guaranteed to be present by the check above
           if (!datasetName) {
             return;
           }
