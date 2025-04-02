@@ -44,6 +44,7 @@ export function getRunningEvaluation(
 
 export function runEvaluation(
   evaluationName: string,
+  datasetName: string,
   variantName: string,
   concurrency: number,
 ): Promise<EvaluationStartInfo> {
@@ -59,8 +60,10 @@ export function runEvaluation(
     gatewayURL,
     "--config-file",
     getConfigPath(),
-    "--name",
+    "--evaluation-name",
     evaluationName,
+    "--dataset-name",
+    datasetName,
     "--variant-name",
     variantName,
     "--concurrency",

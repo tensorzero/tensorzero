@@ -21,8 +21,6 @@ export default function BasicInfo({ evaluation_config }: BasicInfoProps) {
   const functionType = functionConfig?.type;
   const functionIconConfig = getFunctionTypeIcon(functionType);
 
-  const datasetName = evaluation_config.dataset_name;
-
   return (
     <BasicInfoLayout>
       <BasicInfoItem>
@@ -34,17 +32,6 @@ export default function BasicInfo({ evaluation_config }: BasicInfoProps) {
             label={functionName}
             secondaryLabel={`· ${functionType}`}
             link={`/observability/functions/${functionName}`}
-            font="mono"
-          />
-        </BasicInfoItemContent>
-      </BasicInfoItem>
-
-      <BasicInfoItem>
-        <BasicInfoItemTitle>Dataset</BasicInfoItemTitle>
-        <BasicInfoItemContent>
-          <Chip
-            label={datasetName}
-            link={`/datasets/${datasetName}`}
             font="mono"
           />
         </BasicInfoItemContent>

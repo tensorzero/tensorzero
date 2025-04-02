@@ -30,7 +30,6 @@ pub const LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT: &str =
 #[derive(Debug)]
 pub struct StaticEvaluationConfig {
     pub evaluators: HashMap<String, EvaluatorConfig>,
-    pub dataset_name: String,
     pub function_name: String,
 }
 
@@ -153,7 +152,6 @@ impl UninitializedEvaluationConfig {
 #[derive(Debug, Deserialize)]
 pub struct UninitializedStaticEvaluationConfig {
     evaluators: HashMap<String, UninitializedEvaluatorConfig>,
-    dataset_name: String,
     function_name: String,
 }
 
@@ -229,7 +227,6 @@ impl UninitializedStaticEvaluationConfig {
         Ok((
             StaticEvaluationConfig {
                 evaluators,
-                dataset_name: self.dataset_name,
                 function_name: self.function_name,
             },
             function_configs,
@@ -543,7 +540,6 @@ mod tests {
 
             let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
-                dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
@@ -551,7 +547,6 @@ mod tests {
             assert!(result.is_ok());
 
             let (config, additional_functions, metric_configs) = result.unwrap();
-            assert_eq!(config.dataset_name, "test_dataset");
             assert_eq!(config.function_name, function_name);
             assert_eq!(config.evaluators.len(), 1);
             match config.evaluators.get("em_evaluator").unwrap() {
@@ -623,7 +618,6 @@ mod tests {
 
             let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
-                dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
@@ -744,7 +738,6 @@ mod tests {
 
             let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
-                dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
@@ -816,7 +809,6 @@ mod tests {
 
             let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
-                dataset_name: "test_dataset".to_string(),
                 function_name: "nonexistent_function".to_string(),
             };
 
@@ -838,7 +830,6 @@ mod tests {
 
             let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
-                dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
@@ -928,7 +919,6 @@ mod tests {
 
             let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
-                dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
@@ -971,7 +961,6 @@ mod tests {
 
             let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
-                dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
@@ -1031,7 +1020,6 @@ mod tests {
 
             let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
-                dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
@@ -1096,7 +1084,6 @@ mod tests {
 
             let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
-                dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 
@@ -1167,7 +1154,6 @@ mod tests {
 
             let uninitialized_config = UninitializedStaticEvaluationConfig {
                 evaluators,
-                dataset_name: "test_dataset".to_string(),
                 function_name: function_name.to_string(),
             };
 

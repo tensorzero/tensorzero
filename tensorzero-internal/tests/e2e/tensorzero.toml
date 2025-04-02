@@ -2514,7 +2514,6 @@ parameters = "../../fixtures/config/tools/get_humidity.json"
 
 [evaluations.test_evaluation]
 type = "static"
-dataset_name = "test_dataset"
 function_name = "basic_test"
 
 [evaluations.test_evaluation.evaluators.happy_bool]
@@ -2622,7 +2621,6 @@ json_mode = "on"
 [evaluations.entity_extraction]
 type = "static"
 function_name = "extract_entities"
-dataset_name = "extract_entities_0.8"
 
 [evaluations.entity_extraction.evaluators.exact_match]
 type = "exact_match"
@@ -2659,7 +2657,6 @@ json_mode = "on"
 [evaluations.haiku_with_outputs]
 type = "static"
 function_name = "write_haiku"
-dataset_name = "good-haiku-data"
 
 [evaluations.haiku_with_outputs.evaluators.exact_match]
 type = "exact_match"
@@ -2667,7 +2664,6 @@ type = "exact_match"
 [evaluations.haiku_without_outputs]
 type = "static"
 function_name = "write_haiku"
-dataset_name = "good-haikus-no-output"
 
 [evaluations.haiku_without_outputs.evaluators.exact_match]
 type = "exact_match"

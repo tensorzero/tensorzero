@@ -54,7 +54,11 @@ pub struct Args {
 
     /// Name of the evaluation to run.
     #[arg(short, long)]
-    pub name: String,
+    pub evaluation_name: String,
+
+    /// Name of the dataset to run on.
+    #[arg(short, long)]
+    pub dataset_name: String,
 
     /// Name of the variant to run.
     #[arg(short, long)]
@@ -81,7 +85,7 @@ pub async fn run_evaluation(
     let config = Config::load_and_verify_from_path(&args.config_file).await?;
     let evaluation_config = config
         .evaluations
-        .get(&args.name)
+        .get(&args.evaluation_name)
         .ok_or(anyhow!("evaluation not found"))?
         .clone();
     let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
@@ -108,13 +112,14 @@ pub async fn run_evaluation(
 
     let dataset = query_dataset(
         &clickhouse_client,
-        &static_evaluation_config.dataset_name,
+        &args.dataset_name,
         &static_evaluation_config.function_name,
         function_config,
     )
     .await?;
-    let variant = Arc::new(args.variant_name);
-    let evaluation_name = Arc::new(args.name);
+    let dataset_name = Arc::new(args.dataset_name);
+    let variant_name = Arc::new(args.variant_name);
+    let evaluation_name = Arc::new(args.evaluation_name);
     let dataset_len = dataset.len();
     let mut task_id_to_datapoint_id = HashMap::new();
 
@@ -130,9 +135,10 @@ pub async fn run_evaluation(
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
         let client_clone = tensorzero_client_with_semaphore.clone();
-        let variant = variant.clone();
+        let variant_name = variant_name.clone();
         let function_config = function_config.clone();
         let evaluation_config = evaluation_config.clone();
+        let dataset_name = dataset_name.clone();
         let function_name = static_evaluation_config.function_name.clone();
         let evaluation_name = evaluation_name.clone();
         let evaluation_run_id_clone = evaluation_run_id;
@@ -140,15 +146,16 @@ pub async fn run_evaluation(
         let datapoint_id = datapoint.id();
         let abort_handle = join_set.spawn(async move {
             let inference_response = Arc::new(
-                infer_datapoint(
-                    &client_clone,
-                    &function_name,
-                    &variant,
-                    evaluation_run_id_clone,
-                    &datapoint,
-                    &evaluation_name,
-                    &function_config,
-                )
+                infer_datapoint(InferDatapointParams {
+                    tensorzero_client: &client_clone,
+                    function_name: &function_name,
+                    variant_name: &variant_name,
+                    evaluation_run_id: evaluation_run_id_clone,
+                    dataset_name: &dataset_name,
+                    datapoint: &datapoint,
+                    evaluation_name: &evaluation_name,
+                    function_config: &function_config,
+                })
                 .await?,
             );
 
@@ -284,15 +291,29 @@ pub fn format_cutoff_failures(failures: &[(String, f32, f32)]) -> String {
         .join("\n")
 }
 
-async fn infer_datapoint(
-    tensorzero_client: &ThrottledTensorZeroClient,
-    function_name: &str,
-    variant_name: &str,
+struct InferDatapointParams<'a> {
+    tensorzero_client: &'a ThrottledTensorZeroClient,
+    function_name: &'a str,
+    variant_name: &'a str,
     evaluation_run_id: Uuid,
-    datapoint: &Datapoint,
-    evaluation_name: &str,
-    function_config: &FunctionConfig,
-) -> Result<InferenceResponse> {
+    dataset_name: &'a str,
+    datapoint: &'a Datapoint,
+    evaluation_name: &'a str,
+    function_config: &'a FunctionConfig,
+}
+
+async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceResponse> {
+    let InferDatapointParams {
+        tensorzero_client,
+        function_name,
+        variant_name,
+        evaluation_run_id,
+        dataset_name,
+        datapoint,
+        evaluation_name,
+        function_config,
+    } = params;
+
     let input = resolved_input_to_input(datapoint.input().clone()).await?;
     let dynamic_tool_params = match datapoint.tool_call_config() {
         Some(tool_params) => get_tool_params_args(tool_params, function_config).await,
@@ -328,6 +349,10 @@ async fn infer_datapoint(
             (
                 "tensorzero::evaluation_name".to_string(),
                 evaluation_name.to_string(),
+            ),
+            (
+                "tensorzero::dataset_name".to_string(),
+                dataset_name.to_string(),
             ),
         ]),
         dynamic_tool_params,
