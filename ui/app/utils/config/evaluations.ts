@@ -32,11 +32,21 @@ export const EvaluatorConfigSchema = z.discriminatedUnion("type", [
 ]);
 export type EvaluatorConfig = z.infer<typeof EvaluatorConfigSchema>;
 
-export const EvaluationConfigSchema = z.object({
+export const StaticEvaluationConfigSchema = z.object({
   evaluators: z.record(z.string(), EvaluatorConfigSchema),
   dataset_name: z.string(),
   function_name: z.string(),
 });
+export type StaticEvaluationConfig = z.infer<
+  typeof StaticEvaluationConfigSchema
+>;
+
+export const EvaluationConfigSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("static"),
+    ...StaticEvaluationConfigSchema.shape,
+  }),
+]);
 export type EvaluationConfig = z.infer<typeof EvaluationConfigSchema>;
 
 export const getOptimize = (evaluatorConfig: EvaluatorConfig) => {

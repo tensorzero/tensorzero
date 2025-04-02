@@ -359,7 +359,7 @@ impl<'c> Config<'c> {
         for (name, evaluation_config) in uninitialized_config.evaluations {
             let (evaluation_config, evaluation_function_configs, evaluation_metric_configs) =
                 evaluation_config.load(&config.functions, &base_path, &name)?;
-            evaluations.insert(name, Arc::new(evaluation_config));
+            evaluations.insert(name, Arc::new(EvaluationConfig::Static(evaluation_config)));
             for (evaluation_function_name, evaluation_function_config) in
                 evaluation_function_configs
             {
@@ -597,11 +597,12 @@ impl UninitializedConfig {
                     })
                 })?
                 .parse::<toml::Table>()
-                .map_err(|_| {
+                .map_err(|e| {
                     Error::new(ErrorDetails::Config {
                         message: format!(
-                            "Failed to parse config file as valid TOML: {}",
-                            path.to_string_lossy()
+                            "Failed to parse config file `{}` as valid TOML: {}",
+                            path.to_string_lossy(),
+                            e
                         ),
                     })
                 })?,
@@ -2150,6 +2151,30 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         assert!(logs_contain(
             "Config file is empty, so only default functions will be available."
         ))
+    }
+
+    #[tokio::test]
+    async fn test_invalid_toml() {
+        let config_str = r#"
+        [models.my-model]
+        routing = ["dummy"]
+
+        [models.my-model]
+        routing = ["other"]
+        "#;
+
+        let tmpfile = NamedTempFile::new().unwrap();
+        std::fs::write(tmpfile.path(), config_str).unwrap();
+
+        let err = Config::load_and_verify_from_path(tmpfile.path())
+            .await
+            .unwrap_err()
+            .to_string();
+
+        assert!(
+            err.contains("duplicate key `my-model` in table `models`"),
+            "Unexpected error: {err:?}"
+        );
     }
 
     #[test]
