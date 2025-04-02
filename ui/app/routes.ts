@@ -27,6 +27,7 @@ export default [
     "routes/api/function/$function_name/feedback_counts.route.ts",
   ),
   route("api/tensorzero/inference", "routes/api/tensorzero/inference.ts"),
+  route("api/tensorzero/status", "routes/api/tensorzero/status.ts"),
   route("datasets", "routes/datasets/route.tsx"),
   route("datasets/builder", "routes/datasets/builder/route.tsx"),
   route("datasets/:dataset_name", "routes/datasets/$dataset_name/route.tsx"),

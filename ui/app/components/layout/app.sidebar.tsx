@@ -30,6 +30,7 @@ import {
   SidebarGroupLabel,
   SidebarGroupContent,
 } from "~/components/ui/sidebar";
+import TensorZeroStatusIndicator from "./TensorZeroStatusIndicator";
 
 const FF_ENABLE_DATASETS =
   import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
@@ -192,7 +193,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="relative">
-        <SidebarTrigger className="justify-left flex">
+        {state === "expanded" && <TensorZeroStatusIndicator />}
+        <SidebarTrigger className="justify-left mt-1 flex">
           <span className="sr-only">
             {state === "expanded" ? "Collapse sidebar" : "Expand sidebar"}
           </span>
