@@ -5,7 +5,7 @@ services:
     volumes:
       - ./config:/app/config:ro
     env_file:
-      - ${ENV_FILE:-../.env}
+      - .env
     ports:
       - "4000:4000"
     restart: unless-stopped

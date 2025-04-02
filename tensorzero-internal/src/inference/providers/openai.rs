@@ -40,7 +40,7 @@ use crate::inference::types::{
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use crate::inference::providers::helpers::inject_extra_body;
+use crate::inference::providers::helpers::inject_extra_request_data;
 
 lazy_static! {
     static ref OPENAI_DEFAULT_BASE_URL: Url = {
@@ -148,7 +148,7 @@ impl InferenceProvider for OpenAIProvider {
                     message: format!("Error serializing OpenAI request: {e}"),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -165,6 +165,7 @@ impl InferenceProvider for OpenAIProvider {
         }
         let res = request_builder
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
@@ -239,7 +240,7 @@ impl InferenceProvider for OpenAIProvider {
                     message: format!("Error serializing OpenAI request: {e}"),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -255,7 +256,8 @@ impl InferenceProvider for OpenAIProvider {
         let start_time = Instant::now();
         let mut request_builder = http_client
             .post(request_url)
-            .header("Content-Type", "application/json");
+            .header("Content-Type", "application/json")
+            .headers(headers);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
         }

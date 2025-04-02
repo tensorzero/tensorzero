@@ -20,6 +20,13 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let bad_auth_extra_headers = vec![E2ETestProvider {
+        variant_name: "gcp-vertex-haiku-extra-headers".to_string(),
+        model_name: "claude-3-haiku-20240307-gcp-vertex".into(),
+        model_provider_name: "gcp_vertex_anthropic".into(),
+        credentials: HashMap::new(),
+    }];
+
     let json_providers = vec![
         E2ETestProvider {
             variant_name: "gcp-vertex-haiku".to_string(),
@@ -44,6 +51,7 @@ async fn get_providers() -> E2ETestProviders {
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
+        bad_auth_extra_headers,
         reasoning_inference: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],

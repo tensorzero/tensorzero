@@ -62,7 +62,7 @@ pub struct Args {
 
     /// Name of the variant to run.
     #[arg(short, long)]
-    pub variant: String,
+    pub variant_name: String,
 
     /// Number of concurrent requests to make.
     #[arg(short, long, default_value = "1")]
@@ -118,7 +118,7 @@ pub async fn run_evaluation(
     )
     .await?;
     let dataset_name = Arc::new(args.dataset_name);
-    let variant = Arc::new(args.variant);
+    let variant_name = Arc::new(args.variant_name);
     let evaluation_name = Arc::new(args.evaluation_name);
     let dataset_len = dataset.len();
     let mut task_id_to_datapoint_id = HashMap::new();
@@ -135,7 +135,7 @@ pub async fn run_evaluation(
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
         let client_clone = tensorzero_client_with_semaphore.clone();
-        let variant = variant.clone();
+        let variant_name = variant_name.clone();
         let function_config = function_config.clone();
         let evaluation_config = evaluation_config.clone();
         let dataset_name = dataset_name.clone();
@@ -149,7 +149,7 @@ pub async fn run_evaluation(
                 infer_datapoint(InferDatapointParams {
                     tensorzero_client: &client_clone,
                     function_name: &function_name,
-                    variant_name: &variant,
+                    variant_name: &variant_name,
                     evaluation_run_id: evaluation_run_id_clone,
                     dataset_name: &dataset_name,
                     datapoint: &datapoint,
