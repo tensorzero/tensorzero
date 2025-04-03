@@ -736,24 +736,6 @@ impl AsyncTensorZeroGateway {
         verbose_errors: bool,
         async_setup: bool,
     ) -> PyResult<Py<PyAny>> {
-        // let gateway_url = gateway_url.to_string();
-        // let build_gateway = move |py: Python<'_>| {
-        //     let client = BaseTensorZeroGateway::new(py, &gateway_url, timeout, verbose_errors)?;
-        //     let instance = PyClassInitializer::from(client).add_subclass(AsyncTensorZeroGateway {});
-        //     Ok(Py::new(py, instance)?.into_any())
-        // };
-        // if async_setup {
-        //     // This doesn't actually do anything async at the moment, but we run
-        //     // 'build_gateway' inside the future so that any exception is thrown by the future
-        //     Ok(
-        //         pyo3_async_runtimes::tokio::future_into_py(cls.py(), async move {
-        //             Python::with_gil(build_gateway)
-        //         })?
-        //         .unbind(),
-        //     )
-        // } else {
-        //     build_gateway(cls.py())
-        // }
         let mut client_builder = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
             url: Url::parse(gateway_url)
                 .map_err(|e| PyValueError::new_err(format!("Invalid gateway URL: {e}")))?,
