@@ -2576,4 +2576,30 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.mixture_of_n_variant.fuser]`"));
         assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.best_of_n_variant.evaluator]`"));
     }
+
+    #[tokio::test]
+    async fn test_config_load_no_credentials() {
+        let config_str = r#"
+        [models."my-model"]
+        routing = ["openai"]
+
+        [models.my-model.providers.openai]
+        type = "openai"
+        model_name = "gpt-4o-mini-2024-07-18"
+        api_key_location = "path::/not/a/path"
+        "#;
+
+        let tmpfile = NamedTempFile::new().unwrap();
+        std::fs::write(tmpfile.path(), config_str).unwrap();
+
+        let err = Config::load_and_verify_from_path(tmpfile.path(), true)
+            .await
+            .unwrap_err();
+        assert_eq!(err.to_string(), "models.my-model.providers.openai: API key missing for provider: openai: Failed to read credentials file - No such file or directory (os error 2)");
+
+        // Should not fail since validation is disabled
+        Config::load_and_verify_from_path(tmpfile.path(), false)
+            .await
+            .expect("Failed to load config");
+    }
 }
