@@ -436,14 +436,16 @@ impl Client {
         })?;
 
         let headers = resp.headers();
-        let version = headers.get("x-tensorzero-gateway-version");
+        let version = if !cfg!(feature = "e2e_tests") {
+            headers
+                .get("x-tensorzero-gateway-version")
+                .and_then(|v| v.to_str().ok())
+                .map(|v| v.to_string())
+        } else {
+            env::var("TENSORZERO_E2E_GATEWAY_VERSION_OVERRIDE").ok()
+        };
         if let Some(version) = version {
-            match version.to_str() {
-                Ok(version) => self.update_gateway_version(version.to_string()).await,
-                Err(e) => {
-                    tracing::warn!("Gateway version header is not valid UTF-8: {e}");
-                }
-            }
+            self.update_gateway_version(version).await;
         }
 
         if let Err(e) = resp.error_for_status_ref() {
