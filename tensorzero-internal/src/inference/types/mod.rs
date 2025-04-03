@@ -704,7 +704,7 @@ impl From<Value> for ResolvedInputMessageContent {
     }
 }
 
-pub fn deserialize_content<'de, D: Deserializer<'de>>(
+fn deserialize_content<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<InputMessageContent>, D::Error> {
     UntaggedEnumVisitor::new()
