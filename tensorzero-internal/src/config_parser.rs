@@ -1,6 +1,7 @@
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
+use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -24,6 +25,8 @@ use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig};
 use std::error::Error as StdError;
+
+scoped_thread_local!(pub(crate) static SKIP_CREDENTIAL_VALIDATION: ());
 
 #[derive(Debug, Default)]
 pub struct Config<'c> {
@@ -267,7 +270,10 @@ impl std::fmt::Display for MetricConfigLevel {
 }
 
 impl<'c> Config<'c> {
-    pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
+    pub async fn load_and_verify_from_path(
+        config_path: &Path,
+        validate_credentials: bool,
+    ) -> Result<Config<'c>, Error> {
         let config_table = match UninitializedConfig::read_toml_config(config_path)? {
             Some(table) => table,
             None => {
@@ -288,10 +294,27 @@ impl<'c> Config<'c> {
                 .into());
             }
         };
-        let config = Self::load_from_toml(config_table, base_path)?;
+        let config;
+        #[cfg(feature = "e2e_tests")]
+        {
+            config = SKIP_CREDENTIAL_VALIDATION
+                .set(&(), || Self::load_from_toml(config_table, base_path));
+        }
+        #[cfg(not(feature = "e2e_tests"))]
+        {
+            if validate_credentials {
+                config = Self::load_from_toml(config_table, base_path);
+            } else {
+                config = SKIP_CREDENTIAL_VALIDATION
+                    .set(&(), || Self::load_from_toml(config_table, base_path));
+            }
+        }
+        let config = config?;
 
-        if let Some(object_store) = &config.object_store_info {
-            object_store.verify().await?;
+        if validate_credentials {
+            if let Some(object_store) = &config.object_store_info {
+                object_store.verify().await?;
+            }
         }
 
         Ok(config)
@@ -2145,7 +2168,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
     async fn test_empty_config() {
         let tempfile = NamedTempFile::new().unwrap();
         write!(&tempfile, "").unwrap();
-        Config::load_and_verify_from_path(tempfile.path())
+        Config::load_and_verify_from_path(tempfile.path(), true)
             .await
             .unwrap();
         assert!(logs_contain(
@@ -2166,7 +2189,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let tmpfile = NamedTempFile::new().unwrap();
         std::fs::write(tmpfile.path(), config_str).unwrap();
 
-        let err = Config::load_and_verify_from_path(tmpfile.path())
+        let err = Config::load_and_verify_from_path(tmpfile.path(), true)
             .await
             .unwrap_err()
             .to_string();
@@ -2308,7 +2331,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
     #[traced_test]
     #[tokio::test]
     async fn test_config_load_no_config_file() {
-        let err = Config::load_and_verify_from_path(Path::new("nonexistent.toml"))
+        let err = Config::load_and_verify_from_path(Path::new("nonexistent.toml"), true)
             .await
             .unwrap_err()
             .to_string();
@@ -2337,7 +2360,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path())
+        let err = Config::load_and_verify_from_path(tempfile.path(), true)
             .await
             .unwrap_err()
             .to_string();
@@ -2366,7 +2389,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path())
+        let err = Config::load_and_verify_from_path(tempfile.path(), true)
             .await
             .unwrap_err()
             .to_string();
@@ -2402,7 +2425,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path())
+        let err = Config::load_and_verify_from_path(tempfile.path(), true)
             .await
             .unwrap_err()
             .to_string();
@@ -2440,7 +2463,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path())
+        let err = Config::load_and_verify_from_path(tempfile.path(), true)
             .await
             .unwrap_err()
             .to_string();
@@ -2480,7 +2503,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path())
+        let err = Config::load_and_verify_from_path(tempfile.path(), true)
             .await
             .unwrap_err()
             .to_string();

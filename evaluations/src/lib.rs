@@ -82,7 +82,9 @@ pub async fn run_evaluation(
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
 
-    let config = Config::load_and_verify_from_path(&args.config_file).await?;
+    // We do not validate credentials here since we just want the evaluator config
+    // If we are using an embedded gateway, credentials are validated when that is initialized
+    let config = Config::load_and_verify_from_path(&args.config_file, false).await?;
     let evaluation_config = config
         .evaluations
         .get(&args.evaluation_name)

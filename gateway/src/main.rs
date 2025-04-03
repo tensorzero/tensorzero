@@ -82,7 +82,7 @@ async fn main() {
 
     let config = if let Some(path) = &config_path {
         Arc::new(
-            Config::load_and_verify_from_path(Path::new(&path))
+            Config::load_and_verify_from_path(Path::new(&path), true)
                 .await
                 .ok() // Don't print the error here, since it was already printed when it was constructed
                 .expect_pretty("Failed to load config"),

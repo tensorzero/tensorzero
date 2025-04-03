@@ -554,13 +554,10 @@ mod tests {
         let creds = VLLMCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, VLLMCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = VLLMCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, VLLMCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = VLLMCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, VLLMCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));
