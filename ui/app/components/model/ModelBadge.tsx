@@ -34,6 +34,12 @@ function formatProvider(provider: ProviderType): {
         className:
           "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
       };
+    case "aws_sagemaker":
+      return {
+        name: "AWS Sagemaker",
+        className:
+          "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
+        };
     case "azure":
       return {
         name: "Azure",
