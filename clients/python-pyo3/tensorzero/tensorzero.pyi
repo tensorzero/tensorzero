@@ -15,12 +15,13 @@ from uuid import UUID
 import uuid_utils
 
 from tensorzero import (
+    DynamicEvaluationRunResponse,
+    ExtraBody,
     FeedbackResponse,
     InferenceChunk,
     InferenceInput,
     InferenceResponse,
 )
-from tensorzero.types import ExtraBody
 
 class BaseTensorZeroGateway:
     pass
@@ -147,6 +148,20 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
         :param tags: If set, adds tags to the feedback request.
         :return: {"feedback_id": str}
+        """
+
+    def dynamic_evaluation_run(
+        self,
+        *,
+        variants: Dict[str, str],
+        tags: Dict[str, str],
+    ) -> DynamicEvaluationRunResponse:
+        """
+        Make a POST request to the /dynamic_evaluation_run endpoint.
+
+        :param variants: A dictionary of variant names to variant values.
+        :param tags: A dictionary of tags to add to the dynamic evaluation run.
+        :return: A `DynamicEvaluationRunResponse` instance ({"episode_id": str}).
         """
 
     def close(self) -> None:
@@ -288,6 +303,20 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param dryrun: If true, the feedback request will be executed but won't be stored to the database (i.e. no-op).
         :param tags: If set, adds tags to the feedback request.
         :return: {"feedback_id": str}
+        """
+
+    async def dynamic_evaluation_run(  # type: ignore[override]
+        self,
+        *,
+        variants: Dict[str, str],
+        tags: Dict[str, str],
+    ) -> DynamicEvaluationRunResponse:
+        """
+        Make a POST request to the /dynamic_evaluation_run endpoint.
+
+        :param variants: A dictionary of variant names to variant values.
+        :param tags: A dictionary of tags to add to the dynamic evaluation run.
+        :return: A `DynamicEvaluationRunResponse` instance ({"episode_id": str}).
         """
 
     async def close(self) -> None:

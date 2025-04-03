@@ -21,17 +21,18 @@ use pyo3::{
     IntoPyObjectExt,
 };
 use python_helpers::{
-    deserialize_from_pyobj, parse_feedback_response, parse_inference_chunk,
-    parse_inference_response, parse_tool, python_uuid_to_uuid, serialize_to_dict,
+    deserialize_from_pyobj, parse_dynamic_evaluation_run_response, parse_feedback_response,
+    parse_inference_chunk, parse_inference_response, parse_tool, python_uuid_to_uuid,
+    serialize_to_dict,
 };
 use tensorzero_internal::{
     gateway_util::ShutdownHandle, inference::types::extra_body::UnfilteredInferenceExtraBody,
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientInferenceParams, ClientSecretString, DynamicToolParams,
-    FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, Input, TensorZeroError,
-    Tool,
+    ClientBuilderMode, ClientInferenceParams, ClientSecretString, DynamicEvaluationRunParams,
+    DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, Input,
+    TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -668,6 +669,28 @@ impl TensorZeroGateway {
             .unbind()),
         }
     }
+
+    /// Make a request to the /dynamic_evaluation_run endpoint.
+    ///
+    /// :param variants: A dictionary mapping function names to pinned variant names.
+    /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
+    /// :return: A `DynamicEvaluationRunResponse` object.
+    #[pyo3(signature = (*, variants, tags))]
+    fn dynamic_evaluation_run(
+        this: PyRef<'_, Self>,
+        variants: HashMap<String, String>,
+        tags: HashMap<String, String>,
+    ) -> PyResult<Py<PyAny>> {
+        let client = this.as_super().client.clone();
+        let params = DynamicEvaluationRunParams { variants, tags };
+        let fut = client.dynamic_evaluation_run(params);
+
+        let resp = tokio_block_on_without_gil(this.py(), fut);
+        match resp {
+            Ok(resp) => parse_dynamic_evaluation_run_response(this.py(), resp),
+            Err(e) => Err(convert_error(this.py(), e)),
+        }
+    }
 }
 
 #[pyclass(extends=BaseTensorZeroGateway)]
@@ -969,6 +992,29 @@ impl AsyncTensorZeroGateway {
             // so we need the GIL
             Python::with_gil(|py| match res {
                 Ok(resp) => Ok(parse_feedback_response(py, resp)?.into_any()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// Make a request to the /dynamic_evaluation_run endpoint.
+    ///
+    /// :param variants: A dictionary mapping function names to pinned variant names.
+    /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
+    /// :return: A `DynamicEvaluationRunResponse` object.
+    #[pyo3(signature = (*, variants, tags))]
+    fn dynamic_evaluation_run(
+        this: PyRef<'_, Self>,
+        variants: HashMap<String, String>,
+        tags: HashMap<String, String>,
+    ) -> PyResult<Bound<'_, PyAny>> {
+        let client = this.as_super().client.clone();
+        let params = DynamicEvaluationRunParams { variants, tags };
+
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.dynamic_evaluation_run(params).await;
+            Python::with_gil(|py| match res {
+                Ok(resp) => parse_dynamic_evaluation_run_response(py, resp),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
