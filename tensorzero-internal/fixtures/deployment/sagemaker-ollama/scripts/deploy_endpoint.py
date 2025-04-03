@@ -1,9 +1,10 @@
 # Based on https://github.com/aws-samples/sagemaker-genai-hosting-examples/blob/main/Llama2/Llama2-7b/LMI/llama2-7b.ipynb
 # This is specialized for the TensorZero AWS account
-import sagemaker
-import boto3
 import os
 import time
+
+import boto3
+import sagemaker
 
 SAGEMAKER_ROLE = "arn:aws:iam::637423354485:role/service-role/AmazonSageMaker-ExecutionRole-20250328T164731"
 SERVERLESS = False
