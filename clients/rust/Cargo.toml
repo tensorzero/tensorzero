@@ -5,7 +5,7 @@ edition = "2021"
 
 [[test]]
 name = "client_tests"
-path = "tests/tests.rs"
+path = "tests/versioning.rs"
 required-features = ["e2e_tests"]
 
 [dependencies]
