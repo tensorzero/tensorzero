@@ -1,3 +1,7 @@
+use axum::extract::Request;
+use axum::http::HeaderValue;
+use axum::middleware::Next;
+use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
 use clap::Parser;
@@ -45,6 +49,15 @@ struct Args {
 
     /// Deprecated: use `--config-file` instead
     tensorzero_toml: Option<PathBuf>,
+}
+
+async fn add_version_header(request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    response.headers_mut().insert(
+        "x-tensorzero-gateway-version",
+        HeaderValue::from_static(TENSORZERO_VERSION),
+    );
+    response
 }
 
 #[tokio::main]
@@ -153,6 +166,7 @@ async fn main() {
             get(move || std::future::ready(metrics_handle.render())),
         )
         .fallback(endpoints::fallback::handle_404)
+        .layer(axum::middleware::from_fn(add_version_header))
         .with_state(app_state);
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
