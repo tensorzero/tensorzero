@@ -1,0 +1,20 @@
+{
+  "name": "pokemon-battle",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "run": "tsc && node build/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "type": "commonjs",
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^22.10.6",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "pokemon-showdown": "github:smogon/pokemon-showdown#82ed1fb54d307481b77dc47e40c63224fba7260c"
+  }
+}
