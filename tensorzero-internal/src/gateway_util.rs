@@ -197,7 +197,7 @@ pub async fn start_openai_compatible_gateway(
     })?;
 
     let config = if let Some(config_file) = config_file {
-        Arc::new(Config::load_and_verify_from_path(Path::new(&config_file)).await?)
+        Arc::new(Config::load_and_verify_from_path(Path::new(&config_file), true).await?)
     } else {
         Arc::new(Config::default())
     };

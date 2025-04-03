@@ -74,8 +74,7 @@ impl FireworksProvider {
 pub enum FireworksCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
-    None,
+    Missing,
 }
 
 impl TryFrom<Credential> for FireworksCredentials {
@@ -85,8 +84,7 @@ impl TryFrom<Credential> for FireworksCredentials {
         match credentials {
             Credential::Static(key) => Ok(FireworksCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(FireworksCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
-            Credential::Missing => Ok(FireworksCredentials::None),
+            Credential::Missing => Ok(FireworksCredentials::Missing),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Fireworks provider".to_string(),
             })),
@@ -109,8 +107,7 @@ impl FireworksCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
-            &FireworksCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            FireworksCredentials::Missing => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
             .into()),
@@ -297,6 +294,10 @@ impl InferenceProvider for FireworksProvider {
             provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
+    }
+
+    fn is_missing_credentials(&self) -> bool {
+        matches!(self.credentials, FireworksCredentials::Missing)
     }
 }
 
@@ -589,13 +590,10 @@ mod tests {
         let creds = FireworksCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, FireworksCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = FireworksCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, FireworksCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = FireworksCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, FireworksCredentials::Missing));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

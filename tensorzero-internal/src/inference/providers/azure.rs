@@ -66,8 +66,7 @@ impl AzureProvider {
 pub enum AzureCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
-    None,
+    Missing,
 }
 
 impl TryFrom<Credential> for AzureCredentials {
@@ -77,8 +76,7 @@ impl TryFrom<Credential> for AzureCredentials {
         match credentials {
             Credential::Static(key) => Ok(AzureCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(AzureCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
-            Credential::Missing => Ok(AzureCredentials::None),
+            Credential::Missing => Ok(AzureCredentials::Missing),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Azure provider".to_string(),
             })),
@@ -101,8 +99,7 @@ impl AzureCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
-            AzureCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            AzureCredentials::Missing => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
             .into()),
@@ -274,6 +271,10 @@ impl InferenceProvider for AzureProvider {
             provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
+    }
+
+    fn is_missing_credentials(&self) -> bool {
+        matches!(self.credentials, AzureCredentials::Missing)
     }
 }
 
@@ -668,13 +669,10 @@ mod tests {
         let creds = AzureCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, AzureCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = AzureCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, AzureCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = AzureCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AzureCredentials::Missing));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

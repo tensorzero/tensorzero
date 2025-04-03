@@ -257,6 +257,10 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         }
         .into())
     }
+
+    fn is_missing_credentials(&self) -> bool {
+        matches!(self.credentials, GCPVertexCredentials::Missing)
+    }
 }
 
 /// Maps events from Anthropic into the TensorZero format

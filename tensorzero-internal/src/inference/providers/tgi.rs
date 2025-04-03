@@ -77,6 +77,7 @@ pub enum TGICredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    Missing,
 }
 
 impl TryFrom<Credential> for TGICredentials {
@@ -113,6 +114,10 @@ impl TGICredentials {
                 .transpose()
             }
             TGICredentials::None => Ok(None),
+            TGICredentials::Missing => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: PROVIDER_NAME.to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -298,6 +303,10 @@ impl InferenceProvider for TGIProvider {
             provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
+    }
+
+    fn is_missing_credentials(&self) -> bool {
+        matches!(self.credentials, TGICredentials::Missing)
     }
 }
 

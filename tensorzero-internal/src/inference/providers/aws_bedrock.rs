@@ -468,6 +468,12 @@ impl InferenceProvider for AWSBedrockProvider {
         }
         .into())
     }
+
+    /// AWS Bedrock handles its own credentials
+    /// We don't validate them here
+    fn is_missing_credentials(&self) -> bool {
+        false
+    }
 }
 
 fn stream_bedrock(

@@ -239,6 +239,10 @@ pub enum ErrorDetails {
     MissingBatchInferenceResponse {
         inference_id: Option<Uuid>,
     },
+    MissingCredentials {
+        model_name: String,
+        provider_name: String,
+    },
     ModelProvidersExhausted {
         provider_errors: HashMap<String, Error>,
     },
@@ -371,6 +375,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplateMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => tracing::Level::ERROR,
             ErrorDetails::MissingBatchInferenceResponse { .. } => tracing::Level::WARN,
+            ErrorDetails::MissingCredentials { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelProvidersExhausted { .. } => tracing::Level::ERROR,
             ErrorDetails::ModelValidation { .. } => tracing::Level::ERROR,
             ErrorDetails::Observability { .. } => tracing::Level::ERROR,
@@ -453,6 +458,7 @@ impl ErrorDetails {
             ErrorDetails::MiniJinjaTemplateMissing { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MiniJinjaTemplateRender { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::MissingBatchInferenceResponse { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::MissingCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelProvidersExhausted { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ModelValidation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::Observability { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -759,6 +765,16 @@ impl std::fmt::Display for ErrorDetails {
                 ),
                 None => write!(f, "Missing batch inference response"),
             },
+            ErrorDetails::MissingCredentials {
+                model_name,
+                provider_name,
+            } => {
+                write!(
+                    f,
+                    "Missing credentials for model: {} and provider: {}",
+                    model_name, provider_name
+                )
+            }
             ErrorDetails::ModelProvidersExhausted { provider_errors } => {
                 write!(
                     f,

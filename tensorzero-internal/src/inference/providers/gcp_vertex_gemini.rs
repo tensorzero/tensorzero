@@ -89,8 +89,7 @@ pub fn default_api_key_location() -> CredentialLocation {
 pub enum GCPVertexCredentials {
     Static(GCPServiceAccountCredentials),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
-    None,
+    Missing,
 }
 
 impl TryFrom<(Credential, &str)> for GCPVertexCredentials {
@@ -108,8 +107,7 @@ impl TryFrom<(Credential, &str)> for GCPVertexCredentials {
                 )?,
             )),
             Credential::Dynamic(key_name) => Ok(GCPVertexCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
-            Credential::Missing => Ok(GCPVertexCredentials::None),
+            Credential::Missing => Ok(GCPVertexCredentials::Missing),
             _ => Err(Error::new(ErrorDetails::GCPCredentials {
                 message: format!("Invalid credential_location for {} provider", model),
             }))?,
@@ -134,8 +132,7 @@ impl GCPVertexCredentials {
                     })
                 })?,
             )),
-            #[cfg(any(test, feature = "e2e_tests"))]
-            GCPVertexCredentials::None => Err(Error::new(ErrorDetails::ApiKeyMissing {
+            GCPVertexCredentials::Missing => Err(Error::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             })),
         }
@@ -428,6 +425,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
+    }
+
+    fn is_missing_credentials(&self) -> bool {
+        matches!(self.credentials, GCPVertexCredentials::Missing)
     }
 }
 
@@ -2145,13 +2146,10 @@ mod tests {
         let creds = GCPVertexCredentials::try_from((generic, "GCPVertexGemini")).unwrap();
         assert!(matches!(creds, GCPVertexCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = GCPVertexCredentials::try_from((generic, "GCPVertexGemini")).unwrap();
-            assert!(matches!(creds, GCPVertexCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = GCPVertexCredentials::try_from((generic, "GCPVertexGemini")).unwrap();
+        assert!(matches!(creds, GCPVertexCredentials::Missing));
 
         // Test invalid JSON content
         let invalid_json = "invalid json";

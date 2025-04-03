@@ -82,7 +82,8 @@ pub async fn run_evaluation(
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
 
-    let config = Config::load_and_verify_from_path(&args.config_file).await?;
+    // We will verify credentials if needed in the client builder.
+    let config = Config::load_and_verify_from_path(&args.config_file, false).await?;
     let evaluation_config = config
         .evaluations
         .get(&args.evaluation_name)
@@ -90,7 +91,6 @@ pub async fn run_evaluation(
         .clone();
     let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
     let function_config = config.get_function(&static_evaluation_config.function_name)?;
-    #[allow(unused)]
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {
             ClientBuilder::new(ClientBuilderMode::HTTPGateway { url: gateway_url })

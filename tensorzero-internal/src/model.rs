@@ -406,6 +406,18 @@ impl ModelConfig {
             provider_errors,
         }))
     }
+
+    pub fn verify_credentials(&self, model_name: &str) -> Result<(), Error> {
+        for provider in self.providers.values() {
+            if provider.is_missing_credentials() {
+                return Err(Error::new(ErrorDetails::MissingCredentials {
+                    model_name: model_name.to_string(),
+                    provider_name: provider.name.to_string(),
+                }));
+            }
+        }
+        Ok(())
+    }
 }
 
 async fn stream_with_cache_write(
@@ -1091,6 +1103,29 @@ impl ModelProvider {
             }
         }
     }
+
+    fn is_missing_credentials(&self) -> bool {
+        match &self.config {
+            ProviderConfig::Anthropic(provider) => provider.is_missing_credentials(),
+            ProviderConfig::AWSBedrock(provider) => provider.is_missing_credentials(),
+            ProviderConfig::Azure(provider) => provider.is_missing_credentials(),
+            ProviderConfig::DeepSeek(provider) => provider.is_missing_credentials(),
+            ProviderConfig::Fireworks(provider) => provider.is_missing_credentials(),
+            ProviderConfig::GCPVertexAnthropic(provider) => provider.is_missing_credentials(),
+            ProviderConfig::GCPVertexGemini(provider) => provider.is_missing_credentials(),
+            ProviderConfig::GoogleAIStudioGemini(provider) => provider.is_missing_credentials(),
+            ProviderConfig::Hyperbolic(provider) => provider.is_missing_credentials(),
+            ProviderConfig::Mistral(provider) => provider.is_missing_credentials(),
+            ProviderConfig::OpenAI(provider) => provider.is_missing_credentials(),
+            ProviderConfig::SGLang(provider) => provider.is_missing_credentials(),
+            ProviderConfig::TGI(provider) => provider.is_missing_credentials(),
+            ProviderConfig::Together(provider) => provider.is_missing_credentials(),
+            ProviderConfig::VLLM(provider) => provider.is_missing_credentials(),
+            ProviderConfig::XAI(provider) => provider.is_missing_credentials(),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            ProviderConfig::Dummy(provider) => provider.is_missing_credentials(),
+        }
+    }
 }
 
 pub enum CredentialLocation {
@@ -1136,7 +1171,6 @@ pub enum Credential {
     FileContents(SecretString),
     Dynamic(String),
     None,
-    #[cfg(any(test, feature = "e2e_tests"))]
     Missing,
 }
 
@@ -1209,92 +1243,23 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
         match location {
             CredentialLocation::Env(key_name) => match env::var(key_name) {
                 Ok(value) => Ok(Credential::Static(SecretString::from(value))),
-                Err(_) => {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
-                        warn!(
-                            "You are missing the credentials required for a model provider of type {}, so the associated tests will likely fail.",
-                            provider_type
-                        );
-                        Ok(Credential::Missing)
-                    }
-                    #[cfg(not(any(test, feature = "e2e_tests")))]
-                    {
-                        Err(Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: provider_type.to_string(),
-                        }))
-                    }
-                }
+                Err(_) => Ok(Credential::Missing),
             },
             CredentialLocation::PathFromEnv(env_key) => {
                 // First get the path from environment variable
                 let path = match env::var(&env_key) {
                     Ok(path) => path,
-                    Err(_) => {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
-                            warn!(
-                                "Environment variable {} is required for a model provider of type {} but is missing, so the associated tests will likely fail.",
-                                env_key, provider_type
-                            );
-                            return Ok(Credential::Missing);
-                        }
-                        #[cfg(not(any(test, feature = "e2e_tests")))]
-                        {
-                            return Err(Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: format!(
-                                    "{}: Environment variable {} for credentials path is missing",
-                                    provider_type, env_key
-                                ),
-                            }));
-                        }
-                    }
+                    Err(_) => return Ok(Credential::Missing),
                 };
                 // Then read the file contents
                 match fs::read_to_string(path) {
                     Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
-                    Err(e) => {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
-                            warn!(
-                                "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
-                                provider_type, e
-                            );
-                            Ok(Credential::Missing)
-                        }
-                        #[cfg(not(any(test, feature = "e2e_tests")))]
-                        {
-                            Err(Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: format!(
-                                    "{}: Failed to read credentials file - {}",
-                                    provider_type, e
-                                ),
-                            }))
-                        }
-                    }
+                    Err(_) => Ok(Credential::Missing),
                 }
             }
             CredentialLocation::Path(path) => match fs::read_to_string(path) {
                 Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
-                Err(e) => {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
-                        warn!(
-                            "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
-                            provider_type, e
-                        );
-                        Ok(Credential::Missing)
-                    }
-                    #[cfg(not(any(test, feature = "e2e_tests")))]
-                    {
-                        Err(Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: format!(
-                                "{}: Failed to read credentials file - {}",
-                                provider_type, e
-                            ),
-                        }))
-                    }
-                }
+                Err(e) => Ok(Credential::Missing),
             },
             CredentialLocation::Dynamic(key_name) => Ok(Credential::Dynamic(key_name.clone())),
             CredentialLocation::None => Ok(Credential::None),

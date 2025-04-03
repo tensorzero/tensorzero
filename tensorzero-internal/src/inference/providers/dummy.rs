@@ -552,6 +552,10 @@ impl InferenceProvider for DummyProvider {
         }
         .into())
     }
+
+    fn is_missing_credentials(&self) -> bool {
+        false
+    }
 }
 lazy_static! {
     static ref EMPTY_SECRET: SecretString = SecretString::from(String::new());
@@ -596,6 +600,10 @@ impl EmbeddingProvider for DummyProvider {
             usage,
             latency,
         })
+    }
+
+    fn is_missing_credentials(&self) -> bool {
+        false
     }
 }
 

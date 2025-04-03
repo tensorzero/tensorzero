@@ -41,4 +41,6 @@ pub trait InferenceProvider {
         http_client: &'a reqwest::Client,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> impl Future<Output = Result<PollBatchInferenceResponse, Error>> + Send + 'a;
+
+    fn is_missing_credentials(&self) -> bool;
 }

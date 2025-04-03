@@ -90,8 +90,7 @@ fn default_api_key_location() -> CredentialLocation {
 pub enum TogetherCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
-    None,
+    Missing,
 }
 
 impl TryFrom<Credential> for TogetherCredentials {
@@ -101,8 +100,7 @@ impl TryFrom<Credential> for TogetherCredentials {
         match credentials {
             Credential::Static(key) => Ok(TogetherCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(TogetherCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
-            Credential::Missing => Ok(TogetherCredentials::None),
+            Credential::Missing => Ok(TogetherCredentials::Missing),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Together provider".to_string(),
             })),
@@ -124,10 +122,10 @@ impl TogetherCredentials {
                     },
                 )?))
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
-            TogetherCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            TogetherCredentials::Missing => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
-            })?,
+            }
+            .into()),
         }
     }
 }
@@ -297,6 +295,10 @@ impl InferenceProvider for TogetherProvider {
             provider_type: "GCP Vertex Gemini".to_string(),
         }
         .into())
+    }
+
+    fn is_missing_credentials(&self) -> bool {
+        matches!(self.credentials, TogetherCredentials::Missing)
     }
 }
 
@@ -964,13 +966,10 @@ mod tests {
         let creds = TogetherCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, TogetherCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = TogetherCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, TogetherCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = TogetherCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, TogetherCredentials::Missing));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

@@ -267,7 +267,10 @@ impl std::fmt::Display for MetricConfigLevel {
 }
 
 impl<'c> Config<'c> {
-    pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
+    pub async fn load_and_verify_from_path(
+        config_path: &Path,
+        verify_credentials: bool,
+    ) -> Result<Config<'c>, Error> {
         let config_table = match UninitializedConfig::read_toml_config(config_path)? {
             Some(table) => table,
             None => {
@@ -290,8 +293,16 @@ impl<'c> Config<'c> {
         };
         let config = Self::load_from_toml(config_table, base_path)?;
 
-        if let Some(object_store) = &config.object_store_info {
-            object_store.verify().await?;
+        if verify_credentials {
+            if let Some(object_store) = &config.object_store_info {
+                object_store.verify().await?;
+            }
+            for (model_name, model_config) in config.models.iter() {
+                model_config.verify_credentials(model_name)?;
+            }
+            for (embedding_model_name, embedding_model_config) in config.embedding_models.iter() {
+                embedding_model_config.validate_credentials(embedding_model_name)?;
+            }
         }
 
         Ok(config)
@@ -2145,7 +2156,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
     async fn test_empty_config() {
         let tempfile = NamedTempFile::new().unwrap();
         write!(&tempfile, "").unwrap();
-        Config::load_and_verify_from_path(tempfile.path())
+        Config::load_and_verify_from_path(tempfile.path(), true)
             .await
             .unwrap();
         assert!(logs_contain(
@@ -2166,7 +2177,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let tmpfile = NamedTempFile::new().unwrap();
         std::fs::write(tmpfile.path(), config_str).unwrap();
 
-        let err = Config::load_and_verify_from_path(tmpfile.path())
+        let err = Config::load_and_verify_from_path(tmpfile.path(), true)
             .await
             .unwrap_err()
             .to_string();
@@ -2308,7 +2319,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
     #[traced_test]
     #[tokio::test]
     async fn test_config_load_no_config_file() {
-        let err = Config::load_and_verify_from_path(Path::new("nonexistent.toml"))
+        let err = Config::load_and_verify_from_path(Path::new("nonexistent.toml"), true)
             .await
             .unwrap_err()
             .to_string();
@@ -2337,7 +2348,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path())
+        let err = Config::load_and_verify_from_path(tempfile.path(), true)
             .await
             .unwrap_err()
             .to_string();
@@ -2366,7 +2377,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path())
+        let err = Config::load_and_verify_from_path(tempfile.path(), true)
             .await
             .unwrap_err()
             .to_string();
@@ -2402,7 +2413,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path())
+        let err = Config::load_and_verify_from_path(tempfile.path(), true)
             .await
             .unwrap_err()
             .to_string();
@@ -2440,7 +2451,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path())
+        let err = Config::load_and_verify_from_path(tempfile.path(), true)
             .await
             .unwrap_err()
             .to_string();
@@ -2480,7 +2491,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path())
+        let err = Config::load_and_verify_from_path(tempfile.path(), true)
             .await
             .unwrap_err()
             .to_string();

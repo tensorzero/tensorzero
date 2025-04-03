@@ -131,6 +131,18 @@ impl EmbeddingModelConfig {
         }
         Err(ErrorDetails::ModelProvidersExhausted { provider_errors }.into())
     }
+
+    pub fn validate_credentials(&self, model_name: &str) -> Result<(), Error> {
+        for (provider_name, provider) in &self.providers {
+            if provider.is_missing_credentials() {
+                return Err(Error::new(ErrorDetails::MissingCredentials {
+                    model_name: model_name.to_string(),
+                    provider_name: provider_name.to_string(),
+                }));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -276,6 +288,8 @@ pub trait EmbeddingProvider {
         client: &Client,
         dynamic_api_keys: &InferenceCredentials,
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
+
+    fn is_missing_credentials(&self) -> bool;
 }
 
 #[derive(Debug)]
@@ -319,6 +333,14 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
             EmbeddingProviderConfig::Dummy(provider) => {
                 provider.embed(request, client, dynamic_api_keys).await
             }
+        }
+    }
+
+    fn is_missing_credentials(&self) -> bool {
+        match self {
+            EmbeddingProviderConfig::OpenAI(provider) => provider.is_missing_credentials(),
+            #[cfg(any(test, feature = "e2e_tests"))]
+            EmbeddingProviderConfig::Dummy(provider) => provider.is_missing_credentials(),
         }
     }
 }

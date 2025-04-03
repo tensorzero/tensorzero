@@ -68,6 +68,7 @@ pub enum VLLMCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    Missing,
 }
 
 impl TryFrom<Credential> for VLLMCredentials {
@@ -78,8 +79,7 @@ impl TryFrom<Credential> for VLLMCredentials {
             Credential::Static(key) => Ok(VLLMCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(VLLMCredentials::Dynamic(key_name)),
             Credential::None => Ok(VLLMCredentials::None),
-            #[cfg(any(test, feature = "e2e_tests"))]
-            Credential::Missing => Ok(VLLMCredentials::None),
+            Credential::Missing => Ok(VLLMCredentials::Missing),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for vLLM provider".to_string(),
             })),
@@ -102,6 +102,10 @@ impl VLLMCredentials {
                 })?))
             }
             VLLMCredentials::None => Ok(None),
+            VLLMCredentials::Missing => Err(ErrorDetails::ApiKeyMissing {
+                provider_name: PROVIDER_NAME.to_string(),
+            }
+            .into()),
         }
     }
 }
@@ -275,6 +279,10 @@ impl InferenceProvider for VLLMProvider {
             provider_type: "GCP Vertex Gemini".to_string(),
         }
         .into())
+    }
+
+    fn is_missing_credentials(&self) -> bool {
+        matches!(self.credentials, VLLMCredentials::Missing)
     }
 }
 
@@ -555,12 +563,9 @@ mod tests {
         assert!(matches!(creds, VLLMCredentials::Dynamic(_)));
 
         // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = VLLMCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, VLLMCredentials::None));
-        }
+        let generic = Credential::Missing;
+        let creds = VLLMCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, VLLMCredentials::Missing));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

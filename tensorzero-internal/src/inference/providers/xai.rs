@@ -73,7 +73,7 @@ impl XAIProvider {
 pub enum XAICredentials {
     Static(SecretString),
     Dynamic(String),
-    None,
+    Missing,
 }
 
 impl TryFrom<Credential> for XAICredentials {
@@ -83,9 +83,7 @@ impl TryFrom<Credential> for XAICredentials {
         match credentials {
             Credential::Static(key) => Ok(XAICredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(XAICredentials::Dynamic(key_name)),
-            Credential::None => Ok(XAICredentials::None),
-            #[cfg(any(test, feature = "e2e_tests"))]
-            Credential::Missing => Ok(XAICredentials::None),
+            Credential::Missing => Ok(XAICredentials::Missing),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for xAI provider".to_string(),
             })),
@@ -106,7 +104,7 @@ impl XAICredentials {
                 }
                 .into()
             }),
-            XAICredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            XAICredentials::Missing => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
             .into()),
@@ -283,6 +281,10 @@ impl InferenceProvider for XAIProvider {
             provider_type: PROVIDER_TYPE.to_string(),
         }
         .into())
+    }
+
+    fn is_missing_credentials(&self) -> bool {
+        matches!(self.credentials, XAICredentials::Missing)
     }
 }
 
@@ -608,13 +610,10 @@ mod tests {
         let creds = XAICredentials::try_from(generic).unwrap();
         assert!(matches!(creds, XAICredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = XAICredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, XAICredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = XAICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, XAICredentials::Missing));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));
