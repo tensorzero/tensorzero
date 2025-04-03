@@ -1528,7 +1528,7 @@ wheels = [
 ]
 
 [[package]]
-name = "tensorzero-examples-rag-retrieval-augmented-generation-multi-hop-retrieval-jeopardy"
+name = "tensorzero-examples-rag-retrieval-augmented-generation-simple-agentic-rag"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
