@@ -2572,7 +2572,10 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        Config::load_from_toml(config, base_path.clone()).expect("Failed to construct config");
+
+        SKIP_CREDENTIAL_VALIDATION
+            .set(&(), || Config::load_from_toml(config, base_path))
+            .unwrap();
 
         assert!(!logs_contain("good_variant"));
         assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.test]`"));

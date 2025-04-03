@@ -2140,8 +2140,9 @@ mod tests {
             .into()
         );
         // Test that it works with an initialized model
-        let anthropic_provider_config =
-            ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap());
+        let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.set(&(), || {
+            ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap())
+        });
         let anthropic_model_config = ModelConfig {
             routing: vec!["anthropic".into()],
             providers: HashMap::from([(
