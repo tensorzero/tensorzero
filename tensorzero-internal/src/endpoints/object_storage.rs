@@ -7,7 +7,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config_parser::ObjectStoreInfo,
+    config_parser::{Config, ObjectStoreInfo},
     error::{Error, ErrorDetails},
     gateway_util::{AppState, AppStateData},
     inference::types::storage::StoragePath,
@@ -40,11 +40,24 @@ pub async fn get_object_handler(
     State(AppStateData { config, .. }): AppState,
     Query(params): Query<PathParams>,
 ) -> Result<Json<ObjectResponse>, Error> {
+    // Use the existing object store if it matches the requested kind, so
     let storage_path: StoragePath = serde_json::from_str(&params.storage_path).map_err(|e| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Error parsing storage path: {}", e),
         })
     })?;
+    Ok(Json(get_object(&config, storage_path).await?))
+}
+
+/// Fetches an object using the object store and path specified by the encoded `StoragePath`.
+/// This does not need to match the gateway's current object store (e.g. a `StorageKind::Filesystem`)
+/// could be provided even if the gateway is configured with `StorageKind::S3Compatible`.
+/// However, if the provider requires authentication, the gateway must have the correct credentials
+/// set as environment variables.
+pub async fn get_object(
+    config: &Config<'_>,
+    storage_path: StoragePath,
+) -> Result<ObjectResponse, Error> {
     // Use the existing object store if it matches the requested kind, so
     // that we can re-use our connection pool.
     let store = match &config.object_store_info {
