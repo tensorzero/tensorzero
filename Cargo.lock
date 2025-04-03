@@ -3808,6 +3808,7 @@ dependencies = [
  "rand 0.9.0",
  "reqwest",
  "reqwest-eventsource",
+ "scoped-tls",
  "secrecy",
  "serde",
  "serde-untagged",

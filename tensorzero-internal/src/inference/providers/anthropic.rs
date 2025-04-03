@@ -82,7 +82,6 @@ impl AnthropicProvider {
 pub enum AnthropicCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -93,7 +92,6 @@ impl TryFrom<Credential> for AnthropicCredentials {
         match credentials {
             Credential::Static(key) => Ok(AnthropicCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(AnthropicCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(AnthropicCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Anthropic provider".to_string(),
@@ -117,7 +115,6 @@ impl AnthropicCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             AnthropicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
@@ -2665,13 +2662,10 @@ mod tests {
         let creds = AnthropicCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, AnthropicCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = AnthropicCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, AnthropicCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = AnthropicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AnthropicCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

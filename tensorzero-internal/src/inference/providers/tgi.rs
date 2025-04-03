@@ -87,7 +87,6 @@ impl TryFrom<Credential> for TGICredentials {
             Credential::Static(key) => Ok(TGICredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(TGICredentials::Dynamic(key_name)),
             Credential::None => Ok(TGICredentials::None),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(TGICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for TGI provider".to_string(),

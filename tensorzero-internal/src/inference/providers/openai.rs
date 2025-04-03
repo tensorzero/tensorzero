@@ -100,7 +100,6 @@ impl TryFrom<Credential> for OpenAICredentials {
             Credential::Static(key) => Ok(OpenAICredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(OpenAICredentials::Dynamic(key_name)),
             Credential::None => Ok(OpenAICredentials::None),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(OpenAICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for OpenAI provider".to_string(),
@@ -3415,13 +3414,10 @@ mod tests {
         let creds = OpenAICredentials::try_from(generic).unwrap();
         assert!(matches!(creds, OpenAICredentials::None));
 
-        // Test Missing credentials (in test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = OpenAICredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, OpenAICredentials::None));
-        }
+        // Test Missing credentials
+        let generic = Credential::Missing;
+        let creds = OpenAICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, OpenAICredentials::None));
 
         // Test invalid credential type
         let generic = Credential::FileContents(SecretString::from("test"));

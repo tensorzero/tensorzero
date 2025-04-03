@@ -82,6 +82,7 @@ url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 tensorzero-derive = { path = "../tensorzero-derive"}
 clap = { workspace = true }
+scoped-tls = "1.0.1"
 
 
 [dev-dependencies]
