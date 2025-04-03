@@ -6,12 +6,13 @@ use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use dataset::query_dataset;
 use evaluators::evaluate_inference;
-use helpers::{get_tool_params_args, resolved_input_to_input, setup_logging};
+use helpers::{get_tool_params_args, setup_logging};
 use serde::{Deserialize, Serialize};
 use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
 use tensorzero::{
-    CacheParamsOptions, Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams,
-    DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceResponse,
+    input_handling::resolved_input_to_input, CacheParamsOptions, Client, ClientBuilder,
+    ClientBuilderMode, ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput,
+    InferenceParams, InferenceResponse,
 };
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::config_parser::MetricConfigOptimize;
@@ -314,7 +315,8 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         function_config,
     } = params;
 
-    let input = resolved_input_to_input(datapoint.input().clone()).await?;
+    let input =
+        resolved_input_to_input(datapoint.input().clone(), &tensorzero_client.client).await?;
     let dynamic_tool_params = match datapoint.tool_call_config() {
         Some(tool_params) => get_tool_params_args(tool_params, function_config).await,
         None => DynamicToolParams::default(),
@@ -401,7 +403,7 @@ pub struct RunInfo {
 }
 
 pub struct ThrottledTensorZeroClient {
-    client: Client,
+    pub client: Client,
     semaphore: Semaphore,
 }
 
