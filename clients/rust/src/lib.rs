@@ -17,12 +17,13 @@ mod client_inference_params;
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 
 pub use tensorzero_internal::cache::CacheParamsOptions;
-pub use tensorzero_internal::endpoints::object_storage::ObjectResponse,
 pub use tensorzero_internal::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_internal::endpoints::feedback::Params as FeedbackParams;
 pub use tensorzero_internal::endpoints::inference::{
     InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
 };
+pub use tensorzero_internal::endpoints::object_storage::ObjectResponse;
+pub use tensorzero_internal::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_internal::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role,
 };

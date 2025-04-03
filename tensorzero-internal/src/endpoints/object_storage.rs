@@ -14,7 +14,7 @@ use crate::{
 };
 use aws_smithy_types::base64;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "e2e_tests", derive(PartialEq))]
 pub struct ObjectResponse {
     pub data: String,
@@ -90,8 +90,8 @@ pub async fn get_object(
             message: format!("Error getting object bytes: {}", e),
         })
     })?;
-    Ok(Json(ObjectResponse {
+    Ok(ObjectResponse {
         data: base64::encode(&bytes),
         reused_object_store: matches!(store, Cow::Borrowed(_)),
-    }))
+    })
 }
