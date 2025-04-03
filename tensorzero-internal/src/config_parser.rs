@@ -270,7 +270,11 @@ impl std::fmt::Display for MetricConfigLevel {
 }
 
 impl<'c> Config<'c> {
-    pub async fn load_and_verify_from_path(
+    pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
+        Self::load_from_path_optional_verify_credentials(config_path, true).await
+    }
+
+    pub async fn load_from_path_optional_verify_credentials(
         config_path: &Path,
         validate_credentials: bool,
     ) -> Result<Config<'c>, Error> {
@@ -2168,7 +2172,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
     async fn test_empty_config() {
         let tempfile = NamedTempFile::new().unwrap();
         write!(&tempfile, "").unwrap();
-        Config::load_and_verify_from_path(tempfile.path(), true)
+        Config::load_and_verify_from_path(tempfile.path())
             .await
             .unwrap();
         assert!(logs_contain(
@@ -2189,7 +2193,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let tmpfile = NamedTempFile::new().unwrap();
         std::fs::write(tmpfile.path(), config_str).unwrap();
 
-        let err = Config::load_and_verify_from_path(tmpfile.path(), true)
+        let err = Config::load_and_verify_from_path(tmpfile.path())
             .await
             .unwrap_err()
             .to_string();
@@ -2331,7 +2335,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
     #[traced_test]
     #[tokio::test]
     async fn test_config_load_no_config_file() {
-        let err = Config::load_and_verify_from_path(Path::new("nonexistent.toml"), true)
+        let err = Config::load_and_verify_from_path(Path::new("nonexistent.toml"))
             .await
             .unwrap_err()
             .to_string();
@@ -2360,7 +2364,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path(), true)
+        let err = Config::load_and_verify_from_path(tempfile.path())
             .await
             .unwrap_err()
             .to_string();
@@ -2389,7 +2393,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path(), true)
+        let err = Config::load_and_verify_from_path(tempfile.path())
             .await
             .unwrap_err()
             .to_string();
@@ -2425,7 +2429,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path(), true)
+        let err = Config::load_and_verify_from_path(tempfile.path())
             .await
             .unwrap_err()
             .to_string();
@@ -2463,7 +2467,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path(), true)
+        let err = Config::load_and_verify_from_path(tempfile.path())
             .await
             .unwrap_err()
             .to_string();
@@ -2503,7 +2507,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
             [functions]"#
         )
         .unwrap();
-        let err = Config::load_and_verify_from_path(tempfile.path(), true)
+        let err = Config::load_and_verify_from_path(tempfile.path())
             .await
             .unwrap_err()
             .to_string();
@@ -2578,7 +2582,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
     }
 
     #[tokio::test]
-    async fn test_config_load_no_credentials() {
+    async fn test_config_load_optional_credentials() {
         let config_str = r#"
         [models."my-model"]
         routing = ["openai"]
@@ -2592,13 +2596,13 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let tmpfile = NamedTempFile::new().unwrap();
         std::fs::write(tmpfile.path(), config_str).unwrap();
 
-        let err = Config::load_and_verify_from_path(tmpfile.path(), true)
+        let err = Config::load_from_path_optional_verify_credentials(tmpfile.path(), true)
             .await
             .unwrap_err();
         assert_eq!(err.to_string(), "models.my-model.providers.openai: API key missing for provider: openai: Failed to read credentials file - No such file or directory (os error 2)");
 
         // Should not fail since validation is disabled
-        Config::load_and_verify_from_path(tmpfile.path(), false)
+        Config::load_from_path_optional_verify_credentials(tmpfile.path(), false)
             .await
             .expect("Failed to load config");
     }

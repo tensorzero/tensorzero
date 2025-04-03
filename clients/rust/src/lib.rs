@@ -183,7 +183,7 @@ impl ClientBuilder {
             } => {
                 let config = if let Some(config_file) = config_file {
                     Arc::new(
-                        Config::load_and_verify_from_path(config_file, true)
+                        Config::load_and_verify_from_path(config_file)
                             .await
                             .map_err(|e| {
                                 ClientBuilderError::ConfigParsing(TensorZeroError::Other {

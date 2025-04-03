@@ -84,7 +84,8 @@ pub async fn run_evaluation(
 
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
-    let config = Config::load_and_verify_from_path(&args.config_file, false).await?;
+    let config =
+        Config::load_from_path_optional_verify_credentials(&args.config_file, false).await?;
     let evaluation_config = config
         .evaluations
         .get(&args.evaluation_name)
