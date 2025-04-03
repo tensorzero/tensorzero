@@ -2574,7 +2574,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
     }
 
     #[tokio::test]
-    async fn test_config_load_optional_credentials() {
+    async fn test_config_load_optional_credentials_validation() {
         let config_str = r#"
         [models."my-model"]
         routing = ["openai"]
@@ -2588,10 +2588,12 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let tmpfile = NamedTempFile::new().unwrap();
         std::fs::write(tmpfile.path(), config_str).unwrap();
 
-        let err = Config::load_from_path_optional_verify_credentials(tmpfile.path(), true)
-            .await
-            .unwrap_err();
-        assert_eq!(err.to_string(), "models.my-model.providers.openai: API key missing for provider: openai: Failed to read credentials file - No such file or directory (os error 2)");
+        let res = Config::load_from_path_optional_verify_credentials(tmpfile.path(), true).await;
+        if cfg!(feature = "e2e_tests") {
+            assert!(res.is_ok());
+        } else {
+            assert_eq!(res.unwrap_err().to_string(), "models.my-model.providers.openai: API key missing for provider: openai: Failed to read credentials file - No such file or directory (os error 2)");
+        }
 
         // Should not fail since validation is disabled
         Config::load_from_path_optional_verify_credentials(tmpfile.path(), false)
