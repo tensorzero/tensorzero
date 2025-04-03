@@ -13,6 +13,7 @@ use tokio_stream::StreamExt;
 use url::Url;
 
 mod client_inference_params;
+pub mod input_handling;
 
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 
