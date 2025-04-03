@@ -63,37 +63,24 @@ impl HTTPGateway {
         let status_url = self.base_url.join("status").map_err(|_| {
             ClientBuilderError::GatewayVersion("Failed to construct /status URL".to_string())
         })?;
-        let new_version = if !cfg!(feature = "e2e_tests") {
-            // If the client is initialized and the ping for version fails, we simply don't set it.
-            let status_response = match self.http_client.get(status_url).send().await {
-                Ok(status_response) => status_response,
-                Err(_) => return Ok(()),
-            };
+        // If the client is initialized and the ping for version fails, we simply don't set it.
+        let status_response = match self.http_client.get(status_url).send().await {
+            Ok(status_response) => Some(status_response),
+            Err(_) => None,
+        };
 
-            // If we fail to parse the /status response, we throw an error because this is very wrong.
-            let status_response: StatusResponse = status_response.json().await.map_err(|e| {
+        // If we fail to parse the /status response, we throw an error because this is very wrong.
+        let status_response: Option<StatusResponse> = match status_response {
+            Some(status_response) => Some(status_response.json().await.map_err(|e| {
                 ClientBuilderError::GatewayVersion(format!("Failed to parse /status response: {e}"))
-            })?;
-            Some(status_response.version)
-        } else {
-            // Same logic as above except the version can be overridden by the TENSORZERO_E2E_GATEWAY_VERSION_OVERRIDE environment variable.
-            let status_response = match self.http_client.get(status_url).send().await {
-                Ok(status_response) => Some(status_response),
-                Err(_) => return Ok(()),
-            };
-            let status_response: Option<StatusResponse> = match status_response {
-                Some(status_response) => Some(status_response.json().await.map_err(|_| {
-                    ClientBuilderError::GatewayVersion(
-                        "Failed to parse /status response".to_string(),
-                    )
-                })?),
-                None => return Ok(()),
-            };
-            let mut version = status_response.map(|s| s.version);
+            })?),
+            None => None,
+        };
+        let mut new_version = status_response.map(|s| s.version);
+        if cfg!(feature = "e2e_tests") {
             if let Ok(version_override) = env::var("TENSORZERO_E2E_GATEWAY_VERSION_OVERRIDE") {
-                version = Some(version_override);
+                new_version = Some(version_override);
             }
-            version
         };
         if let Some(version) = new_version {
             let mut gateway_version = self.gateway_version.lock().await;
@@ -451,20 +438,14 @@ impl Client {
         })?;
 
         let headers = resp.headers();
-        let version = if !cfg!(feature = "e2e_tests") {
-            headers
-                .get("x-tensorzero-gateway-version")
-                .and_then(|v| v.to_str().ok())
-                .map(|v| v.to_string())
-        } else {
-            let mut version = headers
-                .get("x-tensorzero-gateway-version")
-                .and_then(|v| v.to_str().ok())
-                .map(|v| v.to_string());
+        let mut version = headers
+            .get("x-tensorzero-gateway-version")
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.to_string());
+        if cfg!(feature = "e2e_tests") {
             if let Ok(version_override) = env::var("TENSORZERO_E2E_GATEWAY_VERSION_OVERRIDE") {
                 version = Some(version_override);
             }
-            version
         };
         if let Some(version) = version {
             self.update_gateway_version(version).await;
