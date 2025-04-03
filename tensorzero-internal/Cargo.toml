@@ -45,7 +45,7 @@ image = { version = "0.25.6", default-features = false }
 itertools = "0.14.0"
 jsonschema = "0.29.1"
 jsonwebtoken = "9.3.1"
-lazy_static = { version = "1.5.0" }
+lazy_static = { workspace = true }
 metrics = "0.24.1"
 metrics-exporter-prometheus = { version = "0.16.2", features = [
     "http-listener",
@@ -80,7 +80,7 @@ tracing-subscriber = { version = "0.3.18", features = [
 ] }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
-tensorzero-derive = { path = "../tensorzero-derive"}
+tensorzero-derive = { path = "../tensorzero-derive" }
 clap = { workspace = true }
 scoped-tls = "1.0.1"
 
