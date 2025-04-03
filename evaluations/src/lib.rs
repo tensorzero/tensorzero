@@ -6,7 +6,7 @@ use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use dataset::query_dataset;
 use evaluators::evaluate_inference;
-use helpers::{get_tool_params_args, resolved_input_to_input, setup_logging};
+use helpers::{get_tool_params_args, resolved_input_to_client_input, setup_logging};
 use serde::{Deserialize, Serialize};
 use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
 use tensorzero::{
@@ -317,7 +317,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         function_config,
     } = params;
 
-    let input = resolved_input_to_input(datapoint.input().clone()).await?;
+    let input = resolved_input_to_client_input(datapoint.input().clone()).await?;
     let dynamic_tool_params = match datapoint.tool_call_config() {
         Some(tool_params) => get_tool_params_args(tool_params, function_config).await,
         None => DynamicToolParams::default(),

@@ -13,8 +13,10 @@ use tokio_stream::StreamExt;
 use url::Url;
 
 mod client_inference_params;
+mod client_input;
 
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
+pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 
 pub use tensorzero_internal::cache::CacheParamsOptions;
 pub use tensorzero_internal::endpoints::feedback::FeedbackResponse;
@@ -359,7 +361,7 @@ impl Client {
                         gateway.state.config.clone(),
                         &gateway.state.http_client,
                         gateway.state.clickhouse_connection_info.clone(),
-                        params.into(),
+                        params.try_into().map_err(err_to_http)?,
                     )
                     .await
                     .map_err(err_to_http)

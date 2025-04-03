@@ -3747,6 +3747,7 @@ dependencies = [
  "reqwest-eventsource",
  "secrecy",
  "serde",
+ "serde-untagged",
  "serde_json",
  "tensorzero-internal",
  "thiserror 2.0.12",
