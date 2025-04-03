@@ -238,6 +238,13 @@ api_key_location = "dynamic::fireworks_api_key"
 [models.qwen2p5-72b-instruct]
 routing = ["fireworks"]
 
+[models."deepseek-r1"]
+routing = ["fireworks"]
+
+[models."deepseek-r1".providers.fireworks]
+type = "fireworks"
+model_name = "accounts/fireworks/models/deepseek-r1"
+
 [models.qwen2p5-72b-instruct.providers.fireworks]
 type = "fireworks"
 model_name = "accounts/fireworks/models/qwen2p5-72b-instruct"
@@ -1100,6 +1107,13 @@ type = "chat_completion"
 model = "deepseek::deepseek-chat"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+
+[functions.basic_test.variants.fireworks-deepseek]
+type = "chat_completion"
+model = "deepseek-r1"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
 [functions.basic_test.variants.flaky]
 type = "chat_completion"
 model = "flaky_basic_test"
@@ -1573,6 +1587,14 @@ system_template = "../../fixtures/config/functions/json_success/prompt/system_te
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
 json_mode = "strict"
+
+[functions.json_success.variants.fireworks-deepseek]
+type = "chat_completion"
+model = "deepseek-r1"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "off"
+max_tokens = 800
 
 [functions.json_success.variants.xai]
 type = "chat_completion"
