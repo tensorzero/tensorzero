@@ -180,6 +180,7 @@ impl UninitializedStaticEvaluationConfig {
             }
             .into());
         }
+
         // evaluation names cannot have "::" in them since we use it as a delimiter
         if evaluation_name.contains("::") {
             return Err(ErrorDetails::Config {
@@ -391,7 +392,7 @@ pub struct UninitializedLLMJudgeChatCompletionVariantConfig {
     pub presence_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
-    pub json_mode: JsonMode, // This is JSON
+    pub json_mode: JsonMode, // This is a JSON function
     #[serde(default)]
     pub retries: RetryConfig,
     #[serde(default)]

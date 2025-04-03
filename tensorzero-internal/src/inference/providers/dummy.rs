@@ -193,6 +193,41 @@ impl InferenceProvider for DummyProvider {
             }
         }
 
+        if self.model_name == "lying_image_judger" {
+            #[allow(clippy::expect_used)]
+            let mut counters = FLAKY_COUNTERS
+                .lock()
+                .expect("FLAKY_COUNTERS mutex is poisoned");
+            let counter = counters.entry(self.model_name.clone()).or_insert(0);
+            *counter += 1;
+
+            let content = match *counter % 2 {
+                0 => vec![ContentBlockOutput::Text(Text {
+                    text: "This is a crab.".to_string(),
+                })],
+                _ => vec![ContentBlockOutput::Text(Text {
+                    text: "This is a dog.".to_string(),
+                })],
+            };
+            return Ok(ProviderInferenceResponse {
+                id: Uuid::now_v7(),
+                created: current_timestamp(),
+                output: content,
+                raw_request: "raw request".to_string(),
+                raw_response: "raw response".to_string(),
+                usage: Usage {
+                    input_tokens: 1000,
+                    output_tokens: 1000,
+                },
+                latency: Latency::NonStreaming {
+                    response_time: Duration::from_millis(100),
+                },
+                system: None,
+                input_messages: vec![],
+                finish_reason: None,
+            });
+        }
+
         if self.model_name.starts_with("error") {
             return Err(ErrorDetails::InferenceClient {
                 message: format!(

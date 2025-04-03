@@ -35,6 +35,9 @@ pub async fn run_llm_judge_evaluator(
 ) -> Result<Option<LLMJudgeEvaluationResult>> {
     let resolved_input = datapoint.input();
     let serialized_datapoint_input = prepare_serialized_input(resolved_input)?;
+    // TODO (Viraj): add a flag to LLM judge config that is `input_format = "serialized" | "messages"`
+    // optional, default is "serialized"
+    // we only support images in "messages" format and error telling people that.
     let generated_output = match &inference_response {
         InferenceResponse::Chat(chat_response) => {
             prepare_serialized_chat_output(&chat_response.content)?

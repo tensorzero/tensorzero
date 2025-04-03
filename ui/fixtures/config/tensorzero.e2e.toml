@@ -243,6 +243,27 @@ system_instructions = "evaluations/haiku/topic_starts_with_f/system_instructions
 json_mode = "strict"
 temperature = 0
 
+[evaluations.images]
+type = "static"
+function_name = "tensorzero::default"
+
+[evaluations.images.evaluators.exact_match]
+type = "exact_match"
+
+[evaluations.images.evaluators.honest_answer]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+include = { reference_output = false }
+cutoff = 0.2
+
+[evaluations.images.evaluators.honest_answer.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_instructions = "evaluations/images/honest_answer/system_instructions.txt"
+temperature = 0
+json_mode = "strict"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                               OBJECT_STORAGE                               │
 # └────────────────────────────────────────────────────────────────────────────┘
