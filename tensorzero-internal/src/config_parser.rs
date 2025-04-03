@@ -298,22 +298,11 @@ impl<'c> Config<'c> {
                 .into());
             }
         };
-        let config;
-        #[cfg(feature = "e2e_tests")]
-        {
-            config = SKIP_CREDENTIAL_VALIDATION
-                .set(&(), || Self::load_from_toml(config_table, base_path));
-        }
-        #[cfg(not(feature = "e2e_tests"))]
-        {
-            if validate_credentials {
-                config = Self::load_from_toml(config_table, base_path);
-            } else {
-                config = SKIP_CREDENTIAL_VALIDATION
-                    .set(&(), || Self::load_from_toml(config_table, base_path));
-            }
-        }
-        let config = config?;
+        let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
+            SKIP_CREDENTIAL_VALIDATION.set(&(), || Self::load_from_toml(config_table, base_path))?
+        } else {
+            Self::load_from_toml(config_table, base_path)?
+        };
 
         if validate_credentials {
             if let Some(object_store) = &config.object_store_info {
