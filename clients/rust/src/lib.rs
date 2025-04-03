@@ -71,8 +71,8 @@ impl HTTPGateway {
             };
 
             // If we fail to parse the /status response, we throw an error because this is very wrong.
-            let status_response: StatusResponse = status_response.json().await.map_err(|_| {
-                ClientBuilderError::GatewayVersion("Failed to parse /status response".to_string())
+            let status_response: StatusResponse = status_response.json().await.map_err(|e| {
+                ClientBuilderError::GatewayVersion(format!("Failed to parse /status response: {e}"))
             })?;
             Some(status_response.version)
         } else {
