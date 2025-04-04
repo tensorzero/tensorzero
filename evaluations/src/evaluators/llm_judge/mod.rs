@@ -23,6 +23,7 @@ pub struct LLMJudgeEvaluationResult {
     pub value: Value,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run_llm_judge_evaluator(
     inference_response: &InferenceResponse,
     datapoint: &Datapoint,
@@ -140,17 +141,47 @@ fn prepare_llm_judge_input(
         }
         LLMJudgeInputFormat::Messages => {
             let mut messages = prepare_messages_input(input)?;
-            // TODO (Viraj): Add something that explains the format of the output and the outputs as needed.
             let final_message = prepare_final_message_messages_input(
                 llm_judge_config,
-                generated_output,
-                reference_output,
-            )?;
+                &generated_output,
+                reference_output.as_deref(),
+            );
+            match final_message {
+                Some(final_message) => {
+                    messages.push(InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text(TextKind::Text {
+                            text: final_message,
+                        })],
+                    });
+                }
+                None => return Ok(None),
+            }
             Ok(Some(Input {
                 system: None,
                 messages,
             }))
         }
+    }
+}
+
+fn prepare_final_message_messages_input(
+    llm_judge_config: &LLMJudgeConfig,
+    generated_output: &str,
+    reference_output: Option<&str>,
+) -> Option<String> {
+    if llm_judge_config.include.reference_output {
+        let reference_output = reference_output?;
+        // Includes hardcoded placeholders for generated_output and reference_output
+        Some(format!(
+            include_str!("message_output_template_with_reference.txt"),
+            generated_output, reference_output
+        ))
+    } else {
+        Some(format!(
+            include_str!("message_output_template_without_reference.txt"),
+            generated_output
+        ))
     }
 }
 
@@ -315,14 +346,10 @@ mod tests {
     use super::*;
 
     use serde_json::json;
+    use tensorzero::Image;
     use tensorzero::Role;
     use tensorzero_internal::{
-        inference::types::{
-            resolved_input::ImageWithPath,
-            storage::{StorageKind, StoragePath},
-            Base64Image, ContentBlockChatOutput, ImageKind, ResolvedInput, ResolvedInputMessage,
-            ResolvedInputMessageContent, Text,
-        },
+        inference::types::{ContentBlockChatOutput, Text},
         tool::{ToolCallOutput, ToolResult},
     };
 
@@ -331,31 +358,31 @@ mod tests {
     #[test]
     fn test_prepare_serialized_input() {
         // No system, just a text user message
-        let resolved_input = ResolvedInput {
+        let input = Input {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![InputMessageContent::Text(TextKind::Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         };
-        let serialized_input = prepare_serialized_input(&resolved_input).unwrap();
+        let serialized_input = prepare_serialized_input(&input).unwrap();
         assert_eq!(
             serialized_input,
-            r#"{"messages":[{"role":"user","content":[{"type":"text","value":"Hello, world!"}]}]}"#
+            r#"{"messages":[{"role":"user","content":[{"type":"text","text":"Hello, world!"}]}]}"#
         );
 
         // System message, user message with a text and tool block
-        let resolved_input = ResolvedInput {
+        let input = Input {
             system: Some(json!("You are a helpful assistant")),
-            messages: vec![ResolvedInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
                 content: vec![
-                    ResolvedInputMessageContent::Text {
-                        value: json!("Hello, world!"),
-                    },
-                    ResolvedInputMessageContent::ToolResult(ToolResult {
+                    InputMessageContent::Text(TextKind::Text {
+                        text: "Hello, world!".to_string(),
+                    }),
+                    InputMessageContent::ToolResult(ToolResult {
                         name: "tool".to_string(),
                         result: "it's 24 degrees and cloudy in SF".to_string(),
                         id: "foooo".to_string(),
@@ -363,32 +390,22 @@ mod tests {
                 ],
             }],
         };
-        let serialized_input = prepare_serialized_input(&resolved_input).unwrap();
+        let serialized_input = prepare_serialized_input(&input).unwrap();
         assert_eq!(
             serialized_input,
-            r#"{"system":"You are a helpful assistant","messages":[{"role":"user","content":[{"type":"text","value":"Hello, world!"},{"type":"tool_result","name":"tool","result":"it's 24 degrees and cloudy in SF","id":"foooo"}]}]}"#
+            r#"{"system":"You are a helpful assistant","messages":[{"role":"user","content":[{"type":"text","text":"Hello, world!"},{"type":"tool_result","name":"tool","result":"it's 24 degrees and cloudy in SF","id":"foooo"}]}]}"#
         );
         // Input contains an image
-        let resolved_input = ResolvedInput {
+        let input = Input {
             system: None,
-            messages: vec![ResolvedInputMessage {
+            messages: vec![InputMessage {
                 role: Role::User,
-                content: vec![ResolvedInputMessageContent::Image(ImageWithPath {
-                    image: Base64Image {
-                        url: Some(Url::parse("https://example.com/image.png").unwrap()),
-                        data: None,
-                        mime_type: ImageKind::Png,
-                    },
-                    storage_path: StoragePath {
-                        kind: StorageKind::Filesystem {
-                            path: "/tmp/image.png".to_string(),
-                        },
-                        path: "foo".to_string().into(),
-                    },
+                content: vec![InputMessageContent::Image(Image::Url {
+                    url: Url::parse("https://example.com/image.png").unwrap(),
                 })],
             }],
         };
-        let error = prepare_serialized_input(&resolved_input).unwrap_err();
+        let error = prepare_serialized_input(&input).unwrap_err();
         assert_eq!(
             error.to_string(),
             "Image content not supported for LLM judge evaluations"

@@ -129,6 +129,7 @@ pub(crate) async fn evaluate_inference(
 /// - Err(e): The evaluator failed to run due to some error (like the LLM Judge failed to infer).
 ///
 /// NOTE: Each evaluator we implement in the match statement below should follow this contract.
+#[allow(clippy::too_many_arguments)]
 async fn run_evaluator(
     evaluation_config: &EvaluationConfig,
     evaluator_name: String,

@@ -25,6 +25,7 @@ pub use tensorzero_internal::endpoints::inference::{
 };
 pub use tensorzero_internal::endpoints::object_storage::ObjectResponse;
 pub use tensorzero_internal::inference::types::storage::{StorageKind, StoragePath};
+pub use tensorzero_internal::inference::types::Image;
 pub use tensorzero_internal::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role,
 };

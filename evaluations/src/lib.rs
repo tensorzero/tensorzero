@@ -162,7 +162,6 @@ pub async fn run_evaluation(
                 })
                 .await?,
             );
-            println!("inference_response: {:?}", inference_response);
 
             let evaluation_result = evaluate_inference(
                 inference_response.clone(),
