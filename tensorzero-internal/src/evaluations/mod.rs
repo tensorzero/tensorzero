@@ -68,6 +68,7 @@ pub struct ExactMatchConfig {
 
 #[derive(Debug)]
 pub struct LLMJudgeConfig {
+    pub input_format: LLMJudgeInputFormat,
     pub output_type: LLMJudgeOutputType,
     pub include: LLMJudgeIncludeConfig,
     pub optimize: LLMJudgeOptimize,
@@ -78,6 +79,14 @@ pub struct LLMJudgeConfig {
 pub struct LLMJudgeIncludeConfig {
     #[serde(default)]
     pub reference_output: bool,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LLMJudgeInputFormat {
+    #[default]
+    Serialized,
+    Messages,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -247,6 +256,8 @@ enum UninitializedEvaluatorConfig {
 
 #[derive(Debug, Deserialize)]
 struct UninitializedLLMJudgeConfig {
+    #[serde(default)]
+    input_format: LLMJudgeInputFormat,
     variants: HashMap<String, UninitializedLLMJudgeVariantConfig>,
     output_type: LLMJudgeOutputType,
     optimize: LLMJudgeOptimize,
@@ -355,6 +366,7 @@ impl UninitializedEvaluatorConfig {
                 });
                 Ok((
                     EvaluatorConfig::LLMJudge(LLMJudgeConfig {
+                        input_format: params.input_format,
                         output_type: params.output_type,
                         include: params.include,
                         optimize: params.optimize,
@@ -602,6 +614,7 @@ mod tests {
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Min,
@@ -722,6 +735,7 @@ mod tests {
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
                 variants,
                 output_type: LLMJudgeOutputType::Float,
                 optimize: LLMJudgeOptimize::Max,
@@ -903,6 +917,7 @@ mod tests {
             }
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Min,
@@ -1004,6 +1019,7 @@ mod tests {
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Min,
@@ -1070,6 +1086,7 @@ mod tests {
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Max,
@@ -1140,6 +1157,7 @@ mod tests {
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Max,

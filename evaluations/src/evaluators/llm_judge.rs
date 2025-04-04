@@ -9,11 +9,10 @@ use tensorzero::{
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{
-    get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeOutputType,
+    get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType,
 };
 use tensorzero_internal::inference::types::{
-    ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessageContent,
-    TextKind,
+    ContentBlockChatOutput, JsonInferenceOutput, TextKind,
 };
 use uuid::Uuid;
 
@@ -32,43 +31,19 @@ pub async fn run_llm_judge_evaluator(
     evaluation_name: &str,
     evaluator_name: &str,
     evaluation_run_id: Uuid,
+    input: &Input,
 ) -> Result<Option<LLMJudgeEvaluationResult>> {
-    let resolved_input = datapoint.input();
-    let serialized_datapoint_input = prepare_serialized_input(resolved_input)?;
-    // TODO (Viraj): add a flag to LLM judge config that is `input_format = "serialized" | "messages"`
-    // optional, default is "serialized"
-    // we only support images in "messages" format and error telling people that.
-    let generated_output = match &inference_response {
-        InferenceResponse::Chat(chat_response) => {
-            prepare_serialized_chat_output(&chat_response.content)?
-        }
-        InferenceResponse::Json(json_response) => {
-            prepare_serialized_json_output(&json_response.output)?
-        }
-    };
-    let reference_output = match handle_reference_output(llm_judge_config, datapoint) {
-        Ok(reference_output) => reference_output,
-        // Reference output is optional so if it's needed but not present, we can just return None
-        Err(_e) => return Ok(None),
-    };
-    let input = Input {
-        system: None,
-        messages: vec![InputMessage {
-            role: Role::User,
-            content: vec![InputMessageContent::Text(TextKind::Arguments{
-                arguments: json!({"input": serialized_datapoint_input, "generated_output": generated_output, "reference_output": reference_output})
-                    .as_object()
-                    .expect("Arguments should be an object")
-                    .clone()
-            })],
-        }],
-    };
+    let judge_input =
+        match prepare_llm_judge_input(llm_judge_config, input, inference_response, datapoint)? {
+            Some(input) => input,
+            None => return Ok(None),
+        };
 
     let params = ClientInferenceParams {
         function_name: Some(get_llm_judge_function_name(evaluation_name, evaluator_name)),
         model_name: None,
         episode_id: None,
-        input,
+        input: judge_input,
         stream: Some(false),
         include_original_response: false,
         params: InferenceParams::default(),
@@ -128,25 +103,70 @@ pub async fn run_llm_judge_evaluator(
     }
 }
 
-pub fn prepare_serialized_input(resolved_input: &ResolvedInput) -> Result<String> {
-    for message in &resolved_input.messages {
+fn prepare_llm_judge_input(
+    llm_judge_config: &LLMJudgeConfig,
+    input: &Input,
+    inference_response: &InferenceResponse,
+    datapoint: &Datapoint,
+) -> Result<Option<Input>> {
+    let generated_output = match &inference_response {
+        InferenceResponse::Chat(chat_response) => {
+            prepare_serialized_chat_output(&chat_response.content)?
+        }
+        InferenceResponse::Json(json_response) => {
+            prepare_serialized_json_output(&json_response.output)?
+        }
+    };
+    let reference_output = match handle_reference_output(llm_judge_config, datapoint) {
+        Ok(reference_output) => reference_output,
+        // Reference output is optional so if it's needed but not present, we can just return None
+        Err(_e) => return Ok(None),
+    };
+    match &llm_judge_config.input_format {
+        LLMJudgeInputFormat::Serialized => {
+            let serialized_input = prepare_serialized_input(input)?;
+            Ok(Some(Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(TextKind::Arguments{
+                        arguments: json!({"input": serialized_input, "generated_output": generated_output, "reference_output": reference_output})
+                            .as_object()
+                            .expect("Arguments should be an object")
+                            .clone()
+                    })],
+                }],
+            }))
+        }
+        LLMJudgeInputFormat::Messages => {
+            todo!()
+        }
+    }
+}
+
+fn prepare_serialized_input(input: &Input) -> Result<String> {
+    for message in &input.messages {
         for content in &message.content {
             match content {
-                ResolvedInputMessageContent::Image(..) => {
+                InputMessageContent::Image(..) => {
                     bail!("Image content not supported for LLM judge evaluations")
                 }
-                ResolvedInputMessageContent::Unknown { .. } => {
+                InputMessageContent::Unknown { .. } => {
                     bail!("Unknown content not supported for LLM judge evaluations")
                 }
-                ResolvedInputMessageContent::Text { .. }
-                | ResolvedInputMessageContent::ToolCall { .. }
-                | ResolvedInputMessageContent::ToolResult { .. }
-                | ResolvedInputMessageContent::RawText { .. }
-                | ResolvedInputMessageContent::Thought(_) => {}
+                InputMessageContent::Text { .. }
+                | InputMessageContent::ToolCall { .. }
+                | InputMessageContent::ToolResult { .. }
+                | InputMessageContent::RawText { .. }
+                | InputMessageContent::Thought(_) => {}
             }
         }
     }
-    Ok(serde_json::to_string(resolved_input)?)
+    Ok(serde_json::to_string(input)?)
+}
+
+fn prepare_messages_input(input: &Input) -> Result<Input> {
+    todo!()
 }
 
 /// We prepare the serialized output by converting the content blocks to a string.

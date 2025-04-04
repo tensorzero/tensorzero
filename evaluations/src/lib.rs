@@ -9,6 +9,7 @@ use evaluators::evaluate_inference;
 use helpers::{get_tool_params_args, setup_logging};
 use serde::{Deserialize, Serialize};
 use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
+use tensorzero::Input;
 use tensorzero::{
     input_handling::resolved_input_to_input, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput,
@@ -146,6 +147,7 @@ pub async fn run_evaluation(
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let abort_handle = join_set.spawn(async move {
+            let input = Arc::new(resolved_input_to_input(datapoint.input().clone(), &client_clone.client).await?);
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
                     tensorzero_client: &client_clone,
@@ -156,6 +158,7 @@ pub async fn run_evaluation(
                     datapoint: &datapoint,
                     evaluation_name: &evaluation_name,
                     function_config: &function_config,
+                    input: &input,
                 })
                 .await?,
             );
@@ -164,6 +167,7 @@ pub async fn run_evaluation(
             let evaluation_result = evaluate_inference(
                 inference_response.clone(),
                 datapoint.clone(),
+                input,
                 evaluation_config,
                 evaluation_name,
                 client_clone,
@@ -300,6 +304,7 @@ struct InferDatapointParams<'a> {
     evaluation_run_id: Uuid,
     dataset_name: &'a str,
     datapoint: &'a Datapoint,
+    input: &'a Input,
     evaluation_name: &'a str,
     function_config: &'a FunctionConfig,
 }
@@ -314,10 +319,9 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         datapoint,
         evaluation_name,
         function_config,
+        input,
     } = params;
 
-    let input =
-        resolved_input_to_input(datapoint.input().clone(), &tensorzero_client.client).await?;
     let dynamic_tool_params = match datapoint.tool_call_config() {
         Some(tool_params) => get_tool_params_args(tool_params, function_config).await,
         None => DynamicToolParams::default(),
@@ -339,7 +343,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
     let params = ClientInferenceParams {
         function_name: Some(function_name.to_string()),
         variant_name: Some(variant_name.to_string()),
-        input,
+        input: input.clone(),
         tags: HashMap::from([
             (
                 "tensorzero::evaluation_run_id".to_string(),
