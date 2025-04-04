@@ -464,6 +464,9 @@ async fn run_llm_judge_evaluation_chat() {
     assert_eq!(total_topic_fs, 3);
 }
 
+/// High level with this test is that the judge is actually just checking if the reference output matches the
+/// generated output.
+/// However, it takes an image and we verify that the image is actually used in the inference.
 #[tokio::test(flavor = "multi_thread")]
 async fn run_image_evaluation() {
     let clickhouse = get_clickhouse().await;
@@ -659,6 +662,10 @@ async fn run_image_evaluation() {
             evaluator_inference["tags"]["tensorzero::evaluation_name"],
             "images"
         );
+        let input = evaluator_inference["input"].as_str().unwrap();
+        // Check that the input contains the image
+        // Since we test image inputs other places, we can assume this worked as intended.
+        assert!(input.contains("image/png"));
 
         parsed_output.push(parsed);
     }

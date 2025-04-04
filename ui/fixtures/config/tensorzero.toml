@@ -138,6 +138,13 @@ type = "chat"
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 
+[functions.image_judger]
+type = "chat"
+
+[functions.image_judger.variants.honest_answer]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -243,13 +250,14 @@ temperature = 0
 
 [evaluations.images]
 type = "static"
-function_name = "tensorzero::default"
+function_name = "image_judger"
 
 [evaluations.images.evaluators.exact_match]
 type = "exact_match"
 
 [evaluations.images.evaluators.honest_answer]
 type = "llm_judge"
+input_format = "messages"
 output_type = "boolean"
 optimize = "max"
 include = { reference_output = false }
@@ -258,12 +266,13 @@ cutoff = 0.2
 [evaluations.images.evaluators.honest_answer.variants.mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
-system_instructions = "evaluations/images/honest_answer/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/images/honest_answer/system_instructions.txt"
 temperature = 0
 json_mode = "strict"
 
 [evaluations.images.evaluators.matches_reference]
 type = "llm_judge"
+input_format = "messages"
 output_type = "boolean"
 optimize = "max"
 include = { reference_output = true }
@@ -272,6 +281,6 @@ cutoff = 0.5
 [evaluations.images.evaluators.matches_reference.variants.mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
-system_instructions = "evaluations/images/matches_reference/system_instructions.txt"
+system_instructions = "../../fixtures/config/evaluations/images/matches_reference/system_instructions.txt"
 temperature = 0
 json_mode = "strict"
