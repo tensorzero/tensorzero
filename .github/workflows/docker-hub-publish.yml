@@ -117,7 +117,7 @@ jobs:
             latest=false
           tags: |
             type=ref,event=tag,
-            type=sha,
+            type=sha,format=long
             type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.prerelease == false }}
 
       - name: Create manifest list and push
