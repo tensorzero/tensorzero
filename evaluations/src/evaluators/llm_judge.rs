@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use anyhow::{bail, Result};
 use serde_json::{json, Value};
 use tensorzero::{
-    ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
-    Input, InputMessage, InputMessageContent, Role,
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::endpoints::datasets::Datapoint;
@@ -48,11 +48,11 @@ pub async fn run_llm_judge_evaluator(
         // Reference output is optional so if it's needed but not present, we can just return None
         Err(_e) => return Ok(None),
     };
-    let input = Input {
+    let input = ClientInput {
         system: None,
-        messages: vec![InputMessage {
+        messages: vec![ClientInputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text(TextKind::Arguments{
+            content: vec![ClientInputMessageContent::Text(TextKind::Arguments{
                 arguments: json!({"input": serialized_datapoint_input, "generated_output": generated_output, "reference_output": reference_output})
                     .as_object()
                     .expect("Arguments should be an object")

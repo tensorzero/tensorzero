@@ -5,8 +5,8 @@ use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use tensorzero::{
-    ClientInferenceParams, InferenceOutput, InferenceResponse, Input, InputMessage,
-    InputMessageContent,
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    InferenceOutput, InferenceResponse,
 };
 use tensorzero_internal::{
     inference::{
@@ -17,8 +17,9 @@ use tensorzero_internal::{
         },
         types::{ContentBlock, Image, ImageKind, RequestMessage, Role, Text, TextKind},
     },
-    tool::ToolCall,
+    tool::{ToolCall, ToolCallInput},
 };
+use tracing_test::traced_test;
 use uuid::Uuid;
 
 use tensorzero_internal::clickhouse::test_helpers::{
@@ -1329,11 +1330,11 @@ async fn e2e_test_variant_zero_weight_skip_zero() {
     let error = client
         .inference(ClientInferenceParams {
             function_name: Some("variant_failover_zero_weight".to_string()),
-            input: Input {
+            input: ClientInput {
                 system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
-                messages: vec![InputMessage {
+                messages: vec![ClientInputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
                         arguments: serde_json::json!({"type": "tacos", "quantity": 13})
                             .as_object()
                             .unwrap()
@@ -1372,11 +1373,11 @@ async fn e2e_test_variant_zero_weight_pin_zero() {
         .inference(ClientInferenceParams {
             function_name: Some("variant_failover_zero_weight".to_string()),
             variant_name: Some("zero_weight".to_string()),
-            input: Input {
+            input: ClientInput {
                 system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
-                messages: vec![InputMessage {
+                messages: vec![ClientInputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
                         arguments: serde_json::json!({"type": "tacos", "quantity": 13})
                             .as_object()
                             .unwrap()
@@ -1754,11 +1755,11 @@ model = "dummy::good"
 
     let params = ClientInferenceParams {
         function_name: Some("my_test".to_string()),
-        input: Input {
+        input: ClientInput {
             system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
-            messages: vec![InputMessage {
+            messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1824,10 +1825,10 @@ model_name = "json"
 
     let params = ClientInferenceParams {
         function_name: Some("best_of_n".to_string()),
-        input: Input {
-            messages: vec![InputMessage {
+        input: ClientInput {
+            messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -1890,10 +1891,10 @@ model = "dummy::flaky_model"
 
     let params = ClientInferenceParams {
         function_name: Some("mixture_of_n".to_string()),
-        input: Input {
-            messages: vec![InputMessage {
+        input: ClientInput {
+            messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
                     text: "Please write me a sentence about Megumin making an explosion."
                         .to_string(),
                 })],
@@ -2163,13 +2164,13 @@ pub async fn test_raw_text(client: tensorzero::Client) {
         .inference(ClientInferenceParams {
             episode_id: Some(episode_id),
             function_name: Some("json_success".to_string()),
-            input: Input {
+            input: ClientInput {
                 system: Some(serde_json::json!({
                     "assistant_name": "Dr. Mehta"
                 })),
-                messages: vec![InputMessage {
+                messages: vec![ClientInputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::RawText {
+                    content: vec![ClientInputMessageContent::RawText {
                         value: "This is not the normal input".into(),
                     }],
                 }],
@@ -2478,11 +2479,11 @@ async fn test_dummy_only_embedded_gateway_no_config() {
     let response = client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::my-model".to_string()),
-            input: Input {
+            input: ClientInput {
                 system: None,
-                messages: vec![InputMessage {
+                messages: vec![ClientInputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
                         text: "What is the name of the capital city of Japan?".to_string(),
                     })],
                 }],
@@ -2700,15 +2701,15 @@ async fn test_image_inference_without_object_store() {
     let err_msg = client
         .inference(ClientInferenceParams {
             model_name: Some("openai::gpt-4o-mini".to_string()),
-            input: Input {
+            input: ClientInput {
                 system: None,
-                messages: vec![InputMessage {
+                messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![
-                        InputMessageContent::Text(TextKind::Text {
+                        ClientInputMessageContent::Text(TextKind::Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        InputMessageContent::Image(Image::Base64 {
+                        ClientInputMessageContent::Image(Image::Base64 {
                             mime_type: ImageKind::Png,
                             data: BASE64_STANDARD.encode(FERRIS_PNG),
                         }),
@@ -2860,4 +2861,43 @@ async fn test_inference_output_tokens_zero() {
 #[tokio::test]
 async fn test_inference_input_tokens_output_tokens_zero() {
     test_inference_zero_tokens_helper("dummy::input_tokens_output_tokens_zero", None, None).await;
+}
+
+#[tokio::test]
+#[traced_test]
+
+async fn test_tool_call_input_no_warning() {
+    let client = make_embedded_gateway_no_config().await;
+    client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::good".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![
+                        ClientInputMessageContent::Text(TextKind::Text {
+                            text: "Describe the contents of the image".to_string(),
+                        }),
+                        ClientInputMessageContent::ToolCall(ToolCallInput {
+                            name: Some("get_temperature".to_string()),
+                            arguments: Some(json!({
+                                "location": "Brooklyn",
+                                "units": "celsius"
+                            })),
+                            raw_arguments: None,
+                            raw_name: None,
+                            id: "0".to_string(),
+                        }),
+                    ],
+                }],
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert!(!logs_contain("Deprecation"));
+    assert!(!logs_contain("deprecation"));
+    assert!(!logs_contain("Deprecated"));
+    assert!(!logs_contain("deprecated"));
 }

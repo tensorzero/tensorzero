@@ -29,9 +29,8 @@ use tensorzero_internal::{
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientInferenceParams, ClientSecretString, DynamicToolParams,
-    FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, Input, TensorZeroError,
-    Tool,
+    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, DynamicToolParams,
+    FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, TensorZeroError, Tool,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -391,7 +390,7 @@ impl BaseTensorZeroGateway {
             Default::default()
         };
 
-        let input: Input = deserialize_from_pyobj(py, &input)?;
+        let input: ClientInput = deserialize_from_pyobj(py, &input)?;
 
         Ok(ClientInferenceParams {
             function_name,
