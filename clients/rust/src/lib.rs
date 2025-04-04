@@ -449,21 +449,20 @@ impl Client {
     ) -> Result<ObjectResponse, TensorZeroError> {
         match &self.mode {
             ClientMode::HTTPGateway(client) => {
-                let url =
-                    client
-                        .base_url
-                        .join("object_storage")
-                        .map_err(|e| TensorZeroError::Other {
-                            source: tensorzero_internal::error::Error::new(
-                                ErrorDetails::InvalidBaseUrl {
-                                    message: format!(
-                                        "Failed to join base URL with /object_storage endpoint: {}",
-                                        e
-                                    ),
-                                },
-                            )
-                            .into(),
-                        })?;
+                let url = client
+                    .base_url
+                    .join("internal/object_storage")
+                    .map_err(|e| TensorZeroError::Other {
+                        source: tensorzero_internal::error::Error::new(
+                            ErrorDetails::InvalidBaseUrl {
+                                message: format!(
+                                    "Failed to join base URL with /internal/object_storage endpoint: {}",
+                                    e
+                                ),
+                            },
+                        )
+                        .into(),
+                    })?;
                 let storage_path_json =
                     serde_json::to_string(&storage_path).map_err(|e| TensorZeroError::Other {
                         source: tensorzero_internal::error::Error::new(
