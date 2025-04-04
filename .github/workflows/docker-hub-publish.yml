@@ -6,6 +6,8 @@ on:
   workflow_dispatch:
   release:
     types: [published]
+  push:
+    branches: ["main"]
 
 env:
   DOCKERHUB_USER: tensorzero
@@ -111,8 +113,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKERHUB_USER }}/${{ matrix.container.name }}
+          flavor: |
+            latest=false
           tags: |
-            type=ref,event=tag
+            type=ref,event=tag,
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.prerelease == false }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
