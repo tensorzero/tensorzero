@@ -447,8 +447,36 @@ impl TensorZeroGateway {
         timeout: Option<f64>,
         verbose_errors: bool,
     ) -> PyResult<Py<TensorZeroGateway>> {
-        let client = BaseTensorZeroGateway::new(cls.py(), gateway_url, timeout, verbose_errors)?;
-        let instance = PyClassInitializer::from(client).add_subclass(TensorZeroGateway {});
+        let mut client_builder = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+            url: Url::parse(gateway_url)
+                .map_err(|e| PyValueError::new_err(format!("Invalid gateway URL: {e}")))?,
+        })
+        .with_verbose_errors(verbose_errors);
+        if let Some(timeout) = timeout {
+            let http_client = reqwest::Client::builder()
+                .timeout(
+                    Duration::try_from_secs_f64(timeout)
+                        .map_err(|e| PyValueError::new_err(format!("Invalid timeout: {e}")))?,
+                )
+                .build()
+                .map_err(|e| PyValueError::new_err(format!("Failed to build HTTP client: {e}")))?;
+            client_builder = client_builder.with_http_client(http_client);
+        }
+        let client_fut = client_builder.build();
+        let client_res = tokio_block_on_without_gil(cls.py(), client_fut);
+        let client = match client_res {
+            Ok(client) => client,
+            Err(e) => {
+                return Err(tensorzero_internal_error(
+                    cls.py(),
+                    &format!("Failed to construct TensorZero client: {e:?}"),
+                )?);
+            }
+        };
+        let instance = PyClassInitializer::from(BaseTensorZeroGateway {
+            client: Arc::new(client),
+        })
+        .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
     }
 
@@ -707,23 +735,46 @@ impl AsyncTensorZeroGateway {
         verbose_errors: bool,
         async_setup: bool,
     ) -> PyResult<Py<PyAny>> {
-        let gateway_url = gateway_url.to_string();
-        let build_gateway = move |py: Python<'_>| {
-            let client = BaseTensorZeroGateway::new(py, &gateway_url, timeout, verbose_errors)?;
-            let instance = PyClassInitializer::from(client).add_subclass(AsyncTensorZeroGateway {});
-            Ok(Py::new(py, instance)?.into_any())
+        let mut client_builder = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+            url: Url::parse(gateway_url)
+                .map_err(|e| PyValueError::new_err(format!("Invalid gateway URL: {e}")))?,
+        })
+        .with_verbose_errors(verbose_errors);
+        if let Some(timeout) = timeout {
+            let http_client = reqwest::Client::builder()
+                .timeout(Duration::from_secs_f64(timeout))
+                .build()
+                .map_err(|e| PyValueError::new_err(format!("Failed to build HTTP client: {e}")))?;
+            client_builder = client_builder.with_http_client(http_client);
+        }
+        let client_fut = client_builder.build();
+        let build_gateway = async move {
+            let client = client_fut.await;
+            // We need to interact with Python objects here (to build up a Python `AsyncTensorZeroGateway`),
+            // so we need the GIL
+            Python::with_gil(|py| {
+                let client = match client {
+                    Ok(client) => client,
+                    Err(e) => {
+                        return Err(tensorzero_internal_error(
+                            py,
+                            &format!("Failed to construct TensorZero client: {e:?}"),
+                        )?);
+                    }
+                };
+
+                // Construct an instance of `AsyncTensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
+                let instance = PyClassInitializer::from(BaseTensorZeroGateway {
+                    client: Arc::new(client),
+                })
+                .add_subclass(AsyncTensorZeroGateway {});
+                Py::new(py, instance)
+            })
         };
         if async_setup {
-            // This doesn't actually do anything async at the moment, but we run
-            // 'build_gateway' inside the future so that any exception is thrown by the future
-            Ok(
-                pyo3_async_runtimes::tokio::future_into_py(cls.py(), async move {
-                    Python::with_gil(build_gateway)
-                })?
-                .unbind(),
-            )
+            Ok(pyo3_async_runtimes::tokio::future_into_py(cls.py(), build_gateway)?.unbind())
         } else {
-            build_gateway(cls.py())
+            Ok(tokio_block_on_without_gil(cls.py(), build_gateway)?.into_any())
         }
     }
 

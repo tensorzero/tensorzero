@@ -36,6 +36,7 @@ anyhow = "1.0.97"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
 clap = { version = "4.5.34", features = ["derive"] }
 futures = "0.3.30"
+lazy_static = { version = "1.5.0" }
 url = "2.5.4"
 serde-untagged = "0.1.7"
 
