@@ -13,9 +13,9 @@ use super::helpers::inject_extra_request_data;
 use super::openai::{
     get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAISystemRequestMessage,
-    StreamOptions, TensorZeroEventError,
+    StreamOptions,
 };
-use super::provider_trait::InferenceProvider;
+use super::provider_trait::{InferenceProvider, TensorZeroEventError};
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};

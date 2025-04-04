@@ -25,8 +25,9 @@ use super::helpers::inject_extra_request_data;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
-    OpenAIToolChoice, StreamOptions, TensorZeroEventError,
+    OpenAIToolChoice, StreamOptions,
 };
+use super::provider_trait::TensorZeroEventError;
 
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("SGLANG_API_KEY".to_string())

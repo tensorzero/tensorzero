@@ -26,9 +26,9 @@ use super::helpers::inject_extra_request_data;
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
-    OpenAIToolChoiceString, SpecificToolChoice, TensorZeroEventError,
+    OpenAIToolChoiceString, SpecificToolChoice,
 };
-use super::provider_trait::InferenceProvider;
+use super::provider_trait::{InferenceProvider, TensorZeroEventError};
 
 const PROVIDER_NAME: &str = "Azure";
 const PROVIDER_TYPE: &str = "azure";

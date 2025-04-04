@@ -28,9 +28,9 @@ use super::{
         get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
         tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse,
         OpenAIResponseChoice, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
-        OpenAIToolType, TensorZeroEventError,
+        OpenAIToolType,
     },
-    provider_trait::InferenceProvider,
+    provider_trait::{InferenceProvider, TensorZeroEventError},
 };
 
 lazy_static! {

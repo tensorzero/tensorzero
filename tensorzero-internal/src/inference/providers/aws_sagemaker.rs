@@ -23,7 +23,7 @@ use eventsource_stream::{EventStreamError, Eventsource};
 use futures::StreamExt;
 use std::time::Instant;
 
-use super::openai::TensorZeroEventError;
+use super::provider_trait::TensorZeroEventError;
 use super::{
     aws_common,
     provider_trait::{InferenceProvider, WrappedProvider},

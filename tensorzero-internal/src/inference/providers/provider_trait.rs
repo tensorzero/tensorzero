@@ -18,7 +18,13 @@ use std::fmt::Debug;
 use std::pin::Pin;
 use tokio::time::Instant;
 
-use super::openai::TensorZeroEventError;
+/// A helper type for preserving custom errors when working with `reqwest_eventsource`
+/// This is currently used by `stream_openai` to allow using it with a provider
+/// that needs to do additional validation when streaming (e.g. Sagemaker)
+pub enum TensorZeroEventError {
+    TensorZero(Error),
+    EventSource(reqwest_eventsource::Error),
+}
 
 pub trait InferenceProvider {
     fn infer<'a>(

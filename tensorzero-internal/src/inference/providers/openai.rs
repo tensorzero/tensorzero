@@ -43,7 +43,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::inference::providers::helpers::inject_extra_request_data;
 
-use super::provider_trait::WrappedProvider;
+use super::provider_trait::{TensorZeroEventError, WrappedProvider};
 
 lazy_static! {
     static ref OPENAI_DEFAULT_BASE_URL: Url = {
@@ -678,12 +678,6 @@ pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource:
         provider_type,
     }
     .into()
-}
-
-/// A helper type for preserving custom errors when working with `reqwest_eventsource`
-pub enum TensorZeroEventError {
-    TensorZero(Error),
-    EventSource(reqwest_eventsource::Error),
 }
 
 pub fn stream_openai(
