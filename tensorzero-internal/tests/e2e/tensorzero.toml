@@ -2708,6 +2708,7 @@ type = "exact_match"
 
 [evaluations.images.evaluators.honest_answer]
 type = "llm_judge"
+input_format = "messages"
 output_type = "boolean"
 optimize = "max"
 include = { reference_output = false }
