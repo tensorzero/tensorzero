@@ -2,7 +2,7 @@ use futures::future::try_join_all;
 use serde_json::Value;
 
 use crate::{Client, ClientInput, ClientInputMessage, ClientInputMessageContent, TensorZeroError};
-use tensorzero_internal::tool::ToolCallInput;
+use tensorzero_internal::tool::{ToolCall, ToolCallInput};
 use tensorzero_internal::{
     error::ErrorDetails,
     inference::types::{
@@ -37,6 +37,16 @@ async fn resolved_input_message_to_client_input_message(
     Ok(ClientInputMessage { role, content })
 }
 
+fn convert_tool_call(tool_call: ToolCall) -> ToolCallInput {
+    ToolCallInput {
+        id: tool_call.id,
+        name: Some(tool_call.name),
+        arguments: None,
+        raw_arguments: Some(tool_call.arguments),
+        raw_name: None,
+    }
+}
+
 async fn resolved_input_message_content_to_client_input_message_content(
     resolved_input_message_content: ResolvedInputMessageContent,
     client: &Client,
@@ -54,16 +64,9 @@ async fn resolved_input_message_content_to_client_input_message_content(
                 .into(),
             }),
         },
-        ResolvedInputMessageContent::ToolCall(tool_call) => {
-            let tool_call = ToolCallInput {
-                id: tool_call.id,
-                name: Some(tool_call.name),
-                arguments: None,
-                raw_arguments: Some(tool_call.arguments),
-                raw_name: None,
-            };
-            Ok(ClientInputMessageContent::ToolCall(tool_call))
-        }
+        ResolvedInputMessageContent::ToolCall(tool_call) => Ok(
+            ClientInputMessageContent::ToolCall(convert_tool_call(tool_call)),
+        ),
         ResolvedInputMessageContent::ToolResult(tool_result) => {
             Ok(ClientInputMessageContent::ToolResult(tool_result))
         }
@@ -104,4 +107,33 @@ async fn fetch_image_data(
 ) -> Result<String, TensorZeroError> {
     let response = client.get_object(storage_path).await?;
     Ok(response.data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_convert_tool_call() {
+        let input_tool_call = ToolCall {
+            id: "test_id".to_string(),
+            name: "test_tool".to_string(),
+            arguments: serde_json::json!({
+                "param1": "value1",
+                "param2": "value2"
+            })
+            .to_string(),
+        };
+
+        let result = convert_tool_call(input_tool_call);
+
+        assert_eq!(result.id, "test_id");
+        assert_eq!(result.name, Some("test_tool".to_string()));
+        assert_eq!(result.arguments, None);
+        assert_eq!(
+            result.raw_arguments,
+            Some(r#"{"param1":"value1","param2":"value2"}"#.to_string())
+        );
+        assert_eq!(result.raw_name, None);
+    }
 }
