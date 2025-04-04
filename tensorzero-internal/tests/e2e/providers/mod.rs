@@ -1,5 +1,6 @@
 mod anthropic;
 mod aws_bedrock;
+mod aws_sagemaker;
 mod azure;
 mod batch;
 pub mod common;

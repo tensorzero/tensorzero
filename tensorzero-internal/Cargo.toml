@@ -82,6 +82,13 @@ url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 tensorzero-derive = { path = "../tensorzero-derive" }
 clap = { workspace = true }
+aws-sdk-sagemakerruntime = { version = "1.65.0", features = [
+    "behavior-version-latest",
+    "rt-tokio",
+    "default-https-client",
+], default-features = false }
+aws-smithy-runtime-api = "1.7.4"
+eventsource-stream = "0.2.3"
 scoped-tls = "1.0.1"
 
 

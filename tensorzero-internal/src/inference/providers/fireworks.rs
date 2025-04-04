@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::OnceLock};
 
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
@@ -30,7 +30,7 @@ use super::{
         OpenAIResponseChoice, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
         OpenAIToolType,
     },
-    provider_trait::InferenceProvider,
+    provider_trait::{InferenceProvider, TensorZeroEventError},
 };
 
 lazy_static! {
@@ -268,7 +268,11 @@ impl InferenceProvider for FireworksProvider {
                     raw_response: None,
                 })
             })?;
-        let stream = stream_openai(event_source, start_time).peekable();
+        let stream = stream_openai(
+            event_source.map_err(TensorZeroEventError::EventSource),
+            start_time,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 

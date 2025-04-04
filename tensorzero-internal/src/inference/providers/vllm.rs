@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::sync::OnceLock;
 
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
@@ -15,7 +15,7 @@ use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAISystemRequestMessage,
     StreamOptions,
 };
-use super::provider_trait::InferenceProvider;
+use super::provider_trait::{InferenceProvider, TensorZeroEventError};
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
@@ -249,7 +249,11 @@ impl InferenceProvider for VLLMProvider {
                     provider_type: PROVIDER_TYPE.to_string(),
                 })
             })?;
-        let stream = stream_openai(event_source, start_time).peekable();
+        let stream = stream_openai(
+            event_source.map_err(TensorZeroEventError::EventSource),
+            start_time,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 

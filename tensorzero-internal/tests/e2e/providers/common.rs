@@ -1358,6 +1358,15 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                 "Unexpected error: {res}"
             );
         }
+        "aws-sagemaker" => {
+            assert!(
+                res["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("InvalidSignatureException"),
+                "Unexpected error: {res}"
+            );
+        }
         "anthropic" => {
             assert!(
                 res["error"].as_str().unwrap().contains("invalid x-api-key"),
@@ -2234,7 +2243,7 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         "params": {
             "chat_completion": {
                 "temperature": -100,
-                "top_p": -100
+                "top_p": -100,
             }
         },
         "input":
@@ -2247,6 +2256,13 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
                 }
             ]},
         "stream": true,
+        "extra_body": [
+            {
+                "variant_name": "aws-sagemaker",
+                "pointer": "/messages/0/content",
+                "value": 123,
+            },
+        ]
     });
 
     let mut event_source = Client::new()
@@ -9395,6 +9411,14 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
 }
 
 pub async fn test_short_inference_request_with_provider(provider: E2ETestProvider) {
+    // We currently host ollama on sagemaker, and use a wrapped 'openai' provider
+    // in our tensorzero.toml. ollama doesn't support 'max_completion_tokens', so this test
+    // currently fails. It's fine to skip it, since we really care about testing the sagemaker
+    // wrapper code, not whatever container we happen to be wrapping.
+    if provider.model_provider_name == "aws-sagemaker" {
+        return;
+    }
+
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
