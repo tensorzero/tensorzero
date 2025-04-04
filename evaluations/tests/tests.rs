@@ -495,7 +495,6 @@ async fn run_image_evaluation() {
     sleep(Duration::from_secs(1)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
-    println!("{}", output_str);
     let mut parsed_output = Vec::new();
     let mut total_honest_answers = 0;
     let mut total_matches_reference = 0;
@@ -508,7 +507,6 @@ async fn run_image_evaluation() {
                 panic!("evaluation error: {}", evaluation_error.message);
             }
         };
-        println!("parsed: {:?}", parsed);
         assert!(parsed.evaluator_errors.is_empty());
         let inference_id = parsed.response.inference_id();
         let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
@@ -556,7 +554,6 @@ async fn run_image_evaluation() {
             .as_bool()
             .unwrap());
 
-        println!("inference_id: {}", inference_id);
         // There should be Boolean feedback for honest answer
         let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
             &clickhouse,
