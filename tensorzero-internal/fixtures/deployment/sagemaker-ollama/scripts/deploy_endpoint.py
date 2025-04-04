@@ -1,5 +1,6 @@
 # Based on https://github.com/aws-samples/sagemaker-genai-hosting-examples/blob/main/Llama2/Llama2-7b/LMI/llama2-7b.ipynb
-# This is specialized for the TensorZero AWS account
+# This deploys an existing Docker image (specified by the `DOCKER_IMAGE_URI` env var) to a Sagemaker endpoint
+# in the TensorZero AWS account. It's specialized for that account, and isn't a general-purpose script
 import os
 import time
 
@@ -92,6 +93,7 @@ def main():
             create_endpoint_response = sm_client.create_endpoint(
                 EndpointName=endpoint_name, EndpointConfigName=endpoint_config_name
             )
+            break
         except Exception as e:
             if "Cannot create already existing endpoint" in str(e):
                 print("Endpoint not yet deleted, retrying...")
