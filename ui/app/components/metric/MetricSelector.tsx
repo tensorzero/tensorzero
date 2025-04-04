@@ -163,7 +163,7 @@ export function MetricSelector<T extends Record<string, unknown>>({
               )}
             </div>
 
-            <div className="space-y-1 text-sm text-muted-foreground">
+            <div className="text-muted-foreground space-y-1 text-sm">
               <div>
                 Feedbacks:{" "}
                 {/* If field.value is empty string (unselected), show loading skeleton */}

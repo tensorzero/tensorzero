@@ -136,7 +136,7 @@ export function VariantSelector({
                 {isLoading ? (
                   <div className="flex items-center justify-center py-6">
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600"></div>
-                    <span className="ml-2 text-sm text-muted-foreground">
+                    <span className="text-muted-foreground ml-2 text-sm">
                       Loading...
                     </span>
                   </div>
@@ -175,7 +175,7 @@ export function VariantSelector({
                             <span className="flex-1 truncate">
                               {info.variant_name}
                             </span>
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-muted-foreground text-xs">
                               {runIdSegment}
                             </span>
                             {isSelected && <Check className="ml-2 h-4 w-4" />}

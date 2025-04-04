@@ -45,7 +45,7 @@ export const Chip: React.FC<ChipProps> = ({
       )}
       <span className="text-fg-primary">{label}</span>
       {secondaryLabel && (
-        <span className="pl-0.5 text-fg-tertiary">{secondaryLabel}</span>
+        <span className="text-fg-tertiary pl-0.5">{secondaryLabel}</span>
       )}
     </>
   );
@@ -63,7 +63,7 @@ export const Chip: React.FC<ChipProps> = ({
       <TooltipProvider>
         <Tooltip delayDuration={100}>
           <TooltipTrigger asChild>{chipContent}</TooltipTrigger>
-          <TooltipContent className="border border-border bg-bg-secondary text-fg-primary shadow-lg">
+          <TooltipContent className="border-border bg-bg-secondary text-fg-primary border shadow-lg">
             {tooltip}
           </TooltipContent>
         </Tooltip>

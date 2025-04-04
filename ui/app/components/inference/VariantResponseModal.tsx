@@ -211,11 +211,11 @@ export function VariantResponseModal({
       return (
         <>
           Comparing{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+          <code className="bg-muted rounded px-1.5 py-0.5 font-mono">
             {originalVariant}
           </code>{" "}
           vs.{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+          <code className="bg-muted rounded px-1.5 py-0.5 font-mono">
             {selectedVariant}
           </code>
         </>
@@ -224,7 +224,7 @@ export function VariantResponseModal({
       return (
         <>
           Comparing datapoint vs.{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+          <code className="bg-muted rounded px-1.5 py-0.5 font-mono">
             {selectedVariant}
           </code>
         </>
@@ -276,7 +276,7 @@ export function VariantResponseModal({
                   )}
                 </Button>
                 {showRawResponse && (
-                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-gray-100 p-4 text-xs">
+                  <pre className="mt-2 overflow-x-auto rounded-md bg-gray-100 p-4 text-xs break-words whitespace-pre-wrap">
                     <code>{JSON.stringify(rawResponse, null, 2)}</code>
                   </pre>
                 )}

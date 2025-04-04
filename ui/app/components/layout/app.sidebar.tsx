@@ -123,7 +123,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent
         className={cn(
-          "!overflow-y-auto !overflow-x-hidden transition-[width] duration-200",
+          "overflow-x-hidden! overflow-y-auto! transition-[width] duration-200",
         )}
       >
         <SidebarGroup>

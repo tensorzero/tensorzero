@@ -14,7 +14,7 @@ export function EmptyMessage({
   return (
     <div
       className={cn(
-        "flex items-center justify-center py-16 text-sm text-fg-muted",
+        "text-fg-muted flex items-center justify-center py-16 text-sm",
         className,
       )}
     >
@@ -34,7 +34,7 @@ export function Label({ text, className }: LabelProps) {
 
   return (
     <Badge
-      className={cn("mx-4 mb-0 mt-4 bg-bg-muted text-fg-primary", className)}
+      className={cn("bg-bg-muted text-fg-primary mx-4 mt-4 mb-0", className)}
     >
       {text}
     </Badge>
@@ -68,11 +68,11 @@ export function CodeMessage({
     <div className={cn("relative w-full", className)}>
       <Label text={label} />
 
-      <div className="w-full overflow-hidden rounded-lg bg-bg-primary">
+      <div className="bg-bg-primary w-full overflow-hidden rounded-lg">
         <div className="w-full">
           <div className="flex w-full">
             {showLineNumbers && (
-              <div className="pointer-events-none sticky left-0 min-w-[3rem] flex-shrink-0 select-none bg-bg-primary py-5 pl-4 pr-3 text-right font-mono text-fg-muted">
+              <div className="bg-bg-primary text-fg-muted pointer-events-none sticky left-0 min-w-[3rem] shrink-0 py-5 pr-3 pl-4 text-right font-mono select-none">
                 {Array.from({ length: lineCount }, (_, i) => (
                   <div key={i} className="text-sm leading-6">
                     {i + 1}
@@ -80,9 +80,9 @@ export function CodeMessage({
                 ))}
               </div>
             )}
-            <div className="w-0 flex-grow overflow-auto">
+            <div className="w-0 grow overflow-auto">
               <pre className="w-full px-4 py-5">
-                <code className="block whitespace-pre font-mono text-sm leading-6 text-fg-primary">
+                <code className="text-fg-primary block font-mono text-sm leading-6 whitespace-pre">
                   {content || " "}
                 </code>
               </pre>
@@ -116,9 +116,9 @@ export function TextMessage({
     <div className={cn("relative w-full", className)}>
       <Label text={label} />
 
-      <div className="w-full overflow-hidden rounded-lg bg-bg-primary">
+      <div className="bg-bg-primary w-full overflow-hidden rounded-lg">
         <div className="p-5">
-          <div className="whitespace-pre-wrap break-words text-sm text-fg-primary">
+          <div className="text-fg-primary text-sm break-words whitespace-pre-wrap">
             {content}
           </div>
         </div>

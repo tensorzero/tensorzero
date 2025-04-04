@@ -28,7 +28,7 @@ export default function TensorZeroStatusIndicator() {
 
   return (
     <div className="px-3 py-2 text-xs">
-      <div className="flex items-center gap-2 truncate text-fg-muted">
+      <div className="text-fg-muted flex items-center gap-2 truncate">
         <div
           className={`h-2 w-2 rounded-full ${getStatusColor()} mr-1 inline-block`}
         />

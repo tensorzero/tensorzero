@@ -72,11 +72,11 @@ const TruncatedContent = ({
             side="right"
             align="start"
             sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-md overflow-auto shadow-sm"
+            className="tooltip-scrollable max-h-[60vh] max-w-md overflow-auto shadow-xs"
             avoidCollisions={true}
           >
             <div className="flex h-full w-full items-center justify-center p-4">
-              <pre className="w-full whitespace-pre-wrap text-xs">
+              <pre className="w-full text-xs whitespace-pre-wrap">
                 {content}
               </pre>
             </div>
@@ -103,7 +103,7 @@ const TruncatedContent = ({
             side="right"
             align="start"
             sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto shadow-sm"
+            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto shadow-xs"
             avoidCollisions={true}
           >
             <div className="flex h-full w-full items-center justify-center p-4">
@@ -134,7 +134,7 @@ const TruncatedContent = ({
             side="right"
             align="start"
             sideOffset={5}
-            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto shadow-sm"
+            className="tooltip-scrollable max-h-[60vh] max-w-[500px] overflow-auto shadow-xs"
             avoidCollisions={true}
           >
             <div className="flex h-full w-full items-center justify-center p-4">
@@ -616,7 +616,7 @@ const EvaluatorProperties = ({
   return (
     <div className="mt-2 flex flex-col items-center gap-1">
       {orderedStats.length > 0 && (
-        <div className="mt-2 text-center text-xs text-muted-foreground">
+        <div className="text-muted-foreground mt-2 text-center text-xs">
           {orderedStats.map((stat) => {
             // Get the variant color for the circle using the run ID from the stat
             const variantColorClass = useColorAssigner().getColor(
@@ -634,7 +634,7 @@ const EvaluatorProperties = ({
                 }`}
               >
                 <div
-                  className={`h-2 w-2 rounded-full ${variantColorClass} flex-shrink-0`}
+                  className={`h-2 w-2 rounded-full ${variantColorClass} shrink-0`}
                 ></div>
                 <span>
                   {formatSummaryValue(stat.mean_metric, metricConfig)}

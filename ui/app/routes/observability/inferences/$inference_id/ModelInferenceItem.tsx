@@ -55,7 +55,7 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
           <CardTitle>Output</CardTitle>
         </CardHeader>
         <CardContent>
-          <pre className="overflow-x-auto rounded-md bg-muted p-4">
+          <pre className="bg-muted overflow-x-auto rounded-md p-4">
             <code className="text-sm">
               {JSON.stringify(inference.output, null, 2)}
             </code>
@@ -68,7 +68,7 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
           <CardTitle>Raw Request</CardTitle>
         </CardHeader>
         <CardContent>
-          <pre className="overflow-x-auto rounded-md bg-muted p-4">
+          <pre className="bg-muted overflow-x-auto rounded-md p-4">
             <code className="text-sm">
               {(() => {
                 try {
@@ -91,7 +91,7 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
           <CardTitle>Raw Response</CardTitle>
         </CardHeader>
         <CardContent>
-          <pre className="overflow-x-auto rounded-md bg-muted p-4">
+          <pre className="bg-muted overflow-x-auto rounded-md p-4">
             <code className="text-sm">
               {(() => {
                 try {

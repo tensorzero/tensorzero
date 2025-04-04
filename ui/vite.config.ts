@@ -1,6 +1,5 @@
 import { reactRouter } from "@react-router/dev/vite";
-import autoprefixer from "autoprefixer";
-import tailwindcss from "tailwindcss";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import wasm from "vite-plugin-wasm";
@@ -12,13 +11,9 @@ const shouldLoadReactRouter =
   !process.env.VITEST && !process.argv[1]?.includes("storybook");
 
 export default defineConfig({
-  css: {
-    postcss: {
-      plugins: [tailwindcss, autoprefixer],
-    },
-  },
   plugins: [
     wasm(),
+    tailwindcss(),
     shouldLoadReactRouter ? reactRouter() : react(),
     tsconfigPaths(),
   ],

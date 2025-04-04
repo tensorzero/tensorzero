@@ -57,7 +57,7 @@ function MessageContent({ content }: { content: ContentBlock[] }) {
 function Message({ message }: { message: RequestMessage }) {
   return (
     <div className="space-y-1">
-      <div className="font-medium capitalize text-slate-600 dark:text-slate-400">
+      <div className="font-medium text-slate-600 capitalize dark:text-slate-400">
         {message.role}
       </div>
       <MessageContent content={message.content} />
@@ -74,7 +74,7 @@ export default function Input({ input_messages, system }: InputProps) {
       <CardContent className="space-y-6">
         {system && (
           <div className="rounded border border-slate-200 p-4 dark:border-slate-800">
-            <div className="mb-3 text-md font-semibold text-slate-900 dark:text-slate-100">
+            <div className="text-md mb-3 font-semibold text-slate-900 dark:text-slate-100">
               System
             </div>
             <pre className="overflow-x-auto p-4">
@@ -84,7 +84,7 @@ export default function Input({ input_messages, system }: InputProps) {
         )}
 
         <div className="rounded border border-slate-200 p-4 dark:border-slate-800">
-          <div className="mb-3 text-md font-semibold text-slate-900 dark:text-slate-100">
+          <div className="text-md mb-3 font-semibold text-slate-900 dark:text-slate-100">
             Messages
           </div>
           <div className="space-y-4">

@@ -30,7 +30,7 @@ export default function DatasetTable({
             <TableRow className="hover:bg-bg-primary">
               <TableCell
                 colSpan={3}
-                className="px-3 py-8 text-center text-fg-muted"
+                className="text-fg-muted px-3 py-8 text-center"
               >
                 No datasets found.
               </TableCell>
@@ -43,7 +43,7 @@ export default function DatasetTable({
                     to={`/datasets/${count.dataset_name}`}
                     className="block no-underline"
                   >
-                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                       {count.dataset_name}
                     </code>
                   </Link>

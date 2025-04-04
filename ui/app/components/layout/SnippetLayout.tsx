@@ -13,7 +13,7 @@ export function SnippetLayout({ children, className }: SnippetLayoutProps) {
   return (
     <div
       className={cn(
-        "w-full rounded-lg border border-border bg-bg-primary",
+        "border-border bg-bg-primary w-full rounded-lg border",
         className,
       )}
     >
@@ -37,7 +37,7 @@ export function SnippetHeader({
   className,
 }: SnippetHeaderProps) {
   return (
-    <div className={cn("flex flex-col gap-1 px-6 pb-4 pt-6", className)}>
+    <div className={cn("flex flex-col gap-1 px-6 pt-6 pb-4", className)}>
       {heading && <SnippetHeading>{heading}</SnippetHeading>}
       {description && <SnippetDescription>{description}</SnippetDescription>}
       {children}
@@ -54,7 +54,7 @@ export function SnippetHeading({ children, className }: SnippetHeadingProps) {
   return (
     <h3
       className={cn(
-        "text-lg font-medium leading-none tracking-tight",
+        "text-lg leading-none font-medium tracking-tight",
         className,
       )}
     >
@@ -73,7 +73,7 @@ export function SnippetDescription({
   className,
 }: SnippetDescriptionProps) {
   return (
-    <div className={cn("text-sm text-fg-secondary", className)}>{children}</div>
+    <div className={cn("text-fg-secondary text-sm", className)}>{children}</div>
   );
 }
 
@@ -122,7 +122,7 @@ export function SnippetContent({
       </div>
 
       {needsExpansion && !expanded && (
-        <div className="absolute bottom-0 left-0 right-0 flex justify-center bg-gradient-to-t from-bg-primary to-transparent pb-4 pt-8">
+        <div className="from-bg-primary absolute right-0 bottom-0 left-0 flex justify-center bg-linear-to-t to-transparent pt-8 pb-4">
           <Button variant="outline" size="sm" onClick={() => setExpanded(true)}>
             Show more
           </Button>
@@ -197,7 +197,7 @@ export function SnippetTabs({
       onValueChange={handleTabChange}
       className={cn("w-full", className)}
     >
-      <TabsList className="flex w-full justify-start rounded-none border-b border-border p-3">
+      <TabsList className="border-border flex w-full justify-start rounded-none border-b p-3">
         {tabs.map((tab) => (
           <TabsTrigger
             key={tab.id}

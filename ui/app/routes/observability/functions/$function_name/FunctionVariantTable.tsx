@@ -39,7 +39,7 @@ export default function FunctionVariantTable({
           <TableRow className="hover:bg-bg-primary">
             <TableCell
               colSpan={5}
-              className="px-3 py-8 text-center text-fg-muted"
+              className="text-fg-muted px-3 py-8 text-center"
             >
               No variants found.
             </TableCell>
@@ -55,7 +55,7 @@ export default function FunctionVariantTable({
                   variantName={variant_count.variant_name}
                   functionName={function_name}
                 >
-                  <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                     {variant_count.variant_name}
                   </code>
                 </VariantLink>

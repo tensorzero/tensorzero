@@ -110,7 +110,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
           ))}
         </SelectContent>
       </Select>
-      <div className="mb-1 mt-2 text-xs text-muted-foreground">
+      <div className="text-muted-foreground mt-2 mb-1 text-xs">
         Function:{" "}
         {function_name ? (
           <span className="font-medium">
@@ -122,7 +122,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
           <Skeleton className="inline-block h-3 w-16 align-middle" />
         )}
       </div>
-      <div className="mb-1 text-xs text-muted-foreground">
+      <div className="text-muted-foreground mb-1 text-xs">
         Datapoints:{" "}
         {count !== null ? (
           <span className="font-medium">{count}</span>
@@ -180,7 +180,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
           min="1"
           value={concurrencyLimit}
           onChange={(e) => setConcurrencyLimit(e.target.value)}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm"
           required
         />
       </div>

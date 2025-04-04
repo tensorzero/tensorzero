@@ -45,7 +45,7 @@ export default function DatasetRowSearchBar({
             control={form.control}
             name="datasetRowId"
             render={({ field }) => (
-              <FormItem className="flex-grow">
+              <FormItem className="grow">
                 <FormControl>
                   <Input
                     placeholder="00000000-0000-0000-0000-000000000000"

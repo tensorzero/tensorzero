@@ -26,9 +26,9 @@ export function TryWithVariantButton({
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" disabled={isLoading}>
-          <Compare className="h-4 w-4 text-fg-tertiary" />
+          <Compare className="text-fg-tertiary h-4 w-4" />
           Try with variant
-          <ChevronDown className="h-4 w-4 text-fg-tertiary" />
+          <ChevronDown className="text-fg-tertiary h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
