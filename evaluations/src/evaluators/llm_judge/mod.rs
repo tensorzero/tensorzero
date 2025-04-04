@@ -136,6 +136,8 @@ fn prepare_llm_judge_input(
         Err(_e) => return Ok(None),
     };
     match &llm_judge_config.input_format {
+        // Here, we serialize the input and include it in the first user message as a TextKind::Arguments block
+        // alongside the generated output and optionally the reference output.
         LLMJudgeInputFormat::Serialized => {
             let serialized_input = prepare_serialized_input(input)?;
             Ok(Some(ClientInput {
@@ -151,6 +153,8 @@ fn prepare_llm_judge_input(
                 }],
             }))
         }
+        // Here, we convert the input to a list of messages and append the generated output and optionally the reference output
+        // to the last user message.
         LLMJudgeInputFormat::Messages => {
             let mut messages = prepare_messages_input(input)?;
             let final_message = prepare_final_message_messages_input(
