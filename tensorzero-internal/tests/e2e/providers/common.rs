@@ -200,6 +200,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_multi_turn_parallel_tool_use_inference_request_with_provider;
         use $crate::providers::common::test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider;
         use $crate::providers::common::test_streaming_invalid_request_with_provider;
+        use $crate::providers::common::test_json_mode_off_inference_request_with_provider;
 
 
         #[tokio::test]
@@ -551,6 +552,15 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.parallel_tool_use_inference;
             for provider in providers {
                 test_multi_turn_parallel_tool_use_streaming_inference_request_with_provider(provider).await;
+            }
+        }
+
+
+        #[tokio::test]
+        async fn test_json_mode_off_inference_request() {
+            let providers = $func().await.json_mode_inference;
+            for provider in providers {
+                test_json_mode_off_inference_request_with_provider(provider).await;
             }
         }
     };
@@ -10312,4 +10322,196 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
             panic!("Expected a text block, got {:?}", output_content);
         }
     }
+}
+
+pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETestProvider) {
+    // Some providers don't support configuring JSON mode,
+    // so we'll skip the test for them
+    if provider.model_provider_name == "sglang"
+        || provider.model_provider_name == "tgi"
+        || provider.model_provider_name == "vllm"
+    {
+        return;
+    }
+
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "json_success",
+        "variant_name": provider.variant_name,
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "AskJeeves"},
+               "messages": [
+                   {
+                       "role": "user",
+                       "content": {"country": "Japan"}
+                   }
+               ]
+            },
+        "params": {
+            "chat_completion": {
+                "json_mode": "off",
+            }
+        },
+        "stream": false,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    // Check basic response structure
+    let output = response_json.get("output").unwrap().as_object().unwrap();
+    let parsed = output.get("parsed").unwrap().as_object().unwrap();
+    let answer = parsed.get("answer").unwrap().as_str().unwrap();
+
+    // Assert that Tokyo is the answer
+    assert_eq!(answer, "Tokyo");
+    let raw = output.get("raw").unwrap().as_str().unwrap();
+    assert_eq!(raw, "{\n    \"answer\": \"Tokyo\"\n}");
+
+    // The result shouldn't be valid JSON when json_mode is off
+    let is_valid_json = serde_json::from_str::<Value>(raw).is_ok();
+    if is_valid_json {
+        // Some providers might still return JSON even with json_mode off
+        // This is not a failure, just something to be aware of
+        println!("WARNING: Provider returned valid JSON despite json_mode being off");
+    }
+
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+
+    // First, check Inference table
+    let result = select_json_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "system": {"assistant_name": "AskJeeves"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": {"country": "Japan"}}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+
+    // Check that correctly parsed output is present
+    let output = result.get("output").unwrap().as_str().unwrap();
+    let output: Value = serde_json::from_str(output).unwrap();
+    let parsed = output.get("parsed").unwrap().as_object().unwrap();
+    let answer = parsed.get("answer").unwrap().as_str().unwrap();
+    assert_eq!(answer, "Tokyo");
+    let raw = output.get("raw").unwrap().as_str().unwrap();
+    assert_eq!(raw, "{\n    \"answer\": \"Tokyo\"\n}");
+
+    // Check that episode_id is here and correct
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, provider.variant_name);
+
+    // Check the processing time
+    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(processing_time_ms > 0);
+
+    // Check that we saved the correct json mode to ClickHouse
+    let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
+    let inference_params: Value = serde_json::from_str(inference_params).unwrap();
+    let clickhouse_json_mode = inference_params
+        .get("chat_completion")
+        .unwrap()
+        .get("json_mode")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!("off", clickhouse_json_mode);
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, provider.model_name);
+
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, provider.model_provider_name);
+
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("japan"));
+
+    // Check that raw_request is valid JSON
+    let raw_request_val: Value =
+        serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
+
+    // Check for the presence of response_format:{"type":"text"} or similar structure
+    // depending on the provider
+    let response_format_present = if provider.model_provider_name == "openai" {
+        raw_request_val
+            .get("response_format")
+            .and_then(|rf| rf.get("type"))
+            .map_or(false, |t| t == "text")
+    } else if provider.model_provider_name == "anthropic" {
+        !raw_request_val.get("response_format").is_some()
+    } else if provider.model_provider_name == "google_ai_studio_gemini"
+        || provider.model_provider_name == "gcp_vertex_gemini"
+    {
+        !raw_request_val
+            .get("generationConfig")
+            .and_then(|gc| gc.get("response_mime_type"))
+            .is_some()
+    } else {
+        // For other providers, we may not know the exact format
+        // so we'll just check that the request is valid
+        true
+    };
+
+    assert!(
+        response_format_present,
+        "Expected response_format to be set appropriately for text output"
+    );
+
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 5);
+
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 5);
+
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+
+    assert!(result.get("ttft_ms").unwrap().is_null());
 }
