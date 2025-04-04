@@ -67,6 +67,9 @@ importers:
       "@react-router/serve":
         specifier: ^7.4.1
         version: 7.4.1(react-router@7.4.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.2)
+      "@tailwindcss/vite":
+        specifier: ^4.1.2
+        version: 4.1.2(vite@6.2.5(@types/node@22.14.0)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
       "@vitejs/plugin-react":
         specifier: ^4.3.4
         version: 4.3.4(vite@6.2.5(@types/node@22.14.0)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
@@ -164,9 +167,6 @@ importers:
       "@storybook/test":
         specifier: ^8.6.12
         version: 8.6.12(storybook@8.6.12(prettier@3.5.3))
-      "@tailwindcss/postcss":
-        specifier: ^4.1.2
-        version: 4.1.2
       "@types/json-schema":
         specifier: ^7.0.15
         version: 7.0.15
@@ -191,9 +191,6 @@ importers:
       "@vitest/coverage-v8":
         specifier: 3.1.1
         version: 3.1.1(@vitest/browser@3.1.1)(vitest@3.1.1)
-      autoprefixer:
-        specifier: ^10.4.21
-        version: 10.4.21(postcss@8.5.3)
       eslint:
         specifier: ^9.23.0
         version: 9.23.0(jiti@2.4.2)
@@ -203,9 +200,6 @@ importers:
       playwright:
         specifier: ^1.51.1
         version: 1.51.1
-      postcss:
-        specifier: ^8.5.3
-        version: 8.5.3
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -237,13 +231,6 @@ packages:
       {
         integrity: sha512-baYZExFpsdkBNuvGKTKWCwKH57HRZLVtycZS05WTQNVOiXVSeAki3nU35zlRbToeMW8aHlJfyS+1C4BOv27q0A==,
       }
-
-  "@alloc/quick-lru@5.2.0":
-    resolution:
-      {
-        integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==,
-      }
-    engines: { node: ">=10" }
 
   "@ampproject/remapping@2.3.0":
     resolution:
@@ -2296,11 +2283,13 @@ packages:
       }
     engines: { node: ">= 10" }
 
-  "@tailwindcss/postcss@4.1.2":
+  "@tailwindcss/vite@4.1.2":
     resolution:
       {
-        integrity: sha512-vgkMo6QRhG6uv97im6Y4ExDdq71y9v2IGZc+0wn7lauQFYJM/1KdUVhrOkexbUso8tUsMOWALxyHVkQEbsM7gw==,
+        integrity: sha512-3r/ZdMW0gxY8uOx1To0lpYa4coq4CzINcCX4laM1rS340Kcn0ac4A/MMFfHN8qba51aorZMYwMcOxYk4wJ9FYg==,
       }
+    peerDependencies:
+      vite: ^5.2.0 || ^6
 
   "@testing-library/dom@10.4.0":
     resolution:
@@ -2904,16 +2893,6 @@ packages:
       {
         integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==,
       }
-
-  autoprefixer@10.4.21:
-    resolution:
-      {
-        integrity: sha512-O+A6LWV5LDHSJD3LjHYoNi4VLsj/Whi7k6zG12xTYaU4cQ8oxQGckXNX8cRHK5yOZ/ppVHe0ZBXGzSV9jXdVbQ==,
-      }
-    engines: { node: ^10 || ^12 || >=14 }
-    hasBin: true
-    peerDependencies:
-      postcss: ^8.1.0
 
   available-typed-arrays@1.0.7:
     resolution:
@@ -3921,12 +3900,6 @@ packages:
         integrity: sha512-buRG0fpBtRHSTCOASe6hD258tEubFoRLb4ZNA6NxMVHNw2gOcwHo9wyablzMzOA5z9xA9L1KNjk/Nt6MT9aYow==,
       }
     engines: { node: ">= 0.6" }
-
-  fraction.js@4.3.7:
-    resolution:
-      {
-        integrity: sha512-ZsDfxO51wGAXREY55a7la9LScWpwv9RxIrYABrlvOFBlH/ShPnrtsXeuUIfXKKOVicNxQ+o8JTbJvjS4M89yew==,
-      }
 
   fresh@0.5.2:
     resolution:
@@ -5022,13 +4995,6 @@ packages:
       }
     engines: { node: ^14.17.0 || ^16.13.0 || >=18.0.0 }
 
-  normalize-range@0.1.2:
-    resolution:
-      {
-        integrity: sha512-bdok/XvKII3nUpklnV6P2hxtMNrCboOjAcyBuQnWEhO665FwrSNRxU+AqpsyvO6LgGYPspN+lu5CLtw4jPRKNA==,
-      }
-    engines: { node: ">=0.10.0" }
-
   npm-install-checks@6.3.0:
     resolution:
       {
@@ -5310,12 +5276,6 @@ packages:
         integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==,
       }
     engines: { node: ">= 0.4" }
-
-  postcss-value-parser@4.2.0:
-    resolution:
-      {
-        integrity: sha512-1NNCs6uurfkVbeXG4S8JFT9t19m45ICnif8zWLd5oPSZ50QnwMfK+H3jv408d4jw/7Bttv5axS5IiHoLaVNHeQ==,
-      }
 
   postcss@8.5.3:
     resolution:
@@ -6860,8 +6820,6 @@ packages:
 snapshots:
   "@adobe/css-tools@4.4.2": {}
 
-  "@alloc/quick-lru@5.2.0": {}
-
   "@ampproject/remapping@2.3.0":
     dependencies:
       "@jridgewell/gen-mapping": 0.3.8
@@ -8317,13 +8275,12 @@ snapshots:
       "@tailwindcss/oxide-win32-arm64-msvc": 4.1.2
       "@tailwindcss/oxide-win32-x64-msvc": 4.1.2
 
-  "@tailwindcss/postcss@4.1.2":
+  "@tailwindcss/vite@4.1.2(vite@6.2.5(@types/node@22.14.0)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))":
     dependencies:
-      "@alloc/quick-lru": 5.2.0
       "@tailwindcss/node": 4.1.2
       "@tailwindcss/oxide": 4.1.2
-      postcss: 8.5.3
       tailwindcss: 4.1.2
+      vite: 6.2.5(@types/node@22.14.0)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
 
   "@testing-library/dom@10.4.0":
     dependencies:
@@ -8772,16 +8729,6 @@ snapshots:
   async-function@1.0.0: {}
 
   asynckit@0.4.0: {}
-
-  autoprefixer@10.4.21(postcss@8.5.3):
-    dependencies:
-      browserslist: 4.24.4
-      caniuse-lite: 1.0.30001710
-      fraction.js: 4.3.7
-      normalize-range: 0.1.2
-      picocolors: 1.1.1
-      postcss: 8.5.3
-      postcss-value-parser: 4.2.0
 
   available-typed-arrays@1.0.7:
     dependencies:
@@ -9500,8 +9447,6 @@ snapshots:
 
   forwarded@0.2.0: {}
 
-  fraction.js@4.3.7: {}
-
   fresh@0.5.2: {}
 
   fs-extra@10.1.0:
@@ -10084,8 +10029,6 @@ snapshots:
       semver: 7.7.1
       validate-npm-package-license: 3.0.4
 
-  normalize-range@0.1.2: {}
-
   npm-install-checks@6.3.0:
     dependencies:
       semver: 7.7.1
@@ -10248,8 +10191,6 @@ snapshots:
       "@babel/runtime": 7.27.0
 
   possible-typed-array-names@1.1.0: {}
-
-  postcss-value-parser@4.2.0: {}
 
   postcss@8.5.3:
     dependencies:
