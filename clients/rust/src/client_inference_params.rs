@@ -6,10 +6,15 @@ use serde_json::Value;
 use tensorzero_internal::{
     cache::CacheParamsOptions,
     endpoints::inference::{InferenceParams, Params},
-    inference::types::{extra_body::UnfilteredInferenceExtraBody, Input},
+    error::Error,
+    inference::types::{
+        extra_body::UnfilteredInferenceExtraBody, Input, InputMessage, InputMessageContent,
+    },
     tool::DynamicToolParams,
 };
 use uuid::Uuid;
+
+use crate::client_input::{test_client_input_to_input, ClientInput};
 
 // This is a copy-paste of the `Params` struct from `tensorzero_internal::endpoints::inference::Params`.
 // with just the `credentials` field adjusted to allow serialization.
@@ -24,7 +29,7 @@ pub struct ClientInferenceParams {
     // NOTE: DO NOT GENERATE EPISODE IDS MANUALLY. THE API WILL DO THAT FOR YOU.
     pub episode_id: Option<Uuid>,
     // the input for the inference
-    pub input: Input,
+    pub input: ClientInput,
     // default False
     pub stream: Option<bool>,
     // Inference-time overrides for variant types (use with caution)
@@ -65,13 +70,28 @@ pub struct ClientInferenceParams {
     pub extra_body: UnfilteredInferenceExtraBody,
 }
 
-impl From<ClientInferenceParams> for Params {
-    fn from(this: ClientInferenceParams) -> Self {
-        Params {
+impl TryFrom<ClientInferenceParams> for Params {
+    type Error = Error;
+    fn try_from(this: ClientInferenceParams) -> Result<Self, Error> {
+        let mut messages = Vec::with_capacity(this.input.messages.len());
+        for message in this.input.messages {
+            let mut content = Vec::with_capacity(message.content.len());
+            for input_content in message.content {
+                content.push(InputMessageContent::try_from(input_content)?);
+            }
+            messages.push(InputMessage {
+                role: message.role,
+                content,
+            });
+        }
+        Ok(Params {
             function_name: this.function_name,
             model_name: this.model_name,
             episode_id: this.episode_id,
-            input: this.input,
+            input: Input {
+                system: this.input.system,
+                messages,
+            },
             stream: this.stream,
             params: this.params,
             variant_name: this.variant_name,
@@ -89,7 +109,7 @@ impl From<ClientInferenceParams> for Params {
             cache_options: this.cache_options,
             include_original_response: this.include_original_response,
             extra_body: this.extra_body,
-        }
+        })
     }
 }
 
@@ -120,7 +140,7 @@ fn assert_params_match(client_params: ClientInferenceParams) {
         function_name,
         model_name,
         episode_id,
-        input,
+        input: test_client_input_to_input(input),
         stream,
         params,
         variant_name,

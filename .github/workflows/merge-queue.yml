@@ -36,6 +36,13 @@ env:
 jobs:
   clickhouse-tests-cloud:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cloud_instance:
+          - release_channel: regular
+            url_secret: CLICKHOUSE_CLOUD_URL
+          - release_channel: fast
+            url_secret: CLICKHOUSE_CLOUD_FAST_CHANNEL_URL
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: dtolnay/rust-toolchain@stable
@@ -45,13 +52,13 @@ jobs:
         with:
           tool: cargo-nextest
 
-      - name: Wake up ClickHouse cloud
-        run: |
-          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES'
-
       - name: Set up TENSORZERO_CLICKHOUSE_URL
         run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets[matrix.cloud_instance.url_secret] }}" >> $GITHUB_ENV
+
+      - name: Wake up ClickHouse cloud
+        run: |
+          curl $TENSORZERO_CLICKHOUSE_URL --data-binary 'SHOW DATABASES'
 
       - name: Delete old ClickHouse cloud dbs
         run: ./ci/delete-clickhouse-dbs.sh

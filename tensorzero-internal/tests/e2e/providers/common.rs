@@ -19,8 +19,8 @@ use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use std::future::IntoFuture;
 use tensorzero::{
-    CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
-    InputMessage, InputMessageContent,
+    CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
+    ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 
 use tensorzero_internal::endpoints::object_storage::{
@@ -841,15 +841,15 @@ pub async fn test_url_image_inference_with_provider_and_store(
             .inference(ClientInferenceParams {
                 model_name: Some(provider.model_name.clone()),
                 episode_id: Some(episode_id),
-                input: Input {
+                input: ClientInput {
                     system: None,
-                    messages: vec![InputMessage {
+                    messages: vec![ClientInputMessage {
                         role: Role::User,
                         content: vec![
-                            InputMessageContent::Text(TextKind::Text {
+                            ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            InputMessageContent::Image(Image::Url {
+                            ClientInputMessageContent::Image(Image::Url {
                                 url: image_url.clone(),
                             }),
                         ],
@@ -900,15 +900,15 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                 function_name: Some("image_test".to_string()),
                 variant_name: Some(provider.variant_name.clone()),
                 episode_id: Some(episode_id),
-                input: Input {
+                input: ClientInput {
                     system: None,
-                    messages: vec![InputMessage {
+                    messages: vec![ClientInputMessage {
                         role: Role::User,
                         content: vec![
-                            InputMessageContent::Text(TextKind::Text {
+                            ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            InputMessageContent::Image(Image::Base64 {
+                            ClientInputMessageContent::Image(Image::Base64 {
                                 mime_type: ImageKind::Png,
                                 data: image_data.clone(),
                             }),
@@ -7292,12 +7292,12 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         model_name: None,
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
-        input: tensorzero::Input {
+        input: tensorzero::ClientInput {
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
-            messages: vec![tensorzero::InputMessage {
+            messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
                 content: vec![
-                    tensorzero::InputMessageContent::Text(
+                    tensorzero::ClientInputMessageContent::Text(
                         TextKind::Text {
                             text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string()
                         }
@@ -7603,11 +7603,11 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         model_name: None,
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
-        input: tensorzero::Input {
+        input: tensorzero::ClientInput {
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
-            messages: vec![tensorzero::InputMessage {
+            messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
-                content: vec![tensorzero::InputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
             }],
         },
         stream: Some(true),

@@ -173,7 +173,28 @@ async fn run_evaluations_json() {
             feedback["tags"]["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
-
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluator_name"],
+            "count_sports"
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluation_name"],
+            "entity_extraction"
+        );
+        let evaluator_inference_id = Uuid::parse_str(
+            feedback["tags"]["tensorzero::evaluator_inference_id"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let evaluator_inference =
+            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        assert_eq!(
+            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            "entity_extraction"
+        );
         total_the += feedback["value"].as_f64().unwrap() as u32;
         parsed_output.push(parsed);
     }
@@ -285,6 +306,10 @@ async fn run_exact_match_evaluation_chat() {
         assert_eq!(
             clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
             "haiku_with_outputs"
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
+            "exact_match"
         );
         parsed_output.push(parsed);
     }
@@ -405,6 +430,24 @@ async fn run_llm_judge_evaluation_chat() {
         );
         assert_eq!(
             clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
+            "haiku_without_outputs"
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
+            "topic_starts_with_f"
+        );
+        let evaluator_inference_id = Uuid::parse_str(
+            clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let evaluator_inference =
+            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        assert_eq!(
+            evaluator_inference["tags"]["tensorzero::evaluation_name"],
             "haiku_without_outputs"
         );
         parsed_output.push(parsed);
@@ -711,8 +754,9 @@ async fn test_run_llm_judge_evaluator_chat() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(true)));
+    assert_eq!(result.value, json!(true));
 
     let result = run_llm_judge_evaluator(
         &inference_response,
@@ -724,8 +768,9 @@ async fn test_run_llm_judge_evaluator_chat() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(false)));
+    assert_eq!(result.value, json!(false));
 
     let result = run_llm_judge_evaluator(
         &inference_response,
@@ -737,8 +782,9 @@ async fn test_run_llm_judge_evaluator_chat() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(0)));
+    assert_eq!(result.value, json!(0));
 
     let result = run_llm_judge_evaluator(
         &inference_response,
@@ -750,8 +796,9 @@ async fn test_run_llm_judge_evaluator_chat() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(1)));
+    assert_eq!(result.value, json!(1));
 
     // Try without output
     let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
@@ -786,7 +833,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     )
     .await
     .unwrap();
-    assert_eq!(result, None);
+    assert!(result.is_none());
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -862,8 +909,9 @@ async fn test_run_llm_judge_evaluator_json() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(true)));
+    assert_eq!(result.value, json!(true));
 
     let result = run_llm_judge_evaluator(
         &inference_response,
@@ -875,8 +923,9 @@ async fn test_run_llm_judge_evaluator_json() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(false)));
+    assert_eq!(result.value, json!(false));
 
     let result = run_llm_judge_evaluator(
         &inference_response,
@@ -888,8 +937,9 @@ async fn test_run_llm_judge_evaluator_json() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(0)));
+    assert_eq!(result.value, json!(0));
 
     let result = run_llm_judge_evaluator(
         &inference_response,
@@ -901,8 +951,9 @@ async fn test_run_llm_judge_evaluator_json() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(1)));
+    assert_eq!(result.value, json!(1));
 
     // Try without output
     let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
@@ -937,5 +988,5 @@ async fn test_run_llm_judge_evaluator_json() {
     )
     .await
     .unwrap();
-    assert_eq!(result, None);
+    assert!(result.is_none());
 }

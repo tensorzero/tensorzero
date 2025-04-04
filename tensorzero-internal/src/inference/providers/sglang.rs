@@ -80,7 +80,6 @@ impl TryFrom<Credential> for SGLangCredentials {
             Credential::Static(key) => Ok(SGLangCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(SGLangCredentials::Dynamic(key_name)),
             Credential::None => Ok(SGLangCredentials::None),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(SGLangCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for SGLang provider".to_string(),

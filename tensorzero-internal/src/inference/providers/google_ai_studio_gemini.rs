@@ -92,7 +92,6 @@ fn default_api_key_location() -> CredentialLocation {
 pub enum GoogleAIStudioCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -103,7 +102,6 @@ impl TryFrom<Credential> for GoogleAIStudioCredentials {
         match credentials {
             Credential::Static(key) => Ok(GoogleAIStudioCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(GoogleAIStudioCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(GoogleAIStudioCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Google AI Studio Gemini provider"
@@ -128,7 +126,6 @@ impl GoogleAIStudioCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             GoogleAIStudioCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             })?,
@@ -1833,13 +1830,10 @@ mod tests {
         let creds = GoogleAIStudioCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, GoogleAIStudioCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = GoogleAIStudioCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, GoogleAIStudioCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = GoogleAIStudioCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, GoogleAIStudioCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

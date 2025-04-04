@@ -3,8 +3,8 @@
 use std::{io::Write, path::PathBuf};
 
 use tensorzero::{
-    ClientBuilder, ClientBuilderMode, ClientInferenceParams, ContentBlockChunk, InferenceOutput,
-    InferenceResponseChunk, Input, InputMessage, InputMessageContent, Role,
+    ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage,
+    ClientInputMessageContent, ContentBlockChunk, InferenceOutput, InferenceResponseChunk, Role,
 };
 use tensorzero_internal::inference::types::TextKind;
 use tokio_stream::StreamExt;
@@ -69,10 +69,10 @@ async fn main() {
         .inference(ClientInferenceParams {
             function_name: Some(args.function_name),
             stream: Some(args.streaming),
-            input: Input {
-                messages: vec![InputMessage {
+            input: ClientInput {
+                messages: vec![ClientInputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Arguments {
+                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
                         arguments: input,
                     })],
                 }],
