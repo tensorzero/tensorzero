@@ -23,9 +23,7 @@ jobs:
             target: linux/arm64
         container:
           - name: ui
-            context: ./ui
           - name: gateway
-            context: .
     permissions:
       packages: write
       contents: read
@@ -60,7 +58,6 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           platforms: ${{ matrix.platform.target }}
-          context: ${{ matrix.container.context }}
           file: ./${{ matrix.container.name }}/Dockerfile
           push: true
           provenance: mode=max
@@ -88,9 +85,7 @@ jobs:
       matrix:
         container:
           - name: ui
-            context: ./ui
           - name: gateway
-            context: .
     runs-on: ubuntu-latest
     needs:
       - build
