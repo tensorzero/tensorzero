@@ -2997,7 +2997,7 @@ async fn test_client_adjust_tool_call() {
 
     assert_eq!(last_body, stringified_tool_call_args);
 
-    // Set an older gateway version, and verify that we still stringify the tool call arugments
+    // Set an older gateway version, and verify that we still stringify the tool call arguments
     bad_gateway
         .e2e_update_gateway_version("2025.03.2".to_string())
         .await;
