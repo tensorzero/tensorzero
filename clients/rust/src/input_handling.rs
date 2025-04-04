@@ -1,50 +1,50 @@
 use futures::future::try_join_all;
 use serde_json::Value;
 
-use crate::{Client, TensorZeroError};
+use crate::{Client, ClientInput, ClientInputMessage, ClientInputMessageContent, TensorZeroError};
+use tensorzero_internal::tool::ToolCallInput;
 use tensorzero_internal::{
     error::ErrorDetails,
     inference::types::{
-        storage::StoragePath, Image, Input, InputMessage, InputMessageContent, ResolvedInput,
-        ResolvedInputMessage, ResolvedInputMessageContent, TextKind,
+        storage::StoragePath, Image, ResolvedInput, ResolvedInputMessage,
+        ResolvedInputMessageContent, TextKind,
     },
 };
 
-pub async fn resolved_input_to_input(
+pub async fn resolved_input_to_client_input(
     resolved_input: ResolvedInput,
     client: &Client,
-) -> Result<Input, TensorZeroError> {
+) -> Result<ClientInput, TensorZeroError> {
     let ResolvedInput { system, messages } = resolved_input;
     let messages = try_join_all(
         messages
             .into_iter()
-            .map(|message| resolved_input_message_to_input_message(message, client)),
+            .map(|message| resolved_input_message_to_client_input_message(message, client)),
     )
     .await?;
-    Ok(Input { system, messages })
+    Ok(ClientInput { system, messages })
 }
 
-async fn resolved_input_message_to_input_message(
+async fn resolved_input_message_to_client_input_message(
     resolved_input_message: ResolvedInputMessage,
     client: &Client,
-) -> Result<InputMessage, TensorZeroError> {
+) -> Result<ClientInputMessage, TensorZeroError> {
     let ResolvedInputMessage { role, content } = resolved_input_message;
-    let content =
-        try_join_all(content.into_iter().map(|content| {
-            resolved_input_message_content_to_input_message_content(content, client)
-        }))
-        .await?;
-    Ok(InputMessage { role, content })
+    let content = try_join_all(content.into_iter().map(|content| {
+        resolved_input_message_content_to_client_input_message_content(content, client)
+    }))
+    .await?;
+    Ok(ClientInputMessage { role, content })
 }
 
-async fn resolved_input_message_content_to_input_message_content(
+async fn resolved_input_message_content_to_client_input_message_content(
     resolved_input_message_content: ResolvedInputMessageContent,
     client: &Client,
-) -> Result<InputMessageContent, TensorZeroError> {
+) -> Result<ClientInputMessageContent, TensorZeroError> {
     match resolved_input_message_content {
         ResolvedInputMessageContent::Text { value } => match value {
-            Value::String(s) => Ok(InputMessageContent::Text(TextKind::Text { text: s })),
-            Value::Object(o) => Ok(InputMessageContent::Text(TextKind::Arguments {
+            Value::String(s) => Ok(ClientInputMessageContent::Text(TextKind::Text { text: s })),
+            Value::Object(o) => Ok(ClientInputMessageContent::Text(TextKind::Arguments {
                 arguments: o,
             })),
             _ => Err(TensorZeroError::Other {
@@ -55,15 +55,24 @@ async fn resolved_input_message_content_to_input_message_content(
             }),
         },
         ResolvedInputMessageContent::ToolCall(tool_call) => {
-            Ok(InputMessageContent::ToolCall(tool_call))
+            let tool_call = ToolCallInput {
+                id: tool_call.id,
+                name: Some(tool_call.name),
+                arguments: None,
+                raw_arguments: Some(tool_call.arguments),
+                raw_name: None,
+            };
+            Ok(ClientInputMessageContent::ToolCall(tool_call))
         }
         ResolvedInputMessageContent::ToolResult(tool_result) => {
-            Ok(InputMessageContent::ToolResult(tool_result))
+            Ok(ClientInputMessageContent::ToolResult(tool_result))
         }
         ResolvedInputMessageContent::RawText { value } => {
-            Ok(InputMessageContent::RawText { value })
+            Ok(ClientInputMessageContent::RawText { value })
         }
-        ResolvedInputMessageContent::Thought(thought) => Ok(InputMessageContent::Thought(thought)),
+        ResolvedInputMessageContent::Thought(thought) => {
+            Ok(ClientInputMessageContent::Thought(thought))
+        }
         ResolvedInputMessageContent::Image(image) => {
             let mime_type = image.image.mime_type;
             let data = match image.image.data {
@@ -74,7 +83,7 @@ async fn resolved_input_message_content_to_input_message_content(
                 }
             };
 
-            Ok(InputMessageContent::Image(Image::Base64 {
+            Ok(ClientInputMessageContent::Image(Image::Base64 {
                 mime_type,
                 data,
             }))
@@ -82,7 +91,7 @@ async fn resolved_input_message_content_to_input_message_content(
         ResolvedInputMessageContent::Unknown {
             data,
             model_provider_name,
-        } => Ok(InputMessageContent::Unknown {
+        } => Ok(ClientInputMessageContent::Unknown {
             data,
             model_provider_name,
         }),

@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use anyhow::{bail, Result};
 use serde_json::{json, Value};
 use tensorzero::{
-    ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
-    Input, InputMessage, InputMessageContent, Role,
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::endpoints::datasets::Datapoint;
@@ -32,7 +32,7 @@ pub async fn run_llm_judge_evaluator(
     evaluation_name: &str,
     evaluator_name: &str,
     evaluation_run_id: Uuid,
-    input: &Input,
+    input: &ClientInput,
 ) -> Result<Option<LLMJudgeEvaluationResult>> {
     let judge_input =
         match prepare_llm_judge_input(llm_judge_config, input, inference_response, datapoint)? {
@@ -106,10 +106,10 @@ pub async fn run_llm_judge_evaluator(
 
 fn prepare_llm_judge_input(
     llm_judge_config: &LLMJudgeConfig,
-    input: &Input,
+    input: &ClientInput,
     inference_response: &InferenceResponse,
     datapoint: &Datapoint,
-) -> Result<Option<Input>> {
+) -> Result<Option<ClientInput>> {
     let generated_output = match &inference_response {
         InferenceResponse::Chat(chat_response) => {
             prepare_serialized_chat_output(&chat_response.content)?
@@ -126,11 +126,11 @@ fn prepare_llm_judge_input(
     match &llm_judge_config.input_format {
         LLMJudgeInputFormat::Serialized => {
             let serialized_input = prepare_serialized_input(input)?;
-            Ok(Some(Input {
+            Ok(Some(ClientInput {
                 system: None,
-                messages: vec![InputMessage {
+                messages: vec![ClientInputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Arguments{
+                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments{
                         arguments: json!({"input": serialized_input, "generated_output": generated_output, "reference_output": reference_output})
                             .as_object()
                             .expect("Arguments should be an object")
@@ -148,16 +148,16 @@ fn prepare_llm_judge_input(
             );
             match final_message {
                 Some(final_message) => {
-                    messages.push(InputMessage {
+                    messages.push(ClientInputMessage {
                         role: Role::User,
-                        content: vec![InputMessageContent::Text(TextKind::Text {
+                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
                             text: final_message,
                         })],
                     });
                 }
                 None => return Ok(None),
             }
-            Ok(Some(Input {
+            Ok(Some(ClientInput {
                 system: None,
                 messages,
             }))
@@ -185,45 +185,45 @@ fn prepare_final_message_messages_input(
     }
 }
 
-fn prepare_serialized_input(input: &Input) -> Result<String> {
+fn prepare_serialized_input(input: &ClientInput) -> Result<String> {
     for message in &input.messages {
         for content in &message.content {
             match content {
-                InputMessageContent::Image(..) => {
+                ClientInputMessageContent::Image(..) => {
                     bail!("Image content not supported for LLM judge evaluations")
                 }
-                InputMessageContent::Unknown { .. } => {
+                ClientInputMessageContent::Unknown { .. } => {
                     bail!("Unknown content not supported for LLM judge evaluations")
                 }
-                InputMessageContent::Text { .. }
-                | InputMessageContent::ToolCall { .. }
-                | InputMessageContent::ToolResult { .. }
-                | InputMessageContent::RawText { .. }
-                | InputMessageContent::Thought(_) => {}
+                ClientInputMessageContent::Text { .. }
+                | ClientInputMessageContent::ToolCall { .. }
+                | ClientInputMessageContent::ToolResult { .. }
+                | ClientInputMessageContent::RawText { .. }
+                | ClientInputMessageContent::Thought(_) => {}
             }
         }
     }
     Ok(serde_json::to_string(input)?)
 }
 
-fn prepare_messages_input(input: &Input) -> Result<Vec<InputMessage>> {
+fn prepare_messages_input(input: &ClientInput) -> Result<Vec<ClientInputMessage>> {
     let mut messages = Vec::new();
     if let Some(system) = &input.system {
         match system {
             Value::String(system) => {
-                messages.push(InputMessage {
+                messages.push(ClientInputMessage {
                     role: Role::User,
                     // TODO (Viraj): decide how we should serialize system messages
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
                         text: system.clone(),
                     })],
                 });
             }
             Value::Object(system) => {
                 let system_message = serde_json::to_string(system)?;
-                messages.push(InputMessage {
+                messages.push(ClientInputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
                         text: system_message,
                     })],
                 })
@@ -235,7 +235,7 @@ fn prepare_messages_input(input: &Input) -> Result<Vec<InputMessage>> {
     }
     for message in &input.messages {
         let content = serialize_content_for_messages_input(&message.content)?;
-        messages.push(InputMessage {
+        messages.push(ClientInputMessage {
             role: message.role,
             content,
         });
@@ -244,44 +244,44 @@ fn prepare_messages_input(input: &Input) -> Result<Vec<InputMessage>> {
 }
 
 fn serialize_content_for_messages_input(
-    content: &Vec<InputMessageContent>,
-) -> Result<Vec<InputMessageContent>> {
+    content: &Vec<ClientInputMessageContent>,
+) -> Result<Vec<ClientInputMessageContent>> {
     let mut serialized_content = Vec::new();
     for content_block in content {
         match content_block {
-            InputMessageContent::Image(image) => {
-                serialized_content.push(InputMessageContent::Image(image.clone()));
+            ClientInputMessageContent::Image(image) => {
+                serialized_content.push(ClientInputMessageContent::Image(image.clone()));
             }
-            InputMessageContent::Unknown { .. } => {
+            ClientInputMessageContent::Unknown { .. } => {
                 bail!("Unknown content not supported for LLM judge evaluations")
             }
-            InputMessageContent::ToolCall { .. }
-            | InputMessageContent::ToolResult { .. }
-            | InputMessageContent::RawText { .. }
-            | InputMessageContent::Thought(_) => {
+            ClientInputMessageContent::ToolCall { .. }
+            | ClientInputMessageContent::ToolResult { .. }
+            | ClientInputMessageContent::RawText { .. }
+            | ClientInputMessageContent::Thought(_) => {
                 serialized_content.push(content_block.clone());
             }
-            InputMessageContent::Text(text) => match text {
+            ClientInputMessageContent::Text(text) => match text {
                 TextKind::Text { text } => {
-                    serialized_content.push(InputMessageContent::Text(TextKind::Text {
+                    serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
                         text: text.clone(),
                     }));
                 }
                 TextKind::Arguments { arguments } => {
                     let arguments_string = serde_json::to_string(arguments)?;
-                    serialized_content.push(InputMessageContent::Text(TextKind::Text {
+                    serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
                         text: arguments_string,
                     }));
                 }
                 TextKind::LegacyValue { value } => match value {
                     Value::String(string) => {
-                        serialized_content.push(InputMessageContent::Text(TextKind::Text {
+                        serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
                             text: string.clone(),
                         }));
                     }
                     Value::Object(object) => {
                         let object_string = serde_json::to_string(object)?;
-                        serialized_content.push(InputMessageContent::Text(TextKind::Text {
+                        serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
                             text: object_string,
                         }));
                     }
@@ -358,11 +358,11 @@ mod tests {
     #[test]
     fn test_prepare_serialized_input() {
         // No system, just a text user message
-        let input = Input {
+        let input = ClientInput {
             system: None,
-            messages: vec![InputMessage {
+            messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
                     text: "Hello, world!".to_string(),
                 })],
             }],
@@ -374,15 +374,15 @@ mod tests {
         );
 
         // System message, user message with a text and tool block
-        let input = Input {
+        let input = ClientInput {
             system: Some(json!("You are a helpful assistant")),
-            messages: vec![InputMessage {
+            messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![
-                    InputMessageContent::Text(TextKind::Text {
+                    ClientInputMessageContent::Text(TextKind::Text {
                         text: "Hello, world!".to_string(),
                     }),
-                    InputMessageContent::ToolResult(ToolResult {
+                    ClientInputMessageContent::ToolResult(ToolResult {
                         name: "tool".to_string(),
                         result: "it's 24 degrees and cloudy in SF".to_string(),
                         id: "foooo".to_string(),
@@ -396,11 +396,11 @@ mod tests {
             r#"{"system":"You are a helpful assistant","messages":[{"role":"user","content":[{"type":"text","text":"Hello, world!"},{"type":"tool_result","name":"tool","result":"it's 24 degrees and cloudy in SF","id":"foooo"}]}]}"#
         );
         // Input contains an image
-        let input = Input {
+        let input = ClientInput {
             system: None,
-            messages: vec![InputMessage {
+            messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Image(Image::Url {
+                content: vec![ClientInputMessageContent::Image(Image::Url {
                     url: Url::parse("https://example.com/image.png").unwrap(),
                 })],
             }],

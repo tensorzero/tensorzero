@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use serde_json::Value;
-use tensorzero::{FeedbackParams, InferenceResponse, Input};
+use tensorzero::{ClientInput, FeedbackParams, InferenceResponse};
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{
     get_evaluator_metric_name, EvaluationConfig, EvaluatorConfig,
@@ -29,7 +29,7 @@ pub type EvaluationResult = HashMap<String, Result<Option<Value>>>;
 pub(crate) async fn evaluate_inference(
     inference_response: Arc<InferenceResponse>,
     datapoint: Arc<Datapoint>,
-    input: Arc<Input>,
+    input: Arc<ClientInput>,
     evaluation_config: Arc<EvaluationConfig>,
     evaluation_name: Arc<String>,
     tensorzero_client: Arc<ThrottledTensorZeroClient>,
@@ -138,7 +138,7 @@ async fn run_evaluator(
     datapoint: &Datapoint,
     evaluation_name: &str,
     evaluation_run_id: Uuid,
-    input: &Input,
+    input: &ClientInput,
 ) -> Result<EvaluatorResult> {
     let EvaluationConfig::Static(static_evaluation_config) = evaluation_config;
     let evaluator_config = match static_evaluation_config.evaluators.get(&evaluator_name) {

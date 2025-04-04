@@ -7,7 +7,7 @@ use clap::Parser;
 use evaluations::evaluators::llm_judge::run_llm_judge_evaluator;
 use evaluations::ThrottledTensorZeroClient;
 use serde_json::json;
-use tensorzero::input_handling::resolved_input_to_input;
+use tensorzero::input_handling::resolved_input_to_client_input;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_internal::inference::types::{
@@ -887,9 +887,10 @@ async fn test_run_llm_judge_evaluator_chat() {
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
     };
-    let input = resolved_input_to_input(datapoint.input().clone(), &tensorzero_client.client)
-        .await
-        .unwrap();
+    let input =
+        resolved_input_to_client_input(datapoint.input().clone(), &tensorzero_client.client)
+            .await
+            .unwrap();
     let result = run_llm_judge_evaluator(
         &inference_response,
         &datapoint,
@@ -1051,9 +1052,10 @@ async fn test_run_llm_judge_evaluator_json() {
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
     };
-    let input = resolved_input_to_input(datapoint.input().clone(), &tensorzero_client.client)
-        .await
-        .unwrap();
+    let input =
+        resolved_input_to_client_input(datapoint.input().clone(), &tensorzero_client.client)
+            .await
+            .unwrap();
     let result = run_llm_judge_evaluator(
         &inference_response,
         &datapoint,
