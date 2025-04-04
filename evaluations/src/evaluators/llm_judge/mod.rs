@@ -139,7 +139,12 @@ fn prepare_llm_judge_input(
             }))
         }
         LLMJudgeInputFormat::Messages => {
-            todo!()
+            let mut messages = prepare_messages_input(input)?;
+            // TODO (Viraj): Add something that explains the format of the output and the outputs as needed.
+            Ok(Some(Input {
+                system: None,
+                messages,
+            }))
         }
     }
 }
@@ -165,8 +170,91 @@ fn prepare_serialized_input(input: &Input) -> Result<String> {
     Ok(serde_json::to_string(input)?)
 }
 
-fn prepare_messages_input(input: &Input) -> Result<Input> {
-    todo!()
+fn prepare_messages_input(input: &Input) -> Result<Vec<InputMessage>> {
+    let mut messages = Vec::new();
+    if let Some(system) = &input.system {
+        match system {
+            Value::String(system) => {
+                messages.push(InputMessage {
+                    role: Role::User,
+                    // TODO (Viraj): decide how we should serialize system messages
+                    content: vec![InputMessageContent::Text(TextKind::Text {
+                        text: system.clone(),
+                    })],
+                });
+            }
+            Value::Object(system) => {
+                let system_message = serde_json::to_string(system)?;
+                messages.push(InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(TextKind::Text {
+                        text: system_message,
+                    })],
+                })
+            }
+            _ => {
+                bail!("System message is not a string or object");
+            }
+        }
+    }
+    for message in &input.messages {
+        let content = serialize_content_for_messages_input(&message.content)?;
+        messages.push(InputMessage {
+            role: message.role,
+            content,
+        });
+    }
+    Ok(messages)
+}
+
+fn serialize_content_for_messages_input(
+    content: &Vec<InputMessageContent>,
+) -> Result<Vec<InputMessageContent>> {
+    let mut serialized_content = Vec::new();
+    for content_block in content {
+        match content_block {
+            InputMessageContent::Image(image) => {
+                serialized_content.push(InputMessageContent::Image(image.clone()));
+            }
+            InputMessageContent::Unknown { .. } => {
+                bail!("Unknown content not supported for LLM judge evaluations")
+            }
+            InputMessageContent::ToolCall { .. }
+            | InputMessageContent::ToolResult { .. }
+            | InputMessageContent::RawText { .. }
+            | InputMessageContent::Thought(_) => {
+                serialized_content.push(content_block.clone());
+            }
+            InputMessageContent::Text(text) => match text {
+                TextKind::Text { text } => {
+                    serialized_content.push(InputMessageContent::Text(TextKind::Text {
+                        text: text.clone(),
+                    }));
+                }
+                TextKind::Arguments { arguments } => {
+                    let arguments_string = serde_json::to_string(arguments)?;
+                    serialized_content.push(InputMessageContent::Text(TextKind::Text {
+                        text: arguments_string,
+                    }));
+                }
+                TextKind::LegacyValue { value } => match value {
+                    Value::String(string) => {
+                        serialized_content.push(InputMessageContent::Text(TextKind::Text {
+                            text: string.clone(),
+                        }));
+                    }
+                    Value::Object(object) => {
+                        let object_string = serde_json::to_string(object)?;
+                        serialized_content.push(InputMessageContent::Text(TextKind::Text {
+                            text: object_string,
+                        }));
+                    }
+                    _ => bail!("Legacy value is not a string"),
+                },
+            },
+        }
+    }
+    Ok(serialized_content)
 }
 
 /// We prepare the serialized output by converting the content blocks to a string.
