@@ -21,7 +21,7 @@ const PageLayout = forwardRef<HTMLDivElement, PageLayoutProps>(
       <div
         ref={ref}
         className={cn(
-          "container mx-auto flex flex-col gap-12 px-8 pb-20 pt-16",
+          "container mx-auto flex flex-col gap-12 px-8 pt-16 pb-20",
           className,
         )}
       >
@@ -64,7 +64,7 @@ const PageHeader = forwardRef<HTMLDivElement, PageHeaderProps>(
       <div ref={ref} className={cn("flex flex-col", className)}>
         <div className="flex flex-col gap-2">
           {label !== undefined && (
-            <p className="flex items-center gap-1.5 text-sm font-normal text-fg-secondary">
+            <p className="text-fg-secondary flex items-center gap-1.5 text-sm font-normal">
               {icon && (
                 <div
                   className={`${iconBg} flex size-5 items-center justify-center rounded-sm`}
@@ -80,15 +80,15 @@ const PageHeader = forwardRef<HTMLDivElement, PageHeaderProps>(
               <h1 className="text-2xl font-medium">{heading}</h1>
             )}
             {name !== undefined && (
-              <span className="font-mono text-2xl font-medium leading-none">
+              <span className="font-mono text-2xl leading-none font-medium">
                 {name}
               </span>
             )}
             {lateral !== undefined && (
-              <p className="text-sm font-normal text-fg-tertiary">{lateral}</p>
+              <p className="text-fg-tertiary text-sm font-normal">{lateral}</p>
             )}
             {count !== undefined && (
-              <h1 className="text-2xl font-medium text-fg-muted">
+              <h1 className="text-fg-muted text-2xl font-medium">
                 {count.toLocaleString()}
               </h1>
             )}
@@ -156,7 +156,7 @@ const SectionHeader = forwardRef<HTMLHeadingElement, SectionHeaderProps>(
         {heading}
 
         {count !== undefined && (
-          <span className="text-xl font-medium text-fg-muted">
+          <span className="text-fg-muted text-xl font-medium">
             {count.toLocaleString()}
           </span>
         )}

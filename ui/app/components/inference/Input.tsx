@@ -105,7 +105,7 @@ function Message({ message, isEditing, onMessageChange }: MessageProps) {
 
   return (
     <div className="space-y-1">
-      <div className="text-md font-medium capitalize text-slate-600 dark:text-slate-400">
+      <div className="text-md font-medium text-slate-600 capitalize dark:text-slate-400">
         {message.role}
       </div>
       <MessageContent

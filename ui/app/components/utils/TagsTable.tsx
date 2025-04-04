@@ -82,7 +82,7 @@ export function TagsTable({ tags }: TagsTableProps) {
           <TableRow className="hover:bg-bg-primary">
             <TableCell
               colSpan={2}
-              className="px-3 py-8 text-center text-fg-muted"
+              className="text-fg-muted px-3 py-8 text-center"
             >
               No tags found.
             </TableCell>
