@@ -273,16 +273,26 @@ pub async fn select_feedback_by_target_id_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     table_name: &str,
     target_id: Uuid,
+    metric_name: Option<&str>,
 ) -> Option<Value> {
-    let query = format!(
-        "SELECT * FROM {} WHERE target_id = '{}' FORMAT JSONEachRow",
-        table_name, target_id
-    );
+    let query = match metric_name {
+        Some(metric_name) => {
+            format!(
+                "SELECT * FROM {} WHERE target_id = '{}' AND metric_name = '{}' FORMAT JSONEachRow",
+                table_name, target_id, metric_name
+            )
+        }
+        None => format!(
+            "SELECT * FROM {} WHERE target_id = '{}' FORMAT JSONEachRow",
+            table_name, target_id
+        ),
+    };
 
     let text = clickhouse_connection_info
         .run_query(query, None)
         .await
         .unwrap();
+    println!("text: {}", text);
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }

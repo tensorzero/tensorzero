@@ -13,11 +13,13 @@ use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJ
 use tensorzero_internal::inference::types::{
     ResolvedInputMessage, ResolvedInputMessageContent, Text,
 };
+use tokio::time::sleep;
 use url::Url;
 
 use crate::common::write_json_fixture_to_dataset;
 use common::write_chat_fixture_to_dataset;
 use evaluations::{run_evaluation, stats::EvaluationUpdate, Args, OutputFormat};
+use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
 use tensorzero::{ClientBuilder, ClientBuilderMode};
 use tensorzero::{InferenceResponse, Role};
@@ -120,6 +122,7 @@ async fn run_evaluations_json() {
             &clickhouse,
             "BooleanMetricFeedback",
             inference_id,
+            None,
         )
         .await
         .unwrap();
@@ -150,6 +153,7 @@ async fn run_evaluations_json() {
             &clickhouse,
             "FloatMetricFeedback",
             inference_id,
+            None,
         )
         .await
         .unwrap();
@@ -281,6 +285,7 @@ async fn run_exact_match_evaluation_chat() {
             &clickhouse,
             "BooleanMetricFeedback",
             inference_id,
+            None,
         )
         .await
         .unwrap();
@@ -394,6 +399,7 @@ async fn run_llm_judge_evaluation_chat() {
             &clickhouse,
             "FloatMetricFeedback",
             inference_id,
+            None,
         )
         .await
         .is_none());
@@ -405,6 +411,7 @@ async fn run_llm_judge_evaluation_chat() {
             &clickhouse,
             "BooleanMetricFeedback",
             inference_id,
+            None,
         )
         .await
         .unwrap();
@@ -485,11 +492,13 @@ async fn run_image_evaluation() {
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(1)).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     println!("{}", output_str);
     let mut parsed_output = Vec::new();
     let mut total_honest_answers = 0;
+    let mut total_matches_reference = 0;
     for line in output_lines {
         let parsed: EvaluationUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
@@ -536,6 +545,7 @@ async fn run_image_evaluation() {
             &clickhouse,
             "FloatMetricFeedback",
             inference_id,
+            None,
         )
         .await
         .is_none());
@@ -546,11 +556,13 @@ async fn run_image_evaluation() {
             .as_bool()
             .unwrap());
 
-        // There should be Boolean feedback for this evaluation
+        println!("inference_id: {}", inference_id);
+        // There should be Boolean feedback for honest answer
         let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
             &clickhouse,
             "BooleanMetricFeedback",
             inference_id,
+            Some("tensorzero::evaluation_name::images::evaluator_name::honest_answer"),
         )
         .await
         .unwrap();
@@ -577,11 +589,11 @@ async fn run_image_evaluation() {
         );
         assert_eq!(
             clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
-            "haiku_without_outputs"
+            "images"
         );
         assert_eq!(
             clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
-            "topic_starts_with_f"
+            "honest_answer"
         );
         let evaluator_inference_id = Uuid::parse_str(
             clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
@@ -595,12 +607,68 @@ async fn run_image_evaluation() {
                 .unwrap();
         assert_eq!(
             evaluator_inference["tags"]["tensorzero::evaluation_name"],
-            "haiku_without_outputs"
+            "images"
         );
+
+        // There should be Boolean feedback for matches reference
+        let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            Some("tensorzero::evaluation_name::images::evaluator_name::matches_reference"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            clickhouse_feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::evaluation_name::images::evaluator_name::matches_reference"
+        );
+        assert_eq!(
+            clickhouse_feedback["value"],
+            parsed.evaluations["matches_reference"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
+        total_matches_reference += clickhouse_feedback["value"].as_bool().unwrap() as u32;
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
+            "images"
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
+            "matches_reference"
+        );
+        let evaluator_inference_id = Uuid::parse_str(
+            clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let evaluator_inference =
+            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        assert_eq!(
+            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            "images"
+        );
+
         parsed_output.push(parsed);
     }
     assert_eq!(parsed_output.len(), 2);
-    assert_eq!(total_honest_answers, 1);
+    assert_eq!(total_honest_answers, 2);
+    // One of the reference outputs is a lie but this tells the truth
+    assert_eq!(total_matches_reference, 1);
 }
 
 #[tokio::test(flavor = "multi_thread")]

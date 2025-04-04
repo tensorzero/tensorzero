@@ -2464,7 +2464,7 @@ type = "chat"
 
 [functions.image_judger.variants.honest_answer]
 type = "chat_completion"
-model = "dummy::lying_image_judger"
+model = "openai::gpt-4o-mini-2024-07-18"
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
@@ -2718,5 +2718,20 @@ cutoff = 0.2
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 system_instructions = "../../fixtures/config/evaluations/images/honest_answer/system_instructions.txt"
+temperature = 0
+json_mode = "strict"
+
+[evaluations.images.evaluators.matches_reference]
+type = "llm_judge"
+input_format = "messages"
+output_type = "boolean"
+optimize = "max"
+include = { reference_output = true }
+cutoff = 0.5
+
+[evaluations.images.evaluators.matches_reference.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_instructions = "../../fixtures/config/evaluations/images/matches_reference/system_instructions.txt"
 temperature = 0
 json_mode = "strict"

@@ -261,3 +261,17 @@ model = "openai::gpt-4o-mini-2024-07-18"
 system_instructions = "evaluations/images/honest_answer/system_instructions.txt"
 temperature = 0
 json_mode = "strict"
+
+[evaluations.images.evaluators.matches_reference]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+include = { reference_output = true }
+cutoff = 0.5
+
+[evaluations.images.evaluators.matches_reference.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_instructions = "evaluations/images/matches_reference/system_instructions.txt"
+temperature = 0
+json_mode = "strict"
