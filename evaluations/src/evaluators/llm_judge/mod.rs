@@ -141,6 +141,11 @@ fn prepare_llm_judge_input(
         LLMJudgeInputFormat::Messages => {
             let mut messages = prepare_messages_input(input)?;
             // TODO (Viraj): Add something that explains the format of the output and the outputs as needed.
+            let final_message = prepare_final_message_messages_input(
+                llm_judge_config,
+                generated_output,
+                reference_output,
+            )?;
             Ok(Some(Input {
                 system: None,
                 messages,
