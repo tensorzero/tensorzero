@@ -52,11 +52,26 @@ struct Args {
 }
 
 async fn add_version_header(request: Request, next: Next) -> Response {
+    #[allow(unused_mut)]
+    let mut version = HeaderValue::from_static(TENSORZERO_VERSION);
+    #[cfg(feature = "e2e_tests")]
+    {
+        if request
+            .headers()
+            .contains_key("x-tensorzero-e2e-version-remove")
+        {
+            tracing::info!("Removing version header due to e2e header");
+            return next.run(request).await;
+        }
+        if let Some(header_version) = request.headers().get("x-tensorzero-e2e-version-override") {
+            tracing::info!("Overriding version header with e2e header: {header_version:?}");
+            version = header_version.clone();
+        }
+    }
     let mut response = next.run(request).await;
-    response.headers_mut().insert(
-        "x-tensorzero-gateway-version",
-        HeaderValue::from_static(TENSORZERO_VERSION),
-    );
+    response
+        .headers_mut()
+        .insert("x-tensorzero-gateway-version", version);
     response
 }
 
