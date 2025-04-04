@@ -367,13 +367,16 @@ mod tests {
     use tensorzero::Image;
     use tensorzero::Role;
     use tensorzero_internal::endpoints::datasets::ChatInferenceDatapoint;
+    use tensorzero_internal::endpoints::datasets::JsonInferenceDatapoint;
     use tensorzero_internal::endpoints::inference::ChatInferenceResponse;
+    use tensorzero_internal::endpoints::inference::JsonInferenceResponse;
     use tensorzero_internal::evaluations::LLMJudgeIncludeConfig;
     use tensorzero_internal::evaluations::LLMJudgeOptimize;
     use tensorzero_internal::inference::types::ResolvedInput;
     use tensorzero_internal::inference::types::Usage;
+    use tensorzero_internal::tool::ToolCallInput;
     use tensorzero_internal::{
-        inference::types::{ContentBlockChatOutput, Text},
+        inference::types::{ContentBlockChatOutput, Text, Thought},
         tool::{ToolCallOutput, ToolResult},
     };
 
@@ -619,5 +622,520 @@ mod tests {
                 }],
             }
         );
+    }
+
+    #[test]
+    fn test_prepare_messages_input() {
+        // Test with simple string system message
+        let input = ClientInput {
+            system: Some(json!("You are a helpful assistant")),
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "Hello!".to_string(),
+                })],
+            }],
+        };
+        let messages = prepare_messages_input(&input).unwrap();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, Role::User);
+        assert_eq!(messages[0].content.len(), 1);
+        if let ClientInputMessageContent::Text(TextKind::Text { text }) = &messages[0].content[0] {
+            assert_eq!(text, "You are a helpful assistant");
+        } else {
+            panic!("Expected TextKind::Text");
+        }
+        assert_eq!(messages[1].role, Role::User);
+
+        // Test with object system message
+        let input = ClientInput {
+            system: Some(json!({
+                "instructions": "Be helpful",
+                "persona": "assistant"
+            })),
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "Hello!".to_string(),
+                })],
+            }],
+        };
+        let messages = prepare_messages_input(&input).unwrap();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].role, Role::User);
+        if let ClientInputMessageContent::Text(TextKind::Text { text }) = &messages[0].content[0] {
+            assert_eq!(
+                text,
+                r#"{"instructions":"Be helpful","persona":"assistant"}"#
+            );
+        } else {
+            panic!("Expected TextKind::Text");
+        }
+
+        // Test with invalid system message
+        let input = ClientInput {
+            system: Some(json!([1, 2, 3])),
+            messages: vec![],
+        };
+        let err = prepare_messages_input(&input).unwrap_err();
+        assert_eq!(err.to_string(), "System message is not a string or object");
+    }
+
+    #[test]
+    fn test_serialize_content_for_messages_input() {
+        // Test with TextKind::Text
+        let content = vec![ClientInputMessageContent::Text(TextKind::Text {
+            text: "Hello, world!".to_string(),
+        })];
+        let serialized = serialize_content_for_messages_input(&content).unwrap();
+        assert_eq!(serialized.len(), 1);
+        if let ClientInputMessageContent::Text(TextKind::Text { text }) = &serialized[0] {
+            assert_eq!(text, "Hello, world!");
+        } else {
+            panic!("Expected TextKind::Text");
+        }
+
+        // Test with TextKind::Arguments
+        let content = vec![ClientInputMessageContent::Text(TextKind::Arguments {
+            arguments: json!({"key": "value"}).as_object().unwrap().clone(),
+        })];
+        let serialized = serialize_content_for_messages_input(&content).unwrap();
+        assert_eq!(serialized.len(), 1);
+        if let ClientInputMessageContent::Text(TextKind::Text { text }) = &serialized[0] {
+            assert_eq!(text, r#"{"key":"value"}"#);
+        } else {
+            panic!("Expected TextKind::Text");
+        }
+
+        // Test with TextKind::LegacyValue (string)
+        let content = vec![ClientInputMessageContent::Text(TextKind::LegacyValue {
+            value: json!("legacy text"),
+        })];
+        let serialized = serialize_content_for_messages_input(&content).unwrap();
+        assert_eq!(serialized.len(), 1);
+        if let ClientInputMessageContent::Text(TextKind::Text { text }) = &serialized[0] {
+            assert_eq!(text, "legacy text");
+        } else {
+            panic!("Expected TextKind::Text");
+        }
+
+        // Test with TextKind::LegacyValue (object)
+        let content = vec![ClientInputMessageContent::Text(TextKind::LegacyValue {
+            value: json!({"legacy": "object"}),
+        })];
+        let serialized = serialize_content_for_messages_input(&content).unwrap();
+        assert_eq!(serialized.len(), 1);
+        if let ClientInputMessageContent::Text(TextKind::Text { text }) = &serialized[0] {
+            assert_eq!(text, r#"{"legacy":"object"}"#);
+        } else {
+            panic!("Expected TextKind::Text");
+        }
+
+        // Test with TextKind::LegacyValue (non-string, non-object)
+        let content = vec![ClientInputMessageContent::Text(TextKind::LegacyValue {
+            value: json!([1, 2, 3]),
+        })];
+        let err = serialize_content_for_messages_input(&content).unwrap_err();
+        assert_eq!(err.to_string(), "Legacy value is not a string");
+
+        // Test with ToolCall, ToolResult, etc. (should pass through)
+        let content = vec![
+            ClientInputMessageContent::ToolCall(ToolCallInput {
+                name: Some("tool".to_string()),
+                arguments: Some(json!({"arg": "value"})),
+                id: "toolid".to_string(),
+                raw_name: None,
+                raw_arguments: None,
+            }),
+            ClientInputMessageContent::ToolResult(ToolResult {
+                name: "tool".to_string(),
+                result: "result".to_string(),
+                id: "toolid".to_string(),
+            }),
+            ClientInputMessageContent::RawText {
+                value: "raw text".to_string(),
+            },
+            ClientInputMessageContent::Thought(Thought {
+                text: "thought".to_string(),
+                signature: None,
+            }),
+        ];
+        let serialized = serialize_content_for_messages_input(&content).unwrap();
+        assert_eq!(serialized.len(), 4);
+
+        // Test with Unknown content (should error)
+        let content = vec![ClientInputMessageContent::Unknown {
+            data: json!({"unknown": "data"}),
+            model_provider_name: Some("provider".to_string()),
+        }];
+        let err = serialize_content_for_messages_input(&content).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Unknown content not supported for LLM judge evaluations"
+        );
+    }
+
+    #[test]
+    fn test_prepare_serialized_json_output() {
+        // Test with parsed field
+        let output = JsonInferenceOutput {
+            raw: r#"{"key":"value"}"#.to_string(),
+            parsed: Some(json!({"key":"value"})),
+        };
+        let serialized = prepare_serialized_json_output(&output).unwrap();
+        assert_eq!(serialized, r#"{"key":"value"}"#);
+
+        // Test without parsed field
+        let output = JsonInferenceOutput {
+            raw: r#"{"key":"value"}"#.to_string(),
+            parsed: None,
+        };
+        let err = prepare_serialized_json_output(&output).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "JSON output does not contain a `parsed` field"
+        );
+    }
+
+    #[test]
+    fn test_handle_reference_output() {
+        // Test with reference output disabled
+        let config = LLMJudgeConfig {
+            input_format: LLMJudgeInputFormat::Serialized,
+            output_type: LLMJudgeOutputType::Float,
+            cutoff: None,
+            optimize: LLMJudgeOptimize::Max,
+            include: LLMJudgeIncludeConfig {
+                reference_output: false,
+            },
+        };
+        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+            dataset_name: "dataset".to_string(),
+            function_name: "function".to_string(),
+            id: Uuid::now_v7(),
+            episode_id: Some(Uuid::now_v7()),
+            input: ResolvedInput {
+                system: None,
+                messages: Vec::new(),
+            },
+            output: None,
+            tool_params: None,
+            tags: None,
+            auxiliary: String::new(),
+            is_deleted: false,
+        });
+        let result = handle_reference_output(&config, &datapoint).unwrap();
+        assert_eq!(result, None);
+
+        // Test with reference output enabled but missing in datapoint
+        let config = LLMJudgeConfig {
+            input_format: LLMJudgeInputFormat::Serialized,
+            output_type: LLMJudgeOutputType::Float,
+            cutoff: None,
+            optimize: LLMJudgeOptimize::Max,
+            include: LLMJudgeIncludeConfig {
+                reference_output: true,
+            },
+        };
+        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+            dataset_name: "dataset".to_string(),
+            function_name: "function".to_string(),
+            id: Uuid::now_v7(),
+            episode_id: Some(Uuid::now_v7()),
+            input: ResolvedInput {
+                system: None,
+                messages: Vec::new(),
+            },
+            output: None,
+            tool_params: None,
+            tags: None,
+            auxiliary: String::new(),
+            is_deleted: false,
+        });
+        let err = handle_reference_output(&config, &datapoint).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Datapoint does not contain an output when this is expected"
+        );
+
+        // Test with reference output enabled and present (chat)
+        let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
+            dataset_name: "dataset".to_string(),
+            function_name: "function".to_string(),
+            id: Uuid::now_v7(),
+            episode_id: Some(Uuid::now_v7()),
+            input: ResolvedInput {
+                system: None,
+                messages: Vec::new(),
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "Reference text".to_string(),
+            })]),
+            tool_params: None,
+            tags: None,
+            auxiliary: String::new(),
+            is_deleted: false,
+        });
+        let result = handle_reference_output(&config, &datapoint)
+            .unwrap()
+            .unwrap();
+        assert_eq!(result, r#"[{"type":"text","text":"Reference text"}]"#);
+
+        // Test with reference output enabled and present (json)
+        let datapoint = Datapoint::JsonInference(JsonInferenceDatapoint {
+            dataset_name: "dataset".to_string(),
+            function_name: "function".to_string(),
+            id: Uuid::now_v7(),
+            episode_id: Some(Uuid::now_v7()),
+            input: ResolvedInput {
+                system: None,
+                messages: Vec::new(),
+            },
+            output: Some(JsonInferenceOutput {
+                raw: r#"{"result":"json reference"}"#.to_string(),
+                parsed: Some(json!({"result":"json reference"})),
+            }),
+            output_schema: json!({}),
+            tags: None,
+            auxiliary: String::new(),
+            is_deleted: false,
+        });
+        let result = handle_reference_output(&config, &datapoint)
+            .unwrap()
+            .unwrap();
+        assert_eq!(result, r#"{"result":"json reference"}"#);
+    }
+
+    #[test]
+    fn test_prepare_final_message_messages_input() {
+        // Test with reference output required but not provided
+        let config = LLMJudgeConfig {
+            input_format: LLMJudgeInputFormat::Messages,
+            output_type: LLMJudgeOutputType::Float,
+            cutoff: None,
+            optimize: LLMJudgeOptimize::Max,
+            include: LLMJudgeIncludeConfig {
+                reference_output: true,
+            },
+        };
+        let result = prepare_final_message_messages_input(&config, "Generated", None);
+        assert_eq!(result, None);
+
+        // Test with reference output required and provided
+        let message =
+            prepare_final_message_messages_input(&config, "Generated", Some("Reference")).unwrap();
+        let expected = format!(
+            include_str!("message_output_template_with_reference.txt"),
+            "Generated", "Reference"
+        );
+        assert_eq!(message, expected);
+
+        // Test without reference output
+        let config = LLMJudgeConfig {
+            input_format: LLMJudgeInputFormat::Messages,
+            output_type: LLMJudgeOutputType::Float,
+            cutoff: None,
+            optimize: LLMJudgeOptimize::Max,
+            include: LLMJudgeIncludeConfig {
+                reference_output: false,
+            },
+        };
+        let message = prepare_final_message_messages_input(&config, "Generated", None).unwrap();
+        let expected = format!(
+            include_str!("message_output_template_without_reference.txt"),
+            "Generated"
+        );
+        assert_eq!(message, expected);
+    }
+
+    #[test]
+    fn test_prepare_llm_judge_input_messages_format() {
+        // Test with Messages format, no reference output
+        let llm_judge_config = LLMJudgeConfig {
+            input_format: LLMJudgeInputFormat::Messages,
+            output_type: LLMJudgeOutputType::Float,
+            cutoff: None,
+            optimize: LLMJudgeOptimize::Max,
+            include: LLMJudgeIncludeConfig {
+                reference_output: false,
+            },
+        };
+        let input = ClientInput {
+            system: Some(json!("System instruction")),
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "User message".to_string(),
+                })],
+            }],
+        };
+        let prepared_input = prepare_llm_judge_input(
+            &llm_judge_config,
+            &input,
+            &InferenceResponse::Chat(ChatInferenceResponse {
+                content: vec![ContentBlockChatOutput::Text(Text {
+                    text: "Generated output".to_string(),
+                })],
+                inference_id: Uuid::now_v7(),
+                variant_name: "model".to_string(),
+                usage: Usage::default(),
+                original_response: None,
+                finish_reason: None,
+                episode_id: Uuid::now_v7(),
+            }),
+            &Datapoint::ChatInference(ChatInferenceDatapoint {
+                dataset_name: "dataset".to_string(),
+                function_name: "function".to_string(),
+                id: Uuid::now_v7(),
+                episode_id: Some(Uuid::now_v7()),
+                input: ResolvedInput {
+                    system: None,
+                    messages: Vec::new(),
+                },
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "Reference output".to_string(),
+                })]),
+                tool_params: None,
+                tags: None,
+                auxiliary: String::new(),
+                is_deleted: false,
+            }),
+        )
+        .unwrap()
+        .unwrap();
+
+        // Check structure of prepared input
+        assert_eq!(prepared_input.system, None);
+        assert_eq!(prepared_input.messages.len(), 3); // System converted to user + original user + final message
+
+        // First message should be system converted to user
+        assert_eq!(prepared_input.messages[0].role, Role::User);
+        if let ClientInputMessageContent::Text(TextKind::Text { text }) =
+            &prepared_input.messages[0].content[0]
+        {
+            assert_eq!(text, "System instruction");
+        } else {
+            panic!("Expected TextKind::Text");
+        }
+
+        // Second message should be original user message
+        assert_eq!(prepared_input.messages[1].role, Role::User);
+        if let ClientInputMessageContent::Text(TextKind::Text { text }) =
+            &prepared_input.messages[1].content[0]
+        {
+            assert_eq!(text, "User message");
+        } else {
+            panic!("Expected TextKind::Text");
+        }
+
+        // Third message should contain the generated output
+        assert_eq!(prepared_input.messages[2].role, Role::User);
+        if let ClientInputMessageContent::Text(TextKind::Text { text }) =
+            &prepared_input.messages[2].content[0]
+        {
+            let expected = format!(
+                include_str!("message_output_template_without_reference.txt"),
+                "[{\"type\":\"text\",\"text\":\"Generated output\"}]"
+            );
+            assert_eq!(text, &expected);
+        } else {
+            panic!("Expected TextKind::Text");
+        }
+    }
+
+    #[test]
+    fn test_prepare_serialized_chat_output_error_cases() {
+        // Test with only Unknown blocks
+        let content = vec![ContentBlockChatOutput::Unknown {
+            data: json!({"foo": "bar"}),
+            model_provider_name: Some("provider".to_string()),
+        }];
+        let err = prepare_serialized_chat_output(&content).unwrap_err();
+        assert_eq!(err.to_string(), "No valid content blocks to serialize");
+
+        // Test with empty content
+        let content = Vec::new();
+        let err = prepare_serialized_chat_output(&content).unwrap_err();
+        assert_eq!(err.to_string(), "No valid content blocks to serialize");
+    }
+
+    #[test]
+    fn test_prepare_llm_judge_input_with_json_response() {
+        // Test with JSON response
+        let llm_judge_config = LLMJudgeConfig {
+            input_format: LLMJudgeInputFormat::Serialized,
+            output_type: LLMJudgeOutputType::Float,
+            cutoff: None,
+            optimize: LLMJudgeOptimize::Max,
+            include: LLMJudgeIncludeConfig::default(),
+        };
+        let input = ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "Query".to_string(),
+                })],
+            }],
+        };
+        let prepared_input = prepare_llm_judge_input(
+            &llm_judge_config,
+            &input,
+            &InferenceResponse::Json(JsonInferenceResponse {
+                output: JsonInferenceOutput {
+                    raw: r#"{"result":"json output"}"#.to_string(),
+                    parsed: Some(json!({"result":"json output"})),
+                },
+                inference_id: Uuid::now_v7(),
+                variant_name: "model".to_string(),
+                usage: Usage::default(),
+                original_response: None,
+                finish_reason: None,
+                episode_id: Uuid::now_v7(),
+            }),
+            &Datapoint::JsonInference(JsonInferenceDatapoint {
+                dataset_name: "dataset".to_string(),
+                function_name: "function".to_string(),
+                id: Uuid::now_v7(),
+                episode_id: Some(Uuid::now_v7()),
+                input: ResolvedInput {
+                    system: None,
+                    messages: Vec::new(),
+                },
+                output: Some(JsonInferenceOutput {
+                    raw: r#"{"result":"reference output"}"#.to_string(),
+                    parsed: Some(json!({"result":"reference output"})),
+                }),
+                output_schema: json!({}),
+                tags: None,
+                auxiliary: String::new(),
+                is_deleted: false,
+            }),
+        )
+        .unwrap()
+        .unwrap();
+
+        // Check the prepared input
+        assert_eq!(prepared_input.system, None);
+        assert_eq!(prepared_input.messages.len(), 1);
+        assert_eq!(prepared_input.messages[0].role, Role::User);
+        if let ClientInputMessageContent::Text(TextKind::Arguments { arguments }) =
+            &prepared_input.messages[0].content[0]
+        {
+            assert_eq!(
+                arguments.get("input").and_then(|v| v.as_str()).unwrap(),
+                r#"{"messages":[{"role":"user","content":[{"type":"text","text":"Query"}]}]}"#
+            );
+            assert_eq!(
+                arguments
+                    .get("generated_output")
+                    .and_then(|v| v.as_str())
+                    .unwrap(),
+                r#"{"result":"json output"}"#
+            );
+            assert!(arguments.get("reference_output").unwrap().is_null());
+        } else {
+            panic!("Expected TextKind::Arguments");
+        }
     }
 }
