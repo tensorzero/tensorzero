@@ -292,7 +292,6 @@ pub async fn select_feedback_by_target_id_clickhouse(
         .run_query(query, None)
         .await
         .unwrap();
-    println!("text: {}", text);
     let json: Value = serde_json::from_str(&text).ok()?;
     Some(json)
 }
