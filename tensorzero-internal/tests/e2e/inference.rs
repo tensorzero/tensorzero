@@ -1,12 +1,13 @@
 use crate::providers::common::{make_embedded_gateway_with_config, FERRIS_PNG};
+use axum::http::HeaderValue;
 use base64::prelude::*;
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    InferenceOutput, InferenceResponse,
+    ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage,
+    ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_internal::{
     inference::{
@@ -20,6 +21,7 @@ use tensorzero_internal::{
     tool::{ToolCall, ToolCallInput},
 };
 use tracing_test::traced_test;
+use url::Url;
 use uuid::Uuid;
 
 use tensorzero_internal::clickhouse::test_helpers::{
@@ -2900,4 +2902,116 @@ async fn test_tool_call_input_no_warning() {
     assert!(!logs_contain("deprecation"));
     assert!(!logs_contain("Deprecated"));
     assert!(!logs_contain("deprecated"));
+}
+
+#[tokio::test]
+async fn test_client_no_version() {
+    let mut version_remove_headers = reqwest::header::HeaderMap::new();
+    version_remove_headers.append(
+        "x-tensorzero-e2e-version-remove",
+        HeaderValue::from_static("true"),
+    );
+
+    let http_remove_version = reqwest::ClientBuilder::new()
+        .default_headers(version_remove_headers)
+        .build()
+        .unwrap();
+
+    let remove_version_gateway = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+        url: get_gateway_endpoint("/"),
+    })
+    .with_http_client(http_remove_version)
+    .build()
+    .await
+    .unwrap();
+
+    // The discovery query should not give a version, due to 'x-tensorzero-e2e-version-remove'
+    let version = remove_version_gateway.get_gateway_version().await;
+    assert_eq!(version, None);
+}
+
+#[tokio::test]
+async fn test_client_detect_version() {
+    let mut version_override_headers = reqwest::header::HeaderMap::new();
+    version_override_headers.append(
+        "x-tensorzero-e2e-version-override",
+        HeaderValue::from_static("3025.01.12"),
+    );
+
+    let http_client = reqwest::ClientBuilder::new()
+        .default_headers(version_override_headers)
+        .build()
+        .unwrap();
+
+    let gateway = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+        url: get_gateway_endpoint("/"),
+    })
+    .with_http_client(http_client)
+    .build()
+    .await
+    .unwrap();
+
+    // The client should have used the version header (overridden by 'x-tensorzero-e2e-version-override')
+    let version = gateway.get_gateway_version().await;
+    assert_eq!(version, Some("3025.01.12".to_string()));
+}
+
+#[tokio::test]
+async fn test_client_adjust_tool_call() {
+    let bad_gateway = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+        url: Url::parse("http://tensorzero.invalid").unwrap(),
+    })
+    .build()
+    .await
+    .unwrap();
+
+    let params = ClientInferenceParams {
+        function_name: Some("basic_test".to_string()),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::ToolCall(ToolCallInput {
+                    name: Some("my_tool_call".to_string()),
+                    arguments: Some(json!({
+                        "location": "Brooklyn",
+                        "units": "celsius"
+                    })),
+                    id: "my_id".to_string(),
+                    raw_arguments: None,
+                    raw_name: None,
+                })],
+            }],
+        },
+        ..Default::default()
+    };
+
+    bad_gateway.inference(params.clone()).await.unwrap_err();
+    let stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":"{\"location\":\"Brooklyn\",\"units\":\"celsius\"}","id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[]}"#;
+    let non_stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":{"location":"Brooklyn","units":"celsius"},"id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[]}"#;
+
+    // With an invalid gateway url, we shouldn't get a version
+    assert_eq!(bad_gateway.get_gateway_version().await, None);
+
+    let last_body = { bad_gateway.last_body.lock().await.take().unwrap() };
+
+    assert_eq!(last_body, stringified_tool_call_args);
+
+    // Set an older gateway version, and verify that we still stringify the tool call arugments
+    bad_gateway
+        .e2e_update_gateway_version("2025.03.2".to_string())
+        .await;
+    bad_gateway.inference(params.clone()).await.unwrap_err();
+
+    let last_body = { bad_gateway.last_body.lock().await.take().unwrap() };
+    assert_eq!(last_body, stringified_tool_call_args);
+
+    // Set a newer gateway version, and verify that we do not stringify the arguments
+    bad_gateway
+        .e2e_update_gateway_version("2025.03.3".to_string())
+        .await;
+    bad_gateway.inference(params).await.unwrap_err();
+
+    let last_body = { bad_gateway.last_body.lock().await.take().unwrap() };
+    assert_eq!(last_body, non_stringified_tool_call_args);
 }
