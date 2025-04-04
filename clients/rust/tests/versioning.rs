@@ -1,7 +1,7 @@
 #![cfg(feature = "e2e_tests")]
 #![allow(clippy::panic, clippy::unwrap_used, clippy::expect_used)]
 use serde_json::json;
-use tensorzero::{ClientBuilder, ClientBuilderMode, ClientInferenceParams, Input};
+use tensorzero::{ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput};
 
 use reqwest::Url;
 
@@ -42,7 +42,7 @@ async fn test_versioning() {
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
             episode_id: None,
-            input: Input {
+            input: ClientInput {
                 system: Some(json!({"assistant_name": "John"})),
                 messages: vec![],
             },
