@@ -11,6 +11,7 @@ use tensorzero_internal::{
     },
 };
 
+/// Convert a resolved input to a client input
 pub async fn resolved_input_to_client_input(
     resolved_input: ResolvedInput,
     client: &Client,
@@ -111,6 +112,15 @@ async fn fetch_image_data(
 
 #[cfg(test)]
 mod tests {
+    use object_store::path::Path;
+
+    use tensorzero_internal::inference::types::{
+        resolved_input::ImageWithPath, storage::StorageKind, Base64Image, ImageKind,
+    };
+    use url::Url;
+
+    use crate::{ClientBuilder, ClientBuilderMode};
+
     use super::*;
 
     #[test]
@@ -135,5 +145,61 @@ mod tests {
             Some(r#"{"param1":"value1","param2":"value2"}"#.to_string())
         );
         assert_eq!(result.raw_name, None);
+    }
+
+    #[tokio::test]
+    async fn test_resolved_input_message_content_to_client_message_content_with_image() {
+        // Create a mock client that returns a predefined response for get_object
+        let mock_client = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
+            url: Url::parse("http://notaurl.com").unwrap(),
+        })
+        .build()
+        .await
+        .unwrap();
+
+        // Set up the image data
+        let image_data = "base64_encoded_image_data";
+        let path = Path::parse("test-image.jpg").unwrap();
+        let storage_path = StoragePath {
+            path,
+            kind: StorageKind::S3Compatible {
+                bucket_name: Some("test-bucket".to_string()),
+                region: Some("test-region".to_string()),
+                endpoint: Some("test-endpoint".to_string()),
+                allow_http: Some(true),
+                #[cfg(feature = "e2e_tests")]
+                prefix: "".to_string(),
+            },
+        };
+
+        // Create the resolved input message content with an image
+        let resolved_content = ResolvedInputMessageContent::Image(ImageWithPath {
+            image: Base64Image {
+                url: Some(Url::parse("http://notaurl.com").unwrap()),
+                mime_type: ImageKind::Jpeg,
+                data: Some(image_data.to_string()),
+            },
+            storage_path: storage_path.clone(),
+        });
+
+        // Call the function under test
+        let result = resolved_input_message_content_to_client_input_message_content(
+            resolved_content,
+            &mock_client,
+        )
+        .await
+        .unwrap();
+
+        // Verify the result
+        match result {
+            ClientInputMessageContent::Image(Image::Base64 {
+                mime_type: result_mime_type,
+                data: result_data,
+            }) => {
+                assert_eq!(result_mime_type, ImageKind::Jpeg);
+                assert_eq!(result_data, image_data);
+            }
+            _ => panic!("Expected ClientInputMessageContent::Image, got something else"),
+        }
     }
 }

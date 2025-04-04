@@ -3751,6 +3751,7 @@ dependencies = [
  "clap",
  "futures",
  "lazy_static",
+ "object_store",
  "pyo3",
  "reqwest",
  "reqwest-eventsource",
