@@ -68,7 +68,7 @@ async def judge_answer(
     task_description: str,
     metric_properties: str,
     prediction: str,
-    truth: str,
+    ground_truth: str,
     semaphore: asyncio.Semaphore,
     variant_name: str = "baseline",
     dryrun: bool = True,
@@ -87,7 +87,10 @@ async def judge_answer(
                         "content": [
                             {
                                 "type": "text",
-                                "arguments": {"prediction": prediction, "truth": truth},
+                                "arguments": {
+                                    "prediction": prediction,
+                                    "ground_truth": ground_truth,
+                                },
                             }
                         ],
                     },

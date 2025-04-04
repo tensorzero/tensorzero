@@ -1,2 +1,7 @@
-prediction: {{ prediction }}
-truth: {{ truth }}
+# Prediction
+
+{{ prediction }}
+
+# Ground Truth
+
+{{ ground_truth }}
