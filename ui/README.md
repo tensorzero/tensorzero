@@ -17,11 +17,12 @@ See the [Quick Start](https://www.tensorzero.com/docs/quickstart/) and the [Tens
 We provide fixture data for development purposes, but you can also use the UI with any relevant configuration.
 The instructions below assume you're using the provided setup with fixture data.
 
-1. Create a `.env` file in `fixtures/` with credentials for the gateway. See `fixtures/.env.example` for reference.
-2. Launch the TensorZero Gateway and ClickHouse with `docker compose -f fixtures/docker-compose.yml up`.
-3. Set the UI environment variables in the shell (not `.env`). See `.env.example` for reference.
-4. Build the wasm modules. See `app/utils/minijinja/README.md` for reference.
-5. Run `pnpm install` to install the dependencies.
-6. Run `pnpm dev` to start the development server.
+1. Build the `evaluations` binary. Run: `cargo build -p evaluations`
+2. Build the MiniJinja WASM module. See `./app/utils/minijinja/README.md` for reference.
+3. Set the environment variables for the gateway. Create a `.env` file in `fixtures/` with credentials. See `fixtures/.env.example` for reference.
+4. Launch the TensorZero Gateway and ClickHouse with `docker compose -f fixtures/docker-compose.yml up`.
+5. Set the UI environment variables in the shell (not `.env`). See `./.env.example` for reference.
+6. Run `pnpm install` to install the dependencies.
+7. Run `pnpm dev` to start the development server.
 
 You can also run tests with `pnpm test` and Storybook with `pnpm storybook`.
