@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use serde_json::{json, Value};
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse, Role,
+    DynamicToolParams, Image, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::endpoints::datasets::Datapoint;
@@ -104,6 +104,18 @@ pub async fn run_llm_judge_evaluator(
     }
 }
 
+/// We prepare the input for the LLM judge evaluator.
+/// This is heavily informed by the config for the evaluator.
+/// There are two flags that matter here:
+///  - include.reference_output: Whether we include the reference output in the input.
+///  - input_format: Serialized or Messages.
+///
+/// If we are using the serialized format, we serialize the input and include it the generated and reference outputs in a
+/// TextKind::Arguments block that should get templated into the first user message by the LLM Judge.
+///
+/// If we are using the messages format, we first convert the original system message to a user message by serializing it,
+/// append all the other messages as is, and finally append the generated and reference outputs in a TextKind::Text block that we format here.
+/// Since we don't want to use a template on the gateway side, we must format this here.
 fn prepare_llm_judge_input(
     llm_judge_config: &LLMJudgeConfig,
     input: &ClientInput,
@@ -213,7 +225,6 @@ fn prepare_messages_input(input: &ClientInput) -> Result<Vec<ClientInputMessage>
             Value::String(system) => {
                 messages.push(ClientInputMessage {
                     role: Role::User,
-                    // TODO (Viraj): decide how we should serialize system messages
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
                         text: system.clone(),
                     })],
@@ -250,6 +261,10 @@ fn serialize_content_for_messages_input(
     for content_block in content {
         match content_block {
             ClientInputMessageContent::Image(image) => {
+                // The image was already converted from a ResolvedImage to a Base64Image before this.
+                if let Image::Url { .. } = image {
+                    bail!("URL images not supported for LLM judge evaluations. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
+                }
                 serialized_content.push(ClientInputMessageContent::Image(image.clone()));
             }
             ClientInputMessageContent::Unknown { .. } => {
@@ -267,6 +282,8 @@ fn serialize_content_for_messages_input(
                         text: text.clone(),
                     }));
                 }
+                // Since the LLM Judge does not have the template of the original function,
+                // we instead serialize the arguments and send them as a TextKind::Text block.
                 TextKind::Arguments { arguments } => {
                     let arguments_string = serde_json::to_string(arguments)?;
                     serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
@@ -279,6 +296,7 @@ fn serialize_content_for_messages_input(
                             text: string.clone(),
                         }));
                     }
+                    // Same behavior as Arguments above.
                     Value::Object(object) => {
                         let object_string = serde_json::to_string(object)?;
                         serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
@@ -348,6 +366,12 @@ mod tests {
     use serde_json::json;
     use tensorzero::Image;
     use tensorzero::Role;
+    use tensorzero_internal::endpoints::datasets::ChatInferenceDatapoint;
+    use tensorzero_internal::endpoints::inference::ChatInferenceResponse;
+    use tensorzero_internal::evaluations::LLMJudgeIncludeConfig;
+    use tensorzero_internal::evaluations::LLMJudgeOptimize;
+    use tensorzero_internal::inference::types::ResolvedInput;
+    use tensorzero_internal::inference::types::Usage;
     use tensorzero_internal::{
         inference::types::{ContentBlockChatOutput, Text},
         tool::{ToolCallOutput, ToolResult},
@@ -454,6 +478,146 @@ mod tests {
         assert_eq!(
             serialized_output,
             r#"[{"type":"tool_call","arguments":{"foo":"bar"},"id":"foooo","name":"tool","raw_arguments":"{\"foo\": \"bar\"}","raw_name":"tool"},{"type":"text","text":"Hello, world!"}]"#
+        );
+    }
+
+    #[test]
+    fn test_prepare_llm_judge_input() {
+        let llm_judge_config = LLMJudgeConfig {
+            input_format: LLMJudgeInputFormat::Serialized,
+            output_type: LLMJudgeOutputType::Float,
+            cutoff: None,
+            optimize: LLMJudgeOptimize::Max,
+            include: LLMJudgeIncludeConfig::default(),
+        };
+        let input = ClientInput {
+            system: Some(json!("You are a helpful assistant")),
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "bar".to_string(),
+                })],
+            }],
+        };
+        // Reference output disabled, serialized input format
+        let input = prepare_llm_judge_input(
+            &llm_judge_config,
+            &input,
+            &InferenceResponse::Chat(ChatInferenceResponse {
+                content: vec![ContentBlockChatOutput::Text(Text {
+                    text: "Hi world!".to_string(),
+                })],
+                inference_id: Uuid::now_v7(),
+                variant_name: "foo".to_string(),
+                usage: Usage::default(),
+                original_response: None,
+                finish_reason: None,
+                episode_id: Uuid::now_v7(),
+            }),
+            &Datapoint::ChatInference(ChatInferenceDatapoint {
+                dataset_name: "foo".to_string(),
+                function_name: "foo".to_string(),
+                id: Uuid::now_v7(),
+                episode_id: Some(Uuid::now_v7()),
+                input: ResolvedInput {
+                    // This shouldn't get used
+                    system: None,
+                    messages: Vec::new(),
+                },
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })]),
+                tool_params: None,
+                tags: None,
+                auxiliary: String::new(),
+                is_deleted: false,
+            }),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            input,
+            ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
+                        arguments: json!({
+                            "input": "{\"system\":\"You are a helpful assistant\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"bar\"}]}]}",
+                            "generated_output": "[{\"type\":\"text\",\"text\":\"Hi world!\"}]",
+                            "reference_output": null
+                        })
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    })],
+                }],
+            }
+        );
+
+        // Reference output enabled, serialized input format, no includes
+        let llm_judge_config = LLMJudgeConfig {
+            input_format: LLMJudgeInputFormat::Serialized,
+            output_type: LLMJudgeOutputType::Float,
+            cutoff: None,
+            optimize: LLMJudgeOptimize::Max,
+            include: LLMJudgeIncludeConfig {
+                reference_output: true,
+            },
+        };
+        let input = prepare_llm_judge_input(
+            &llm_judge_config,
+            &input,
+            &InferenceResponse::Chat(ChatInferenceResponse {
+                content: vec![ContentBlockChatOutput::Text(Text {
+                    text: "Hi, world!".to_string(),
+                })],
+                inference_id: Uuid::now_v7(),
+                variant_name: "foo".to_string(),
+                usage: Usage::default(),
+                original_response: None,
+                finish_reason: None,
+                episode_id: Uuid::now_v7(),
+            }),
+            &Datapoint::ChatInference(ChatInferenceDatapoint {
+                dataset_name: "foo".to_string(),
+                function_name: "foo".to_string(),
+                id: Uuid::now_v7(),
+                episode_id: Some(Uuid::now_v7()),
+                input: ResolvedInput {
+                    // This shouldn't get used
+                    system: None,
+                    messages: Vec::new(),
+                },
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })]),
+                tool_params: None,
+                tags: None,
+                auxiliary: String::new(),
+                is_deleted: false,
+            }),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            input,
+            ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
+                        arguments: json!({
+                            "input": "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"arguments\":{\"input\":\"{\\\"system\\\":\\\"You are a helpful assistant\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"bar\\\"}]}]}\",\"generated_output\":\"[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"Hi world!\\\"}]\",\"reference_output\":null}}]}]}",
+                            "generated_output": "[{\"type\":\"text\",\"text\":\"Hi, world!\"}]",
+                            "reference_output": "[{\"type\":\"text\",\"text\":\"Hello, world!\"}]"
+                        })
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    })],
+                }],
+            }
         );
     }
 }
