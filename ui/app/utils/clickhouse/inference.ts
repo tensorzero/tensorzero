@@ -730,9 +730,7 @@ export const parsedModelInferenceRowSchema = modelInferenceRowSchema
 export type ParsedModelInferenceRow = z.infer<
   typeof parsedModelInferenceRowSchema
 >;
-/*
-const resolvedInput = await resolveInput(input);
-*/
+
 async function parseModelInferenceRow(
   row: ModelInferenceRow,
 ): Promise<ParsedModelInferenceRow> {
