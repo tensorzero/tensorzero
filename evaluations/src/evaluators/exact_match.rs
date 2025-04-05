@@ -76,6 +76,7 @@ mod tests {
             tags: None,
             auxiliary: "".to_string(),
             is_deleted: false,
+            source_inference_id: None,
         });
         let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
             inference_id: Uuid::now_v7(),
@@ -132,6 +133,7 @@ mod tests {
             tags: None,
             auxiliary: "".to_string(),
             is_deleted: false,
+            source_inference_id: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);
@@ -169,6 +171,7 @@ mod tests {
             tags: None,
             auxiliary: "".to_string(),
             is_deleted: false,
+            source_inference_id: None,
         });
         let inference_response = InferenceResponse::Json(JsonInferenceResponse {
             inference_id: Uuid::now_v7(),
@@ -234,6 +237,7 @@ mod tests {
             tags: None,
             auxiliary: "".to_string(),
             is_deleted: false,
+            source_inference_id: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);
@@ -268,6 +272,7 @@ mod tests {
             tags: None,
             auxiliary: "".to_string(),
             is_deleted: false,
+            source_inference_id: None,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
         assert_eq!(result, None);

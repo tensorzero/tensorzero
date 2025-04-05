@@ -40,9 +40,11 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     const queryParams = serializedFormDataToDatasetQueryParams(jsonData);
 
-    await insertRowsForDataset(queryParams);
+    const writtenRows = await insertRowsForDataset(queryParams);
 
-    return redirect(`/datasets/${queryParams.dataset_name}`);
+    return redirect(
+      `/datasets/${queryParams.dataset_name}?rowsAdded=${writtenRows}`,
+    );
   } catch (error) {
     console.error("Error creating dataset:", error);
     return data({ errors: { message: `${error}` } }, { status: 500 });
