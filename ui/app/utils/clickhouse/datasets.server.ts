@@ -435,6 +435,7 @@ export async function getDatapoint(
       tool_params,
       tags,
       auxiliary,
+      source_inference_id,
       formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at,
       formatDateTime(staled_at, '%Y-%m-%dT%H:%i:%SZ') as staled_at
     FROM ChatInferenceDatapoint FINAL
@@ -456,6 +457,7 @@ export async function getDatapoint(
       output_schema,
       tags,
       auxiliary,
+      source_inference_id,
       formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at,
       formatDateTime(staled_at, '%Y-%m-%dT%H:%i:%SZ') AS staled_at
     FROM JsonInferenceDatapoint FINAL

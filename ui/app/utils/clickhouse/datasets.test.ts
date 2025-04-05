@@ -490,6 +490,7 @@ describe("getDatapoint", () => {
 describe("datapoint operations", () => {
   test("chat datapoint lifecycle - insert, get, delete", async () => {
     const datapoint_id = uuid();
+    const source_inference_id = uuid();
     const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
@@ -515,6 +516,7 @@ describe("datapoint operations", () => {
       updated_at: new Date().toISOString(),
       is_deleted: false,
       staled_at: null,
+      source_inference_id,
     };
 
     // Test insertion
@@ -530,7 +532,7 @@ describe("datapoint operations", () => {
     expect(retrievedDatapoint?.function_name).toBe(chatDatapoint.function_name);
     expect(retrievedDatapoint?.dataset_name).toBe(chatDatapoint.dataset_name);
     expect(retrievedDatapoint?.input).toEqual(chatDatapoint.input);
-
+    expect(retrievedDatapoint?.source_inference_id).toBe(source_inference_id);
     // Check if it's a chat inference row before accessing tool_params
     if (retrievedDatapoint && "tool_params" in retrievedDatapoint) {
       expect(JSON.stringify(retrievedDatapoint.output)).toBe(
@@ -568,6 +570,7 @@ describe("datapoint operations", () => {
 
   test("json datapoint lifecycle - insert, get, delete", async () => {
     const datapoint_id = uuid();
+    const source_inference_id = uuid();
     const jsonDatapoint: ParsedJsonInferenceDatapointRow = {
       dataset_name: "test_json_dataset",
       function_name: "extract_entities",
@@ -609,6 +612,7 @@ describe("datapoint operations", () => {
       updated_at: new Date().toISOString(),
       is_deleted: false,
       staled_at: null,
+      source_inference_id,
     };
 
     // Test insertion
@@ -665,6 +669,7 @@ describe("datapoint operations", () => {
   });
 
   test("handles duplicate insertions gracefully", async () => {
+    const source_inference_id = uuid();
     const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
@@ -692,6 +697,7 @@ describe("datapoint operations", () => {
       updated_at: new Date().toISOString(),
       is_deleted: false,
       staled_at: null,
+      source_inference_id,
     };
 
     // First insertion
@@ -866,6 +872,7 @@ describe("insertDatapoint", () => {
         updated_at: new Date().toISOString(),
         is_deleted: false,
         staled_at: null,
+        source_inference_id: null,
       }),
     ).rejects.toThrow();
   });

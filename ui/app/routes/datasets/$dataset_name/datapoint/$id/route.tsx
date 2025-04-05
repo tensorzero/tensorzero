@@ -124,6 +124,11 @@ export async function action({ request }: ActionFunctionArgs) {
     }
     return redirect(`/datasets/${parsedFormData.dataset_name}`);
   } else if (action === "save") {
+    const inputChanged = formData.get("inputChanged") === "true";
+    console.log("formdata inputChanged", formData.get("inputChanged"));
+    console.log("inputChanged", inputChanged);
+    console.log("formdata", formData);
+    throw new Error("test");
     // Transform input to match TensorZero client's expected format
     const transformedInput = transformInputForTensorZero(parsedFormData.input);
     const transformedOutput = transformOutputForTensorZero(
@@ -213,14 +218,19 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [resetKey, setResetKey] = useState(0);
   const [canSave, setCanSave] = useState(false);
+  const [inputChanged, setInputChanged] = useState(false);
+  const [outputChanged, setOutputChanged] = useState(false);
+
   useEffect(() => {
     // Use JSON.stringify to compare object values rather than references
-    const inputChanged =
+    const hasInputChanged =
       JSON.stringify(input) !== JSON.stringify(originalInput);
-    const outputChanged =
+    const hasOutputChanged =
       JSON.stringify(output) !== JSON.stringify(originalOutput);
 
-    setCanSave(isEditing && (inputChanged || outputChanged));
+    setInputChanged(hasInputChanged);
+    setOutputChanged(hasOutputChanged);
+    setCanSave(isEditing && (hasInputChanged || hasOutputChanged));
   }, [isEditing, input, output, originalInput, originalOutput]);
 
   const toggleEditing = () => setIsEditing(!isEditing);
@@ -264,6 +274,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     });
 
     formData.append("action", action);
+    formData.append("inputChanged", String(inputChanged));
+    formData.append("outputChanged", String(outputChanged));
 
     // Submit to the local action by targeting the current route (".")
     fetcher.submit(formData, { method: "post", action: "." });
