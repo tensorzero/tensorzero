@@ -755,6 +755,64 @@ describe("insertRowsForDataset", () => {
       }),
     ).rejects.toThrow();
   });
+
+  test("correctly handles incremental insertions for json", async () => {
+    // Generate a random dataset name so this test can be safely re-run
+    const dataset_name = `test_incremental_insertions_${uuid()}`;
+    const insert_with_cutoff = async (cutoff: number) => {
+      const rowsAdded = await insertRowsForDataset({
+        dataset_name,
+        inferenceType: "json",
+        function_name: "extract_entities",
+        extra_where: [],
+        extra_params: {},
+        metric_filter: {
+          metric: "jaccard_similarity",
+          metric_type: "float",
+          operator: ">",
+          threshold: cutoff,
+          join_on: "id",
+        },
+        output_source: "none",
+      });
+      return rowsAdded;
+    };
+    const rowsAdded = await insert_with_cutoff(0.9);
+    expect(rowsAdded).toBe(54);
+    const rowsAdded2 = await insert_with_cutoff(0.8);
+    expect(rowsAdded2).toBe(0);
+    const rowsAdded3 = await insert_with_cutoff(0.7);
+    expect(rowsAdded3).toBe(5);
+  });
+
+  test("correctly handles incremental insertions for chat", async () => {
+    // Generate a random dataset name so this test can be safely re-run
+    const dataset_name = `test_incremental_insertions_${uuid()}`;
+    const insert_with_cutoff = async (cutoff: number) => {
+      const rowsAdded = await insertRowsForDataset({
+        dataset_name,
+        inferenceType: "chat",
+        function_name: "write_haiku",
+        extra_where: [],
+        extra_params: {},
+        metric_filter: {
+          metric: "haiku_rating",
+          metric_type: "float",
+          operator: ">",
+          threshold: cutoff,
+          join_on: "id",
+        },
+        output_source: "none",
+      });
+      return rowsAdded;
+    };
+    const rowsAdded = await insert_with_cutoff(0.9);
+    expect(rowsAdded).toBe(57);
+    const rowsAdded2 = await insert_with_cutoff(0.8);
+    expect(rowsAdded2).toBe(10);
+    const rowsAdded3 = await insert_with_cutoff(0.7);
+    expect(rowsAdded3).toBe(8);
+  });
 });
 
 describe("insertDatapoint", () => {

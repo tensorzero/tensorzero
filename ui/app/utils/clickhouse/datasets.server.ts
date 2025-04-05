@@ -290,6 +290,7 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
   const rows = await resultSet.json<DatasetCountInfo[]>();
   return z.array(DatasetCountInfoSchema).parse(rows);
 }
+
 /**
  * Executes an INSERT INTO ... SELECT ... query to insert rows into the dataset table.
  *
@@ -301,7 +302,7 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
  * to prepend a constant `dataset_name` column.
  *
  * @param params - The dataset query parameters.
- * @returns A promise that resolves when the insert query completes.
+ * @returns The number of rows inserted.
  */
 export async function insertRowsForDataset(
   params: DatasetQueryParams,
@@ -327,31 +328,32 @@ export async function insertRowsForDataset(
   // Build the SELECT query from the source table
   const { query: sourceQuery, query_params } = buildDatasetSelectQuery(params);
   query_params.datapoint_table = destinationTable;
+  query_params.dataset_name = validatedParams.data.dataset_name;
 
   // Wrap the select query to include all required columns with their defaults
   const wrappedQuery = `
     INSERT INTO {datapoint_table:Identifier}
     SELECT
-      '${validatedParams.data.dataset_name}' as dataset_name,
-      function_name,
+      {dataset_name:String} as dataset_name,
+      subquery.function_name as function_name,
       generateUUIDv7() as id,
-      episode_id,
-      input,
-      output,
-      ${validatedParams.data.inferenceType === "chat" ? "tool_params" : "output_schema"},
-      tags,
-      auxiliary,
+      subquery.episode_id as episode_id,
+      subquery.input as input,
+      subquery.output as output,
+      ${validatedParams.data.inferenceType === "chat" ? "subquery.tool_params" : "subquery.output_schema"},
+      subquery.tags as tags,
+      subquery.auxiliary as auxiliary,
       false as is_deleted,
       now64() as updated_at,
       null as staled_at,
-      id as source_inference_id
+      subquery.id as source_inference_id
     FROM (
       ${sourceQuery}
     ) AS subquery
     LEFT JOIN {datapoint_table:Identifier} as existing FINAL
-      ON '${validatedParams.data.dataset_name}' = existing.dataset_name
+      ON {dataset_name:String} = existing.dataset_name
          AND subquery.function_name = existing.function_name
-         AND subquery.id != existing.id
+         AND subquery.id = existing.source_inference_id
          AND existing.staled_at IS NULL
       WHERE existing.source_inference_id IS NULL
     `;
@@ -361,13 +363,10 @@ export async function insertRowsForDataset(
     query: wrappedQuery,
     query_params,
   });
-  console.log(resultSet);
-  const rows = await resultSet.text();
-  console.log(rows);
   const responseHeaders = resultSet.response_headers;
   const summary = responseHeaders["x-clickhouse-summary"] as string;
   const parsedSummary = JSON.parse(summary);
-  const writtenRows = parsedSummary.written_rows as number;
+  const writtenRows = Number(parsedSummary.written_rows);
   return writtenRows;
 }
 
