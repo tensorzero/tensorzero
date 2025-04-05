@@ -42,17 +42,19 @@ export default function TensorZeroStatusIndicator() {
                 : "Failed to connect to Gateway"}
         </div>
         {status && !versionsMatch() && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-[10px] text-yellow-600">
-                Version mismatch: UI {uiVersion}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="right" align="center">
-              Please make sure your UI has the same version as the gateway.
-              Otherwise you might have compatibility issues.
-            </TooltipContent>
-          </Tooltip>
+          <div className="ml-5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-[10px] text-yellow-600">
+                  Version mismatch: UI {uiVersion}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="right" align="center">
+                Please make sure your UI has the same version as the gateway.
+                Otherwise you might have compatibility issues.
+              </TooltipContent>
+            </Tooltip>
+          </div>
         )}
       </div>
     </div>
