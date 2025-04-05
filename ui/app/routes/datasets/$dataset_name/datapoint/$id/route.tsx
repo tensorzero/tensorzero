@@ -96,11 +96,13 @@ export async function action({ request }: ActionFunctionArgs) {
     is_deleted: formData.get("is_deleted") === "true",
     updated_at: formData.get("updated_at"),
     staled_at: null,
+    source_inference_id: formData.get("source_inference_id"),
   };
 
   const cleanedData = Object.fromEntries(
     Object.entries(rawData).filter(([, value]) => value !== undefined),
   );
+  console.log("cleanedData", cleanedData);
   const parsedFormData: ParsedDatasetRow =
     ParsedDatasetRowSchema.parse(cleanedData);
   const config = await getConfig();
@@ -125,10 +127,6 @@ export async function action({ request }: ActionFunctionArgs) {
     return redirect(`/datasets/${parsedFormData.dataset_name}`);
   } else if (action === "save") {
     const inputChanged = formData.get("inputChanged") === "true";
-    console.log("formdata inputChanged", formData.get("inputChanged"));
-    console.log("inputChanged", inputChanged);
-    console.log("formdata", formData);
-    throw new Error("test");
     // Transform input to match TensorZero client's expected format
     const transformedInput = transformInputForTensorZero(parsedFormData.input);
     const transformedOutput = transformOutputForTensorZero(
@@ -159,6 +157,7 @@ export async function action({ request }: ActionFunctionArgs) {
                   parsedFormData["tool_params" as keyof typeof parsedFormData],
               }
             : {}),
+          source_inference_id: parsedFormData["source_inference_id"],
         },
       );
       await staleDatapoint(

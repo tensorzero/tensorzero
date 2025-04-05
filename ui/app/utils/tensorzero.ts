@@ -259,6 +259,7 @@ const BaseDatapointSchema = z.object({
   output: JSONValueSchema,
   tags: z.record(z.string()).optional(),
   auxiliary: z.string().optional(),
+  source_inference_id: z.string().uuid().nullable(),
 });
 
 /**
