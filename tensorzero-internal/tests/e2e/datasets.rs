@@ -4,7 +4,10 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero_internal::endpoints::datasets::CLICKHOUSE_DATETIME_FORMAT;
+use tensorzero_internal::{
+    clickhouse::test_helpers::stale_datapoint_clickhouse,
+    endpoints::datasets::CLICKHOUSE_DATETIME_FORMAT,
+};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -111,8 +114,67 @@ async fn test_datapoint_insert_synthetic_chat() {
 
     // Check that the datapoint was not inserted into clickhouse
     let datapoint = select_chat_datapoint_clickhouse(&clickhouse, new_datapoint_id).await;
-    println!("datapoint: {:?}", datapoint);
     assert!(datapoint.is_none());
+
+    // Let's stale the old datapoint and try again
+    stale_datapoint_clickhouse(&clickhouse, datapoint_id).await;
+
+    // Try a new insert with the same source_inference_id but a new datapoint id
+    let new_datapoint_id = Uuid::now_v7();
+    let resp = client
+       .put(get_gateway_endpoint(&format!(
+           "/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
+       )))
+       .json(&json!({
+           "function_name": "basic_test",
+           "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "value": "My synthetic input"}]}]},
+           "output": [{"type": "text", "text": "My synthetic output"}],
+           "source_inference_id": source_inference_id,
+       }))
+       .send()
+       .await.unwrap();
+
+    let status = resp.status();
+    assert_eq!(status, StatusCode::OK);
+
+    let mut datapoint = select_chat_datapoint_clickhouse(&clickhouse, new_datapoint_id)
+        .await
+        .unwrap();
+
+    let updated_at = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("updated_at")
+        .unwrap();
+    let updated_at = chrono::NaiveDateTime::parse_from_str(
+        updated_at.as_str().unwrap(),
+        CLICKHOUSE_DATETIME_FORMAT,
+    )
+    .unwrap()
+    .and_utc();
+    assert!(
+        chrono::Utc::now()
+            .signed_duration_since(updated_at)
+            .num_seconds()
+            < 5,
+        "Unexpected updated_at: {updated_at:?}"
+    );
+
+    let expected = json!({
+      "dataset_name": dataset_name,
+      "function_name": "basic_test",
+      "id": new_datapoint_id.to_string(),
+      "episode_id": null,
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"My synthetic input\"}]}]}",
+      "output": "[{\"type\":\"text\",\"text\":\"My synthetic output\"}]",
+      "tool_params": "",
+      "tags": {},
+      "auxiliary": "",
+      "is_deleted": false,
+      "staled_at": null,
+      "source_inference_id": source_inference_id.to_string(),
+    });
+    assert_eq!(datapoint, expected);
 }
 
 #[tokio::test]
@@ -491,7 +553,7 @@ async fn test_datapoint_insert_synthetic_json() {
       "episode_id": null,
       "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"US\"}}]}]}",
       "output": "{\"raw\":\"{\\\"answer\\\":\\\"New answer\\\"}\",\"parsed\":{\"answer\":\"New answer\"}}",
-      "output_schema": "{}",
+      "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
@@ -500,7 +562,7 @@ async fn test_datapoint_insert_synthetic_json() {
     });
     assert_eq!(datapoint, expected);
 
-    // TODO: try with a new datapoint_id and the same source_inference_id
+    // Try with a new datapoint_id and the same source_inference_id
     // and verify that you get 400 and there is no write
     let new_datapoint_id = Uuid::now_v7();
     let new_resp = client
@@ -531,6 +593,73 @@ async fn test_datapoint_insert_synthetic_json() {
     let datapoint = select_json_datapoint_clickhouse(&clickhouse, new_datapoint_id).await;
     println!("datapoint: {:?}", datapoint);
     assert!(datapoint.is_none());
+    // Let's stale the old datapoint and try again
+    stale_datapoint_clickhouse(&clickhouse, datapoint_id).await;
+
+    // Try a new insert with the same source_inference_id but a new datapoint id
+    let new_datapoint_id = Uuid::now_v7();
+    let resp = client
+       .put(get_gateway_endpoint(&format!(
+           "/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
+       )))
+       .json(&json!({
+           "function_name": "json_success",
+           "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+           "output": {"answer": "New answer"},
+           "output_schema": {
+               "type": "object",
+               "properties": {
+                   "answer": {"type": "string"}
+               },
+               "required": ["answer"],
+               "additionalProperties": false
+           },
+           "source_inference_id": source_inference_id,
+       }))
+       .send()
+       .await.unwrap();
+
+    let status = resp.status();
+    assert_eq!(status, StatusCode::OK);
+
+    let mut datapoint = select_json_datapoint_clickhouse(&clickhouse, new_datapoint_id)
+        .await
+        .unwrap();
+
+    let updated_at = datapoint
+        .as_object_mut()
+        .unwrap()
+        .remove("updated_at")
+        .unwrap();
+    let updated_at = chrono::NaiveDateTime::parse_from_str(
+        updated_at.as_str().unwrap(),
+        CLICKHOUSE_DATETIME_FORMAT,
+    )
+    .unwrap()
+    .and_utc();
+    assert!(
+        chrono::Utc::now()
+            .signed_duration_since(updated_at)
+            .num_seconds()
+            < 5,
+        "Unexpected updated_at: {updated_at:?}"
+    );
+
+    let expected = json!({
+      "dataset_name": dataset_name,
+      "function_name": "json_success",
+      "id": new_datapoint_id.to_string(),
+      "episode_id": null,
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":{\"country\":\"US\"}}]}]}",
+      "output": "{\"raw\":\"{\\\"answer\\\":\\\"New answer\\\"}\",\"parsed\":{\"answer\":\"New answer\"}}",
+      "output_schema": "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}",
+      "tags": {},
+      "auxiliary": "",
+      "is_deleted": false,
+      "staled_at": null,
+      "source_inference_id": source_inference_id.to_string(),
+    });
+    assert_eq!(datapoint, expected);
 }
 
 #[tokio::test]

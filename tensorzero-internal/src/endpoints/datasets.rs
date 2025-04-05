@@ -413,8 +413,7 @@ pub async fn update_datapoint_handler(
                 episode_id: None,
                 input: resolved_input,
                 output,
-                // We currently don't support creating synthetic datapoints with 'output_schema'
-                output_schema: serde_json::Value::Object(Default::default()),
+                output_schema: json.output_schema,
                 tags: json.tags,
                 auxiliary: json.auxiliary,
                 is_deleted: false,
@@ -433,6 +432,8 @@ pub async fn update_datapoint_handler(
     Ok(Json(CreateDatapointResponse { id: path_params.id }))
 }
 
+/// The handler for the DELETE `/datasets/:dataset/function/:function/kind/:kind/datapoint/:id` endpoint.
+/// This deletes a datapoint from the dataset.
 #[instrument(name = "delete_datapoint", skip(app_state))]
 pub async fn delete_datapoint_handler(
     State(app_state): AppState,
@@ -813,7 +814,7 @@ async fn put_deduped_chat_datapoint(
             new_data.is_deleted,
             new_data.source_inference_id,
         FROM new_data
-        LEFT JOIN ChatInferenceDatapoint AS existing
+        LEFT JOIN ChatInferenceDatapoint AS existing FINAL
           ON new_data.dataset_name = existing.dataset_name
              AND new_data.function_name = existing.function_name
              AND new_data.source_inference_id = existing.source_inference_id
@@ -872,7 +873,7 @@ async fn put_deduped_json_datapoint(
             new_data.is_deleted,
             new_data.source_inference_id
         FROM new_data
-        LEFT JOIN JsonInferenceDatapoint AS existing
+        LEFT JOIN JsonInferenceDatapoint AS existing FINAL
           ON new_data.dataset_name = existing.dataset_name
              AND new_data.function_name = existing.function_name
              AND new_data.source_inference_id = existing.source_inference_id

@@ -521,28 +521,60 @@ export async function staleDatapoint(
   datapoint_id: string,
   function_type: "chat" | "json",
 ): Promise<void> {
+  // Use the function type to determine which table to update
   const table =
     function_type === "chat"
       ? "ChatInferenceDatapoint"
       : "JsonInferenceDatapoint";
+
   const query = `
     INSERT INTO {table:Identifier}
+    (
+      dataset_name,
+      function_name,
+      id,
+      episode_id,
+      input,
+      output,
+      ${function_type === "chat" ? "tool_params" : "output_schema"},
+      tags,
+      auxiliary,
+      is_deleted,
+      source_inference_id,
+      staled_at,
+      updated_at
+    )
     SELECT
-      * EXCEPT (staled_at, updated_at),
+      dataset_name,
+      function_name,
+      id,
+      episode_id,
+      input,
+      output,
+      ${function_type === "chat" ? "tool_params" : "output_schema"},
+      tags,
+      auxiliary,
+      is_deleted,
+      source_inference_id,
       now64() as staled_at,
       now64() as updated_at
     FROM {table:Identifier} FINAL
-    WHERE dataset_name = {dataset_name:String}
-      AND id = {datapoint_id:String}
+    WHERE dataset_name = {dataset_name:String} AND id = {datapoint_id:String}
   `;
-  clickhouseClient.query({
-    query,
-    query_params: {
-      table,
-      dataset_name,
-      datapoint_id,
-    },
-  });
+
+  try {
+    await clickhouseClient.query({
+      query,
+      query_params: {
+        table,
+        dataset_name,
+        datapoint_id,
+      },
+    });
+  } catch (error) {
+    console.error(`Error staling datapoint ${datapoint_id}:`, error);
+    throw error;
+  }
 }
 
 export async function insertDatapoint(
