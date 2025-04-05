@@ -2,7 +2,6 @@ import { Card, CardContent } from "~/components/ui/card";
 import type {
   Input,
   InputMessageContent,
-  ResolvedImageContent,
   ResolvedInput,
   ResolvedInputMessage,
   ResolvedInputMessageContent,
@@ -10,6 +9,7 @@ import type {
 import { SystemContent } from "./SystemContent";
 import { useEffect, useState } from "react";
 import { SkeletonImage } from "./SkeletonImage";
+import ImageBlock from "./ImageBlock";
 
 // Base interface with just the common required properties
 interface BaseInputProps {
@@ -387,22 +387,6 @@ function ToolResultBlock({
     <div className="rounded bg-slate-100 p-2 dark:bg-slate-800">
       <div className="font-medium">Result from: {block.name}</div>
       <pre className="mt-1 text-sm">{block.result}</pre>
-    </div>
-  );
-}
-
-function ImageBlock({ image }: { image: ResolvedImageContent }) {
-  return (
-    <div className="w-60 rounded bg-slate-100 p-2 text-xs text-slate-300">
-      <div className="mb-2">Image</div>
-      <a
-        href={image.image.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        download={"tensorzero_" + image.storage_path.path}
-      >
-        <img src={image.image.url} alt="Image" />
-      </a>
     </div>
   );
 }

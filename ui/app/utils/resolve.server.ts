@@ -11,15 +11,21 @@ import type { Input } from "./clickhouse/common";
 import { tensorZeroClient } from "./tensorzero.server";
 
 export async function resolveInput(input: Input): Promise<ResolvedInput> {
-  const resolvedMessages = await Promise.all(
-    input.messages.map(async (message) => {
-      return resolveMessage(message);
-    }),
-  );
+  const resolvedMessages = await resolveMessages(input.messages);
   return {
     ...input,
     messages: resolvedMessages,
   };
+}
+
+export async function resolveMessages(
+  messages: InputMessage[],
+): Promise<ResolvedInputMessage[]> {
+  return Promise.all(
+    messages.map(async (message) => {
+      return resolveMessage(message);
+    }),
+  );
 }
 
 async function resolveMessage(
