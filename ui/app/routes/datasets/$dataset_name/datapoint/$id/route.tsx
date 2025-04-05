@@ -27,52 +27,9 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { DatapointActions } from "./DatapointActions";
-import type {
-  ResolvedInput,
-  ResolvedInputMessage,
-  ResolvedInputMessageContent,
-} from "~/utils/clickhouse/common";
+import type { ResolvedInputMessage } from "~/utils/clickhouse/common";
 import { getConfig } from "~/utils/config/index.server";
-
-/**
- * Transforms input from clickhouse format to TensorZero client format
- */
-function transformInputForTensorZero(input: ResolvedInput) {
-  return {
-    system: input.system,
-    messages: input.messages.map((msg: ResolvedInputMessage) => ({
-      role: msg.role as "system" | "user" | "assistant" | "tool",
-      content: msg.content.map((c: ResolvedInputMessageContent) => {
-        if (c.type === "text") {
-          return { type: "text" as const, value: c.value };
-        } else if (c.type === "tool_call") {
-          return {
-            type: "tool_call" as const,
-            id: c.id,
-            name: c.name,
-            arguments: c.arguments,
-          };
-        } else if (c.type === "tool_result") {
-          return {
-            type: "tool_result" as const,
-            id: c.id,
-            name: c.name,
-            result: c.result,
-          };
-        } else if (c.type === "image") {
-          throw new Error("Image content not supported FIX THIS NOW");
-          // Skip image content as it's not supported in the target schema
-          return {
-            type: "text" as const,
-            value: "[Image content not supported]",
-          };
-        }
-        // Fallback case
-        return { type: "text" as const, value: "Unsupported content type" };
-      }),
-    })),
-  };
-}
+import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference";
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -127,9 +84,16 @@ export async function action({ request }: ActionFunctionArgs) {
     }
     return redirect(`/datasets/${parsedFormData.dataset_name}`);
   } else if (action === "save") {
+    // If the input changed, we should remove the source_inference_id
+    // because it will no longer be valid
     const inputChanged = formData.get("inputChanged") === "true";
+    const sourceInferenceId = inputChanged
+      ? null
+      : parsedFormData.source_inference_id;
     // Transform input to match TensorZero client's expected format
-    const transformedInput = transformInputForTensorZero(parsedFormData.input);
+    const transformedInput = resolvedInputToTensorZeroInput(
+      parsedFormData.input,
+    );
     const transformedOutput = transformOutputForTensorZero(
       parsedFormData.output,
     );
@@ -158,7 +122,7 @@ export async function action({ request }: ActionFunctionArgs) {
                   parsedFormData["tool_params" as keyof typeof parsedFormData],
               }
             : {}),
-          source_inference_id: parsedFormData["source_inference_id"],
+          source_inference_id: sourceInferenceId,
         },
       );
       await staleDatapoint(
