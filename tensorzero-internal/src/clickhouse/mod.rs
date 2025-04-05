@@ -244,6 +244,10 @@ impl ClickHouseConnectionInfo {
         }
     }
 
+    /// Sometimes you might want to treat the data you're sending as a table if you're going
+    /// to do some analysis or filtering prior to inserting it into ClickHouse.
+    /// This function allows you to do this with ClickHouse's external data feature.
+    /// https://clickhouse.com/docs/engines/table-engines/special/external-data
     pub async fn run_query_with_external_data(
         &self,
         external_data: ExternalDataInfo,
