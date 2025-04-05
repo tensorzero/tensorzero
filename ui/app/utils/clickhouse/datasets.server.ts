@@ -622,6 +622,7 @@ export async function insertDatapoint(
       ...("output_schema" in datapoint
         ? { output_schema: datapoint.output_schema }
         : {}),
+      source_inference_id: datapoint.source_inference_id,
     },
   ];
 

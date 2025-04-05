@@ -479,7 +479,14 @@ export class TensorZeroClient {
     datasetName: string,
     datapointId: string,
     datapoint: Datapoint,
+    inputChanged: boolean,
   ): Promise<DatapointResponse> {
+    // If the input changed, we should remove the source_inference_id
+    // because it will no longer be valid
+    datapoint.source_inference_id = inputChanged
+      ? null
+      : datapoint.source_inference_id;
+
     if (!datasetName || typeof datasetName !== "string") {
       throw new Error("Dataset name must be a non-empty string");
     }

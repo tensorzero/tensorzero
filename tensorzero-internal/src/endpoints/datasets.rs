@@ -818,7 +818,7 @@ async fn put_deduped_chat_datapoint(
           ON new_data.dataset_name = existing.dataset_name
              AND new_data.function_name = existing.function_name
              AND new_data.source_inference_id = existing.source_inference_id
-             AND new_data.id != existing.id
+             AND new_data.id != existing.id -- this is to allow us to update the datapoint and keep the same source_inference_id
              AND existing.staled_at IS NULL
         WHERE existing.source_inference_id IS NULL
         "#;
@@ -877,7 +877,7 @@ async fn put_deduped_json_datapoint(
           ON new_data.dataset_name = existing.dataset_name
              AND new_data.function_name = existing.function_name
              AND new_data.source_inference_id = existing.source_inference_id
-             AND new_data.id != existing.id
+             AND new_data.id != existing.id -- this is to allow us to update the datapoint and keep the same source_inference_id
              AND existing.staled_at IS NULL
         WHERE existing.source_inference_id IS NULL
         "#;

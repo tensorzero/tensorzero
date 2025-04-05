@@ -84,10 +84,6 @@ export async function action({ request }: ActionFunctionArgs) {
   } else if (action === "save") {
     // If the input changed, we should remove the source_inference_id
     // because it will no longer be valid
-    const inputChanged = formData.get("inputChanged") === "true";
-    const sourceInferenceId = inputChanged
-      ? null
-      : parsedFormData.source_inference_id;
     // Transform input to match TensorZero client's expected format
     const transformedInput = resolvedInputToTensorZeroInput(
       parsedFormData.input,
@@ -97,36 +93,36 @@ export async function action({ request }: ActionFunctionArgs) {
     );
 
     try {
-      const { id } = await tensorZeroClient.updateDatapoint(
-        parsedFormData.dataset_name,
-        uuid(),
-        {
-          function_name: parsedFormData.function_name,
-          input: transformedInput,
-          output: transformedOutput,
-          tags: parsedFormData.tags || {},
-          auxiliary: parsedFormData.auxiliary,
-          ...(functionType === "json"
-            ? {
-                output_schema:
-                  parsedFormData[
-                    "output_schema" as keyof typeof parsedFormData
-                  ],
-              }
-            : {}),
-          ...(functionType === "chat" && "tool_params" in parsedFormData
-            ? {
-                tool_params:
-                  parsedFormData["tool_params" as keyof typeof parsedFormData],
-              }
-            : {}),
-          source_inference_id: sourceInferenceId,
-        },
-      );
       await staleDatapoint(
         parsedFormData.dataset_name,
         parsedFormData.id,
         functionType,
+      );
+      const datapoint = {
+        function_name: parsedFormData.function_name,
+        input: transformedInput,
+        output: transformedOutput,
+        tags: parsedFormData.tags || {},
+        auxiliary: parsedFormData.auxiliary,
+        ...(functionType === "json"
+          ? {
+              output_schema:
+                parsedFormData["output_schema" as keyof typeof parsedFormData],
+            }
+          : {}),
+        ...(functionType === "chat" && "tool_params" in parsedFormData
+          ? {
+              tool_params:
+                parsedFormData["tool_params" as keyof typeof parsedFormData],
+            }
+          : {}),
+        source_inference_id: parsedFormData.source_inference_id,
+      };
+      const { id } = await tensorZeroClient.updateDatapoint(
+        parsedFormData.dataset_name,
+        uuid(),
+        datapoint,
+        formData.get("inputChanged") === "true",
       );
 
       return redirect(

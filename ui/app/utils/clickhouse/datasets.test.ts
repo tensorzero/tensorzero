@@ -436,6 +436,7 @@ describe("getDatapoint", () => {
       tags: {},
       staled_at: null,
       updated_at: "2025-02-19T00:26:06Z",
+      source_inference_id: null,
     });
   });
 
@@ -475,6 +476,8 @@ describe("getDatapoint", () => {
       ],
       tags: {},
       updated_at: "2025-02-19T00:25:04Z",
+      source_inference_id: null,
+      tool_params: undefined,
     });
   });
 
