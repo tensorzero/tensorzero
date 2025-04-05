@@ -28,22 +28,23 @@ export default function TensorZeroStatusIndicator() {
 
   return (
     <div className="px-3 py-2 text-xs">
-      <div className="flex items-center gap-2 truncate text-fg-muted">
-        <div
-          className={`h-2 w-2 rounded-full ${getStatusColor()} mr-1 inline-block`}
-        />
-        {isLoading
-          ? "Checking status..."
-          : status === undefined
-            ? "Connecting to Gateway..."
-            : status
-              ? `TensorZero Gateway ${serverVersion}`
-              : "Failed to connect to Gateway"}
-        <br />
+      <div className="flex flex-col gap-1 truncate text-fg-muted">
+        <div className="flex items-center gap-2">
+          <div
+            className={`h-2 w-2 rounded-full ${getStatusColor()} mr-1 inline-block`}
+          />
+          {isLoading
+            ? "Checking status..."
+            : status === undefined
+              ? "Connecting to Gateway..."
+              : status
+                ? `TensorZero Gateway ${serverVersion}`
+                : "Failed to connect to Gateway"}
+        </div>
         {status && !versionsMatch() && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="ml-3 text-[10px] text-yellow-600">
+              <span className="text-[10px] text-yellow-600">
                 Version mismatch: UI {uiVersion}
               </span>
             </TooltipTrigger>
