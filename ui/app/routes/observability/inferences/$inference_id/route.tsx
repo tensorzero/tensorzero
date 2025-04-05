@@ -95,12 +95,22 @@ export async function action({ request }: Route.ActionArgs) {
   if (!dataset || !output || !inference_id) {
     throw data("Missing required fields", { status: 400 });
   }
-  const datapoint = await tensorZeroClient.createDatapoint(
-    dataset.toString(),
-    inference_id.toString(),
-    output.toString() as "inherit" | "demonstration" | "none",
-  );
-  return redirect(`/datasets/${dataset.toString()}/datapoint/${datapoint.id}`);
+  try {
+    const datapoint = await tensorZeroClient.createDatapoint(
+      dataset.toString(),
+      inference_id.toString(),
+      output.toString() as "inherit" | "demonstration" | "none",
+    );
+    return redirect(
+      `/datasets/${dataset.toString()}/datapoint/${datapoint.id}`,
+    );
+  } catch (error) {
+    console.error(error);
+    return data(
+      "Failed to create datapoint as a datapoint exists with the same `source_inference_id`",
+      { status: 400 },
+    );
+  }
 }
 
 export default function InferencePage({ loaderData }: Route.ComponentProps) {
@@ -167,6 +177,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     config.functions[inference.function_name]?.variants || {},
   );
   const addToDatasetFetcher = useFetcher();
+  const actionError =
+    addToDatasetFetcher.state === "idle" && addToDatasetFetcher.data
+      ? addToDatasetFetcher.data
+      : null;
 
   const handleAddToDataset = (
     dataset: string,
@@ -186,6 +200,14 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           inference={inference}
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
         />
+
+        {actionError && (
+          <div className="mt-2 inline-block rounded-md bg-red-50 p-2 text-sm text-red-500">
+            {typeof actionError === "string"
+              ? actionError
+              : "An unknown error occurred."}
+          </div>
+        )}
 
         <InferenceActions
           variants={variants}
