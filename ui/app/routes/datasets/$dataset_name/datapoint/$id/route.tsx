@@ -65,7 +65,6 @@ export async function action({ request }: ActionFunctionArgs) {
   const config = await getConfig();
   const functionConfig = config.functions[parsedFormData.function_name];
   const functionType = functionConfig?.type;
-  // await deleteDatapointServer(parsedFormData);
   const action = formData.get("action");
   if (action === "delete") {
     await staleDatapoint(
