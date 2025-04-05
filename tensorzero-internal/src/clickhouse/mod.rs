@@ -569,8 +569,8 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
 #[derive(Debug)]
 pub struct ExternalDataInfo {
     pub external_data_name: String, // The name of the external data table that was used in the query
-    pub structure: String, // Must be a ClickHouse structure string, i.e. "id UInt32, name String"
-    pub format: String,    // Must be a ClickHouse format string, i.e. "JSONEachRow"
+    pub structure: String, // Must be a ClickHouse structure string, e.g. "id UInt32, name String"
+    pub format: String,    // Must be a ClickHouse format string, e.g. "JSONEachRow"
     pub data: String,      // Must be valid ClickHouse data in the given format
 }
 
