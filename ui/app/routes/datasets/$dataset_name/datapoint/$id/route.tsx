@@ -60,7 +60,6 @@ export async function action({ request }: ActionFunctionArgs) {
   const cleanedData = Object.fromEntries(
     Object.entries(rawData).filter(([, value]) => value !== undefined),
   );
-  console.log("cleanedData", cleanedData);
   const parsedFormData: ParsedDatasetRow =
     ParsedDatasetRowSchema.parse(cleanedData);
   const config = await getConfig();
