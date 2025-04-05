@@ -124,7 +124,7 @@ from tensorzero import TensorZeroGateway  # or AsyncTensorZeroGateway
 
 with TensorZeroGateway.build_embedded(clickhouse_url="...", config_file="...") as client:
     response = client.inference(
-        model_name="openai::gpt-4o-mini",
+        model_name="fireworks::accounts/fireworks/models/llama4-maverick-instruct-basic",
         # Try other providers easily: "anthropic::claude-3-7-sonnet-20250219"
         input={
             "messages": [
