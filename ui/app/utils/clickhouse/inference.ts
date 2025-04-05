@@ -18,7 +18,7 @@ import {
 import { data } from "react-router";
 import type { FunctionConfig } from "../config/function";
 import { clickhouseClient } from "./client.server";
-import { resolveMessages } from "../resolve.server";
+import { resolveInput, resolveMessages } from "../resolve.server";
 
 export const inferenceByIdRowSchema = z
   .object({
@@ -595,11 +595,7 @@ async function parseInferenceRow(
   row: InferenceRow,
 ): Promise<ParsedInferenceRow> {
   const input = inputSchema.parse(JSON.parse(row.input));
-  const resolvedMessages = await resolveMessages(input.messages);
-  const resolvedInput = {
-    ...input,
-    messages: resolvedMessages,
-  };
+  const resolvedInput = await resolveInput(input);
   if (row.function_type === "chat") {
     return {
       ...row,
