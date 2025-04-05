@@ -559,7 +559,7 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_json_mode_off_inference_request() {
-            let providers = $func().await.json_mode_inference;
+            let providers = $func().await.simple_inference;
             for provider in providers {
                 test_json_mode_off_inference_request_with_provider(provider).await;
             }
