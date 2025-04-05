@@ -249,7 +249,6 @@ async function loadLLMJudgeEvaluator(
 
   // Load all variants
   const loadedVariants: Record<string, VariantConfig> = {};
-  let activeVariantCount = 0;
 
   for (const [name, variant] of Object.entries(config.variants)) {
     const loadedVariant = await loadLLMJudgeVariant(
@@ -259,19 +258,8 @@ async function loadLLMJudgeEvaluator(
       evaluatorName,
     );
     loadedVariants[name] = loadedVariant;
-
-    // Count active variants (weight > 0)
-    if ((loadedVariant.weight ?? 0) > 0) {
-      activeVariantCount++;
-    }
   }
-
-  // Validate that exactly one variant is active
-  if (activeVariantCount !== 1) {
-    throw new Error(
-      `Evaluator \`${evaluatorName}\` in \`[evaluations.${evaluationName}]\` must have exactly 1 variant that is active. Found ${activeVariantCount} variants with nonzero weights.`,
-    );
-  }
+  // We don't validate that exactly one variant is active here since Rust does
 
   // Create output schema based on output type
   const outputSchema =

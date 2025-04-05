@@ -39,6 +39,7 @@ futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
 url = "2.5.4"
 serde-untagged = "0.1.7"
+object_store = { version = "0.12.0", features = ["serde", "aws"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
