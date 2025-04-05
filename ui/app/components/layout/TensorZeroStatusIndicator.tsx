@@ -21,7 +21,7 @@ export default function TensorZeroStatusIndicator() {
 
   const getStatusColor = () => {
     if (isLoading || status === undefined) return "bg-gray-300"; // Loading or initial state
-    if (!status) return "bg-red-500"; // Couldn't connect (explicit null/failed state)
+    if (!status) return "bg-red-500"; // Could not connect (explicit null/failed state)
     if (!versionsMatch()) return "bg-yellow-500"; // Version mismatch
     return "bg-green-500"; // Everything is good
   };
