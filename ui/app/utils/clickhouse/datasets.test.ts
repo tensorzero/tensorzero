@@ -783,7 +783,24 @@ describe("insertRowsForDataset", () => {
     expect(rowsAdded2).toBe(0);
     const rowsAdded3 = await insert_with_cutoff(0.7);
     expect(rowsAdded3).toBe(5);
-  });
+    // Try a different output source (this should not write any rows)
+    const rowsAdded4 = await insertRowsForDataset({
+      dataset_name,
+      inferenceType: "json",
+      function_name: "extract_entities",
+      extra_where: [],
+      extra_params: {},
+      metric_filter: {
+        metric: "jaccard_similarity",
+        metric_type: "float",
+        operator: ">",
+        threshold: 0.7,
+        join_on: "id",
+      },
+      output_source: "inference",
+    });
+    expect(rowsAdded4).toBe(0);
+  }, 10000); // 10 second timeout
 
   test("correctly handles incremental insertions for chat", async () => {
     // Generate a random dataset name so this test can be safely re-run
@@ -812,7 +829,25 @@ describe("insertRowsForDataset", () => {
     expect(rowsAdded2).toBe(10);
     const rowsAdded3 = await insert_with_cutoff(0.7);
     expect(rowsAdded3).toBe(8);
-  });
+
+    // Try a different output source (this should not write any rows)
+    const rowsAdded4 = await insertRowsForDataset({
+      dataset_name,
+      inferenceType: "chat",
+      function_name: "write_haiku",
+      extra_where: [],
+      extra_params: {},
+      metric_filter: {
+        metric: "haiku_rating",
+        metric_type: "float",
+        operator: ">",
+        threshold: 0.7,
+        join_on: "id",
+      },
+      output_source: "inference",
+    });
+    expect(rowsAdded4).toBe(0);
+  }, 10000); // 10 second timeout
 });
 
 describe("insertDatapoint", () => {
