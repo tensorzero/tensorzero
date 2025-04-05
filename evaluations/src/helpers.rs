@@ -1,74 +1,84 @@
 use anyhow::{anyhow, Result};
 use futures::future::join_all;
-use tensorzero::{DynamicToolParams, Input, InputMessage, InputMessageContent};
+use tensorzero::{ClientInput, ClientInputMessage, ClientInputMessageContent, DynamicToolParams};
 use tensorzero_internal::{
     function::FunctionConfig,
     inference::types::{
         ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, TextKind,
     },
-    tool::ToolCallConfigDatabaseInsert,
+    tool::{ToolCallConfigDatabaseInsert, ToolCallInput},
 };
 
 use crate::{Args, OutputFormat};
 
-/// Convert a `ResolvedInput` to an `Input`.
+/// Convert a `ResolvedInput` to an `ClientInput`.
 ///
 /// This function is async as it will need to fetch data from object storage for
 /// types that aren't serialized in ClickHouse.
-pub async fn resolved_input_to_input(resolved_input: ResolvedInput) -> Result<Input> {
+pub async fn resolved_input_to_client_input(resolved_input: ResolvedInput) -> Result<ClientInput> {
     let futures = resolved_input
         .messages
         .into_iter()
-        .map(resolved_input_message_to_input_message);
+        .map(resolved_input_message_to_client_input_message);
     let message_results = join_all(futures).await;
     let messages = message_results.into_iter().collect::<Result<Vec<_>>>()?;
-    let input = Input {
+    let input = ClientInput {
         system: resolved_input.system,
         messages,
     };
     Ok(input)
 }
 
-async fn resolved_input_message_to_input_message(
+async fn resolved_input_message_to_client_input_message(
     resolved_input_message: ResolvedInputMessage,
-) -> Result<InputMessage> {
+) -> Result<ClientInputMessage> {
     let content_futures = resolved_input_message
         .content
         .into_iter()
-        .map(resolved_input_message_content_to_input_message_content);
+        .map(resolved_input_message_content_to_client_input_message_content);
 
     let content_results = join_all(content_futures).await;
     let content = content_results.into_iter().collect::<Result<Vec<_>>>()?;
 
-    Ok(InputMessage {
+    Ok(ClientInputMessage {
         role: resolved_input_message.role,
         content,
     })
 }
 
-async fn resolved_input_message_content_to_input_message_content(
+async fn resolved_input_message_content_to_client_input_message_content(
     resolved_input_message_content: ResolvedInputMessageContent,
-) -> Result<InputMessageContent> {
+) -> Result<ClientInputMessageContent> {
     match resolved_input_message_content {
         ResolvedInputMessageContent::Text { value } => match value {
             serde_json::Value::String(s) => {
-                Ok(InputMessageContent::Text(TextKind::Text { text: s }))
+                Ok(ClientInputMessageContent::Text(TextKind::Text { text: s }))
             }
-            serde_json::Value::Object(o) => Ok(InputMessageContent::Text(TextKind::Arguments {
-                arguments: o,
-            })),
+            serde_json::Value::Object(o) => {
+                Ok(ClientInputMessageContent::Text(TextKind::Arguments {
+                    arguments: o,
+                }))
+            }
             _ => Err(anyhow::anyhow!("Unsupported text content: {:?}", value)),
         },
         ResolvedInputMessageContent::ToolCall(tool_call) => {
-            Ok(InputMessageContent::ToolCall(tool_call))
+            Ok(ClientInputMessageContent::ToolCall(ToolCallInput {
+                id: tool_call.id,
+                name: Some(tool_call.name),
+                raw_name: None,
+                arguments: None,
+                raw_arguments: Some(tool_call.arguments),
+            }))
         }
         ResolvedInputMessageContent::ToolResult(tool_result) => {
-            Ok(InputMessageContent::ToolResult(tool_result))
+            Ok(ClientInputMessageContent::ToolResult(tool_result))
         }
         ResolvedInputMessageContent::RawText { value } => {
-            Ok(InputMessageContent::RawText { value })
+            Ok(ClientInputMessageContent::RawText { value })
         }
-        ResolvedInputMessageContent::Thought(thought) => Ok(InputMessageContent::Thought(thought)),
+        ResolvedInputMessageContent::Thought(thought) => {
+            Ok(ClientInputMessageContent::Thought(thought))
+        }
         ResolvedInputMessageContent::Image(_image) => {
             // TODO: Implement image support for evaluation
             // This will involve grabbing the image from object storage using the object storage client included in `tensorzero-internal`
@@ -79,7 +89,7 @@ async fn resolved_input_message_content_to_input_message_content(
         ResolvedInputMessageContent::Unknown {
             data,
             model_provider_name,
-        } => Ok(InputMessageContent::Unknown {
+        } => Ok(ClientInputMessageContent::Unknown {
             data,
             model_provider_name,
         }),

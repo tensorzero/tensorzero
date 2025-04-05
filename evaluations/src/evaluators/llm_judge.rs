@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use anyhow::{bail, Result};
 use serde_json::{json, Value};
 use tensorzero::{
-    ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
-    Input, InputMessage, InputMessageContent, Role,
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
 use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::endpoints::datasets::Datapoint;
@@ -19,6 +19,11 @@ use uuid::Uuid;
 
 use crate::ThrottledTensorZeroClient;
 
+pub struct LLMJudgeEvaluationResult {
+    pub inference_id: Uuid,
+    pub value: Value,
+}
+
 pub async fn run_llm_judge_evaluator(
     inference_response: &InferenceResponse,
     datapoint: &Datapoint,
@@ -27,7 +32,7 @@ pub async fn run_llm_judge_evaluator(
     evaluation_name: &str,
     evaluator_name: &str,
     evaluation_run_id: Uuid,
-) -> Result<Option<Value>> {
+) -> Result<Option<LLMJudgeEvaluationResult>> {
     let resolved_input = datapoint.input();
     let serialized_datapoint_input = prepare_serialized_input(resolved_input)?;
     let generated_output = match &inference_response {
@@ -43,11 +48,11 @@ pub async fn run_llm_judge_evaluator(
         // Reference output is optional so if it's needed but not present, we can just return None
         Err(_e) => return Ok(None),
     };
-    let input = Input {
+    let input = ClientInput {
         system: None,
-        messages: vec![InputMessage {
+        messages: vec![ClientInputMessage {
             role: Role::User,
-            content: vec![InputMessageContent::Text(TextKind::Arguments{
+            content: vec![ClientInputMessageContent::Text(TextKind::Arguments{
                 arguments: json!({"input": serialized_datapoint_input, "generated_output": generated_output, "reference_output": reference_output})
                     .as_object()
                     .expect("Arguments should be an object")
@@ -67,10 +72,16 @@ pub async fn run_llm_judge_evaluator(
         variant_name: None,
         dryrun: Some(false),
         internal: true,
-        tags: HashMap::from([(
-            "tensorzero::evaluation_run_id".to_string(),
-            evaluation_run_id.to_string(),
-        )]),
+        tags: HashMap::from([
+            (
+                "tensorzero::evaluation_run_id".to_string(),
+                evaluation_run_id.to_string(),
+            ),
+            (
+                "tensorzero::evaluation_name".to_string(),
+                evaluation_name.to_string(),
+            ),
+        ]),
         dynamic_tool_params: DynamicToolParams::default(),
         output_schema: None,
         credentials: HashMap::new(),
@@ -87,6 +98,7 @@ pub async fn run_llm_judge_evaluator(
             bail!("Streaming not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
         }
     };
+    let inference_id = response.inference_id();
     let output = match response {
         InferenceResponse::Chat(..) => {
             bail!("Chat output not supported for LLM judge evaluations. This is a bug, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
@@ -96,13 +108,20 @@ pub async fn run_llm_judge_evaluator(
             .parsed
             .ok_or_else(|| anyhow::anyhow!("JSON output does not contain a `parsed` field"))?,
     };
-    match llm_judge_config.output_type {
-        LLMJudgeOutputType::Float | LLMJudgeOutputType::Boolean => Ok(Some(
+    let value = match llm_judge_config.output_type {
+        LLMJudgeOutputType::Float | LLMJudgeOutputType::Boolean => Some(
             output
                 .get("score")
                 .ok_or_else(|| anyhow::anyhow!("JSON output does not contain a `score` field"))?
                 .clone(),
-        )),
+        ),
+    };
+    match value {
+        Some(value) => Ok(Some(LLMJudgeEvaluationResult {
+            inference_id,
+            value,
+        })),
+        None => Ok(None),
     }
 }
 

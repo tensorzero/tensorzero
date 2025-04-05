@@ -1,6 +1,7 @@
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
+use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -24,6 +25,8 @@ use crate::variant::dicl::UninitializedDiclConfig;
 use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig};
 use std::error::Error as StdError;
+
+scoped_thread_local!(pub(crate) static SKIP_CREDENTIAL_VALIDATION: ());
 
 #[derive(Debug, Default)]
 pub struct Config<'c> {
@@ -268,6 +271,13 @@ impl std::fmt::Display for MetricConfigLevel {
 
 impl<'c> Config<'c> {
     pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
+        Self::load_from_path_optional_verify_credentials(config_path, true).await
+    }
+
+    pub async fn load_from_path_optional_verify_credentials(
+        config_path: &Path,
+        validate_credentials: bool,
+    ) -> Result<Config<'c>, Error> {
         let config_table = match UninitializedConfig::read_toml_config(config_path)? {
             Some(table) => table,
             None => {
@@ -288,10 +298,16 @@ impl<'c> Config<'c> {
                 .into());
             }
         };
-        let config = Self::load_from_toml(config_table, base_path)?;
+        let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
+            SKIP_CREDENTIAL_VALIDATION.set(&(), || Self::load_from_toml(config_table, base_path))?
+        } else {
+            Self::load_from_toml(config_table, base_path)?
+        };
 
-        if let Some(object_store) = &config.object_store_info {
-            object_store.verify().await?;
+        if validate_credentials {
+            if let Some(object_store) = &config.object_store_info {
+                object_store.verify().await?;
+            }
         }
 
         Ok(config)
@@ -2545,12 +2561,43 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        Config::load_from_toml(config, base_path.clone()).expect("Failed to construct config");
+
+        SKIP_CREDENTIAL_VALIDATION
+            .set(&(), || Config::load_from_toml(config, base_path))
+            .unwrap();
 
         assert!(!logs_contain("good_variant"));
         assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.test]`"));
         assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.dicl]`"));
         assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.mixture_of_n_variant.fuser]`"));
         assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.best_of_n_variant.evaluator]`"));
+    }
+
+    #[tokio::test]
+    async fn test_config_load_optional_credentials_validation() {
+        let config_str = r#"
+        [models."my-model"]
+        routing = ["openai"]
+
+        [models.my-model.providers.openai]
+        type = "openai"
+        model_name = "gpt-4o-mini-2024-07-18"
+        api_key_location = "path::/not/a/path"
+        "#;
+
+        let tmpfile = NamedTempFile::new().unwrap();
+        std::fs::write(tmpfile.path(), config_str).unwrap();
+
+        let res = Config::load_from_path_optional_verify_credentials(tmpfile.path(), true).await;
+        if cfg!(feature = "e2e_tests") {
+            assert!(res.is_ok());
+        } else {
+            assert_eq!(res.unwrap_err().to_string(), "models.my-model.providers.openai: API key missing for provider: openai: Failed to read credentials file - No such file or directory (os error 2)");
+        }
+
+        // Should not fail since validation is disabled
+        Config::load_from_path_optional_verify_credentials(tmpfile.path(), false)
+            .await
+            .expect("Failed to load config");
     }
 }

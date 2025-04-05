@@ -3742,11 +3742,13 @@ version = "0.1.0"
 dependencies = [
  "async-stream",
  "clap",
+ "lazy_static",
  "pyo3",
  "reqwest",
  "reqwest-eventsource",
  "secrecy",
  "serde",
+ "serde-untagged",
  "serde_json",
  "tensorzero-internal",
  "thiserror 2.0.12",
@@ -3808,6 +3810,7 @@ dependencies = [
  "rand 0.9.0",
  "reqwest",
  "reqwest-eventsource",
+ "scoped-tls",
  "secrecy",
  "serde",
  "serde-untagged",
@@ -3831,7 +3834,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.3.4"
+version = "2025.4.0"
 dependencies = [
  "futures",
  "pyo3",

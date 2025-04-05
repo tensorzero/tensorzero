@@ -54,7 +54,9 @@ export async function action({ request }: Route.ActionArgs) {
     );
   } catch (error) {
     console.error("Error starting evaluation:", error);
-    throw new Response("Failed to start evaluation", { status: 500 });
+    throw new Response(`Failed to start evaluation: ${error}`, {
+      status: 500,
+    });
   }
   return redirect(
     `/evaluations/${evaluation_name}?evaluation_run_ids=${evaluation_start_info.evaluation_run_id}`,

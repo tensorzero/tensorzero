@@ -3,14 +3,24 @@ use axum::debug_handler;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::Json;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-pub const TENSORZERO_VERSION: &str = "2025.03.4";
+pub const TENSORZERO_VERSION: &str = "2025.04.0";
 
 /// A handler for a simple liveness check
 #[debug_handler]
-pub async fn status_handler() -> Json<Value> {
-    Json(json!({ "status": "ok", "version": TENSORZERO_VERSION }))
+pub async fn status_handler() -> Json<StatusResponse> {
+    Json(StatusResponse {
+        status: "ok".to_string(),
+        version: TENSORZERO_VERSION.to_string(),
+    })
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct StatusResponse {
+    pub status: String,
+    pub version: String,
 }
 
 /// A handler for a health check that includes availability of related services (for now, ClickHouse)
@@ -64,6 +74,6 @@ mod tests {
     #[tokio::test]
     async fn test_status_handler() {
         let response = status_handler().await;
-        assert_eq!(response.get("version").unwrap(), TENSORZERO_VERSION);
+        assert_eq!(response.version, TENSORZERO_VERSION);
     }
 }
