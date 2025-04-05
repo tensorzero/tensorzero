@@ -740,7 +740,6 @@ const resolvedInput = await resolveInput(input);
 async function parseModelInferenceRow(
   row: ModelInferenceRow,
 ): Promise<ParsedModelInferenceRow> {
-  console.log("row.");
   const parsedMessages = z
     .array(requestMessageSchema)
     .parse(JSON.parse(row.input_messages));
