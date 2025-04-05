@@ -60,6 +60,7 @@ function transformInputForTensorZero(input: ResolvedInput) {
             result: c.result,
           };
         } else if (c.type === "image") {
+          throw new Error("Image content not supported FIX THIS NOW");
           // Skip image content as it's not supported in the target schema
           return {
             type: "text" as const,
