@@ -136,7 +136,8 @@ export const DatapointInsertSchema = z.union([
 export type DatapointInsert = z.infer<typeof DatapointInsertSchema>;
 
 /**
- * Schema defining the allowed query parameters for selecting rows from the dataset.
+ * Schema defining the allowed query parameters for selecting rows from from the ChatInference or JsonInference tables
+ * to be added to a dataset.
  */
 export const DatasetQueryParamsSchema = z.object({
   inferenceType: z.enum(["chat", "json"]),

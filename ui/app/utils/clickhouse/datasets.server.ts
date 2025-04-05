@@ -305,7 +305,8 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
  */
 export async function insertRowsForDataset(
   params: DatasetQueryParams,
-): Promise<void> {
+): Promise<number> {
+  // Validate input parameters
   const validatedParams = DatasetQueryParamsSchema.safeParse(params);
   if (!validatedParams.success) {
     throw new Error(
@@ -317,6 +318,7 @@ export async function insertRowsForDataset(
   }
   validateDatasetName(validatedParams.data.dataset_name);
 
+  // Determine the destination table based on the inference type
   const destinationTable =
     validatedParams.data.inferenceType === "chat"
       ? "ChatInferenceDatapoint"
@@ -324,10 +326,11 @@ export async function insertRowsForDataset(
 
   // Build the SELECT query from the source table
   const { query: sourceQuery, query_params } = buildDatasetSelectQuery(params);
+  query_params.datapoint_table = destinationTable;
 
   // Wrap the select query to include all required columns with their defaults
   const wrappedQuery = `
-    INSERT INTO ${destinationTable}
+    INSERT INTO {datapoint_table:Identifier}
     SELECT
       '${validatedParams.data.dataset_name}' as dataset_name,
       function_name,
@@ -340,17 +343,32 @@ export async function insertRowsForDataset(
       auxiliary,
       false as is_deleted,
       now64() as updated_at,
-      null as staled_at
+      null as staled_at,
+      id as source_inference_id
     FROM (
       ${sourceQuery}
-    ) AS t
-  `;
+    ) AS subquery
+    LEFT JOIN {datapoint_table:Identifier} as existing FINAL
+      ON '${validatedParams.data.dataset_name}' = existing.dataset_name
+         AND subquery.function_name = existing.function_name
+         AND subquery.id != existing.id
+         AND existing.staled_at IS NULL
+      WHERE existing.source_inference_id IS NULL
+    `;
 
   // Execute the INSERT query
-  await clickhouseClient.query({
+  const resultSet = await clickhouseClient.query({
     query: wrappedQuery,
     query_params,
   });
+  console.log(resultSet);
+  const rows = await resultSet.text();
+  console.log(rows);
+  const responseHeaders = resultSet.response_headers;
+  const summary = responseHeaders["x-clickhouse-summary"] as string;
+  const parsedSummary = JSON.parse(summary);
+  const writtenRows = parsedSummary.written_rows as number;
+  return writtenRows;
 }
 
 export async function getDatasetRows(
