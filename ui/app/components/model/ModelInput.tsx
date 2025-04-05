@@ -1,17 +1,22 @@
 import { SkeletonImage } from "~/components/inference/SkeletonImage";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import type {
-  ContentBlock,
   Input,
-  RequestMessage,
+  ResolvedInputMessage,
+  ResolvedInputMessageContent,
 } from "~/utils/clickhouse/common";
+import ImageBlock from "../inference/ImageBlock";
 
 interface InputProps {
-  input_messages: RequestMessage[];
+  input_messages: ResolvedInputMessage[];
   system: string | null;
 }
 
-function MessageContent({ content }: { content: ContentBlock[] }) {
+function MessageContent({
+  content,
+}: {
+  content: ResolvedInputMessageContent[];
+}) {
   return (
     <div className="space-y-2">
       {content.map((block, blockIndex) => {
@@ -20,9 +25,9 @@ function MessageContent({ content }: { content: ContentBlock[] }) {
             return (
               <div key={blockIndex} className="whitespace-pre-wrap">
                 <code className="text-sm">
-                  {typeof block.text === "object"
-                    ? JSON.stringify(block.text, null, 2)
-                    : block.text}
+                  {typeof block.value === "object"
+                    ? JSON.stringify(block.value, null, 2)
+                    : block.value}
                 </code>
               </div>
             );
@@ -47,14 +52,20 @@ function MessageContent({ content }: { content: ContentBlock[] }) {
               </div>
             );
           case "image":
-            return <SkeletonImage />;
+            return <ImageBlock key={blockIndex} image={block} />;
+          case "image_error":
+            return (
+              <div key={blockIndex}>
+                <SkeletonImage error={true} />
+              </div>
+            );
         }
       })}
     </div>
   );
 }
 
-function Message({ message }: { message: RequestMessage }) {
+function Message({ message }: { message: ResolvedInputMessage }) {
   return (
     <div className="space-y-1">
       <div className="font-medium capitalize text-slate-600 dark:text-slate-400">

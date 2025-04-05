@@ -2,6 +2,7 @@ import z from "zod";
 import {
   type ContentBlockOutput,
   type JsonInferenceOutput,
+  resolvedInputMessageSchema,
   resolvedInputSchema,
   type TableBounds,
   TableBoundsSchema,
@@ -17,7 +18,7 @@ import {
 import { data } from "react-router";
 import type { FunctionConfig } from "../config/function";
 import { clickhouseClient } from "./client.server";
-import { resolveInput } from "../resolve.server";
+import { resolveMessages } from "../resolve.server";
 
 export const inferenceByIdRowSchema = z
   .object({
@@ -594,7 +595,11 @@ async function parseInferenceRow(
   row: InferenceRow,
 ): Promise<ParsedInferenceRow> {
   const input = inputSchema.parse(JSON.parse(row.input));
-  const resolvedInput = await resolveInput(input);
+  const resolvedMessages = await resolveMessages(input.messages);
+  const resolvedInput = {
+    ...input,
+    messages: resolvedMessages,
+  };
   if (row.function_type === "chat") {
     return {
       ...row,
@@ -722,22 +727,27 @@ export const parsedModelInferenceRowSchema = modelInferenceRowSchema
     output: true,
   })
   .extend({
-    input_messages: z.array(requestMessageSchema),
+    input_messages: z.array(resolvedInputMessageSchema),
     output: z.array(contentBlockSchema),
   });
 
 export type ParsedModelInferenceRow = z.infer<
   typeof parsedModelInferenceRowSchema
 >;
-
-function parseModelInferenceRow(
+/*
+const resolvedInput = await resolveInput(input);
+*/
+async function parseModelInferenceRow(
   row: ModelInferenceRow,
-): ParsedModelInferenceRow {
+): Promise<ParsedModelInferenceRow> {
+  console.log("row.");
+  const parsedMessages = z
+    .array(requestMessageSchema)
+    .parse(JSON.parse(row.input_messages));
+  const resolvedMessages = await resolveMessages(parsedMessages);
   return {
     ...row,
-    input_messages: z
-      .array(requestMessageSchema)
-      .parse(JSON.parse(row.input_messages)),
+    input_messages: resolvedMessages,
     output: z.array(contentBlockSchema).parse(JSON.parse(row.output)),
   };
 }
@@ -755,7 +765,9 @@ export async function queryModelInferencesByInferenceId(
   });
   const rows = await resultSet.json<ModelInferenceRow>();
   const validatedRows = z.array(modelInferenceRowSchema).parse(rows);
-  const parsedRows = validatedRows.map(parseModelInferenceRow);
+  const parsedRows = await Promise.all(
+    validatedRows.map(parseModelInferenceRow),
+  );
   return parsedRows;
 }
 
