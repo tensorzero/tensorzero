@@ -1,113 +1,175 @@
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { Code } from "~/components/ui/code";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
 import ModelInput from "~/components/model/ModelInput";
+import {
+  BasicInfoLayout,
+  BasicInfoItem,
+  BasicInfoItemTitle,
+  BasicInfoItemContent,
+} from "~/components/layout/BasicInfoLayout";
+import {
+  PageLayout,
+  PageHeader,
+  SectionLayout,
+  SectionHeader,
+  SectionsGroup,
+} from "~/components/layout/PageLayout";
+import { Timer, Input, Output, Calendar } from "~/components/icons/Icons";
+import Chip from "~/components/ui/Chip";
+import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
+import {
+  SnippetLayout,
+  SnippetContent,
+} from "~/components/layout/SnippetLayout";
+import { CodeMessage } from "~/components/layout/SnippetContent";
 
 interface ModelInferenceItemProps {
   inference: ParsedModelInferenceRow;
 }
 
 export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <dt className="text-lg font-semibold">Model</dt>
-          <dd>
-            <Code>{inference.model_name}</Code>
-          </dd>
-        </div>
-        <div>
-          <dt className="text-lg font-semibold">Model Provider</dt>
-          <dd>
-            <Code>{inference.model_provider_name}</Code>
-          </dd>
-        </div>
-        <div>
-          <dt className="text-lg font-semibold">Input Tokens</dt>
-          <dd>{inference.input_tokens}</dd>
-        </div>
-        <div>
-          <dt className="text-lg font-semibold">Output Tokens</dt>
-          <dd>{inference.output_tokens}</dd>
-        </div>
-        <div>
-          <dt className="text-lg font-semibold">Response Time</dt>
-          <dd>{inference.response_time_ms}ms</dd>
-        </div>
-        <div>
-          <dt className="text-lg font-semibold">TTFT</dt>
-          <dd>{inference.ttft_ms ? `${inference.ttft_ms}ms` : "N/A"}</dd>
-        </div>
-        <div>
-          <dt className="text-lg font-semibold">Timestamp</dt>
-          <dd>{new Date(inference.timestamp).toLocaleString()}</dd>
-        </div>
-      </div>
-
-      <ModelInput
-        input_messages={inference.input_messages}
-        system={inference.system}
-      />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Output</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <pre className="overflow-x-auto rounded-md bg-muted p-4">
-            <code className="text-sm">
-              {JSON.stringify(inference.output, null, 2)}
-            </code>
-          </pre>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Raw Request</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <pre className="overflow-x-auto rounded-md bg-muted p-4">
-            <code className="text-sm">
-              {(() => {
-                try {
-                  return JSON.stringify(
-                    JSON.parse(inference.raw_request),
-                    null,
-                    2,
-                  );
-                } catch {
-                  return inference.raw_request;
-                }
-              })()}
-            </code>
-          </pre>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Raw Response</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <pre className="overflow-x-auto rounded-md bg-muted p-4">
-            <code className="text-sm">
-              {(() => {
-                try {
-                  return JSON.stringify(
-                    JSON.parse(inference.raw_response),
-                    null,
-                    2,
-                  );
-                } catch {
-                  return inference.raw_response;
-                }
-              })()}
-            </code>
-          </pre>
-        </CardContent>
-      </Card>
+  // Create timestamp tooltip
+  const { formattedDate, formattedTime, relativeTime } =
+    getTimestampTooltipData(inference.timestamp);
+  const timestampTooltip = (
+    <div className="flex flex-col gap-1">
+      <div>{formattedDate}</div>
+      <div>{formattedTime}</div>
+      <div>{relativeTime}</div>
     </div>
+  );
+
+  return (
+    <PageLayout>
+      <PageHeader label="Model Inference" name={inference.id}>
+        <BasicInfoLayout>
+          <BasicInfoItem>
+            <BasicInfoItemTitle>Model</BasicInfoItemTitle>
+            <BasicInfoItemContent>
+              <Chip label={inference.model_name} font="mono" />
+            </BasicInfoItemContent>
+          </BasicInfoItem>
+
+          <BasicInfoItem>
+            <BasicInfoItemTitle>Model Provider</BasicInfoItemTitle>
+            <BasicInfoItemContent>
+              <Chip label={inference.model_provider_name} />
+            </BasicInfoItemContent>
+          </BasicInfoItem>
+
+          <BasicInfoItem>
+            <BasicInfoItemTitle>Usage</BasicInfoItemTitle>
+            <BasicInfoItemContent>
+              <div className="flex flex-row gap-1">
+                <Chip
+                  icon={<Input className="text-fg-tertiary" />}
+                  label={`${inference.input_tokens} tok`}
+                  tooltip="Input Tokens"
+                />
+                <Chip
+                  icon={<Output className="text-fg-tertiary" />}
+                  label={`${inference.output_tokens} tok`}
+                  tooltip="Output Tokens"
+                />
+                <Chip
+                  icon={<Timer className="text-fg-tertiary" />}
+                  label={`${inference.response_time_ms} ms`}
+                  tooltip="Response Time"
+                />
+              </div>
+            </BasicInfoItemContent>
+          </BasicInfoItem>
+
+          {inference.ttft_ms && (
+            <BasicInfoItem>
+              <BasicInfoItemTitle>TTFT</BasicInfoItemTitle>
+              <BasicInfoItemContent>
+                <Chip
+                  icon={<Timer className="text-fg-tertiary" />}
+                  label={`${inference.ttft_ms} ms`}
+                  tooltip="Time To First Token"
+                />
+              </BasicInfoItemContent>
+            </BasicInfoItem>
+          )}
+
+          <BasicInfoItem>
+            <BasicInfoItemTitle>Timestamp</BasicInfoItemTitle>
+            <BasicInfoItemContent>
+              <Chip
+                icon={<Calendar className="text-fg-tertiary" />}
+                label={formatDateWithSeconds(new Date(inference.timestamp))}
+                tooltip={timestampTooltip}
+              />
+            </BasicInfoItemContent>
+          </BasicInfoItem>
+        </BasicInfoLayout>
+      </PageHeader>
+
+      <SectionsGroup>
+        <SectionLayout>
+          <SectionHeader heading="Input" />
+          <ModelInput
+            input_messages={inference.input_messages}
+            system={inference.system}
+          />
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Output" />
+          <SnippetLayout>
+            <SnippetContent maxHeight={400}>
+              <CodeMessage
+                showLineNumbers
+                content={JSON.stringify(inference.output, null, 2)}
+              />
+            </SnippetContent>
+          </SnippetLayout>
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Raw Request" />
+          <SnippetLayout>
+            <SnippetContent maxHeight={400}>
+              <CodeMessage
+                showLineNumbers
+                content={(() => {
+                  try {
+                    return JSON.stringify(
+                      JSON.parse(inference.raw_request),
+                      null,
+                      2,
+                    );
+                  } catch {
+                    return inference.raw_request;
+                  }
+                })()}
+              />
+            </SnippetContent>
+          </SnippetLayout>
+        </SectionLayout>
+
+        <SectionLayout>
+          <SectionHeader heading="Raw Response" />
+          <SnippetLayout>
+            <SnippetContent maxHeight={400}>
+              <CodeMessage
+                showLineNumbers
+                content={(() => {
+                  try {
+                    return JSON.stringify(
+                      JSON.parse(inference.raw_response),
+                      null,
+                      2,
+                    );
+                  } catch {
+                    return inference.raw_response;
+                  }
+                })()}
+              />
+            </SnippetContent>
+          </SnippetLayout>
+        </SectionLayout>
+      </SectionsGroup>
+    </PageLayout>
   );
 }

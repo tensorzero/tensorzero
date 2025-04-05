@@ -1,5 +1,5 @@
 import { SkeletonImage } from "~/components/inference/SkeletonImage";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent } from "~/components/ui/card";
 import type {
   ContentBlock,
   Input,
@@ -67,10 +67,7 @@ function Message({ message }: { message: RequestMessage }) {
 
 export default function Input({ input_messages, system }: InputProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Input</CardTitle>
-      </CardHeader>
+    <Card className="pt-6">
       <CardContent className="space-y-6">
         {system && (
           <div className="rounded border border-slate-200 p-4 dark:border-slate-800">
