@@ -32,14 +32,3 @@ services:
       start_period: 30s
       start_interval: 1s
       timeout: 1s
-
-  ui:
-    image: tensorzero/ui
-    environment:
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
-      - TENSORZERO_GATEWAY_URL=http://gateway:3000
-    ports:
-      - "4000:4000"
-    depends_on:
-      clickhouse:
-        condition: service_healthy
