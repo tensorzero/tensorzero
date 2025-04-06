@@ -366,7 +366,9 @@ export async function insertRowsForDataset(
   const responseHeaders = resultSet.response_headers;
   const summary = responseHeaders["x-clickhouse-summary"] as string;
   const parsedSummary = JSON.parse(summary);
-  const writtenRows = Number(parsedSummary.written_rows);
+  // NOTE: it seems like recent versions of clickhouse (later than 24.12)
+  // don't return the written_rows if it is 0 so we handle that case here
+  const writtenRows = Number(parsedSummary.written_rows) || 0;
   return writtenRows;
 }
 
