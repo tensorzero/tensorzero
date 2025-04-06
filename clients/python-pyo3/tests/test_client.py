@@ -1840,7 +1840,7 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
                     "role": "assistant",
                     "content": [
                         ToolResult(
-                            name="tool_call",
+                            name="test_tool",
                             result="success",
                             id="1",
                         )
@@ -1876,7 +1876,7 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
     }
     assert request["input"]["messages"][1]["content"][0] == {
         "type": "tool_result",
-        "name": "test",
+        "name": "test_tool",
         "result": "success",
         "id": "1",
     }
