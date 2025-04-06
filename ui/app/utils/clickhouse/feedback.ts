@@ -1,9 +1,6 @@
 import { type TableBounds, TableBoundsSchema } from "./common";
 import { data } from "react-router";
-import { InferenceJoinKey } from "./common";
 import { clickhouseClient } from "./client.server";
-import type { MetricConfig } from "~/utils/config/metric";
-import { getInferenceJoinKey } from "~/utils/clickhouse/curation";
 import { z } from "zod";
 
 export const booleanMetricFeedbackRowSchema = z.object({
