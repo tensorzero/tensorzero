@@ -84,7 +84,7 @@ pub fn deserialize_content<'de, D: Deserializer<'de>>(
             })])
         })
         .map(|object| {
-            tracing::warn!("Deprecation warning - passing in an object for `content` is deprecated. Please use an array of content blocks instead.");
+            tracing::warn!("Deprecation Warning - passing in an object for `content` is deprecated. Please use an array of content blocks instead.");
             Ok(vec![ClientInputMessageContent::Text(TextKind::Arguments {
                 arguments: object.deserialize()?,
             })])
