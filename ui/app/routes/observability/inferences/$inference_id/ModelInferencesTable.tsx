@@ -39,7 +39,7 @@ export function ModelInferencesTable({
         <TableBody>
           {modelInferences.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={2} className="py-4 text-center text-fg-muted">
+              <TableCell colSpan={2} className="text-fg-muted py-4 text-center">
                 No model inferences available.
               </TableCell>
             </TableRow>
@@ -47,16 +47,16 @@ export function ModelInferencesTable({
             modelInferences.map((inference) => (
               <TableRow
                 key={inference.id}
-                className="cursor-pointer hover:bg-bg-hover"
+                className="hover:bg-bg-hover cursor-pointer"
                 onClick={() => handleRowClick(inference)}
               >
                 <TableCell className="max-w-[200px]">
-                  <span className="block overflow-hidden text-ellipsis whitespace-nowrap font-mono">
+                  <span className="block overflow-hidden font-mono text-ellipsis whitespace-nowrap">
                     {inference.id}
                   </span>
                 </TableCell>
                 <TableCell className="max-w-[200px]">
-                  <span className="block overflow-hidden text-ellipsis whitespace-nowrap font-mono">
+                  <span className="block overflow-hidden font-mono text-ellipsis whitespace-nowrap">
                     {inference.model_name}
                   </span>
                 </TableCell>
@@ -67,7 +67,7 @@ export function ModelInferencesTable({
       </Table>
 
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="w-full overflow-y-auto bg-bg-secondary p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+        <SheetContent className="bg-bg-secondary w-full overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
           {selectedInference && (
             <ModelInferenceItem inference={selectedInference} />
           )}

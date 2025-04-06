@@ -36,7 +36,7 @@ export default function DatasetRowTable({
             <TableRow className="hover:bg-bg-primary">
               <TableCell
                 colSpan={5}
-                className="px-3 py-8 text-center text-fg-muted"
+                className="text-fg-muted px-3 py-8 text-center"
               >
                 No datapoints found.
               </TableCell>
@@ -49,7 +49,7 @@ export default function DatasetRowTable({
                     to={`/datasets/${dataset_name}/datapoint/${row.id}`}
                     className="block no-underline"
                   >
-                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                       {row.id}
                     </code>
                   </Link>
@@ -62,14 +62,14 @@ export default function DatasetRowTable({
                     to={`/observability/episodes/${row.episode_id}`}
                     className="block no-underline"
                   >
-                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                       {row.episode_id}
                     </code>
                   </Link>
                 </TableCell>
                 <TableCell>
                   <FunctionLink functionName={row.function_name}>
-                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                       {row.function_name}
                     </code>
                   </FunctionLink>
