@@ -104,9 +104,10 @@ class ToolCall(ContentBlock):
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
-            "type": "tool_call",
             "id": self.id,
-            "name": self.raw_name,
+            "raw_arguments": self.raw_arguments,
+            "raw_name": self.raw_name,
+            "type": "tool_call",
         }
         if self.arguments is not None:
             d["arguments"] = self.arguments
