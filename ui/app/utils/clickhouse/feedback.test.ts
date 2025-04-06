@@ -225,18 +225,6 @@ describe("queryMetricsWithFeedback", () => {
     const jsonResults = await queryMetricsWithFeedback({
       function_name: "extract_entities",
       inference_table: "JsonInference",
-      metrics: {
-        exact_match: {
-          type: "boolean",
-          optimize: "max",
-          level: "inference",
-        },
-        jaccard_similarity: {
-          type: "float",
-          optimize: "max",
-          level: "inference",
-        },
-      },
     });
 
     // Check boolean counts for JSON function
@@ -259,13 +247,6 @@ describe("queryMetricsWithFeedback", () => {
     const chatResults = await queryMetricsWithFeedback({
       function_name: "write_haiku",
       inference_table: "ChatInference",
-      metrics: {
-        haiku_rating: {
-          type: "float",
-          optimize: "max",
-          level: "inference",
-        },
-      },
     });
 
     expect(chatResults.metrics).toContainEqual({
@@ -289,13 +270,6 @@ describe("queryMetricsWithFeedback", () => {
     const results = await queryMetricsWithFeedback({
       function_name: "nonexistent_function",
       inference_table: "ChatInference",
-      metrics: {
-        haiku_rating: {
-          type: "float",
-          optimize: "max",
-          level: "inference",
-        },
-      },
     });
 
     expect(results.metrics).toEqual([]);
@@ -306,18 +280,6 @@ describe("queryMetricsWithFeedback", () => {
     const results = await queryMetricsWithFeedback({
       function_name: "write_haiku",
       inference_table: "ChatInference",
-      metrics: {
-        haiku_rating: {
-          type: "float",
-          optimize: "max",
-          level: "inference",
-        },
-        haiku_rating_episode: {
-          type: "float",
-          optimize: "max",
-          level: "episode",
-        },
-      },
     });
 
     // Check inference level metric
@@ -342,13 +304,6 @@ describe("queryMetricsWithFeedback", () => {
       function_name: "write_haiku",
       variant_name: "initial_prompt_gpt4o_mini",
       inference_table: "ChatInference",
-      metrics: {
-        haiku_rating: {
-          type: "float",
-          optimize: "max",
-          level: "inference",
-        },
-      },
     });
 
     expect(results.metrics).toContainEqual({
