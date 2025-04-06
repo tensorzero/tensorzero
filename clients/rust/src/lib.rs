@@ -702,6 +702,9 @@ fn try_adjust_tool_call_arguments(
     // If we know the gateway version, and it's recent enough, we skip adjusting tool call arguments.
     // We perform the adjustment if the version is known to be too old, or if we didn't get a
     // version header at all (old enough gateways don't send a version header).
+
+    // TODO (#1410): Deprecate this behavior
+
     if let Some(gateway_version) = gateway_version {
         if supports_tool_call_arguments_object(gateway_version)? {
             return Ok(());
