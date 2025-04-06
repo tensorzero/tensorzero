@@ -69,7 +69,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const metricsWithFeedbackPromise = queryMetricsWithFeedback({
     function_name,
     inference_table: getInferenceTableName(function_config),
-    metrics: config.metrics,
   });
   const variantCountsPromise = getVariantCounts({
     function_name,
