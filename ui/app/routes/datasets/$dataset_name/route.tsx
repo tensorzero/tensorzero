@@ -15,7 +15,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -52,7 +52,8 @@ export default function DatasetDetailPage({
   useEffect(() => {
     if (rowsAdded !== null) {
       toast({
-        description: `Added ${rowsAdded} rows to the dataset`,
+        title: "Dataset Updated",
+        description: `Added ${rowsAdded} rows to the dataset.`,
       });
     }
   }, [rowsAdded, toast]);
