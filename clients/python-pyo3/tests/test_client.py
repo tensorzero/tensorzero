@@ -1873,6 +1873,8 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
         "id": "1",
         "name": "test_tool",
         "arguments": {"arg": "value"},
+        "raw_name": "test_tool",
+        "raw_arguments": '{"arg": "value"}',
     }
     assert request["input"]["messages"][1]["content"][0] == {
         "type": "tool_result",
