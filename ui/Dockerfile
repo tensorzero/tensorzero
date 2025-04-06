@@ -58,7 +58,9 @@ RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/
 FROM base AS build-env
 
 COPY ./ui /app/
+
 COPY --from=minijinja-build-env /minijinja/pkg /app/app/utils/minijinja/pkg
+
 COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 
 WORKDIR /app
