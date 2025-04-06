@@ -19,3 +19,7 @@ serde = { workspace = true }
 
 [lints]
 workspace = true
+
+[features]
+e2e_tests = ["tensorzero-internal/e2e_tests"]
+default = []
