@@ -1727,7 +1727,7 @@ def test_sync_basic_inference_with_content_block(sync_client: TensorZeroGateway)
                             type="tool_call",
                             id="1",
                             name="test",
-                            raw_arguments={"arg": "value"},
+                            raw_arguments=json.dumps({"arg": "value"}),
                             raw_name="test_tool",
                             arguments={"arg": "value"},
                         ),
@@ -1829,8 +1829,8 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
                         ToolCall(
                             type="tool_call",
                             id="1",
-                            name="test",
-                            raw_arguments={"arg": "value"},
+                            name="test_tool",
+                            raw_arguments=json.dumps({"arg": "value"}),
                             raw_name="test_tool",
                             arguments={"arg": "value"},
                         )
@@ -1872,7 +1872,7 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
         "type": "tool_call",
         "id": "1",
         "name": "test_tool",
-        "arguments": '{"arg": "value"}',
+        "arguments": {"arg": "value"},
     }
     assert request["input"]["messages"][1]["content"][0] == {
         "type": "tool_result",

@@ -1,4 +1,3 @@
-import json
 import typing as t
 import warnings
 from abc import ABC, abstractmethod
@@ -100,16 +99,20 @@ class ToolCall(ContentBlock):
     arguments: Optional[Dict[str, Any]]
     id: str
     name: Optional[str]
-    raw_arguments: Dict[str, Any]
+    raw_arguments: str
     raw_name: str
 
     def to_dict(self) -> Dict[str, Any]:
-        return dict(
-            type="tool_call",
-            arguments=json.dumps(self.raw_arguments),
-            id=self.id,
-            name=self.raw_name,
-        )
+        d: Dict[str, Any] = {
+            "type": "tool_call",
+            "id": self.id,
+            "name": self.raw_name,
+        }
+        if self.arguments is not None:
+            d["arguments"] = self.arguments
+        if self.name is not None:
+            d["name"] = self.name
+        return d
 
 
 @dataclass
