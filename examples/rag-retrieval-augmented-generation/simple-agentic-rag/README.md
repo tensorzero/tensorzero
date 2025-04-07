@@ -20,21 +20,21 @@ Even with this simple setup, we see that the agent can solve complex queries lik
 Here's a sample response trace:
 
 ```
-[Tool Call] think: {'thought': 'To answer the question, I need to first identify the scientist who won the Nobel Prize for the discovery of the positron. After that, I will determine his hometown and look for a common dish associated with that place.'}
+think: {'thought': 'To answer the question, I need to first identify the scientist who won the Nobel Prize for the discovery of the positron. After that, I will determine his hometown and look for a common dish associated with that place.'}
 
-[Tool Call] search_wikipedia: {'query': 'Nobel Prize positron discovery'}
+search_wikipedia: {'query': 'Nobel Prize positron discovery'}
 
-[Tool Call] load_wikipedia_page: {'title': 'Carl David Anderson'}
+load_wikipedia_page: {'title': 'Carl David Anderson'}
 
-[Tool Call] think: {'thought': 'Carl David Anderson, the scientist who discovered the positron, was born in New York City. I need to find common dishes that are characteristic of New York City.'}
+think: {'thought': 'Carl David Anderson, the scientist who discovered the positron, was born in New York City. I need to find common dishes that are characteristic of New York City.'}
 
-[Tool Call] search_wikipedia: {'query': 'Cuisine of New York City'}
+search_wikipedia: {'query': 'Cuisine of New York City'}
 
-[Tool Call] load_wikipedia_page: {'title': 'Cuisine of New York City'}
+load_wikipedia_page: {'title': 'Cuisine of New York City'}
 
-[Tool Call] think: {'thought': 'I have established that Carl David Anderson, who won the Nobel Prize for discovering the positron, was born in New York City. Based on the information from the cuisine of New York City, some iconic dishes include New York-style pizza, bagels with lox, and pastrami on rye. I need to decide on one common dish to summarize.'}
+think: {'thought': 'I have established that Carl David Anderson, who won the Nobel Prize for discovering the positron, was born in New York City. Based on the information from the cuisine of New York City, some iconic dishes include New York-style pizza, bagels with lox, and pastrami on rye. I need to decide on one common dish to summarize.'}
 
-[Tool Call] answer_question: {'answer': 'The scientist who discovered the positron was Carl David Anderson, born in New York City. A common dish associated with New York City is the New York-style bagel, often served with cream cheese and lox. This iconic dish reflects the city’s rich culinary diversity, particularly its Jewish heritage.\n\nFor more information, see the Wikipedia pages on [Carl David Anderson](https://en.wikipedia.org/wiki/Carl_David_Anderson) and [Cuisine of New York City](https://en.wikipedia.org/wiki/Cuisine_of_New_York_City).'}
+answer_question: {'answer': 'The scientist who discovered the positron was Carl David Anderson, born in New York City. A common dish associated with New York City is the New York-style bagel, often served with cream cheese and lox. This iconic dish reflects the city’s rich culinary diversity, particularly its Jewish heritage.\n\nFor more information, see the Wikipedia pages on [Carl David Anderson](https://en.wikipedia.org/wiki/Carl_David_Anderson) and [Cuisine of New York City](https://en.wikipedia.org/wiki/Cuisine_of_New_York_City).'}
 ```
 
 ## Getting Started
@@ -56,5 +56,5 @@ Feel free to edit it to tune the behavior of the agent!
 
 ### Setup
 
-1. Create a `.env` file with the `OPENAI_API_KEY` environment variable (see `.env.example` for an example).
+1. Set the `OPENAI_API_KEY` environment variable.
 2. Run the `main.ipynb` Jupyter notebook.
