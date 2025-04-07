@@ -51,7 +51,7 @@ describe("convertToTiktokenModel", () => {
     const messages: OpenAIMessage[] = [
       { role: "assistant" as OpenAIRole, content: "Test" },
     ];
-    expect(() => validateMessageLength(messages, "gpt-4-0613", getEncodingForModel("got-4-0613"))).not.toThrow();
+    expect(() => validateMessageLength(messages, "gpt-4-0613", getEncodingForModel("gpt-4-0613"))).not.toThrow();
   });
 
   it("should throw error for unsupported models", () => {
