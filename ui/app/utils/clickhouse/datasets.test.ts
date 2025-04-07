@@ -444,6 +444,7 @@ describe("getDatapoint", () => {
       tags: {},
       staled_at: null,
       updated_at: "2025-02-19T00:26:06Z",
+      source_inference_id: null,
     });
   });
 
@@ -483,6 +484,8 @@ describe("getDatapoint", () => {
       ],
       tags: {},
       updated_at: "2025-02-19T00:25:04Z",
+      source_inference_id: null,
+      tool_params: undefined,
     });
   });
 
@@ -498,6 +501,7 @@ describe("getDatapoint", () => {
 describe("datapoint operations", () => {
   test("chat datapoint lifecycle - insert, get, delete", async () => {
     const datapoint_id = uuid();
+    const source_inference_id = uuid();
     const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
@@ -523,6 +527,7 @@ describe("datapoint operations", () => {
       updated_at: new Date().toISOString(),
       is_deleted: false,
       staled_at: null,
+      source_inference_id,
     };
 
     // Test insertion
@@ -538,7 +543,7 @@ describe("datapoint operations", () => {
     expect(retrievedDatapoint?.function_name).toBe(chatDatapoint.function_name);
     expect(retrievedDatapoint?.dataset_name).toBe(chatDatapoint.dataset_name);
     expect(retrievedDatapoint?.input).toEqual(chatDatapoint.input);
-
+    expect(retrievedDatapoint?.source_inference_id).toBe(source_inference_id);
     // Check if it's a chat inference row before accessing tool_params
     if (retrievedDatapoint && "tool_params" in retrievedDatapoint) {
       expect(JSON.stringify(retrievedDatapoint.output)).toBe(
@@ -576,6 +581,7 @@ describe("datapoint operations", () => {
 
   test("json datapoint lifecycle - insert, get, delete", async () => {
     const datapoint_id = uuid();
+    const source_inference_id = uuid();
     const jsonDatapoint: ParsedJsonInferenceDatapointRow = {
       dataset_name: "test_json_dataset",
       function_name: "extract_entities",
@@ -617,6 +623,7 @@ describe("datapoint operations", () => {
       updated_at: new Date().toISOString(),
       is_deleted: false,
       staled_at: null,
+      source_inference_id,
     };
 
     // Test insertion
@@ -673,6 +680,7 @@ describe("datapoint operations", () => {
   });
 
   test("handles duplicate insertions gracefully", async () => {
+    const source_inference_id = uuid();
     const chatDatapoint: ParsedChatInferenceDatapointRow = {
       dataset_name: "test_chat_dataset",
       function_name: "write_haiku",
@@ -700,6 +708,7 @@ describe("datapoint operations", () => {
       updated_at: new Date().toISOString(),
       is_deleted: false,
       staled_at: null,
+      source_inference_id,
     };
 
     // First insertion
@@ -763,6 +772,99 @@ describe("insertRowsForDataset", () => {
       }),
     ).rejects.toThrow();
   });
+
+  test("correctly handles incremental insertions for json", async () => {
+    // Generate a random dataset name so this test can be safely re-run
+    const dataset_name = `test_incremental_insertions_${uuid()}`;
+    const insert_with_cutoff = async (cutoff: number) => {
+      const rowsAdded = await insertRowsForDataset({
+        dataset_name,
+        inferenceType: "json",
+        function_name: "extract_entities",
+        extra_where: [],
+        extra_params: {},
+        metric_filter: {
+          metric: "jaccard_similarity",
+          metric_type: "float",
+          operator: ">",
+          threshold: cutoff,
+          join_on: "id",
+        },
+        output_source: "none",
+      });
+      return rowsAdded;
+    };
+    const rowsAdded = await insert_with_cutoff(0.9);
+    expect(rowsAdded).toBe(54);
+    const rowsAdded2 = await insert_with_cutoff(0.8);
+    expect(rowsAdded2).toBe(0);
+    const rowsAdded3 = await insert_with_cutoff(0.7);
+    expect(rowsAdded3).toBe(5);
+    // Try a different output source (this should not write any rows)
+    const rowsAdded4 = await insertRowsForDataset({
+      dataset_name,
+      inferenceType: "json",
+      function_name: "extract_entities",
+      extra_where: [],
+      extra_params: {},
+      metric_filter: {
+        metric: "jaccard_similarity",
+        metric_type: "float",
+        operator: ">",
+        threshold: 0.7,
+        join_on: "id",
+      },
+      output_source: "inference",
+    });
+    expect(rowsAdded4).toBe(0);
+  }, 10000); // 10 second timeout
+
+  test("correctly handles incremental insertions for chat", async () => {
+    // Generate a random dataset name so this test can be safely re-run
+    const dataset_name = `test_incremental_insertions_${uuid()}`;
+    const insert_with_cutoff = async (cutoff: number) => {
+      const rowsAdded = await insertRowsForDataset({
+        dataset_name,
+        inferenceType: "chat",
+        function_name: "write_haiku",
+        extra_where: [],
+        extra_params: {},
+        metric_filter: {
+          metric: "haiku_rating",
+          metric_type: "float",
+          operator: ">",
+          threshold: cutoff,
+          join_on: "id",
+        },
+        output_source: "none",
+      });
+      return rowsAdded;
+    };
+    const rowsAdded = await insert_with_cutoff(0.9);
+    expect(rowsAdded).toBe(57);
+    const rowsAdded2 = await insert_with_cutoff(0.8);
+    expect(rowsAdded2).toBe(10);
+    const rowsAdded3 = await insert_with_cutoff(0.7);
+    expect(rowsAdded3).toBe(8);
+
+    // Try a different output source (this should not write any rows)
+    const rowsAdded4 = await insertRowsForDataset({
+      dataset_name,
+      inferenceType: "chat",
+      function_name: "write_haiku",
+      extra_where: [],
+      extra_params: {},
+      metric_filter: {
+        metric: "haiku_rating",
+        metric_type: "float",
+        operator: ">",
+        threshold: 0.7,
+        join_on: "id",
+      },
+      output_source: "inference",
+    });
+    expect(rowsAdded4).toBe(0);
+  }, 10000); // 10 second timeout
 });
 
 describe("insertDatapoint", () => {
@@ -781,6 +883,7 @@ describe("insertDatapoint", () => {
         updated_at: new Date().toISOString(),
         is_deleted: false,
         staled_at: null,
+        source_inference_id: null,
       }),
     ).rejects.toThrow();
   });
