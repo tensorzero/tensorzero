@@ -112,10 +112,10 @@ export function VariantPerformance({
                         <div className="flex flex-1 items-center justify-between leading-none">
                           <span className="text-muted-foreground">{name}</span>
                           <div className="grid text-right">
-                            <span className="font-mono font-medium tabular-nums text-foreground">
+                            <span className="text-foreground font-mono font-medium tabular-nums">
                               {value.toLocaleString()}
                             </span>
-                            <span className="text-[10px] text-muted-foreground">
+                            <span className="text-muted-foreground text-[10px]">
                               n={numInferences.toLocaleString()}
                             </span>
                           </div>

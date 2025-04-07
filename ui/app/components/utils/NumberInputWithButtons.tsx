@@ -29,12 +29,12 @@ export function NumberInputWithButtons({
         step={step}
         value={value === null ? "" : value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="[appearance:textfield] focus:ring-2 focus:ring-primary/20 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="focus:ring-primary/20 [appearance:textfield] focus:ring-2 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
-      <div className="absolute bottom-2 right-3 top-2 flex flex-col opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100">
+      <div className="absolute top-2 right-3 bottom-2 flex flex-col opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100">
         <button
           type="button"
-          className="flex h-1/2 w-4 cursor-pointer items-center justify-center border-none bg-secondary hover:bg-secondary-foreground/15"
+          className="bg-secondary hover:bg-secondary-foreground/15 flex h-1/2 w-4 cursor-pointer items-center justify-center border-none"
           onClick={() => onChange(Math.min((value || 0) + step, max))}
           aria-label={ariaLabelIncrease}
         >
@@ -42,7 +42,7 @@ export function NumberInputWithButtons({
         </button>
         <button
           type="button"
-          className="flex h-1/2 w-4 cursor-pointer items-center justify-center border-none bg-secondary hover:bg-secondary-foreground/15"
+          className="bg-secondary hover:bg-secondary-foreground/15 flex h-1/2 w-4 cursor-pointer items-center justify-center border-none"
           onClick={() => onChange(Math.max((value || 0) - step, min))}
           aria-label={ariaLabelDecrease}
         >
