@@ -1,7 +1,3 @@
-use aws_config::meta::region::RegionProviderChain;
-use aws_sdk_bedrockruntime::client::customize::CustomizableOperation;
-use aws_sdk_bedrockruntime::config::interceptors::BeforeTransmitInterceptorContextMut;
-use aws_sdk_bedrockruntime::config::{Intercept, RuntimeComponents};
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
 use aws_sdk_bedrockruntime::operation::converse_stream::ConverseStreamOutput;
 use aws_sdk_bedrockruntime::types::{
@@ -12,25 +8,22 @@ use aws_sdk_bedrockruntime::types::{
     ToolConfiguration, ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification,
     ToolUseBlock,
 };
-use aws_smithy_types::body::SdkBody;
-use aws_smithy_types::config_bag::ConfigBag;
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_types::region::Region;
 use futures::StreamExt;
 use reqwest::StatusCode;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::Instant;
 
 use super::anthropic::{prefill_json_chunk_response, prefill_json_response};
-use super::helpers::{inject_extra_request_data, peek_first_chunk};
+use super::aws_common::{self, build_interceptor, InterceptorAndRawBody};
+use super::helpers::peek_first_chunk;
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, FunctionType, Latency, ModelInferenceRequest,
@@ -39,7 +32,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs};
-use crate::model::{ModelProvider, ModelProviderRequestInfo};
+use crate::model::ModelProvider;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 #[allow(unused)]
@@ -55,151 +48,10 @@ pub struct AWSBedrockProvider {
 
 impl AWSBedrockProvider {
     pub async fn new(model_id: String, region: Option<Region>) -> Result<Self, Error> {
-        // Decide which AWS region to use. We try the following in order:
-        // - The provided `region` argument
-        // - The region defined by the credentials (e.g. `AWS_REGION` environment variable)
-        // - The default region (us-east-1)
-        let region = RegionProviderChain::first_try(region)
-            .or_default_provider()
-            .region()
-            .await
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceClient {
-                    raw_request: None,
-                    raw_response: None,
-                    status_code: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                    message: "Failed to determine AWS region.".to_string(),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
-
-        tracing::trace!("Creating new AWS Bedrock client for region: {region}",);
-
-        let config = aws_config::from_env().region(region).load().await;
+        let config = aws_common::config_with_region(PROVIDER_TYPE, region).await?;
         let client = aws_sdk_bedrockruntime::Client::new(&config);
 
         Ok(Self { model_id, client })
-    }
-}
-
-struct WithRawRequest<T, E, S, F: FnOnce() -> Result<String, Error>> {
-    bedrock_request: CustomizableOperation<T, E, S>,
-    get_raw_request: F,
-}
-
-/// Attaches our custom interceptor to the request builder, which injects our 'extra_body' parameters into
-/// the request body.
-/// Returns the modified request builder, and a function to retrieve the raw request.
-/// This awkward signature is due to the fact that we cannot call `send()` from a generic
-/// function, as one of the needed traits is private: https://github.com/awslabs/aws-sdk-rust/issues/987
-fn attach_interceptor<T, E: std::error::Error + Send + Sync, S>(
-    mut bedrock_request: CustomizableOperation<T, E, S>,
-    request: &ModelInferenceRequest<'_>,
-    model_provider: &ModelProvider,
-    model_name: String,
-) -> WithRawRequest<T, E, S, impl FnOnce() -> Result<String, Error>> {
-    let raw_request = Arc::new(Mutex::new(None));
-    let extra_body = request.extra_body.clone();
-
-    #[derive(Debug)]
-    struct TensorZeroInterceptor {
-        /// Captures the raw request from `modify_before_signing`.
-        /// After the request is executed, we use this to retrieve the raw request.
-        raw_request: Arc<Mutex<Option<String>>>,
-        extra_body: FullExtraBodyConfig,
-        model_provider_info: ModelProviderRequestInfo,
-        model_name: String,
-    }
-    impl Intercept for TensorZeroInterceptor {
-        fn name(&self) -> &'static str {
-            "TensorZeroInterceptor"
-        }
-        // This interceptor injects our 'extra_body' parameters into the request body,
-        // and captures the raw request.
-        fn modify_before_signing(
-            &self,
-            context: &mut BeforeTransmitInterceptorContextMut<'_>,
-            _runtime_components: &RuntimeComponents,
-            _cfg: &mut ConfigBag,
-        ) -> Result<(), Box<dyn std::error::Error + Sync + Send>> {
-            let http_request = context.request_mut();
-            let bytes = http_request.body().bytes().ok_or_else(|| {
-                Error::new(ErrorDetails::Serialization {
-                    message: "Failed to get body from AWS Bedrock request".to_string(),
-                })
-            })?;
-            let mut body_json: serde_json::Value = serde_json::from_slice(bytes).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Failed to deserialize AWS Bedrock request body: {e}"),
-                })
-            })?;
-            let headers = inject_extra_request_data(
-                &self.extra_body,
-                self.model_provider_info.clone(),
-                &self.model_name,
-                &mut body_json,
-            )?;
-            let raw_request = serde_json::to_string(&body_json).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Failed to serialize AWS Bedrock request body: {e}"),
-                })
-            })?;
-            // Bedrock inexplicably sets this header before calling this interceptor, so we need to update
-            // it ourselves (in case the body length changed)
-            http_request
-                .headers_mut()
-                .insert("content-length", raw_request.len().to_string());
-            *http_request.body_mut() = SdkBody::from(raw_request.clone());
-
-            // Capture the raw request for later use. Note that `modify_before_signing` may be
-            // called multiple times (due to internal aws sdk retries), so this will overwrite
-            // the Mutex to contain the latest raw request (which is what we want).
-            let body = self.raw_request.lock();
-            // Ignore poisoned lock, since we're overwriting it.
-            let mut body = match body {
-                Ok(body) => body,
-                Err(e) => e.into_inner(),
-            };
-            *body = Some(raw_request);
-
-            // We iterate over a reference and clone, since `header.into_iter()`
-            // produces (Option<HeaderName>, HeaderValue)
-            for (name, value) in &headers {
-                http_request
-                    .headers_mut()
-                    .insert(name.clone(), value.clone());
-            }
-            Ok(())
-        }
-    }
-
-    let interceptor = TensorZeroInterceptor {
-        raw_request: raw_request.clone(),
-        extra_body,
-        model_provider_info: model_provider.into(),
-        model_name,
-    };
-
-    bedrock_request = bedrock_request.interceptor(interceptor);
-
-    WithRawRequest {
-        bedrock_request,
-        get_raw_request: move || {
-            let raw_request = raw_request
-                .lock()
-                .map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Poisoned raw_request mutex for AWS bedrock: {e:?}"),
-                    })
-                })?
-                .clone()
-                .ok_or_else(|| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: "Failed to get serialized AWS Bedrock request".to_string(),
-                    })
-                })?;
-            Ok(raw_request)
-        },
     }
 }
 
@@ -285,28 +137,28 @@ impl InferenceProvider for AWSBedrockProvider {
             }
         }
 
-        let WithRawRequest {
-            bedrock_request,
+        let InterceptorAndRawBody {
+            interceptor,
             get_raw_request,
-        } = attach_interceptor(
-            bedrock_request.customize(),
-            request,
-            model_provider,
-            model_name.to_string(),
-        );
+        } = build_interceptor(request, model_provider, model_name.to_string());
 
         let start_time = Instant::now();
-        let output = bedrock_request.send().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error sending request to AWS Bedrock: {:?}",
-                    DisplayErrorContext(&e)
-                ),
-                raw_request: None,
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
+        let output = bedrock_request
+            .customize()
+            .interceptor(interceptor)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error sending request to AWS Bedrock: {:?}",
+                        DisplayErrorContext(&e)
+                    ),
+                    raw_request: None,
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
 
         let latency = Latency::NonStreaming {
             response_time: start_time.elapsed(),
@@ -405,28 +257,28 @@ impl InferenceProvider for AWSBedrockProvider {
                 bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
             }
         }
-        let WithRawRequest {
-            bedrock_request,
+        let InterceptorAndRawBody {
+            interceptor,
             get_raw_request,
-        } = attach_interceptor(
-            bedrock_request.customize(),
-            request,
-            model_provider,
-            model_name.to_string(),
-        );
+        } = build_interceptor(request, model_provider, model_name.to_string());
 
         let start_time = Instant::now();
-        let stream = bedrock_request.send().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!(
-                    "Error sending request to AWS Bedrock: {}",
-                    DisplayErrorContext(&e)
-                ),
-                raw_request: None,
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
+        let stream = bedrock_request
+            .customize()
+            .interceptor(interceptor)
+            .send()
+            .await
+            .map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error sending request to AWS Bedrock: {}",
+                        DisplayErrorContext(&e)
+                    ),
+                    raw_request: None,
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
 
         let raw_request = get_raw_request()?;
 
@@ -1020,7 +872,7 @@ mod tests {
                 .unwrap();
 
             assert!(logs_contain(
-                "Creating new AWS Bedrock client for region: uk-hogwarts-1"
+                "Creating new AWS config for region: uk-hogwarts-1"
             ));
         }
 
@@ -1031,7 +883,7 @@ mod tests {
                 .unwrap();
 
             assert!(logs_contain(
-                "Creating new AWS Bedrock client for region: uk-hogwarts-1"
+                "Creating new AWS config for region: uk-hogwarts-1"
             ));
         }
 
@@ -1060,7 +912,7 @@ mod tests {
                 .unwrap();
 
             assert!(logs_contain(
-                "Creating new AWS Bedrock client for region: me-shire-2"
+                "Creating new AWS config for region: me-shire-2"
             ));
         }
 
