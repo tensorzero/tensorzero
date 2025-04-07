@@ -40,8 +40,3 @@ Though &mdash; unsurprisingly &mdash; it doesn't outperform DICL (see `recipes/d
 
 1. Set the `OPENAI_API_KEY` and `TENSORZERO_CLICKHOUSE_URL` environment variables.
 2. Run the `mipro.ipynb` Jupyter notebook.
-
-## Running the Example
-
-The notebook will first attempt to solve the NER task using the `extract_entities` TensorZero JSON function.
-Under the hood, the TensorZero Gateway will randomly sample either GPT-4o or GPT-4o Mini each inference.
