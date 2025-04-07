@@ -1,9 +1,9 @@
-# Example: Simple Agentic RAG
+# Example: Simple Agentic RAG — Multi-Hop Question Answering with LLMs
 
 ## Background
 
 We present a simple example of a multi-hop retrieval agent using TensorZero.
-The agent iteratively searches Wikipedia to answer a complex question, and decides when it has gathered enough information to answer the question.
+The agent iteratively searches Wikipedia to gather information, and decides when it has enough context to answer a complex question.
 
 The agent has access to four tools:
 
