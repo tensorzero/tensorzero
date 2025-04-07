@@ -15,4 +15,9 @@ dependencies = [
 members = ["tensorzero-recipes"]
 
 [dependency-groups]
-dev = ["pandas-stubs", "pyright", "pytest-asyncio", "pytest"]
+dev = [
+    "pandas-stubs",
+    "pyright",
+    "pytest-asyncio",
+    "pytest",
+]
