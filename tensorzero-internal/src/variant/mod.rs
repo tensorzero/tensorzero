@@ -935,6 +935,7 @@ mod tests {
                     name: model_name.into(),
                     config: dummy_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -1039,6 +1040,7 @@ mod tests {
                     name: model_name_json.into(),
                     config: dummy_provider_config_json,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -1093,6 +1095,7 @@ mod tests {
                     name: error_model_name.into(),
                     config: error_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         };
@@ -1210,6 +1213,7 @@ mod tests {
                         name: error_model_name.into(),
                         config: error_provider_config,
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
                 (
@@ -1218,6 +1222,7 @@ mod tests {
                         name: model_name.into(),
                         config: dummy_provider_config,
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
             ]),
@@ -1313,6 +1318,7 @@ mod tests {
                     name: "good_provider".into(),
                     config: dummy_provider_config,
                     extra_body: Default::default(),
+                    extra_headers: Default::default(),
                 },
             )]),
         }));
@@ -1480,6 +1486,7 @@ mod tests {
                         name: error_model_name.into(),
                         config: error_provider_config,
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
                 (
@@ -1488,6 +1495,7 @@ mod tests {
                         name: model_name.into(),
                         config: dummy_provider_config,
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 ),
             ]),

@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
@@ -21,12 +21,13 @@ use crate::inference::types::{
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
     OpenAIToolChoice, StreamOptions,
 };
+use super::provider_trait::TensorZeroEventError;
 
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("SGLANG_API_KEY".to_string())
@@ -79,7 +80,6 @@ impl TryFrom<Credential> for SGLangCredentials {
             Credential::Static(key) => Ok(SGLangCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(SGLangCredentials::Dynamic(key_name)),
             Credential::None => Ok(SGLangCredentials::None),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(SGLangCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for SGLang provider".to_string(),
@@ -127,7 +127,7 @@ impl InferenceProvider for SGLangProvider {
                     message: format!("Error serializing SGLang request: {e}"),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -144,6 +144,7 @@ impl InferenceProvider for SGLangProvider {
         }
         let res = request_builder
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
@@ -218,7 +219,7 @@ impl InferenceProvider for SGLangProvider {
                     message: format!("Error serializing SGLang request: {e}"),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -240,6 +241,7 @@ impl InferenceProvider for SGLangProvider {
         }
         let event_source = request_builder
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
@@ -251,7 +253,11 @@ impl InferenceProvider for SGLangProvider {
                 })
             })?;
 
-        let stream = stream_openai(event_source, start_time).peekable();
+        let stream = stream_openai(
+            event_source.map_err(TensorZeroEventError::EventSource),
+            start_time,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 

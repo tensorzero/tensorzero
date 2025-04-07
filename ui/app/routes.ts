@@ -19,14 +19,15 @@ export default [
     "routes/api/datasets/count_dataset_function.route.ts",
   ),
   route(
-    "api/evaluations/search_runs/:eval_name",
-    "routes/api/evaluations/search_runs/$eval_name/route.ts",
+    "api/evaluations/search_runs/:evaluation_name",
+    "routes/api/evaluations/search_runs/$evaluation_name/route.ts",
   ),
   route(
     "api/function/:function_name/feedback_counts",
     "routes/api/function/$function_name/feedback_counts.route.ts",
   ),
   route("api/tensorzero/inference", "routes/api/tensorzero/inference.ts"),
+  route("api/tensorzero/status", "routes/api/tensorzero/status.ts"),
   route("datasets", "routes/datasets/route.tsx"),
   route("datasets/builder", "routes/datasets/builder/route.tsx"),
   route("datasets/:dataset_name", "routes/datasets/$dataset_name/route.tsx"),
@@ -35,10 +36,13 @@ export default [
     "routes/datasets/$dataset_name/datapoint/$id/route.tsx",
   ),
   route("evaluations", "routes/evaluations/route.tsx"),
-  route("evaluations/:eval_name", "routes/evaluations/$eval_name/route.tsx"),
   route(
-    "evaluations/:eval_name/:datapoint_id",
-    "routes/evaluations/$eval_name/$datapoint_id/route.tsx",
+    "evaluations/:evaluation_name",
+    "routes/evaluations/$evaluation_name/route.tsx",
+  ),
+  route(
+    "evaluations/:evaluation_name/:datapoint_id",
+    "routes/evaluations/$evaluation_name/$datapoint_id/route.tsx",
   ),
   route(
     "observability/inferences",

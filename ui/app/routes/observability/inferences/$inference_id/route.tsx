@@ -18,12 +18,12 @@ import {
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./InferenceBasicInfo";
 import Input from "~/components/inference/Input";
-import Output from "./InferenceOutput";
+import Output from "~/components/inference/NewOutput";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { tensorZeroClient } from "~/utils/tensorzero.server";
 import { ParameterCard } from "./InferenceParameters";
 import { TagsTable } from "~/components/utils/TagsTable";
-import { ModelInferencesAccordion } from "./ModelInferencesAccordion";
+import { ModelInferencesTable } from "./ModelInferencesTable";
 import { useState } from "react";
 import { useConfig } from "~/context/config";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
@@ -255,7 +255,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Model Inferences" />
-          <ModelInferencesAccordion modelInferences={model_inferences} />
+          <ModelInferencesTable modelInferences={model_inferences} />
         </SectionLayout>
       </SectionsGroup>
 

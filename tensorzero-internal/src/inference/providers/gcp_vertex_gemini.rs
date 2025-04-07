@@ -34,7 +34,7 @@ use crate::model::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::convert_stream_error;
 
 const PROVIDER_NAME: &str = "GCP Vertex Gemini";
@@ -89,7 +89,6 @@ pub fn default_api_key_location() -> CredentialLocation {
 pub enum GCPVertexCredentials {
     Static(GCPServiceAccountCredentials),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -108,7 +107,6 @@ impl TryFrom<(Credential, &str)> for GCPVertexCredentials {
                 )?,
             )),
             Credential::Dynamic(key_name) => Ok(GCPVertexCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(GCPVertexCredentials::None),
             _ => Err(Error::new(ErrorDetails::GCPCredentials {
                 message: format!("Invalid credential_location for {} provider", model),
@@ -134,7 +132,6 @@ impl GCPVertexCredentials {
                     })
                 })?,
             )),
-            #[cfg(any(test, feature = "e2e_tests"))]
             GCPVertexCredentials::None => Err(Error::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             })),
@@ -283,7 +280,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -297,6 +294,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             .post(&self.request_url)
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
@@ -371,7 +369,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -390,6 +388,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             .post(&self.streaming_request_url)
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
@@ -2143,13 +2142,10 @@ mod tests {
         let creds = GCPVertexCredentials::try_from((generic, "GCPVertexGemini")).unwrap();
         assert!(matches!(creds, GCPVertexCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = GCPVertexCredentials::try_from((generic, "GCPVertexGemini")).unwrap();
-            assert!(matches!(creds, GCPVertexCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = GCPVertexCredentials::try_from((generic, "GCPVertexGemini")).unwrap();
+        assert!(matches!(creds, GCPVertexCredentials::None));
 
         // Test invalid JSON content
         let invalid_json = "invalid json";

@@ -1,6 +1,7 @@
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
+use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -10,7 +11,7 @@ use tracing::instrument;
 
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails};
-use crate::evals::{EvalConfig, UninitializedEvalConfig};
+use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::inference::types::storage::StorageKind;
 use crate::jsonschema_util::JSONSchemaFromPath;
@@ -25,6 +26,8 @@ use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig};
 use std::error::Error as StdError;
 
+scoped_thread_local!(pub(crate) static SKIP_CREDENTIAL_VALIDATION: ());
+
 #[derive(Debug, Default)]
 pub struct Config<'c> {
     pub gateway: GatewayConfig,
@@ -33,7 +36,7 @@ pub struct Config<'c> {
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
-    pub evals: HashMap<String, Arc<EvalConfig>>, // eval name => eval config
+    pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     pub templates: TemplateConfig<'c>,
     pub object_store_info: Option<ObjectStoreInfo>,
 }
@@ -268,6 +271,13 @@ impl std::fmt::Display for MetricConfigLevel {
 
 impl<'c> Config<'c> {
     pub async fn load_and_verify_from_path(config_path: &Path) -> Result<Config<'c>, Error> {
+        Self::load_from_path_optional_verify_credentials(config_path, true).await
+    }
+
+    pub async fn load_from_path_optional_verify_credentials(
+        config_path: &Path,
+        validate_credentials: bool,
+    ) -> Result<Config<'c>, Error> {
         let config_table = match UninitializedConfig::read_toml_config(config_path)? {
             Some(table) => table,
             None => {
@@ -288,10 +298,16 @@ impl<'c> Config<'c> {
                 .into());
             }
         };
-        let config = Self::load_from_toml(config_table, base_path)?;
+        let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
+            SKIP_CREDENTIAL_VALIDATION.set(&(), || Self::load_from_toml(config_table, base_path))?
+        } else {
+            Self::load_from_toml(config_table, base_path)?
+        };
 
-        if let Some(object_store) = &config.object_store_info {
-            object_store.verify().await?;
+        if validate_credentials {
+            if let Some(object_store) = &config.object_store_info {
+                object_store.verify().await?;
+            }
         }
 
         Ok(config)
@@ -335,7 +351,7 @@ impl<'c> Config<'c> {
             functions,
             metrics: uninitialized_config.metrics,
             tools,
-            evals: HashMap::new(),
+            evaluations: HashMap::new(),
             templates,
             object_store_info,
         };
@@ -353,24 +369,26 @@ impl<'c> Config<'c> {
         // Validate the config
         config.validate()?;
 
-        // We add the evals after validation since we will be writing tensorzero:: functions to the functions map
+        // We add the evaluations after validation since we will be writing tensorzero:: functions to the functions map
         // and tensorzero:: metrics to the metrics map
-        let mut evals = HashMap::new();
-        for (name, eval_config) in uninitialized_config.evals {
-            let (eval_config, eval_function_configs, eval_metric_configs) =
-                eval_config.load(&config.functions, &base_path, &name)?;
-            evals.insert(name, Arc::new(eval_config));
-            for (eval_function_name, eval_function_config) in eval_function_configs {
-                if config.functions.contains_key(&eval_function_name) {
+        let mut evaluations = HashMap::new();
+        for (name, evaluation_config) in uninitialized_config.evaluations {
+            let (evaluation_config, evaluation_function_configs, evaluation_metric_configs) =
+                evaluation_config.load(&config.functions, &base_path, &name)?;
+            evaluations.insert(name, Arc::new(EvaluationConfig::Static(evaluation_config)));
+            for (evaluation_function_name, evaluation_function_config) in
+                evaluation_function_configs
+            {
+                if config.functions.contains_key(&evaluation_function_name) {
                     return Err(ErrorDetails::Config {
                         message: format!(
                             "Duplicate evaluator function name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
-                            eval_function_name
+                            evaluation_function_name
                         ),
                     }
                     .into());
                 }
-                for variant in eval_function_config.variants().values() {
+                for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
                         config.templates.add_template(
                             template.path.to_string_lossy().as_ref(),
@@ -378,28 +396,30 @@ impl<'c> Config<'c> {
                         )?;
                     }
                 }
-                eval_function_config.validate(
+                evaluation_function_config.validate(
                     &config.tools,
                     &mut config.models,
                     &config.embedding_models,
                     &config.templates,
-                    &eval_function_name,
+                    &evaluation_function_name,
                 )?;
                 config
                     .functions
-                    .insert(eval_function_name, eval_function_config);
+                    .insert(evaluation_function_name, evaluation_function_config);
             }
-            for (eval_metric_name, eval_metric_config) in eval_metric_configs {
-                if config.metrics.contains_key(&eval_metric_name) {
+            for (evaluation_metric_name, evaluation_metric_config) in evaluation_metric_configs {
+                if config.metrics.contains_key(&evaluation_metric_name) {
                     return Err(ErrorDetails::Config {
-                        message: format!("Duplicate evaluator metric name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.", eval_metric_name),
+                        message: format!("Duplicate evaluator metric name: `{}` already exists. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.", evaluation_metric_name),
                     }
                     .into());
                 }
-                config.metrics.insert(eval_metric_name, eval_metric_config);
+                config
+                    .metrics
+                    .insert(evaluation_metric_name, evaluation_metric_config);
             }
         }
-        config.evals = evals;
+        config.evaluations = evaluations;
 
         Ok(config)
     }
@@ -529,7 +549,7 @@ impl<'c> Config<'c> {
     /// Get all templates from the config
     /// The HashMap returned is a mapping from the path as given in the TOML file
     /// (relative to the directory containing the TOML file) to the file contents.
-    /// The former path is used as the name of the template for retrieval by variants later.
+    /// The former path is used as the name of the template for retrievaluation by variants later.
     pub fn get_templates(&self) -> HashMap<String, String> {
         let mut templates = HashMap::new();
 
@@ -575,7 +595,7 @@ struct UninitializedConfig {
     #[serde(default)]
     pub tools: HashMap<String, UninitializedToolConfig>, // tool name => tool config
     #[serde(default)]
-    pub evals: HashMap<String, UninitializedEvalConfig>, // eval name => eval config
+    pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation config
     pub object_storage: Option<StorageKind>,
 }
 
@@ -593,11 +613,12 @@ impl UninitializedConfig {
                     })
                 })?
                 .parse::<toml::Table>()
-                .map_err(|_| {
+                .map_err(|e| {
                     Error::new(ErrorDetails::Config {
                         message: format!(
-                            "Failed to parse config file as valid TOML: {}",
-                            path.to_string_lossy()
+                            "Failed to parse config file `{}` as valid TOML: {}",
+                            path.to_string_lossy(),
+                            e
                         ),
                     })
                 })?,
@@ -978,10 +999,10 @@ mod tests {
         let provider = embedding_model.providers.get("openai").unwrap();
         assert!(matches!(provider, EmbeddingProviderConfig::OpenAI(_)));
 
-        // Check that the function for the LLM Judge eval is added to the functions table
+        // Check that the function for the LLM Judge evaluation is added to the functions table
         let function = config
             .functions
-            .get("tensorzero::llm_judge::eval1::llm_judge_bool")
+            .get("tensorzero::llm_judge::evaluation1::llm_judge_bool")
             .unwrap();
         match &**function {
             FunctionConfig::Json(json_config) => {
@@ -996,7 +1017,7 @@ mod tests {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
                                 path: PathBuf::from(
-                                    "tensorzero::llm_judge::eval1::llm_judge_bool::system"
+                                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::system"
                                 ),
                                 contents:
                                     "Return True if there is NSFW content in this generation.\n\n"
@@ -1013,25 +1034,25 @@ mod tests {
         // Check that the metric for the LLM Judge evaluator is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::eval_name::eval1::evaluator_name::llm_judge_bool")
+            .get("tensorzero::evaluation_name::evaluation1::evaluator_name::llm_judge_bool")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Boolean);
         assert_eq!(metric.optimize, MetricConfigOptimize::Min);
         assert_eq!(metric.level, MetricConfigLevel::Inference);
 
-        // Check that the metric for the exact match eval is added to the metrics table
+        // Check that the metric for the exact match evaluation is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::eval_name::eval1::evaluator_name::em_evaluator")
+            .get("tensorzero::evaluation_name::evaluation1::evaluator_name::em_evaluator")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Boolean);
         assert_eq!(metric.optimize, MetricConfigOptimize::Max);
         assert_eq!(metric.level, MetricConfigLevel::Inference);
 
-        // Check that the metric for the LLM Judge float eval is added to the metrics table
+        // Check that the metric for the LLM Judge float evaluation is added to the metrics table
         let metric = config
             .metrics
-            .get("tensorzero::eval_name::eval1::evaluator_name::llm_judge_float")
+            .get("tensorzero::evaluation_name::evaluation1::evaluator_name::llm_judge_float")
             .unwrap();
         assert_eq!(metric.r#type, MetricConfigType::Float);
         assert_eq!(metric.optimize, MetricConfigOptimize::Min);
@@ -1205,8 +1226,9 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "Function `generate_draft` not found (referenced in `[evals.eval1]`)"
-                    .to_string()
+                message:
+                    "Function `generate_draft` not found (referenced in `[evaluations.evaluation1]`)"
+                        .to_string()
             }
             .into()
         );
@@ -1668,11 +1690,11 @@ mod tests {
         );
     }
 
-    /// Ensure that the config validation fails when an eval points at a nonexistent function
+    /// Ensure that the config validation fails when an evaluation points at a nonexistent function
     #[test]
-    fn test_config_validate_eval_function_nonexistent() {
+    fn test_config_validate_evaluation_function_nonexistent() {
         let mut config = get_sample_valid_config();
-        config["evals"]["eval1"]["function_name"] = "nonexistent_function".into();
+        config["evaluations"]["evaluation1"]["function_name"] = "nonexistent_function".into();
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
 
@@ -1680,32 +1702,33 @@ mod tests {
             result.unwrap_err(),
             ErrorDetails::Config {
                 message:
-                    "Function `nonexistent_function` not found (referenced in `[evals.eval1]`)"
+                    "Function `nonexistent_function` not found (referenced in `[evaluations.evaluation1]`)"
                         .to_string()
             }
             .into()
         );
     }
 
-    /// Ensure that the config validation fails when an eval name contains `::`
+    /// Ensure that the config validation fails when an evaluation name contains `::`
     #[test]
-    fn test_config_validate_eval_name_contains_double_colon() {
+    fn test_config_validate_evaluation_name_contains_double_colon() {
         let mut config = get_sample_valid_config();
-        let eval1 = config["evals"]["eval1"].clone();
+        let evaluation1 = config["evaluations"]["evaluation1"].clone();
         config
-            .get_mut("evals")
+            .get_mut("evaluations")
             .unwrap()
             .as_table_mut()
             .unwrap()
-            .insert("bad::eval".to_string(), eval1);
+            .insert("bad::evaluation".to_string(), evaluation1);
         let base_path = PathBuf::new();
         let result = Config::load_from_toml(config, base_path);
 
         assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
-                message: "Eval names cannot contain \"::\" (referenced in `[evals.bad::eval]`)"
-                    .to_string()
+                message:
+                    "evaluation names cannot contain \"::\" (referenced in `[evaluations.bad::evaluation]`)"
+                        .to_string()
             }
             .into()
         );
@@ -2047,29 +2070,29 @@ mod tests {
 
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::eval1::llm_judge_bool::system")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::system")
                 .unwrap(),
             "Return True if there is NSFW content in this generation.\n\n".to_string(),
         );
 
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::eval1::llm_judge_float::system")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_float::system")
                 .unwrap(),
             "Return a number between 0 and 1 where 1 is very NSFW and 0 is the least NSFW content.\n\n"
                 .to_string(),
         );
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::eval1::llm_judge_bool::user")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::user")
                 .unwrap(),
-            include_str!("evals/llm_judge_user_template.minijinja").to_string()
+            include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
         );
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::eval1::llm_judge_float::user")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_float::user")
                 .unwrap(),
-            include_str!("evals/llm_judge_user_template.minijinja").to_string()
+            include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
         );
 
         // Check the total number of templates
@@ -2144,6 +2167,30 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         assert!(logs_contain(
             "Config file is empty, so only default functions will be available."
         ))
+    }
+
+    #[tokio::test]
+    async fn test_invalid_toml() {
+        let config_str = r#"
+        [models.my-model]
+        routing = ["dummy"]
+
+        [models.my-model]
+        routing = ["other"]
+        "#;
+
+        let tmpfile = NamedTempFile::new().unwrap();
+        std::fs::write(tmpfile.path(), config_str).unwrap();
+
+        let err = Config::load_and_verify_from_path(tmpfile.path())
+            .await
+            .unwrap_err()
+            .to_string();
+
+        assert!(
+            err.contains("duplicate key `my-model` in table `models`"),
+            "Unexpected error: {err:?}"
+        );
     }
 
     #[test]
@@ -2514,12 +2561,43 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
         let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        Config::load_from_toml(config, base_path.clone()).expect("Failed to construct config");
+
+        SKIP_CREDENTIAL_VALIDATION
+            .set(&(), || Config::load_from_toml(config, base_path))
+            .unwrap();
 
         assert!(!logs_contain("good_variant"));
         assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.test]`"));
         assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.dicl]`"));
         assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.mixture_of_n_variant.fuser]`"));
         assert!(logs_contain("Deprecation Warning: `json_mode` is not specified for `[functions.basic_test.variants.best_of_n_variant.evaluator]`"));
+    }
+
+    #[tokio::test]
+    async fn test_config_load_optional_credentials_validation() {
+        let config_str = r#"
+        [models."my-model"]
+        routing = ["openai"]
+
+        [models.my-model.providers.openai]
+        type = "openai"
+        model_name = "gpt-4o-mini-2024-07-18"
+        api_key_location = "path::/not/a/path"
+        "#;
+
+        let tmpfile = NamedTempFile::new().unwrap();
+        std::fs::write(tmpfile.path(), config_str).unwrap();
+
+        let res = Config::load_from_path_optional_verify_credentials(tmpfile.path(), true).await;
+        if cfg!(feature = "e2e_tests") {
+            assert!(res.is_ok());
+        } else {
+            assert_eq!(res.unwrap_err().to_string(), "models.my-model.providers.openai: API key missing for provider: openai: Failed to read credentials file - No such file or directory (os error 2)");
+        }
+
+        // Should not fail since validation is disabled
+        Config::load_from_path_optional_verify_credentials(tmpfile.path(), false)
+            .await
+            .expect("Failed to load config");
     }
 }

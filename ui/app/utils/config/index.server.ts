@@ -11,8 +11,8 @@ import { z } from "zod";
 import { EmbeddingModelConfigSchema, ModelConfigSchema } from "./models";
 import { ToolConfigSchema } from "./tool";
 import type { FunctionConfig } from "./function";
-import type { EvalConfig } from "./evals";
-import { RawEvalConfigSchema } from "./evals.server";
+import type { EvaluationConfig } from "./evaluations";
+import { RawEvaluationConfigSchema } from "./evaluations.server";
 
 const DEFAULT_CONFIG_PATH = "config/tensorzero.toml";
 const ENV_CONFIG_PATH = process.env.TENSORZERO_UI_CONFIG_PATH;
@@ -76,7 +76,7 @@ export async function loadConfig(config_path?: string): Promise<Config> {
         functions: {},
         metrics: {},
         tools: {},
-        evals: {},
+        evaluations: {},
       };
     }
   }
@@ -141,7 +141,10 @@ export const RawConfig = z
       .default({}),
     metrics: z.record(z.string(), MetricConfigSchema).optional().default({}),
     tools: z.record(z.string(), ToolConfigSchema).optional().default({}),
-    evals: z.record(z.string(), RawEvalConfigSchema).optional().default({}),
+    evaluations: z
+      .record(z.string(), RawEvaluationConfigSchema)
+      .optional()
+      .default({}),
   })
   .transform((raw) => {
     const config = { ...raw };
@@ -150,11 +153,13 @@ export const RawConfig = z
       load: async function (config_path: string): Promise<Config> {
         const loadedMetrics: Record<string, MetricConfig> = {};
         const loadedFunctions: Record<string, FunctionConfig> = {};
-        const loadedEvals: Record<string, EvalConfig> = {};
-        for (const [key, evalItem] of Object.entries(config.evals)) {
-          const { evalConfig, functionConfigs, metricConfigs } =
-            await evalItem.load(config_path, key, config.functions);
-          loadedEvals[key] = evalConfig;
+        const loadedEvaluations: Record<string, EvaluationConfig> = {};
+        for (const [key, evaluationItem] of Object.entries(
+          config.evaluations,
+        )) {
+          const { EvaluationConfig, functionConfigs, metricConfigs } =
+            await evaluationItem.load(config_path, key, config.functions);
+          loadedEvaluations[key] = EvaluationConfig;
           for (const [funcKey, funcConfig] of Object.entries(functionConfigs)) {
             loadedFunctions[funcKey] = funcConfig;
           }
@@ -177,7 +182,7 @@ export const RawConfig = z
           functions: loadedFunctions,
           metrics: loadedMetrics,
           tools: config.tools,
-          evals: loadedEvals,
+          evaluations: loadedEvaluations,
         };
       },
     };

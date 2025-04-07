@@ -31,9 +31,9 @@ export default function FunctionInferenceTable({
           <TableRow className="hover:bg-bg-primary">
             <TableCell
               colSpan={4}
-              className="px-3 py-8 text-center text-fg-muted"
+              className="text-fg-muted px-3 py-8 text-center"
             >
-              No inferences found
+              No inferences found.
             </TableCell>
           </TableRow>
         ) : (
@@ -44,7 +44,7 @@ export default function FunctionInferenceTable({
                   to={`/observability/inferences/${inference.id}`}
                   className="block no-underline"
                 >
-                  <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                     {inference.id}
                   </code>
                 </Link>
@@ -54,7 +54,7 @@ export default function FunctionInferenceTable({
                   to={`/observability/episodes/${inference.episode_id}`}
                   className="block no-underline"
                 >
-                  <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                     {inference.episode_id}
                   </code>
                 </Link>
@@ -64,7 +64,7 @@ export default function FunctionInferenceTable({
                   variantName={inference.variant_name}
                   functionName={inference.function_name}
                 >
-                  <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                     {inference.variant_name}
                   </code>
                 </VariantLink>

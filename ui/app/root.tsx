@@ -15,7 +15,7 @@ import { getConfig } from "./utils/config/index.server";
 import { AppSidebar } from "./components/layout/app.sidebar";
 import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
-import { startPeriodicCleanup } from "./utils/evals.server";
+import { startPeriodicCleanup } from "./utils/evaluations.server";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -36,7 +36,7 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export async function loader() {
-  // Initialize eval cleanup when the app loads
+  // Initialize evaluation cleanup when the app loads
   startPeriodicCleanup();
   return await getConfig();
 }

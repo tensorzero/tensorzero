@@ -22,7 +22,7 @@ workspace = true
 async-stream = { workspace = true }
 async-trait = "0.1.86"
 aws-config = { version = "1.6", features = ["behavior-version-latest"] }
-aws-sdk-bedrockruntime = { version = "1.77.0", default-features = false, features = [
+aws-sdk-bedrockruntime = { version = "1.80.0", default-features = false, features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
@@ -34,23 +34,23 @@ aws-smithy-types = { version = "1.3.0", features = [
 aws-types = "1.3.6"
 axum = { workspace = true }
 backon = { version = "1.4.1", features = ["tokio-sleep"] }
-blake3 = "1.7.0"
+blake3 = "1.8.1"
 bytes = "1.6.1"
 chrono = { version = "0.4.40", features = ["serde"] }
 derive_builder = "0.20.0"
 futures = { workspace = true }
 futures-core = "0.3.30"
 hex = "0.4.3"
-image = { version = "0.25.5", default-features = false }
+image = { version = "0.25.6", default-features = false }
 itertools = "0.14.0"
-jsonschema = "0.29.0"
+jsonschema = "0.29.1"
 jsonwebtoken = "9.3.1"
-lazy_static = { version = "1.5.0" }
+lazy_static = { workspace = true }
 metrics = "0.24.1"
 metrics-exporter-prometheus = { version = "0.16.2", features = [
     "http-listener",
 ], default-features = false }
-minijinja = { version = "2.8.0", features = [
+minijinja = { version = "2.9.0", features = [
     "loader",
     "debug",
     "json",
@@ -63,7 +63,7 @@ reqwest = { workspace = true }
 reqwest-eventsource = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
-serde-untagged = "0.1.7"
+serde-untagged = { workspace = true}
 serde_json = { workspace = true }
 serde_path_to_error = "0.1.17"
 sha2 = "0.10.8"
@@ -80,8 +80,16 @@ tracing-subscriber = { version = "0.3.18", features = [
 ] }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
-tensorzero-derive = { path = "../tensorzero-derive"}
+tensorzero-derive = { path = "../tensorzero-derive" }
 clap = { workspace = true }
+aws-sdk-sagemakerruntime = { version = "1.65.0", features = [
+    "behavior-version-latest",
+    "rt-tokio",
+    "default-https-client",
+], default-features = false }
+aws-smithy-runtime-api = "1.7.4"
+eventsource-stream = "0.2.3"
+scoped-tls = "1.0.1"
 
 
 [dev-dependencies]
@@ -90,7 +98,7 @@ tracing-test = { workspace = true }
 tensorzero = { path = "../clients/rust" }
 paste = "1.0.15"
 base64 = "0.22.1"
-aws-sdk-s3 = { version = "1.79.0", default-features = false, features = [
+aws-sdk-s3 = { version = "1.82.0", default-features = false, features = [
     "behavior-version-latest",
     "sigv4a",
     "rt-tokio",

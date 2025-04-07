@@ -133,23 +133,6 @@ jobs:
           uvx ruff@0.9.0 check --output-format=github --extend-select I .
           uvx ruff@0.9.0 format --check .
 
-      - name: "Python: TensorZero Client: Install dependencies"
-        working-directory: clients/python-deprecated
-        run: |
-          uv venv
-          uv sync
-
-      - name: "Python: TensorZero Client: pyright"
-        working-directory: clients/python-deprecated
-        run: |
-          uv pip install pyright==1.1.394
-          uv run pyright
-
-      - name: "Python: TensorZero Client: pytest"
-        working-directory: clients/python-deprecated
-        run: |
-          uv run pytest
-
       - name: "Python: PyO3 Client: Install dependencies"
         working-directory: clients/python-pyo3
         run: |
@@ -287,14 +270,14 @@ jobs:
       - name: Start services for ui tests
         working-directory: ui
         run: |
-          echo "OPENAI_API_KEY=not_used" >> .env
-          echo "FIREWORKS_API_KEY=not_used" >> .env
-          echo "FIREWORKS_ACCOUNT_ID=not_used" >> .env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> .env
-          echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> .env
-          echo "AWS_REGION=us-east-1" >> .env
-          echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
-          echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
+          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
+          echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
+          echo "AWS_REGION=us-east-1" >> fixtures/.env
+          echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
+          echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml --project-name tensorzero-ui up -d --build --force-recreate
 
       - name: Run ui tests
@@ -316,6 +299,11 @@ jobs:
         run: pnpm test-e2e
         continue-on-error: true
         id: e2e_tests
+
+      - name: Print ui tests logs
+        if: always()
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs
 
       - name: Upload Playwright artifacts
         if: steps.e2e_tests.outcome == 'failure'

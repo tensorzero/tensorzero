@@ -7,7 +7,7 @@ members = [
     "clients/rust",
     "clients/python-pyo3",
     "provider-proxy",
-    "evals",
+    "evaluations",
     "tensorzero-derive",
 ]
 resolver = "2"
@@ -28,15 +28,17 @@ toml = "0.8.15"
 reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 tokio-stream = "0.1.15"
-tokio = { version = "1.38.1", features = ["full"] }
+tokio = { version = "1.44.2", features = ["full"] }
 tracing = { version = "0.1.40", features = ["log"] }
-pyo3 = { version = "0.24", features = ["experimental-async", "abi3-py39"] }
+pyo3 = { version = "0.24.1", features = ["experimental-async", "abi3-py39"] }
 axum = { version = "0.8", features = ["macros"] }
 anyhow = "1.0.97"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.32", features = ["derive"] }
+clap = { version = "4.5.35", features = ["derive"] }
 futures = "0.3.30"
+lazy_static = { version = "1.5.0" }
 url = "2.5.4"
+serde-untagged = "0.1.7"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

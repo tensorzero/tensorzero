@@ -7,7 +7,7 @@ use async_trait::async_trait;
 
 /// This migration is used to set up the ClickHouse database for the datasets feature.
 /// It creates two tables: `ChatInferenceDataset` and `JsonInferenceDataset`
-/// These tables store the information required to do things like run evals,
+/// These tables store the information required to do things like run evaluations,
 /// implement dynamic in-context learning, and run curated SFT jobs.
 /// We anticipate unpredictable future uses for datasets as well.
 pub struct Migration0012<'a> {
