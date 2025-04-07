@@ -538,6 +538,7 @@ mod tests {
                 tags: None,
                 auxiliary: String::new(),
                 is_deleted: false,
+                source_inference_id: None,
             }),
         )
         .unwrap()
@@ -603,6 +604,7 @@ mod tests {
                 tags: None,
                 auxiliary: String::new(),
                 is_deleted: false,
+                source_inference_id: None,
             }),
         )
         .unwrap()
@@ -827,6 +829,7 @@ mod tests {
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
+            source_inference_id: None,
         });
         let result = handle_reference_output(&config, &datapoint).unwrap();
         assert_eq!(result, None);
@@ -855,6 +858,7 @@ mod tests {
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
+            source_inference_id: None,
         });
         let err = handle_reference_output(&config, &datapoint).unwrap_err();
         assert_eq!(
@@ -879,6 +883,7 @@ mod tests {
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
+            source_inference_id: None,
         });
         let result = handle_reference_output(&config, &datapoint)
             .unwrap()
@@ -903,6 +908,7 @@ mod tests {
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
+            source_inference_id: None,
         });
         let result = handle_reference_output(&config, &datapoint)
             .unwrap()
@@ -1003,6 +1009,7 @@ mod tests {
                 tags: None,
                 auxiliary: String::new(),
                 is_deleted: false,
+                source_inference_id: None,
             }),
         )
         .unwrap()
@@ -1114,6 +1121,7 @@ mod tests {
                 tags: None,
                 auxiliary: String::new(),
                 is_deleted: false,
+                source_inference_id: None,
             }),
         )
         .unwrap()
