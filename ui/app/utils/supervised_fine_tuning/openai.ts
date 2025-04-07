@@ -20,8 +20,9 @@ import { splitValidationData, type SFTJobStatus } from "./common";
 import { render_message } from "./rendering";
 import { SFTJob } from "./common";
 import { validateMessage, analyzeDataset } from "./validation";
-import { getModelTokenLimit } from "./openAITokenCounter";
+import { getEncodingForModel, getModelTokenLimit } from "./openAITokenCounter";
 import type { OpenAIMessage, OpenAIRole } from "./types";
+import type { Tiktoken } from "tiktoken";
 
 export const client = process.env.OPENAI_API_KEY
   ? new OpenAI({
@@ -307,6 +308,7 @@ export function content_block_to_openai_message(
 function validateAndConvertMessages(
   inferences: ParsedInferenceExample[],
   modelName: string,
+  enc: Tiktoken,
   templateEnv: JsExposedEnv,
   type: "training" | "validation",
 ): OpenAIMessage[][] {
@@ -315,7 +317,7 @@ function validateAndConvertMessages(
       inference,
       templateEnv,
     );
-    const validation = validateMessage(messages, modelName);
+    const validation = validateMessage(messages, modelName, enc);
 
     if (!validation.isValid) {
       const errors = [];
@@ -377,6 +379,7 @@ export async function start_sft_openai(
   templateEnv: JsExposedEnv,
   formData: SFTFormValues,
 ) {
+  const enc = getEncodingForModel(modelName);
   const { trainInferences, valInferences } = splitValidationData(
     inferences,
     validationSplitPercent,
@@ -396,7 +399,7 @@ export async function start_sft_openai(
   });
 
   // Analyze dataset for model improvement insights
-  const analysis = analyzeDataset(trainMessagesForAnalysis, modelName);
+  const analysis = analyzeDataset(trainMessagesForAnalysis, modelName, enc);
   const tokenLimit = getModelTokenLimit(modelName);
 
   const analysisData: AnalysisData = {
@@ -418,12 +421,14 @@ export async function start_sft_openai(
   const trainMessages = validateAndConvertMessages(
     trainInferences,
     modelName,
+    enc,
     templateEnv,
     "training",
   );
   const valMessages = validateAndConvertMessages(
     valInferences,
     modelName,
+    enc,
     templateEnv,
     "validation",
   );
@@ -441,6 +446,7 @@ export async function start_sft_openai(
   );
 
   const jobId = job.id;
+  enc.free();
   return new OpenAISFTJob({
     jobId: jobId,
     status: "created",
