@@ -18,6 +18,7 @@ use url::Url;
 
 mod client_inference_params;
 mod client_input;
+pub mod input_handling;
 
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
 pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageContent};
@@ -28,6 +29,9 @@ pub use tensorzero_internal::endpoints::feedback::Params as FeedbackParams;
 pub use tensorzero_internal::endpoints::inference::{
     InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
 };
+pub use tensorzero_internal::endpoints::object_storage::ObjectResponse;
+pub use tensorzero_internal::inference::types::storage::{StorageKind, StoragePath};
+pub use tensorzero_internal::inference::types::Image;
 pub use tensorzero_internal::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role,
 };
@@ -430,6 +434,55 @@ impl Client {
                         &gateway.state.http_client,
                         gateway.state.clickhouse_connection_info.clone(),
                         params.try_into().map_err(err_to_http)?,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
+            }
+        }
+    }
+
+    pub async fn get_object(
+        &self,
+        storage_path: StoragePath,
+    ) -> Result<ObjectResponse, TensorZeroError> {
+        match &self.mode {
+            ClientMode::HTTPGateway(client) => {
+                let url = client
+                    .base_url
+                    .join("internal/object_storage")
+                    .map_err(|e| TensorZeroError::Other {
+                        source: tensorzero_internal::error::Error::new(
+                            ErrorDetails::InvalidBaseUrl {
+                                message: format!(
+                                    "Failed to join base URL with /internal/object_storage endpoint: {}",
+                                    e
+                                ),
+                            },
+                        )
+                        .into(),
+                    })?;
+                let storage_path_json =
+                    serde_json::to_string(&storage_path).map_err(|e| TensorZeroError::Other {
+                        source: tensorzero_internal::error::Error::new(
+                            ErrorDetails::Serialization {
+                                message: format!("Failed to serialize storage path: {}", e),
+                            },
+                        )
+                        .into(),
+                    })?;
+                let builder = client
+                    .http_client
+                    .get(url)
+                    .query(&[("storage_path", storage_path_json)]);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_internal::endpoints::object_storage::get_object(
+                        &gateway.state.config,
+                        storage_path,
                     )
                     .await
                     .map_err(err_to_http)

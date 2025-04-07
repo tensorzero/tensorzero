@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use serde_json::Value;
-use tensorzero::{FeedbackParams, InferenceResponse};
+use tensorzero::{ClientInput, FeedbackParams, InferenceResponse};
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{
     get_evaluator_metric_name, EvaluationConfig, EvaluatorConfig,
@@ -29,6 +29,7 @@ pub type EvaluationResult = HashMap<String, Result<Option<Value>>>;
 pub(crate) async fn evaluate_inference(
     inference_response: Arc<InferenceResponse>,
     datapoint: Arc<Datapoint>,
+    input: Arc<ClientInput>,
     evaluation_config: Arc<EvaluationConfig>,
     evaluation_name: Arc<String>,
     tensorzero_client: Arc<ThrottledTensorZeroClient>,
@@ -42,6 +43,7 @@ pub(crate) async fn evaluate_inference(
                 let evaluation_config = evaluation_config.clone();
                 let evaluator_name = evaluator_name.clone();
                 let datapoint = datapoint.clone();
+                let input = input.clone();
                 let evaluation_name = evaluation_name.clone();
                 let tensorzero_client = tensorzero_client.clone();
                 let evaluator_name_clone = evaluator_name.clone();
@@ -54,6 +56,7 @@ pub(crate) async fn evaluate_inference(
                     &datapoint,
                     &evaluation_name,
                     evaluation_run_id,
+                    &input,
                 )
                 .await;
 
@@ -126,6 +129,7 @@ pub(crate) async fn evaluate_inference(
 /// - Err(e): The evaluator failed to run due to some error (like the LLM Judge failed to infer).
 ///
 /// NOTE: Each evaluator we implement in the match statement below should follow this contract.
+#[allow(clippy::too_many_arguments)]
 async fn run_evaluator(
     evaluation_config: &EvaluationConfig,
     evaluator_name: String,
@@ -134,6 +138,7 @@ async fn run_evaluator(
     datapoint: &Datapoint,
     evaluation_name: &str,
     evaluation_run_id: Uuid,
+    input: &ClientInput,
 ) -> Result<EvaluatorResult> {
     let EvaluationConfig::Static(static_evaluation_config) = evaluation_config;
     let evaluator_config = match static_evaluation_config.evaluators.get(&evaluator_name) {
@@ -155,6 +160,7 @@ async fn run_evaluator(
                 evaluation_name,
                 &evaluator_name,
                 evaluation_run_id,
+                input,
             )
             .await?,
         ),
