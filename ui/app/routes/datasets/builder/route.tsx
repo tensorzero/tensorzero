@@ -3,6 +3,7 @@ import { useLoaderData } from "react-router";
 import { DatasetBuilderForm } from "./DatasetBuilderForm";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import {
+  countRowsForDataset,
   getDatasetCounts,
   insertRowsForDataset,
 } from "~/utils/clickhouse/datasets.server";
@@ -40,10 +41,14 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     const queryParams = serializedFormDataToDatasetQueryParams(jsonData);
 
-    const writtenRows = await insertRowsForDataset(queryParams);
+    const [writtenRows, totalRows] = await Promise.all([
+      insertRowsForDataset(queryParams),
+      countRowsForDataset(queryParams),
+    ]);
+    const skippedRows = totalRows - writtenRows;
 
     return redirect(
-      `/datasets/${queryParams.dataset_name}?rowsAdded=${writtenRows}`,
+      `/datasets/${queryParams.dataset_name}?rowsAdded=${writtenRows}&rowsSkipped=${skippedRows}`,
     );
   } catch (error) {
     console.error("Error creating dataset:", error);

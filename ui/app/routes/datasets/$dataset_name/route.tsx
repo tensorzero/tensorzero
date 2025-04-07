@@ -23,7 +23,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const pageSize = Number(url.searchParams.get("pageSize")) || 15;
   const offset = Number(url.searchParams.get("offset")) || 0;
   const rowsAddedParam = url.searchParams.get("rowsAdded");
+  const rowsSkippedParam = url.searchParams.get("rowsSkipped");
   const rowsAdded = rowsAddedParam !== null ? Number(rowsAddedParam) : null;
+  const rowsSkipped =
+    rowsSkippedParam !== null ? Number(rowsSkippedParam) : null;
 
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
@@ -39,13 +42,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!count_info) {
     throw data("Dataset not found", { status: 404 });
   }
-  return { rows, count_info, pageSize, offset, rowsAdded };
+  return { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped };
 }
 
 export default function DatasetDetailPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { rows, count_info, pageSize, offset, rowsAdded } = loaderData;
+  const { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped } =
+    loaderData;
   const { toast } = useToast();
 
   // Use useEffect to show toast only after component mounts
@@ -53,7 +57,7 @@ export default function DatasetDetailPage({
     if (rowsAdded !== null) {
       toast({
         title: "Dataset Updated",
-        description: `Added ${rowsAdded} rows to the dataset.`,
+        description: `Added ${rowsAdded} rows to the dataset. Skipped ${rowsSkipped} duplicate rows.`,
       });
     }
   }, [rowsAdded, toast]);
