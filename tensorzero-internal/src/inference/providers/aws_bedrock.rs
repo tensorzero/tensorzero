@@ -872,7 +872,7 @@ mod tests {
                 .unwrap();
 
             assert!(logs_contain(
-                "Creating new AWS client for region: uk-hogwarts-1"
+                "Creating new AWS config for region: uk-hogwarts-1"
             ));
         }
 
@@ -883,7 +883,7 @@ mod tests {
                 .unwrap();
 
             assert!(logs_contain(
-                "Creating new AWS client for region: uk-hogwarts-1"
+                "Creating new AWS config for region: uk-hogwarts-1"
             ));
         }
 
