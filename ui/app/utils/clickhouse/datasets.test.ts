@@ -280,7 +280,7 @@ describe("getDatasetCounts", () => {
 describe("getNumberOfDatasets", () => {
   test("returns the correct number of datasets", async () => {
     const count = await getNumberOfDatasets();
-    expect(count).toBe(2);
+    expect(count).toBe(3);
   });
 });
 
