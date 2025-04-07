@@ -133,23 +133,6 @@ jobs:
           uvx ruff@0.9.0 check --output-format=github --extend-select I .
           uvx ruff@0.9.0 format --check .
 
-      - name: "Python: TensorZero Client: Install dependencies"
-        working-directory: clients/python-deprecated
-        run: |
-          uv venv
-          uv sync
-
-      - name: "Python: TensorZero Client: pyright"
-        working-directory: clients/python-deprecated
-        run: |
-          uv pip install pyright==1.1.394
-          uv run pyright
-
-      - name: "Python: TensorZero Client: pytest"
-        working-directory: clients/python-deprecated
-        run: |
-          uv run pytest
-
       - name: "Python: PyO3 Client: Install dependencies"
         working-directory: clients/python-pyo3
         run: |

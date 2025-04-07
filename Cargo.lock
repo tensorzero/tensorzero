@@ -324,6 +324,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-sagemakerruntime"
+version = "1.65.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0848ca0aaf9e770d11b712069b675ab25603fe9ffc1948e5a091ea77d3387c24"
+dependencies = [
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-eventstream",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand",
+ "http 0.2.12",
+ "once_cell",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sdk-sso"
 version = "1.64.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3785,6 +3809,8 @@ dependencies = [
  "aws-credential-types",
  "aws-sdk-bedrockruntime",
  "aws-sdk-s3",
+ "aws-sdk-sagemakerruntime",
+ "aws-smithy-runtime-api",
  "aws-smithy-types",
  "aws-types",
  "axum",
@@ -3795,6 +3821,7 @@ dependencies = [
  "chrono",
  "clap",
  "derive_builder",
+ "eventsource-stream",
  "futures",
  "futures-core",
  "hex",

@@ -10,7 +10,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
@@ -23,7 +23,7 @@ use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
 };
-use super::provider_trait::InferenceProvider;
+use super::provider_trait::{InferenceProvider, TensorZeroEventError};
 
 lazy_static! {
     static ref HYPERBOLIC_DEFAULT_BASE_URL: Url = {
@@ -255,7 +255,11 @@ impl InferenceProvider for HyperbolicProvider {
                 })
             })?;
 
-        let stream = stream_openai(event_source, start_time).peekable();
+        let stream = stream_openai(
+            event_source.map_err(TensorZeroEventError::EventSource),
+            start_time,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 
