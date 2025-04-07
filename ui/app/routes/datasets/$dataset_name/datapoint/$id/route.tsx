@@ -93,6 +93,8 @@ export async function action({ request }: ActionFunctionArgs) {
     );
 
     try {
+      // For future reference:
+      // These two calls would be a transaction but ClickHouse doesn't support
       await staleDatapoint(
         parsedFormData.dataset_name,
         parsedFormData.id,
