@@ -27,7 +27,7 @@ async def get_instructions(
     if example_schema:
         system_args["example_schema"] = example_schema
 
-    inputs = InferenceInput(system=system_args, messages=[])  # type: ignore[reportArgumentType]
+    inputs = InferenceInput(system=system_args, messages=[])
 
     try:
         async with semaphore:
@@ -75,12 +75,11 @@ async def judge_answer(
 ) -> Optional[Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]]:
     try:
         async with semaphore:
-            system_args = {
-                "task_description": task_description,
-                "metric_properties": metric_properties,
-            }
             inputs = InferenceInput(
-                system=system_args,  # type: ignore[reportArgumentType]
+                system={
+                    "task_description": task_description,
+                    "metric_properties": metric_properties,
+                },
                 messages=[
                     {
                         "role": "user",

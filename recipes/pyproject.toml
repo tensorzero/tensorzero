@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [tool.uv.workspace]
-members = ["tensorzero-recipes"]
+members = ["tensorzero-recipes", "mipro"]
 
 [dependency-groups]
 dev = [
