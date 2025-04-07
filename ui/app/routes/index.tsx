@@ -61,7 +61,7 @@ interface FooterLinkProps {
 
 function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
   return (
-    <Link to={source} className="group flex w-fit items-center" target="_blank" rel="noopener noreferrer">
+    <Link to={source} className="group flex w-fit items-center" rel="noopener noreferrer" target="_blank">
       <Icon className="text-fg-muted group-hover:text-fg-secondary mr-2 h-4 w-4 transition-colors" />
       <span className="text-fg-secondary group-hover:text-fg-primary transition-colors">
         {children}
