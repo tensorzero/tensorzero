@@ -38,3 +38,36 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
+
+// This test depends on model inference cache hits (within ClickHouse)
+// If it starts failing, you may need to regenerate the model inference cache
+test("push the new run button, launch an image evaluation", async ({
+  page,
+}) => {
+  await page.goto("/evaluations");
+  await page.waitForTimeout(500);
+  await page.getByText("New Run").click();
+  await page.waitForTimeout(500);
+  await page.getByText("Select an evaluation").click();
+  await page.waitForTimeout(500);
+  await page.getByRole("option", { name: "images" }).click();
+  await page.waitForTimeout(500);
+  await page.getByText("Select a dataset").click();
+  await page.waitForTimeout(500);
+  await page.getByRole("option", { name: "baz" }).click();
+  await page.waitForTimeout(500);
+  await page.getByText("Select a variant").click();
+  await page.waitForTimeout(500);
+  await page.getByRole("option", { name: "honest_answer" }).click();
+  await page.getByRole("button", { name: "Launch" }).click();
+  await page.waitForTimeout(5000);
+
+  await expect(
+    page.getByText("Select evaluation runs to compare..."),
+  ).toBeVisible();
+  await expect(page.getByText("matches_reference")).toBeVisible();
+  await expect(page.getByText("n=", { exact: false }).first()).toBeVisible();
+
+  // Assert that "error" is not in the page
+  await expect(page.getByText("error", { exact: false })).not.toBeVisible();
+});

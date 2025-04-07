@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
@@ -27,6 +27,7 @@ use super::openai::{
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
     OpenAIToolChoice, StreamOptions,
 };
+use super::provider_trait::TensorZeroEventError;
 
 fn default_api_key_location() -> CredentialLocation {
     CredentialLocation::Env("SGLANG_API_KEY".to_string())
@@ -252,7 +253,11 @@ impl InferenceProvider for SGLangProvider {
                 })
             })?;
 
-        let stream = stream_openai(event_source, start_time).peekable();
+        let stream = stream_openai(
+            event_source.map_err(TensorZeroEventError::EventSource),
+            start_time,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 

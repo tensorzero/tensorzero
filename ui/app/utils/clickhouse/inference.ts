@@ -2,6 +2,7 @@ import z from "zod";
 import {
   type ContentBlockOutput,
   type JsonInferenceOutput,
+  modelInferenceInputMessageSchema,
   resolvedInputMessageSchema,
   resolvedInputSchema,
   type TableBounds,
@@ -13,12 +14,11 @@ import {
   getInferenceTableName,
   inputSchema,
   jsonInferenceOutputSchema,
-  requestMessageSchema,
 } from "./common";
 import { data } from "react-router";
 import type { FunctionConfig } from "../config/function";
 import { clickhouseClient } from "./client.server";
-import { resolveInput, resolveMessages } from "../resolve.server";
+import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
 
 export const inferenceByIdRowSchema = z
   .object({
@@ -735,9 +735,9 @@ async function parseModelInferenceRow(
   row: ModelInferenceRow,
 ): Promise<ParsedModelInferenceRow> {
   const parsedMessages = z
-    .array(requestMessageSchema)
+    .array(modelInferenceInputMessageSchema)
     .parse(JSON.parse(row.input_messages));
-  const resolvedMessages = await resolveMessages(parsedMessages);
+  const resolvedMessages = await resolveModelInferenceMessages(parsedMessages);
   return {
     ...row,
     input_messages: resolvedMessages,
