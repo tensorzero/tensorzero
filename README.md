@@ -388,6 +388,11 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > We demonstrate techniques like fine-tuning and dynamic in-context learning (DICL).
 > In the end, a optimized GPT-4o Mini model outperforms GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.
 
+> **[Agentic RAG: Multi-Hop Question Answering with LLMs](https://github.com/tensorzero/tensorzero/tree/main/examples/rag-retrieval-augmented-generation/simple-agentic-rag/)**
+>
+> This example shows how to build a multi-hop retrieval agent using TensorZero.
+> The agent iteratively searches Wikipedia to answer a complex question, and decides when it has gathered enough information to answer the question.
+
 > **[Writing Haikus to Satisfy a Judge with Hidden Preferences](https://github.com/tensorzero/tensorzero/tree/main/examples/haiku-hidden-preferences)**
 >
 > This example fine-tunes GPT-4o Mini to generate haikus tailored to a specific taste.
