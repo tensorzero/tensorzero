@@ -18,7 +18,11 @@ use crate::{
     inference::types::extra_body::{ExtraBodyConfig, ExtraHeadersConfig},
     jsonschema_util::JSONSchemaFromPath,
     tool::create_implicit_tool_call_config,
-    variant::{chat_completion::ChatCompletionConfig, JsonMode, RetryConfig, VariantConfig},
+    variant::best_of_n_sampling::EvaluatorConfig as OnlineEvaluatorConfig,
+    variant::{
+        best_of_n_sampling::BestOfNSamplingConfig, chat_completion::ChatCompletionConfig, JsonMode,
+        RetryConfig, VariantConfig,
+    },
 };
 
 pub const LLM_JUDGE_USER_SCHEMA_TEXT: &str = include_str!("llm_judge_user_schema.json");
@@ -304,6 +308,7 @@ impl UninitializedEvaluatorConfig {
                                 evaluation_name,
                                 evaluator_name,
                                 &params.input_format,
+                                &name,
                             )
                             .map(|v| (name, v))
                     })
@@ -397,30 +402,70 @@ impl UninitializedEvaluatorConfig {
 #[derive(Debug, TensorZeroDeserialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-pub enum UninitializedLLMJudgeVariantConfig {
+enum UninitializedLLMJudgeVariantConfig {
     ChatCompletion(UninitializedLLMJudgeChatCompletionVariantConfig),
+    BestOfNSampling(UninitializedLLMJudgeBestOfNVariantConfig),
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct UninitializedLLMJudgeChatCompletionVariantConfig {
+struct UninitializedLLMJudgeChatCompletionVariantConfig {
     #[serde(default)]
-    pub active: Option<bool>,
-    pub model: Arc<str>,
-    pub system_instructions: PathBuf,
-    pub temperature: Option<f32>,
-    pub top_p: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub presence_penalty: Option<f32>,
-    pub frequency_penalty: Option<f32>,
-    pub seed: Option<u32>,
-    pub json_mode: JsonMode, // This is a JSON function
+    active: Option<bool>,
+    model: Arc<str>,
+    system_instructions: PathBuf,
+    temperature: Option<f32>,
+    top_p: Option<f32>,
+    max_tokens: Option<u32>,
+    presence_penalty: Option<f32>,
+    frequency_penalty: Option<f32>,
+    seed: Option<u32>,
+    json_mode: JsonMode, // This is a JSON function
     #[serde(default)]
-    pub retries: RetryConfig,
+    retries: RetryConfig,
     #[serde(default)]
-    pub extra_body: Option<ExtraBodyConfig>,
+    extra_body: Option<ExtraBodyConfig>,
     #[serde(default)]
-    pub extra_headers: Option<ExtraHeadersConfig>,
+    extra_headers: Option<ExtraHeadersConfig>,
+}
+
+fn default_timeout() -> f64 {
+    300.0
+}
+
+#[derive(Debug, Deserialize)]
+struct UninitializedLLMJudgeBestOfNVariantConfig {
+    #[serde(default)]
+    active: Option<bool>,
+    #[serde(default = "default_timeout")]
+    timeout_s: f64,
+    #[serde(default)]
+    candidates: Vec<String>,
+    evaluator: UninitializedLLMJudgeChatCompletionVariantConfig,
+}
+
+fn get_template_path(
+    evaluation_name: &str,
+    evaluator_name: &str,
+    variant_name: &str,
+    template_name: &str,
+) -> PathBuf {
+    PathBuf::from(format!(
+        "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::{variant_name}::{template_name}"
+    ))
+}
+
+fn get_weight(active: Option<bool>) -> Option<f64> {
+    match active {
+        Some(active) => {
+            if active {
+                Some(1.0)
+            } else {
+                Some(0.0)
+            }
+        }
+        None => None,
+    }
 }
 
 impl UninitializedLLMJudgeVariantConfig {
@@ -430,6 +475,7 @@ impl UninitializedLLMJudgeVariantConfig {
         evaluation_name: &str,
         evaluator_name: &str,
         input_format: &LLMJudgeInputFormat,
+        variant_name: &str,
     ) -> Result<VariantConfig, Error> {
         match self {
             UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => {
@@ -439,34 +485,24 @@ impl UninitializedLLMJudgeVariantConfig {
                     include_str!("llm_judge_system_instructions.txt"),
                     system_instructions = system_instructions,
                 );
+                let system_template_path =
+                    get_template_path(evaluation_name, evaluator_name, variant_name, "system");
                 let system_template = PathWithContents {
                     // Not a real path but this is used as the handle everywhere as the content is already provided below
-                    path: PathBuf::from(format!(
-                        "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::system"
-                    )),
+                    path: system_template_path.clone(),
                     contents: templated_system_instructions,
                 };
+                let user_template_path =
+                    get_template_path(evaluation_name, evaluator_name, variant_name, "user");
                 let user_template = match input_format {
                     LLMJudgeInputFormat::Serialized => Some(PathWithContents {
-                        path: PathBuf::from(format!(
-                            "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::user"
-                        )),
+                        path: user_template_path.clone(),
                         contents: include_str!("llm_judge_user_template.minijinja").to_string(),
                     }),
                     LLMJudgeInputFormat::Messages => None,
                 };
-                let weight = match params.active {
-                    Some(active) => {
-                        if active {
-                            Some(1.0)
-                        } else {
-                            Some(0.0)
-                        }
-                    }
-                    None => None,
-                };
                 Ok(VariantConfig::ChatCompletion(ChatCompletionConfig {
-                    weight,
+                    weight: get_weight(params.active),
                     model: params.model,
                     system_template: Some(system_template),
                     user_template,
@@ -481,6 +517,59 @@ impl UninitializedLLMJudgeVariantConfig {
                     retries: params.retries,
                     extra_body: params.extra_body,
                     extra_headers: params.extra_headers,
+                }))
+            }
+            UninitializedLLMJudgeVariantConfig::BestOfNSampling(params) => {
+                let evaluator_system_instructions =
+                    read_system_instructions(params.evaluator.system_instructions, base_path)?;
+                let templated_evaluator_system_instructions = format!(
+                    include_str!("llm_judge_system_instructions.txt"),
+                    system_instructions = evaluator_system_instructions,
+                );
+                let evaluator_system_template = PathWithContents {
+                    path: get_template_path(
+                        evaluation_name,
+                        evaluator_name,
+                        variant_name,
+                        "system",
+                    ),
+                    contents: templated_evaluator_system_instructions,
+                };
+                let evaluator_user_template = match input_format {
+                    LLMJudgeInputFormat::Serialized => Some(PathWithContents {
+                        path: get_template_path(
+                            evaluation_name,
+                            evaluator_name,
+                            variant_name,
+                            "user",
+                        ),
+                        contents: include_str!("llm_judge_user_template.minijinja").to_string(),
+                    }),
+                    LLMJudgeInputFormat::Messages => None,
+                };
+                Ok(VariantConfig::BestOfNSampling(BestOfNSamplingConfig {
+                    weight: get_weight(params.active),
+                    timeout_s: params.timeout_s,
+                    candidates: params.candidates,
+                    evaluator: OnlineEvaluatorConfig {
+                        inner: ChatCompletionConfig {
+                            weight: None,
+                            model: params.evaluator.model,
+                            system_template: Some(evaluator_system_template),
+                            user_template: evaluator_user_template,
+                            assistant_template: None,
+                            temperature: params.evaluator.temperature,
+                            top_p: params.evaluator.top_p,
+                            max_tokens: params.evaluator.max_tokens,
+                            presence_penalty: params.evaluator.presence_penalty,
+                            frequency_penalty: params.evaluator.frequency_penalty,
+                            seed: params.evaluator.seed,
+                            json_mode: Some(params.evaluator.json_mode),
+                            retries: params.evaluator.retries,
+                            extra_body: params.evaluator.extra_body,
+                            extra_headers: params.evaluator.extra_headers,
+                        },
+                    },
                 }))
             }
         }

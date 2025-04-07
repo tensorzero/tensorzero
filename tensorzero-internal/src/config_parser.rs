@@ -1017,7 +1017,7 @@ mod tests {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
                                 path: PathBuf::from(
-                                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::system"
+                                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
                                 ),
                                 contents:
                                     "Return True if there is NSFW content in this generation.\n\n"
@@ -2070,27 +2070,31 @@ mod tests {
 
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::system")
+                .get(
+                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
+                )
                 .unwrap(),
             "Return True if there is NSFW content in this generation.\n\n".to_string(),
         );
 
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::evaluation1::llm_judge_float::system")
+                .get(
+                    "tensorzero::llm_judge::evaluation1::llm_judge_float::anthropic_promptA::system"
+                )
                 .unwrap(),
             "Return a number between 0 and 1 where 1 is very NSFW and 0 is the least NSFW content.\n\n"
                 .to_string(),
         );
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::user")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::user")
                 .unwrap(),
             include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
         );
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::evaluation1::llm_judge_float::user")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_float::anthropic_promptA::user")
                 .unwrap(),
             include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
         );
