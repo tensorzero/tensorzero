@@ -205,18 +205,6 @@ jobs:
         run: |
           uv run stubtest tensorzero.tensorzero
 
-      - name: "Python: TensorZero Client: Install dependencies"
-        working-directory: clients/python-deprecated
-        run: |
-          uv venv
-          uv pip sync requirements.txt
-
-      - name: "Python: TensorZero Client: pyright"
-        working-directory: clients/python-deprecated
-        run: |
-          uv pip install pyright==1.1.394
-          uv run pyright
-
       - name: "Python: OpenAI Client: Install dependencies"
         working-directory: clients/openai-python
         run: |
