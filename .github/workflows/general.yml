@@ -387,3 +387,82 @@ jobs:
           TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures
           TENSORZERO_GATEWAY_URL: http://localhost:3000
         run: pnpm test
+
+  ui-tests-e2e:
+    runs-on: ubuntu-latest
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install and configure Namespace CLI
+        uses: namespacelabs/nscloud-setup@v0
+
+      - name: Configure Namespace powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@v0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.9.0"
+
+      - name: Install dependencies
+        working-directory: ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Start services for ui e2e tests
+        working-directory: ui
+        run: |
+          echo "OPENAI_BASE_URL=http://mock-inference-provider:3030/openai" >> fixtures/.env
+          echo "OPENAI_API_KEY=not_used" >> fixtures/.env
+          echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env
+          echo "FIREWORKS_ACCOUNT_ID=not_used" >> fixtures/.env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
+          echo "AWS_REGION=us-east-1" >> fixtures/.env
+          echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
+          echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --wait --build --force-recreate
+
+      - name: Install playwright dependencies
+        working-directory: ui
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run ui e2e tests
+        working-directory: ui
+        env:
+          TENSORZERO_CI: 1
+        run: pnpm test-e2e
+        continue-on-error: true
+        id: e2e_tests
+
+      - name: Print ui tests logs
+        if: always()
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml logs
+
+      - name: Upload Playwright artifacts
+        if: steps.e2e_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            ui/playwright-report/
+            ui/test-results/
+          retention-days: 7
+
+      - name: Exit if tests failed
+        if: steps.e2e_tests.outcome == 'failure'
+        run: exit 1
+
+      - name: Take down ui tests
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.yml down
