@@ -19,8 +19,7 @@ MIPRO operates within a structured optimization framework:
 - Optimization: Utilizes a surrogate model to refine prompt proposals based on observed performance.
 
 In our implementation, we use an LLM judge to score the candidate prompts.
-The judge is configuable to fit your problem by describing the task and metric you want to optimize. This assumes that the LLM judge will output scores that are correlated with the metric you want to optimize.
-
+The judge is configurable to fit your problem by describing the task and metric you want to optimize. This assumes that the LLM judge will output scores that are correlated with the metric you want to optimize.
 **We'll show that TensorZero can automatically optimize prompts for GPT-4o Mini using MIPRO.**
 
 <p align="center">
