@@ -206,7 +206,7 @@ fn prepare_serialized_input(input: &ClientInput) -> Result<String> {
         for content in &message.content {
             match content {
                 ClientInputMessageContent::Image(..) => {
-                    bail!("Image content not supported for LLM judge evaluations")
+                    bail!("Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format.")
                 }
                 ClientInputMessageContent::Unknown { .. } => {
                     bail!("Unknown content not supported for LLM judge evaluations")
@@ -439,7 +439,7 @@ mod tests {
         let error = prepare_serialized_input(&input).unwrap_err();
         assert_eq!(
             error.to_string(),
-            "Image content not supported for LLM judge evaluations"
+            "Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format."
         );
     }
 

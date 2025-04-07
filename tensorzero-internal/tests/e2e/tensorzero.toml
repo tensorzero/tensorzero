@@ -2735,3 +2735,23 @@ model = "openai::gpt-4o-mini-2024-07-18"
 system_instructions = "../../fixtures/config/evaluations/images/matches_reference/system_instructions.txt"
 temperature = 0
 json_mode = "strict"
+
+# This eval should fail on images because it uses the `serialized` input format.
+[evaluations.bad_images]
+type = "static"
+function_name = "image_judger"
+
+[evaluations.bad_images.evaluators.honest_answer]
+type = "llm_judge"
+input_format = "serialized"
+output_type = "boolean"
+optimize = "max"
+include = { reference_output = false }
+cutoff = 0.2
+
+[evaluations.bad_images.evaluators.honest_answer.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_instructions = "../../fixtures/config/evaluations/images/honest_answer/system_instructions.txt"
+temperature = 0
+json_mode = "strict"

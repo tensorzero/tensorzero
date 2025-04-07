@@ -676,6 +676,101 @@ async fn run_image_evaluation() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn check_invalid_image_evaluation() {
+    let clickhouse = get_clickhouse().await;
+    write_chat_fixture_to_dataset(&PathBuf::from(&format!(
+        "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    )))
+    .await;
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let evaluation_run_id = Uuid::now_v7();
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        dataset_name: "baz".to_string(),
+        evaluation_name: "bad_images".to_string(),
+        variant_name: "honest_answer".to_string(),
+        concurrency: 10,
+        format: OutputFormat::Jsonl,
+    };
+
+    let mut output = Vec::new();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
+    clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(1)).await;
+    let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    for line in output_lines {
+        let parsed: EvaluationUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed = match parsed {
+            EvaluationUpdate::Success(evaluation_info) => evaluation_info,
+            EvaluationUpdate::Error(evaluation_error) => {
+                panic!("evaluation error: {}", evaluation_error.message);
+            }
+        };
+        assert_eq!(parsed.evaluator_errors.len(), 1);
+        let honest_answer_error = &parsed.evaluator_errors["honest_answer"];
+        assert_eq!(honest_answer_error, "Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format.");
+        let inference_id = parsed.response.inference_id();
+        let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
+            .await
+            .unwrap();
+        let parsed_response = match parsed.response.clone() {
+            InferenceResponse::Chat(chat_response) => chat_response,
+            InferenceResponse::Json(..) => panic!("Json response not supported"),
+        };
+        // Check the input to the inference parses as ResolvedInput
+        let _clickhouse_input: ResolvedInput =
+            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        // assert_eq!(&clickhouse_input, parsed.datapoint.input());
+        let clickhouse_output: Vec<ContentBlockChatOutput> =
+            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        // Check the output to the inference is the same as the output in the response
+        assert_eq!(clickhouse_output, parsed_response.content);
+        // Check the inference is properly tagged
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
+            "bad_images"
+        );
+
+        // There should be no Float feedback for this evaluation
+        assert!(select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "FloatMetricFeedback",
+            inference_id,
+            None,
+        )
+        .await
+        .is_none());
+
+        // There should be no Boolean feedback for honest answer since it should have failed
+        assert!(select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            Some("tensorzero::evaluation_name::images::evaluator_name::honest_answer"),
+        )
+        .await
+        .is_none());
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_chat_human_readable() {
     write_chat_fixture_to_dataset(&PathBuf::from(&format!(
         "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
