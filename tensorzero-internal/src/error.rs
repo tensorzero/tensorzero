@@ -717,11 +717,7 @@ impl std::fmt::Display for ErrorDetails {
                 data,
                 schema,
             } => {
-                write!(
-                    f,
-                    "JSON Schema validation failed:\n{}",
-                    messages.join("\n")
-                )?;
+                write!(f, "JSON Schema validation failed:\n{}", messages.join("\n"))?;
                 write!(
                     f,
                     "\n\nData:\n{}",
