@@ -256,7 +256,10 @@ Get name and count for all datasets.
 This function should sum the counts of chat and json inferences for each dataset.
 The groups should be ordered by last_updated in descending order.
 */
-export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
+export async function getDatasetCounts(
+  page_size?: number,
+  offset: number = 0,
+): Promise<DatasetCountInfo[]> {
   const resultSet = await clickhouseClient.query({
     query: `
       SELECT
@@ -284,13 +287,39 @@ export async function getDatasetCounts(): Promise<DatasetCountInfo[]> {
       )
       GROUP BY dataset_name
       ORDER BY last_updated DESC
+      ${page_size ? "LIMIT {page_size:UInt32}" : ""}
+      ${offset ? "OFFSET {offset:UInt32}" : ""}
     `,
     format: "JSONEachRow",
+    query_params: {
+      page_size,
+      offset,
+    },
   });
   const rows = await resultSet.json<DatasetCountInfo[]>();
   return z.array(DatasetCountInfoSchema).parse(rows);
 }
 
+export async function getNumberOfDatasets(): Promise<number> {
+  const resultSet = await clickhouseClient.query({
+    query: `
+      SELECT
+        toUInt32(uniqExact(dataset_name)) as count
+      FROM (
+        SELECT dataset_name
+        FROM ChatInferenceDatapoint FINAL
+        WHERE staled_at IS NULL
+        UNION ALL
+        SELECT dataset_name
+        FROM JsonInferenceDatapoint FINAL
+        WHERE staled_at IS NULL
+      )
+    `,
+    format: "JSONEachRow",
+  });
+  const rows = await resultSet.json<{ count: number }>();
+  return rows[0].count;
+}
 /**
  * Executes an INSERT INTO ... SELECT ... query to insert rows into the dataset table.
  *

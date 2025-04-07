@@ -30,6 +30,21 @@ test("should display inferences with image content", async ({ page }) => {
   // Verify images have loaded correctly
   await expect(firstImage).toHaveJSProperty("complete", true);
   await expect(secondImage).toHaveJSProperty("complete", true);
+
+  // Verify that images display in the modelInference section too
+  // Click on the modelInference section
+  await page.getByText("0195e31b-703c-74a3-bbdd-e252ca10a86d").click();
+  // Assert that the images are visible
+  const newImages = page.locator("img");
+  await expect(newImages).toHaveCount(4);
+  const firstNewImage = newImages.nth(0);
+  const secondNewImage = newImages.nth(1);
+  const thirdNewImage = newImages.nth(2);
+  const fourthNewImage = newImages.nth(3);
+  await expect(firstNewImage).toBeVisible();
+  await expect(secondNewImage).toBeVisible();
+  await expect(thirdNewImage).toBeVisible();
+  await expect(fourthNewImage).toBeVisible();
 });
 
 test("tag navigation works by evaluation_name", async ({ page }) => {
