@@ -719,17 +719,17 @@ impl std::fmt::Display for ErrorDetails {
             } => {
                 write!(
                     f,
-                    "JSON Schema validation failed for Function:\n\n{}",
+                    "JSON Schema validation failed:\n{}",
                     messages.join("\n")
                 )?;
                 write!(
                     f,
-                    "\nData: {}",
+                    "\n\nData:\n{}",
                     serde_json::to_string(data).map_err(|_| std::fmt::Error)?
                 )?;
                 write!(
                     f,
-                    "Schema: {}",
+                    "\n\nSchema:\n{}",
                     serde_json::to_string(schema).map_err(|_| std::fmt::Error)?
                 )
             }

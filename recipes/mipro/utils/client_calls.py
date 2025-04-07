@@ -1,5 +1,5 @@
 import asyncio
-from typing import AsyncGenerator, Optional, Union
+from typing import AsyncGenerator, Dict, Optional, Union
 
 from tensorzero import (
     AsyncTensorZeroGateway,
@@ -20,7 +20,7 @@ async def get_instructions(
     """
     Get instructions from the client with retries.
     """
-    system_args = {
+    system_args: Dict[str, str] = {
         "example_instructions": example_instructions,
     }
 
