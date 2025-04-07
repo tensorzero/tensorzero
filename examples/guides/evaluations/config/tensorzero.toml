@@ -20,54 +20,52 @@ user_template = "functions/write_haiku/user_template.minijinja"
 # │                                   EVALS                                    │
 # └────────────────────────────────────────────────────────────────────────────┘
 
-[evals.haiku_eval]
+[evaluations.haiku_eval]
+type = "static"
 function_name = "write_haiku"
-dataset_name = "haiku_dataset" # TODO: must be parameterized
 
-[evals.haiku_eval.evaluators.exact_match]
+[evaluations.haiku_eval.evaluators.exact_match]
 type = "exact_match"
 
-[evals.haiku_eval.evaluators.valid_haiku]
+[evaluations.haiku_eval.evaluators.valid_haiku]
 type = "llm_judge"
 output_type = "boolean"
 optimize = "max"
 cutoff = 0.95
 
-[evals.haiku_eval.evaluators.valid_haiku.variants.gpt_4o_mini_judge]
+[evaluations.haiku_eval.evaluators.valid_haiku.variants.gpt_4o_mini_judge]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
-system_instructions = "evals/haiku_eval/valid_haiku/system_instructions.txt"
+system_instructions = "evaluations/haiku_eval/valid_haiku/system_instructions.txt"
 json_mode = "strict"
 active = true
 
-[evals.haiku_eval.evaluators.valid_haiku.variants.gpt_4o_judge]
+[evaluations.haiku_eval.evaluators.valid_haiku.variants.gpt_4o_judge]
 type = "chat_completion"
 model = "openai::gpt-4o"
-system_instructions = "evals/haiku_eval/valid_haiku/system_instructions.txt"
+system_instructions = "evaluations/haiku_eval/valid_haiku/system_instructions.txt"
 json_mode = "strict"
 
-[evals.haiku_eval.evaluators.metaphor_count]
+[evaluations.haiku_eval.evaluators.metaphor_count]
 type = "llm_judge"
 output_type = "float"
 optimize = "max"
 cutoff = 1
 
-[evals.haiku_eval.evaluators.metaphor_count.variants.gpt_4o_mini_judge]
+[evaluations.haiku_eval.evaluators.metaphor_count.variants.gpt_4o_mini_judge]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
-system_instructions = "evals/haiku_eval/metaphor_count/system_instructions.txt"
+system_instructions = "evaluations/haiku_eval/metaphor_count/system_instructions.txt"
 json_mode = "strict"
-active = true                                                                   # TODO: remove
 
-[evals.haiku_eval.evaluators.compare_haikus]
+[evaluations.haiku_eval.evaluators.compare_haikus]
 type = "llm_judge"
 include = { reference_output = true }
 output_type = "boolean"
 optimize = "max"
 
-[evals.haiku_eval.evaluators.compare_haikus.variants.gpt_4o_mini_judge]
+[evaluations.haiku_eval.evaluators.compare_haikus.variants.gpt_4o_mini_judge]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
-system_instructions = "evals/haiku_eval/compare_haikus/system_instructions.txt"
+system_instructions = "evaluations/haiku_eval/compare_haikus/system_instructions.txt"
 json_mode = "strict"
-active = true                                                                   # TODO: remove
