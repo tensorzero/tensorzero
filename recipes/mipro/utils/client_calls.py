@@ -1,5 +1,5 @@
 import asyncio
-from typing import AsyncIterator, Dict, Optional, Union
+from typing import Any, AsyncIterator, Dict, Optional, Union
 
 from tensorzero import (
     AsyncTensorZeroGateway,
@@ -20,14 +20,14 @@ async def get_instructions(
     """
     Get instructions from the client with retries.
     """
-    system_args: Dict[str, str] = {
+    system_args: Dict[str, Any] = {
         "example_instructions": example_instructions,
     }
 
     if example_schema:
         system_args["example_schema"] = example_schema
 
-    inputs = InferenceInput(system=system_args, messages=[])  # type: ignore[reportArgumentType]
+    inputs = InferenceInput(system=system_args, messages=[])
 
     try:
         async with semaphore:
@@ -75,7 +75,7 @@ async def judge_answer(
 ) -> Optional[Union[InferenceResponse, AsyncIterator[InferenceChunk]]]:
     try:
         async with semaphore:
-            system_args: Dict[str, str] = {  # type: ignore[reportArgumentType]
+            system_args: Dict[str, Any] = {
                 "task_description": task_description,
                 "metric_properties": metric_properties,
             }
