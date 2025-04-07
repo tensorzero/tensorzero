@@ -17,6 +17,7 @@ use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
     CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
+use crate::config_parser::SKIP_CREDENTIAL_VALIDATION;
 use crate::endpoints::inference::InferenceClients;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
@@ -1136,7 +1137,6 @@ pub enum Credential {
     FileContents(SecretString),
     Dynamic(String),
     None,
-    #[cfg(any(test, feature = "e2e_tests"))]
     Missing,
 }
 
@@ -1210,16 +1210,16 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
             CredentialLocation::Env(key_name) => match env::var(key_name) {
                 Ok(value) => Ok(Credential::Static(SecretString::from(value))),
                 Err(_) => {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
-                        warn!(
+                    if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                        #[cfg(any(test, feature = "e2e_tests"))]
+                        {
+                            warn!(
                             "You are missing the credentials required for a model provider of type {}, so the associated tests will likely fail.",
                             provider_type
                         );
+                        }
                         Ok(Credential::Missing)
-                    }
-                    #[cfg(not(any(test, feature = "e2e_tests")))]
-                    {
+                    } else {
                         Err(Error::new(ErrorDetails::ApiKeyMissing {
                             provider_name: provider_type.to_string(),
                         }))
@@ -1231,16 +1231,17 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 let path = match env::var(&env_key) {
                     Ok(path) => path,
                     Err(_) => {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
-                            warn!(
+                        if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                            #[cfg(any(test, feature = "e2e_tests"))]
+                            {
+                                warn!(
                                 "Environment variable {} is required for a model provider of type {} but is missing, so the associated tests will likely fail.",
                                 env_key, provider_type
+
                             );
+                            }
                             return Ok(Credential::Missing);
-                        }
-                        #[cfg(not(any(test, feature = "e2e_tests")))]
-                        {
+                        } else {
                             return Err(Error::new(ErrorDetails::ApiKeyMissing {
                                 provider_name: format!(
                                     "{}: Environment variable {} for credentials path is missing",
@@ -1254,16 +1255,16 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 match fs::read_to_string(path) {
                     Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                     Err(e) => {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
-                            warn!(
+                        if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                            #[cfg(any(test, feature = "e2e_tests"))]
+                            {
+                                warn!(
                                 "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                                 provider_type, e
                             );
+                            }
                             Ok(Credential::Missing)
-                        }
-                        #[cfg(not(any(test, feature = "e2e_tests")))]
-                        {
+                        } else {
                             Err(Error::new(ErrorDetails::ApiKeyMissing {
                                 provider_name: format!(
                                     "{}: Failed to read credentials file - {}",
@@ -1277,16 +1278,16 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
             CredentialLocation::Path(path) => match fs::read_to_string(path) {
                 Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                 Err(e) => {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
-                        warn!(
-                            "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
+                    if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                        #[cfg(any(test, feature = "e2e_tests"))]
+                        {
+                            warn!(
+                                "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                             provider_type, e
                         );
+                        }
                         Ok(Credential::Missing)
-                    }
-                    #[cfg(not(any(test, feature = "e2e_tests")))]
-                    {
+                    } else {
                         Err(Error::new(ErrorDetails::ApiKeyMissing {
                             provider_name: format!(
                                 "{}: Failed to read credentials file - {}",
@@ -2139,8 +2140,9 @@ mod tests {
             .into()
         );
         // Test that it works with an initialized model
-        let anthropic_provider_config =
-            ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap());
+        let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.set(&(), || {
+            ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap())
+        });
         let anthropic_model_config = ModelConfig {
             routing: vec!["anthropic".into()],
             providers: HashMap::from([(

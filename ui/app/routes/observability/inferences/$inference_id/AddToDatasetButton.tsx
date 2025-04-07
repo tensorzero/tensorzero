@@ -97,11 +97,11 @@ export function AddToDatasetButton({
               </div>
             ) : (
               <>
-                <AddToDataset className="h-4 w-4 text-fg-tertiary" />
+                <AddToDataset className="text-fg-tertiary h-4 w-4" />
                 Add to dataset
               </>
             )}
-            <ChevronDown className="h-4 w-4 text-fg-tertiary" />
+            <ChevronDown className="text-fg-tertiary h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-80 p-0">

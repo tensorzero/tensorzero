@@ -126,7 +126,7 @@ impl InputMessageContent {
             InputMessageContent::Thought(thought) => ResolvedInputMessageContent::Thought(thought),
             InputMessageContent::Text(TextKind::LegacyValue { value }) => {
                 tracing::warn!(
-                    r#"Deprecation warning: `{{"type": "text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` or `{{"type": "text", "arguments": {{..}}}} ` instead."#
+                    r#"Deprecation Warning: `{{"type": "text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` or `{{"type": "text", "arguments": {{..}}}} ` instead."#
                 );
                 ResolvedInputMessageContent::Text { value }
             }
@@ -714,7 +714,7 @@ fn deserialize_content<'de, D: Deserializer<'de>>(
             })])
         })
         .map(|object| {
-            tracing::warn!("Deprecation warning - passing in an object for `content` is deprecated. Please use an array of content blocks instead.");
+            tracing::warn!("Deprecation Warning: passing in an object for `content` is deprecated. Please use an array of content blocks instead.");
             Ok(vec![InputMessageContent::Text(TextKind::Arguments {
                 arguments: object.deserialize()?,
             })])

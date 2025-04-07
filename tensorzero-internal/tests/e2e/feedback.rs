@@ -1265,11 +1265,11 @@ async fn test_fast_inference_then_feedback() {
                     model_name: None,
                     variant_name: None,
                     episode_id: None,
-                    input: tensorzero::Input {
+                    input: tensorzero::ClientInput {
                         system: Some(json!({"assistant_name": "Alfred Pennyworth"})),
-                        messages: vec![tensorzero::InputMessage {
+                        messages: vec![tensorzero::ClientInputMessage {
                             role: Role::User,
-                            content: vec![tensorzero::InputMessageContent::Text(TextKind::Text {
+                            content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {
                                 text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."
                                     .to_string()
                             })],

@@ -6,7 +6,7 @@ use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use dataset::query_dataset;
 use evaluators::evaluate_inference;
-use helpers::{get_tool_params_args, resolved_input_to_input, setup_logging};
+use helpers::{get_tool_params_args, resolved_input_to_client_input, setup_logging};
 use serde::{Deserialize, Serialize};
 use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
 use tensorzero::{
@@ -82,7 +82,10 @@ pub async fn run_evaluation(
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
 
-    let config = Config::load_and_verify_from_path(&args.config_file).await?;
+    // We do not validate credentials here since we just want the evaluator config
+    // If we are using an embedded gateway, credentials are validated when that is initialized
+    let config =
+        Config::load_from_path_optional_verify_credentials(&args.config_file, false).await?;
     let evaluation_config = config
         .evaluations
         .get(&args.evaluation_name)
@@ -314,7 +317,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         function_config,
     } = params;
 
-    let input = resolved_input_to_input(datapoint.input().clone()).await?;
+    let input = resolved_input_to_client_input(datapoint.input().clone()).await?;
     let dynamic_tool_params = match datapoint.tool_call_config() {
         Some(tool_params) => get_tool_params_args(tool_params, function_config).await,
         None => DynamicToolParams::default(),

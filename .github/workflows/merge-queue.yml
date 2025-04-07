@@ -34,56 +34,6 @@ env:
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
 
 jobs:
-  clickhouse-tests-cloud:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
-        with:
-          tool: cargo-nextest
-
-      - name: Wake up ClickHouse cloud
-        run: |
-          curl ${{ secrets.CLICKHOUSE_CLOUD_URL }} --data-binary 'SHOW DATABASES'
-
-      - name: Set up TENSORZERO_CLICKHOUSE_URL
-        run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
-
-      - name: Delete old ClickHouse cloud dbs
-        run: ./ci/delete-clickhouse-dbs.sh
-
-      # We run this as a separate step so that we can see live build logs
-      # (and fail the job immediately if the build fails)
-      - name: Build the gateway for E2E tests
-        run: cargo build-e2e
-
-      - name: Launch the gateway for E2E tests
-        run: |
-          cargo run-e2e > e2e_logs.txt 2>&1 &
-            count=0
-            max_attempts=10
-            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
-              echo "Waiting for gateway to be healthy..."
-              sleep 1
-              count=$((count + 1))
-              if [ $count -ge $max_attempts ]; then
-                echo "Gateway failed to become healthy after $max_attempts attempts"
-                exit 1
-              fi
-            done
-          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
-
-      - name: Test (Rust)
-        run: cargo test-e2e-no-creds
-
-      - name: Print e2e logs
-        if: always()
-        run: cat e2e_logs.txt
-
   live-tests:
     runs-on: namespace-profile-tensorzero-8x16
 

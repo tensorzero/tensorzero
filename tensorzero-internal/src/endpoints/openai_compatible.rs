@@ -353,7 +353,7 @@ impl Params {
         let header_episode_id = headers
             .get("episode_id")
             .map(|h| {
-                tracing::warn!("Deprecation warning: Please use the `tensorzero::episode_id` field instead of the `episode_id` header. The header will be removed in a future release.");
+                tracing::warn!("Deprecation Warning: Please use the `tensorzero::episode_id` field instead of the `episode_id` header. The header will be removed in a future release.");
                 h.to_str()
                     .map_err(|_| {
                         Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
@@ -407,7 +407,7 @@ impl Params {
         let header_variant_name = headers
             .get("variant_name")
             .map(|h| {
-                tracing::warn!("Deprecation warning: Please use the `tensorzero::variant_name` field instead of the `variant_name` header. The header will be removed in a future release.");
+                tracing::warn!("Deprecation Warning: Please use the `tensorzero::variant_name` field instead of the `variant_name` header. The header will be removed in a future release.");
                 h.to_str()
                     .map_err(|_| {
                         Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
@@ -420,7 +420,7 @@ impl Params {
         let header_dryrun = headers
             .get("dryrun")
             .map(|h| {
-                tracing::warn!("Deprecation warning: Please use the `tensorzero::dryrun` field instead of the `dryrun` header. The header will be removed in a future release.");
+                tracing::warn!("Deprecation Warning: Please use the `tensorzero::dryrun` field instead of the `dryrun` header. The header will be removed in a future release.");
                 h.to_str()
                     .map_err(|_| {
                         Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
