@@ -1,9 +1,6 @@
 import { type TableBounds, TableBoundsSchema } from "./common";
 import { data } from "react-router";
-import { InferenceJoinKey } from "./common";
 import { clickhouseClient } from "./client.server";
-import type { MetricConfig } from "~/utils/config/metric";
-import { getInferenceJoinKey } from "~/utils/clickhouse/curation";
 import { z } from "zod";
 
 export const booleanMetricFeedbackRowSchema = z.object({
@@ -771,44 +768,9 @@ export type MetricsWithFeedbackData = z.infer<
 export async function queryMetricsWithFeedback(params: {
   function_name: string;
   inference_table: string;
-  metrics: Record<string, MetricConfig>;
   variant_name?: string;
 }): Promise<MetricsWithFeedbackData> {
-  const { function_name, inference_table, metrics, variant_name } = params;
-
-  const inferenceMetrics = Object.entries(metrics)
-    .filter(([, metric]) => {
-      try {
-        return (
-          "level" in metric &&
-          getInferenceJoinKey(metric.level) === InferenceJoinKey.ID
-        );
-      } catch {
-        return false;
-      }
-    })
-    .map(([name]) => name);
-
-  const episodeMetrics = Object.entries(metrics)
-    .filter(([, metric]) => {
-      try {
-        return (
-          "level" in metric &&
-          getInferenceJoinKey(metric.level) === InferenceJoinKey.EPISODE_ID
-        );
-      } catch {
-        return false;
-      }
-    })
-    .map(([name]) => name);
-
-  const idInClause =
-    inferenceMetrics.length > 0
-      ? `IN ('${inferenceMetrics.join("','")}')`
-      : `= ''`;
-
-  const episodeIdInClause =
-    episodeMetrics.length > 0 ? `IN ('${episodeMetrics.join("','")}')` : `= ''`;
+  const { function_name, inference_table, variant_name } = params;
 
   const variantClause = variant_name
     ? `AND i.variant_name = {variant_name:String}`
@@ -826,7 +788,6 @@ export async function queryMetricsWithFeedback(params: {
       JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
-        AND bmf.metric_name ${idInClause}
       GROUP BY i.function_name, bmf.metric_name
       HAVING feedback_count > 0
     ),
@@ -841,7 +802,6 @@ export async function queryMetricsWithFeedback(params: {
       JOIN BooleanMetricFeedback bmf ON bmf.target_id = i.episode_id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
-        AND bmf.metric_name ${episodeIdInClause}
       GROUP BY i.function_name, bmf.metric_name
       HAVING feedback_count > 0
     ),
@@ -856,7 +816,6 @@ export async function queryMetricsWithFeedback(params: {
       JOIN FloatMetricFeedback fmf ON fmf.target_id = i.id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
-        AND fmf.metric_name ${idInClause}
       GROUP BY i.function_name, fmf.metric_name
       HAVING feedback_count > 0
     ),
@@ -871,7 +830,6 @@ export async function queryMetricsWithFeedback(params: {
       JOIN FloatMetricFeedback fmf ON fmf.target_id = i.episode_id
       WHERE i.function_name = {function_name:String}
         ${variantClause}
-        AND fmf.metric_name ${episodeIdInClause}
       GROUP BY i.function_name, fmf.metric_name
       HAVING feedback_count > 0
     ),

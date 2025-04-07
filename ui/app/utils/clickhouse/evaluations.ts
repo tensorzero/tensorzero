@@ -18,6 +18,7 @@ export const EvaluationResultSchema = z.object({
   input: z.string(),
   generated_output: z.string(),
   reference_output: z.string(),
+  dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
 });
@@ -38,6 +39,7 @@ export const JsonEvaluationResultSchema = z.object({
   input: resolvedInputSchema,
   generated_output: jsonInferenceOutputSchema,
   reference_output: jsonInferenceOutputSchema,
+  dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
 });
@@ -50,6 +52,7 @@ export const ChatEvaluationResultSchema = z.object({
   input: resolvedInputSchema,
   generated_output: z.array(contentBlockOutputSchema),
   reference_output: z.array(contentBlockOutputSchema),
+  dataset_name: z.string(),
   metric_name: z.string(),
   metric_value: z.string(),
 });
@@ -117,23 +120,13 @@ function getEvaluatorNameFromMetricName(metricName: string): string {
 export const evaluationInfoResultSchema = z.object({
   evaluation_run_id: z.string().uuid(),
   evaluation_name: z.string(),
+  dataset_name: z.string(),
   function_name: z.string(),
   variant_name: z.string(),
   last_inference_timestamp: z.string().datetime(),
 });
 
 export type EvaluationInfoResult = z.infer<typeof evaluationInfoResultSchema>;
-
-export const EvaluationRunRowInfoSchema = z.object({
-  evaluation_run_id: z.string().uuid(),
-  evaluation_name: z.string(),
-  function_name: z.string(),
-  variant_name: z.string(),
-  last_inference_timestamp: z.string().datetime(),
-  dataset: z.string(),
-});
-
-export type EvaluationRunRowInfo = z.infer<typeof EvaluationRunRowInfoSchema>;
 
 // Define a type for consolidated metrics
 export type ConsolidatedMetric = {

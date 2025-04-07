@@ -49,10 +49,10 @@ export function DatasetBuilderForm({
 
   const watchedFields = useWatch({
     control: form.control,
-    name: ["function", "metric_name", "threshold"] as const,
+    name: ["function", "metric_name", "threshold", "dataset"] as const,
   });
 
-  const [functionName, metricName, threshold] = watchedFields;
+  const [functionName, metricName, threshold, selectedDataset] = watchedFields;
   const counts = useCountFetcher({
     functionName: functionName ?? undefined,
     metricName: metricName ?? undefined,
@@ -153,7 +153,8 @@ export function DatasetBuilderForm({
           disabled={
             submissionPhase !== "idle" ||
             countToInsert === null ||
-            countToInsert === 0
+            countToInsert === 0 ||
+            !selectedDataset
           }
           onClick={() => {
             if (submissionPhase === "complete") {

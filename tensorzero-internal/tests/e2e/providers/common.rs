@@ -19,8 +19,8 @@ use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use std::future::IntoFuture;
 use tensorzero::{
-    CacheParamsOptions, ClientInferenceParams, InferenceOutput, InferenceResponse, Input,
-    InputMessage, InputMessageContent,
+    CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
+    ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 
 use tensorzero_internal::endpoints::object_storage::{
@@ -67,6 +67,7 @@ pub struct E2ETestProvider {
 pub struct E2ETestProviders {
     pub simple_inference: Vec<E2ETestProvider>,
 
+    pub bad_auth_extra_headers: Vec<E2ETestProvider>,
     pub extra_body_inference: Vec<E2ETestProvider>,
 
     pub reasoning_inference: Vec<E2ETestProvider>,
@@ -166,6 +167,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::common::test_inference_params_streaming_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_inference_request_with_provider;
         use $crate::providers::common::test_json_mode_streaming_inference_request_with_provider;
+        use $crate::providers::common::test_bad_auth_extra_headers_with_provider;
         use $crate::providers::common::test_image_inference_with_provider_filesystem;
         use $crate::providers::common::test_image_inference_with_provider_amazon_s3;
         use $crate::providers::common::test_dynamic_json_mode_inference_request_with_provider;
@@ -223,6 +225,14 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.reasoning_inference;
             for provider in providers {
                 test_streaming_reasoning_inference_request_simple_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_bad_auth_extra_headers() {
+            let providers = $func().await.bad_auth_extra_headers;
+            for provider in providers {
+                test_bad_auth_extra_headers_with_provider(provider).await;
             }
         }
 
@@ -831,15 +841,15 @@ pub async fn test_url_image_inference_with_provider_and_store(
             .inference(ClientInferenceParams {
                 model_name: Some(provider.model_name.clone()),
                 episode_id: Some(episode_id),
-                input: Input {
+                input: ClientInput {
                     system: None,
-                    messages: vec![InputMessage {
+                    messages: vec![ClientInputMessage {
                         role: Role::User,
                         content: vec![
-                            InputMessageContent::Text(TextKind::Text {
+                            ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            InputMessageContent::Image(Image::Url {
+                            ClientInputMessageContent::Image(Image::Url {
                                 url: image_url.clone(),
                             }),
                         ],
@@ -890,15 +900,15 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                 function_name: Some("image_test".to_string()),
                 variant_name: Some(provider.variant_name.clone()),
                 episode_id: Some(episode_id),
-                input: Input {
+                input: ClientInput {
                     system: None,
-                    messages: vec![InputMessage {
+                    messages: vec![ClientInputMessage {
                         role: Role::User,
                         content: vec![
-                            InputMessageContent::Text(TextKind::Text {
+                            ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            InputMessageContent::Image(Image::Base64 {
+                            ClientInputMessageContent::Image(Image::Base64 {
                                 mime_type: ImageKind::Png,
                                 data: image_data.clone(),
                             }),
@@ -1281,6 +1291,146 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
         raw_request_val.get("top_p")
     };
     assert_eq!(top_p.unwrap().as_f64().expect("Top P is not a number"), 0.8);
+}
+
+pub async fn test_bad_auth_extra_headers_with_provider(provider: E2ETestProvider) {
+    test_bad_auth_extra_headers_with_provider_and_stream(&provider, false).await;
+    test_bad_auth_extra_headers_with_provider_and_stream(&provider, true).await;
+}
+
+pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
+    provider: &E2ETestProvider,
+    stream: bool,
+) {
+    // Inject randomness to prevent this from being cached, since provider-proxy will ignore the (invalid) auth header
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": provider.variant_name,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": format!("If you see this, something has gone wrong - the request should have failed: {}", Uuid::now_v7())
+                }
+            ]},
+        "stream": stream,
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let res = response.json::<Value>().await.unwrap();
+    // The status codes/messages from providers are inconsistent,
+    // so we manually check for auth-related strings (where possible)
+    match provider.model_provider_name.as_str() {
+        "openai" => assert!(
+            res["error"]
+                .as_str()
+                .unwrap()
+                .contains("You didn't provide an API key")
+                || res["error"].as_str().unwrap().contains("400 Bad Request"),
+            "Unexpected error: {res}"
+        ),
+        "deepseek" => {
+            assert!(
+                res["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Authentication Fails"),
+                "Unexpected error: {res}"
+            );
+        }
+        "google_ai_studio_gemini" => {
+            // We produce an error by setting a bad 'Content-Length', so just
+            // check that an error occurs
+            assert!(!res["error"].as_str().unwrap().is_empty());
+        }
+        "aws-bedrock" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Bad Request"),
+                "Unexpected error: {res}"
+            );
+        }
+        "anthropic" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("invalid x-api-key"),
+                "Unexpected error: {res}"
+            );
+        }
+        "azure" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Access denied"),
+                "Unexpected error: {res}"
+            );
+        }
+        "fireworks" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("unauthorized"),
+                "Unexpected error: {res}"
+            );
+        }
+        "gcp_vertex_anthropic" => {
+            // We produce an error by setting a bad 'Content-Length', so just
+            // check that an error occurs
+            assert!(!res["error"].as_str().unwrap().is_empty());
+        }
+        "hyperbolic" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Bad Request")
+                    || res["error"].as_str().unwrap().contains("401 Unauthorized"),
+                "Unexpected error: {res}"
+            );
+        }
+        "mistral" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Bearer token"),
+                "Unexpected error: {res}"
+            );
+        }
+        "sglang" | "tgi" => {
+            assert!(
+                res["error"]
+                    .as_str()
+                    .is_some_and(|e| e.contains("401 Authorization")),
+                "Unexpected error: {res}"
+            )
+        }
+        "together" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Invalid API key"),
+                "Unexpected error: {res}"
+            )
+        }
+        "vllm" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Unauthorized"),
+                "Unexpected error: {res}"
+            )
+        }
+        "xai" => {
+            assert!(
+                res["error"].as_str().unwrap().contains("Incorrect"),
+                "Unexpected error: {res}"
+            )
+        }
+        "gcp_vertex_gemini" => {
+            // We produce an error by setting a bad 'Content-Length', so just
+            // check that an error occurs
+            assert!(!res["error"].as_str().unwrap().is_empty());
+        }
+        _ => {
+            panic!("Got error: {res}");
+        }
+    }
+
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
 }
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
@@ -7126,12 +7276,12 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         model_name: None,
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
-        input: tensorzero::Input {
+        input: tensorzero::ClientInput {
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
-            messages: vec![tensorzero::InputMessage {
+            messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
                 content: vec![
-                    tensorzero::InputMessageContent::Text(
+                    tensorzero::ClientInputMessageContent::Text(
                         TextKind::Text {
                             text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string()
                         }
@@ -7437,11 +7587,11 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         model_name: None,
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
-        input: tensorzero::Input {
+        input: tensorzero::ClientInput {
             system: Some(json!({"assistant_name": "Dr. Mehta"})),
-            messages: vec![tensorzero::InputMessage {
+            messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
-                content: vec![tensorzero::InputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
+                content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
             }],
         },
         stream: Some(true),

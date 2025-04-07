@@ -32,7 +32,7 @@ use crate::model::{build_creds_caching_default, Credential, CredentialLocation, 
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::convert_stream_error;
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
@@ -92,7 +92,6 @@ fn default_api_key_location() -> CredentialLocation {
 pub enum GoogleAIStudioCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -103,7 +102,6 @@ impl TryFrom<Credential> for GoogleAIStudioCredentials {
         match credentials {
             Credential::Static(key) => Ok(GoogleAIStudioCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(GoogleAIStudioCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(GoogleAIStudioCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Google AI Studio Gemini provider"
@@ -128,7 +126,6 @@ impl GoogleAIStudioCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             GoogleAIStudioCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             })?,
@@ -154,7 +151,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 message: format!("Error serializing Gemini request: {e}"),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -168,6 +165,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         let res = http_client
             .post(url)
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
@@ -239,7 +237,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                 message: format!("Error serializing Gemini request: {e}"),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -258,6 +256,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         let event_source = http_client
             .post(url)
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
@@ -1831,13 +1830,10 @@ mod tests {
         let creds = GoogleAIStudioCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, GoogleAIStudioCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = GoogleAIStudioCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, GoogleAIStudioCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = GoogleAIStudioCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, GoogleAIStudioCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

@@ -22,29 +22,31 @@ import { Skeleton } from "~/components/ui/skeleton";
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
   onClose: () => void;
+  dataset_names: string[];
 }
 
-function EvaluationForm() {
+function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
   const fetcher = useFetcher();
   const config = useConfig();
   const evaluation_names = Object.keys(config.evaluations);
   const [selectedEvaluationName, setSelectedEvaluationName] = useState<
     string | null
   >(null);
+  const [selectedDatasetName, setSelectedDatasetName] = useState<string | null>(
+    null,
+  );
   const [selectedVariantName, setSelectedVariantName] = useState<string | null>(
     null,
   );
   const [concurrencyLimit, setConcurrencyLimit] = useState<string>("5");
   let count = null;
   let isLoading = false;
-  let dataset = null;
   let function_name = null;
   if (selectedEvaluationName) {
-    dataset = config.evaluations[selectedEvaluationName]?.dataset_name;
     function_name = config.evaluations[selectedEvaluationName]?.function_name;
   }
   const { count: datasetCount, isLoading: datasetLoading } =
-    useDatasetCountFetcher(dataset, function_name);
+    useDatasetCountFetcher(selectedDatasetName, function_name);
   count = datasetCount;
   isLoading = datasetLoading;
 
@@ -52,6 +54,9 @@ function EvaluationForm() {
   const isFormValid =
     selectedEvaluationName !== null &&
     selectedVariantName !== null &&
+    selectedDatasetName !== null &&
+    datasetCount !== null &&
+    datasetCount > 0 &&
     concurrencyLimit !== "";
 
   return (
@@ -82,17 +87,30 @@ function EvaluationForm() {
           ))}
         </SelectContent>
       </Select>
-      <div className="my-1 text-xs text-muted-foreground">
-        Dataset:{" "}
-        {dataset ? (
-          <span className="font-medium">
-            <Link to={`/datasets/${dataset}`}>{dataset}</Link>
-          </span>
-        ) : (
-          <Skeleton className="inline-block h-3 w-16 align-middle" />
-        )}
+      <div className="mt-4">
+        <label
+          htmlFor="evaluation_name"
+          className="mb-1 block text-sm font-medium"
+        >
+          Dataset
+        </label>
       </div>
-      <div className="mb-1 text-xs text-muted-foreground">
+      <Select
+        name="dataset_name"
+        onValueChange={(value) => setSelectedDatasetName(value)}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder="Select a dataset" />
+        </SelectTrigger>
+        <SelectContent>
+          {dataset_names.map((dataset_name) => (
+            <SelectItem key={dataset_name} value={dataset_name}>
+              {dataset_name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="text-muted-foreground mt-2 mb-1 text-xs">
         Function:{" "}
         {function_name ? (
           <span className="font-medium">
@@ -104,7 +122,7 @@ function EvaluationForm() {
           <Skeleton className="inline-block h-3 w-16 align-middle" />
         )}
       </div>
-      <div className="mb-1 text-xs text-muted-foreground">
+      <div className="text-muted-foreground mb-1 text-xs">
         Datapoints:{" "}
         {count !== null ? (
           <span className="font-medium">{count}</span>
@@ -162,7 +180,7 @@ function EvaluationForm() {
           min="1"
           value={concurrencyLimit}
           onChange={(e) => setConcurrencyLimit(e.target.value)}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm"
           required
         />
       </div>
@@ -178,6 +196,7 @@ function EvaluationForm() {
 export default function LaunchEvaluationModal({
   isOpen,
   onClose,
+  dataset_names,
 }: LaunchEvaluationModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -186,7 +205,7 @@ export default function LaunchEvaluationModal({
           <DialogTitle>Launch Evaluation</DialogTitle>
         </DialogHeader>
 
-        <EvaluationForm />
+        <EvaluationForm dataset_names={dataset_names} />
       </DialogContent>
     </Dialog>
   );

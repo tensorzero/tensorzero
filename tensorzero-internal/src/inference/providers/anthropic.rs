@@ -34,7 +34,7 @@ use crate::model::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
-use super::helpers::{inject_extra_body, peek_first_chunk};
+use super::helpers::{inject_extra_request_data, peek_first_chunk};
 use super::openai::convert_stream_error;
 
 lazy_static! {
@@ -82,7 +82,6 @@ impl AnthropicProvider {
 pub enum AnthropicCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -93,7 +92,6 @@ impl TryFrom<Credential> for AnthropicCredentials {
         match credentials {
             Credential::Static(key) => Ok(AnthropicCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(AnthropicCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(AnthropicCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Anthropic provider".to_string(),
@@ -117,7 +115,6 @@ impl AnthropicCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             AnthropicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
@@ -147,7 +144,7 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             tensorzero_model_name,
@@ -160,6 +157,7 @@ impl InferenceProvider for AnthropicProvider {
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret())
             .header("content-type", "application/json")
+            .headers(headers)
             .json(&request_body)
             .send()
             .await
@@ -252,7 +250,7 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -270,6 +268,7 @@ impl InferenceProvider for AnthropicProvider {
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("content-type", "application/json")
             .header("x-api-key", api_key.expose_secret())
+            .headers(headers)
             .json(&request_body)
             .eventsource()
             .map_err(|e| {
@@ -2663,13 +2662,10 @@ mod tests {
         let creds = AnthropicCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, AnthropicCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = AnthropicCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, AnthropicCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = AnthropicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AnthropicCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

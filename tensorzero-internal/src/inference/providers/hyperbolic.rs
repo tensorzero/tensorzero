@@ -18,7 +18,7 @@ use serde::Serialize;
 use tokio::time::Instant;
 use url::Url;
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
@@ -70,7 +70,6 @@ impl HyperbolicProvider {
 pub enum HyperbolicCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -81,7 +80,6 @@ impl TryFrom<Credential> for HyperbolicCredentials {
         match credentials {
             Credential::Static(key) => Ok(HyperbolicCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(HyperbolicCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(HyperbolicCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Hyperbolic provider".to_string(),
@@ -105,7 +103,6 @@ impl HyperbolicCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             HyperbolicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             })?,
@@ -133,7 +130,7 @@ impl InferenceProvider for HyperbolicProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -145,6 +142,7 @@ impl InferenceProvider for HyperbolicProvider {
         let request_builder = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
+            .headers(headers)
             .bearer_auth(api_key.expose_secret());
 
         let res = request_builder
@@ -226,7 +224,7 @@ impl InferenceProvider for HyperbolicProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -244,6 +242,7 @@ impl InferenceProvider for HyperbolicProvider {
             .post(request_url)
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
+            .headers(headers)
             .json(&request_body)
             .eventsource()
             .map_err(|e| {
@@ -488,13 +487,10 @@ mod tests {
         let creds = HyperbolicCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, HyperbolicCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = HyperbolicCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, HyperbolicCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = HyperbolicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, HyperbolicCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

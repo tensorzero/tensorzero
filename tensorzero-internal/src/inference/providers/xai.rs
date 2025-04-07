@@ -21,7 +21,7 @@ use crate::inference::types::{
 };
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
@@ -84,7 +84,6 @@ impl TryFrom<Credential> for XAICredentials {
             Credential::Static(key) => Ok(XAICredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(XAICredentials::Dynamic(key_name)),
             Credential::None => Ok(XAICredentials::None),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(XAICredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for xAI provider".to_string(),
@@ -132,7 +131,7 @@ impl InferenceProvider for XAIProvider {
                     message: format!("Error serializing xAI request: {e}"),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -148,6 +147,7 @@ impl InferenceProvider for XAIProvider {
 
         let res = request_builder
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
@@ -222,7 +222,7 @@ impl InferenceProvider for XAIProvider {
                     message: format!("Error serializing xAI request: {e}"),
                 })
             })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -243,6 +243,7 @@ impl InferenceProvider for XAIProvider {
             .post(request_url)
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
+            .headers(headers)
             .json(&request_body)
             .eventsource()
             .map_err(|e| {
@@ -606,13 +607,10 @@ mod tests {
         let creds = XAICredentials::try_from(generic).unwrap();
         assert!(matches!(creds, XAICredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = XAICredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, XAICredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = XAICredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, XAICredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

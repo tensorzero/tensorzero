@@ -13,7 +13,7 @@ mod exact_match;
 use exact_match::run_exact_match_evaluator;
 pub mod llm_judge;
 use futures::stream::{FuturesUnordered, StreamExt};
-use llm_judge::run_llm_judge_evaluator;
+use llm_judge::{run_llm_judge_evaluator, LLMJudgeEvaluationResult};
 use uuid::Uuid;
 
 use crate::ThrottledTensorZeroClient;
@@ -45,51 +45,70 @@ pub(crate) async fn evaluate_inference(
                 let evaluation_name = evaluation_name.clone();
                 let tensorzero_client = tensorzero_client.clone();
                 let evaluator_name_clone = evaluator_name.clone();
-                let evaluation_result = tokio::spawn(async move {
-                    let result = run_evaluator(
-                        &evaluation_config,
-                        evaluator_name_clone.clone(),
-                        &inference_response,
-                        &tensorzero_client,
-                        &datapoint,
-                        &evaluation_name,
-                        evaluation_run_id,
-                    )
-                    .await;
-                    if let Ok(Some(value)) = &result {
-                        // If there is a valid result, send feedback to TensorZero
-                        tensorzero_client
-                            .feedback(FeedbackParams {
-                                metric_name: get_evaluator_metric_name(
-                                    &evaluation_name,
-                                    &evaluator_name_clone,
+
+                let result = run_evaluator(
+                    &evaluation_config,
+                    evaluator_name_clone.clone(),
+                    &inference_response,
+                    &tensorzero_client,
+                    &datapoint,
+                    &evaluation_name,
+                    evaluation_run_id,
+                )
+                .await;
+
+                let evaluation_result = match result {
+                    Ok(result) => {
+                        if let Some(value) = result.value() {
+                            // If there is a valid result, send feedback to TensorZero
+                            let mut tags = HashMap::from([
+                                (
+                                    "tensorzero::evaluation_run_id".to_string(),
+                                    evaluation_run_id.to_string(),
                                 ),
-                                value: value.clone(),
-                                inference_id: Some(inference_response.inference_id()),
-                                dryrun: Some(false),
-                                episode_id: None,
-                                internal: true,
-                                tags: HashMap::from([
-                                    (
-                                        "tensorzero::evaluation_run_id".to_string(),
-                                        evaluation_run_id.to_string(),
+                                (
+                                    "tensorzero::datapoint_id".to_string(),
+                                    datapoint.id().to_string(),
+                                ),
+                                (
+                                    "tensorzero::evaluation_name".to_string(),
+                                    evaluation_name.to_string(),
+                                ),
+                                (
+                                    "tensorzero::evaluator_name".to_string(),
+                                    evaluator_name.to_string(),
+                                ),
+                            ]);
+                            if let Some(inference_id) = result.inference_id() {
+                                tags.insert(
+                                    "tensorzero::evaluator_inference_id".to_string(),
+                                    inference_id.to_string(),
+                                );
+                            }
+                            match tensorzero_client
+                                .feedback(FeedbackParams {
+                                    metric_name: get_evaluator_metric_name(
+                                        &evaluation_name,
+                                        &evaluator_name_clone,
                                     ),
-                                    (
-                                        "tensorzero::datapoint_id".to_string(),
-                                        datapoint.id().to_string(),
-                                    ),
-                                    (
-                                        "tensorzero::evaluation_name".to_string(),
-                                        evaluation_name.to_string(),
-                                    ),
-                                ]),
-                            })
-                            .await?;
+                                    value: value.clone(),
+                                    inference_id: Some(inference_response.inference_id()),
+                                    dryrun: Some(false),
+                                    episode_id: None,
+                                    internal: true,
+                                    tags,
+                                })
+                                .await
+                            {
+                                Ok(_) => (),
+                                Err(e) => return (evaluator_name, Err(e)),
+                            }
+                        }
+                        Ok(result.value_owned())
                     }
-                    result
-                })
-                .await
-                .unwrap_or_else(|e| Err(anyhow::anyhow!("Failed to join task: {e}")));
+                    Err(e) => Err(e),
+                };
+
                 (evaluator_name, evaluation_result)
             },
         ))
@@ -115,7 +134,7 @@ async fn run_evaluator(
     datapoint: &Datapoint,
     evaluation_name: &str,
     evaluation_run_id: Uuid,
-) -> Result<Option<Value>> {
+) -> Result<EvaluatorResult> {
     let EvaluationConfig::Static(static_evaluation_config) = evaluation_config;
     let evaluator_config = match static_evaluation_config.evaluators.get(&evaluator_name) {
         Some(evaluator_config) => evaluator_config,
@@ -123,11 +142,11 @@ async fn run_evaluator(
             return Err(anyhow::anyhow!("Evaluator config not found for {}. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports.", evaluator_name));
         }
     };
-    match evaluator_config {
+    Ok(match evaluator_config {
         EvaluatorConfig::ExactMatch(_exact_match_config) => {
-            run_exact_match_evaluator(inference_response, datapoint)
+            EvaluatorResult::ExactMatch(run_exact_match_evaluator(inference_response, datapoint)?)
         }
-        EvaluatorConfig::LLMJudge(llm_judge_config) => {
+        EvaluatorConfig::LLMJudge(llm_judge_config) => EvaluatorResult::LLMJudge(
             run_llm_judge_evaluator(
                 inference_response,
                 datapoint,
@@ -137,7 +156,34 @@ async fn run_evaluator(
                 &evaluator_name,
                 evaluation_run_id,
             )
-            .await
+            .await?,
+        ),
+    })
+}
+
+pub enum EvaluatorResult {
+    ExactMatch(Option<Value>),
+    LLMJudge(Option<LLMJudgeEvaluationResult>),
+}
+
+impl<'a> EvaluatorResult {
+    pub fn value(&'a self) -> Option<&'a Value> {
+        match self {
+            EvaluatorResult::ExactMatch(value) => value.as_ref(),
+            EvaluatorResult::LLMJudge(value) => value.as_ref().map(|v| &v.value),
+        }
+    }
+
+    pub fn inference_id(&'a self) -> Option<&'a Uuid> {
+        match self {
+            EvaluatorResult::ExactMatch(_) => None,
+            EvaluatorResult::LLMJudge(value) => value.as_ref().map(|v| &v.inference_id),
+        }
+    }
+    pub fn value_owned(self) -> Option<Value> {
+        match self {
+            EvaluatorResult::ExactMatch(value) => value,
+            EvaluatorResult::LLMJudge(value) => value.map(|v| v.value),
         }
     }
 }

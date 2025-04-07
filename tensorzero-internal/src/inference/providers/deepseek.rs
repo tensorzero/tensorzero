@@ -27,7 +27,7 @@ use crate::inference::types::{
 use crate::model::{Credential, CredentialLocation, ModelProvider};
 use crate::tool::ToolCallChunk;
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::{
     convert_stream_error, get_chat_url, handle_openai_error, prepare_openai_tools,
     tensorzero_to_openai_messages, tensorzero_to_openai_system_message,
@@ -55,7 +55,6 @@ const PROVIDER_TYPE: &str = "deepseek";
 pub enum DeepSeekCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -66,7 +65,6 @@ impl TryFrom<Credential> for DeepSeekCredentials {
         match credentials {
             Credential::Static(key) => Ok(DeepSeekCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(DeepSeekCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(DeepSeekCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for DeepSeek provider".to_string(),
@@ -90,7 +88,6 @@ impl DeepSeekCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             DeepSeekCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
@@ -141,7 +138,7 @@ impl InferenceProvider for DeepSeekProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -153,7 +150,8 @@ impl InferenceProvider for DeepSeekProvider {
         let request_builder = http_client
             .post(request_url)
             .header("Content-Type", "application/json")
-            .bearer_auth(api_key.expose_secret());
+            .bearer_auth(api_key.expose_secret())
+            .headers(headers);
 
         let res = request_builder
             .json(&request_body)
@@ -233,7 +231,7 @@ impl InferenceProvider for DeepSeekProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -254,6 +252,7 @@ impl InferenceProvider for DeepSeekProvider {
             .post(request_url)
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
+            .headers(headers)
             .json(&request_body)
             .eventsource()
             .map_err(|e| {
@@ -925,13 +924,10 @@ mod tests {
         let creds = DeepSeekCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, DeepSeekCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = DeepSeekCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, DeepSeekCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = DeepSeekCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, DeepSeekCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

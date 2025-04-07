@@ -23,7 +23,7 @@ use crate::{
 };
 
 use super::{
-    helpers::inject_extra_body,
+    helpers::inject_extra_request_data,
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
         tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage, OpenAIResponse,
@@ -74,7 +74,6 @@ impl FireworksProvider {
 pub enum FireworksCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -85,7 +84,6 @@ impl TryFrom<Credential> for FireworksCredentials {
         match credentials {
             Credential::Static(key) => Ok(FireworksCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(FireworksCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(FireworksCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Fireworks provider".to_string(),
@@ -109,7 +107,6 @@ impl FireworksCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             &FireworksCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
@@ -147,7 +144,7 @@ impl InferenceProvider for FireworksProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -160,6 +157,7 @@ impl InferenceProvider for FireworksProvider {
             .post(request_url)
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
+            .headers(headers)
             .json(&request_body)
             .send()
             .await
@@ -237,7 +235,7 @@ impl InferenceProvider for FireworksProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -259,6 +257,7 @@ impl InferenceProvider for FireworksProvider {
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
@@ -587,13 +586,10 @@ mod tests {
         let creds = FireworksCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, FireworksCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = FireworksCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, FireworksCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = FireworksCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, FireworksCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

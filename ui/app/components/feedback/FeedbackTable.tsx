@@ -36,7 +36,7 @@ export default function FeedbackTable({
             <TableRow className="hover:bg-bg-primary">
               <TableCell
                 colSpan={4}
-                className="px-3 py-8 text-center text-fg-muted"
+                className="text-fg-muted px-3 py-8 text-center"
               >
                 No feedback found.
               </TableCell>
@@ -45,18 +45,21 @@ export default function FeedbackTable({
             feedback.map((item) => (
               <TableRow key={item.id}>
                 <TableCell className="max-w-[200px]">
-                  <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono">
+                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap">
                     {item.id}
                   </code>
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <span>{getMetricName(item)}</span>
+                    <span className="font-mono">{getMetricName(item)}</span>
                     <MetricBadges metric={metrics[getMetricName(item)]} />
                   </div>
                 </TableCell>
                 <TableCell>
-                  <FeedbackValue feedback={item} />
+                  <FeedbackValue
+                    feedback={item}
+                    metric={metrics[getMetricName(item)]}
+                  />
                 </TableCell>
                 <TableCell>{formatDate(new Date(item.timestamp))}</TableCell>
               </TableRow>

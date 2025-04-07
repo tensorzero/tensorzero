@@ -29,7 +29,6 @@ import {
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
-  const dataset_name = config.evaluations[params.evaluation_name].dataset_name;
   const function_name =
     config.evaluations[params.evaluation_name].function_name;
   const function_type = config.functions[function_name].type;
@@ -66,7 +65,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   let resultsPromise;
   if (selected_evaluation_run_ids_array.length > 0) {
     resultsPromise = getEvaluationResults(
-      dataset_name,
       function_name,
       function_type,
       metric_names,
@@ -81,7 +79,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   let statisticsPromise;
   if (selected_evaluation_run_ids_array.length > 0) {
     statisticsPromise = getEvaluationStatistics(
-      dataset_name,
       function_name,
       function_type,
       metric_names,
@@ -94,7 +91,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   let total_datapoints_promise;
   if (selected_evaluation_run_ids_array.length > 0) {
     total_datapoints_promise = countDatapointsForEvaluation(
-      dataset_name,
       function_name,
       function_type,
       selected_evaluation_run_ids_array,
@@ -221,8 +217,8 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
               <EvaluationErrorInfo errors={errors} />
             </>
           )}
-          <div className="flex items-center justify-between">
-            <SectionHeader heading="Results" />
+          <div className="flex items-center">
+            <SectionHeader heading="Results" className="mr-4" />
             <AutoRefreshIndicator isActive={any_evaluation_is_running} />
           </div>
           <EvaluationTable

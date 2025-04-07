@@ -2,6 +2,9 @@
 
 This guide documents the steps to release a new version of TensorZero .
 
+You can inspect the Git SHA used to build a particular image tag with:
+`docker image inspect tensorzero/ui:latest | jq '.[0].Config.Labels["org.opencontainers.image.revision"]'`
+
 ## Versioning
 
 TensorZero follows [CalVer](https://calver.org/) for versioning.
@@ -65,6 +68,35 @@ DOCKER_BUILDKIT=1 docker buildx build \
   -t tensorzero/ui:latest \
   -t tensorzero/ui:XXXX.XX.X \
   -f ui/Dockerfile \
+  --attest type=provenance,mode=max \
+  --attest type=sbom \
+  --push \
+  .
+```
+
+> [!IMPORTANT]
+> Make sure to replace the `XXXX.XX.X` placeholder with the actual version of the Docker container you are building.
+
+## Evaluations Docker container
+
+Before building the Docker container for the first time, you need to set up your container builder:
+
+```bash
+docker buildx create \
+  --name container-builder \
+  --driver docker-container \
+  --use \
+  --bootstrap
+```
+
+Every time you want to build the Docker container, you need to run from the root of the repository:
+
+```bash
+DOCKER_BUILDKIT=1 docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t tensorzero/evaluations:latest \
+  -t tensorzero/evaluations:XXXX.XX.X \
+  -f evaluations/Dockerfile \
   --attest type=provenance,mode=max \
   --attest type=sbom \
   --push \

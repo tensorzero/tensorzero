@@ -53,8 +53,9 @@ async fn run_evaluations_json() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        name: "entity_extraction".to_string(),
-        variant: "gpt_4o_mini".to_string(),
+        evaluation_name: "entity_extraction".to_string(),
+        dataset_name: "extract_entities_0.8".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
     };
@@ -108,6 +109,10 @@ async fn run_evaluations_json() {
         assert_eq!(
             clickhouse_inference["tags"]["tensorzero::evaluation_name"],
             "entity_extraction"
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::dataset_name"],
+            "extract_entities_0.8"
         );
         // Check boolean feedback was recorded
         let feedback = select_feedback_by_target_id_clickhouse(
@@ -168,7 +173,28 @@ async fn run_evaluations_json() {
             feedback["tags"]["tensorzero::datapoint_id"],
             parsed.datapoint.id().to_string()
         );
-
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluator_name"],
+            "count_sports"
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluation_name"],
+            "entity_extraction"
+        );
+        let evaluator_inference_id = Uuid::parse_str(
+            feedback["tags"]["tensorzero::evaluator_inference_id"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let evaluator_inference =
+            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        assert_eq!(
+            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            "entity_extraction"
+        );
         total_the += feedback["value"].as_f64().unwrap() as u32;
         parsed_output.push(parsed);
     }
@@ -192,8 +218,9 @@ async fn run_exact_match_evaluation_chat() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        name: "haiku_with_outputs".to_string(),
-        variant: "gpt_4o_mini".to_string(),
+        evaluation_name: "haiku_with_outputs".to_string(),
+        dataset_name: "good-haiku-data".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
     };
@@ -245,6 +272,10 @@ async fn run_exact_match_evaluation_chat() {
             clickhouse_inference["tags"]["tensorzero::evaluation_name"],
             "haiku_with_outputs"
         );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::dataset_name"],
+            "good-haiku-data"
+        );
         let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
             &clickhouse,
             "BooleanMetricFeedback",
@@ -276,6 +307,10 @@ async fn run_exact_match_evaluation_chat() {
             clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
             "haiku_with_outputs"
         );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
+            "exact_match"
+        );
         parsed_output.push(parsed);
     }
     assert_eq!(parsed_output.len(), 29);
@@ -297,8 +332,9 @@ async fn run_llm_judge_evaluation_chat() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        name: "haiku_without_outputs".to_string(),
-        variant: "gpt_4o_mini".to_string(),
+        dataset_name: "good-haikus-no-output".to_string(),
+        evaluation_name: "haiku_without_outputs".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
     };
@@ -396,6 +432,24 @@ async fn run_llm_judge_evaluation_chat() {
             clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
             "haiku_without_outputs"
         );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
+            "topic_starts_with_f"
+        );
+        let evaluator_inference_id = Uuid::parse_str(
+            clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let evaluator_inference =
+            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        assert_eq!(
+            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            "haiku_without_outputs"
+        );
         parsed_output.push(parsed);
     }
     assert_eq!(parsed_output.len(), 10);
@@ -417,8 +471,9 @@ async fn run_llm_judge_evaluation_chat_human_readable() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        name: "haiku_without_outputs".to_string(),
-        variant: "gpt_4o_mini".to_string(),
+        evaluation_name: "haiku_without_outputs".to_string(),
+        dataset_name: "good-haikus-no-output".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::HumanReadable,
     };
@@ -452,8 +507,9 @@ async fn run_llm_judge_evaluation_json_human_readable() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        name: "entity_extraction".to_string(),
-        variant: "gpt_4o_mini".to_string(),
+        evaluation_name: "entity_extraction".to_string(),
+        dataset_name: "extract_entities_0.8".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::HumanReadable,
     };
@@ -483,14 +539,26 @@ async fn test_parse_args() {
     assert!(args
         .to_string()
         .contains("the following required arguments were not provided:"));
-    assert!(args.to_string().contains("--name <NAME>"));
-    assert!(args.to_string().contains("--variant <VARIANT>"));
+    assert!(args
+        .to_string()
+        .contains("--evaluation-name <EVALUATION_NAME>"));
+    assert!(args.to_string().contains("--dataset-name <DATASET_NAME>"));
+    assert!(args.to_string().contains("--variant-name <VARIANT_NAME>"));
 
     // Test required arguments
-    let args = Args::try_parse_from(["test", "--name", "my-evaluation", "--variant", "my-variant"])
-        .unwrap();
-    assert_eq!(args.name, "my-evaluation");
-    assert_eq!(args.variant, "my-variant");
+    let args = Args::try_parse_from([
+        "test",
+        "--evaluation-name",
+        "my-evaluation",
+        "--variant-name",
+        "my-variant",
+        "--dataset-name",
+        "my-dataset",
+    ])
+    .unwrap();
+    assert_eq!(args.evaluation_name, "my-evaluation");
+    assert_eq!(args.variant_name, "my-variant");
+    assert_eq!(args.dataset_name, "my-dataset");
     assert_eq!(args.config_file, PathBuf::from("./config/tensorzero.toml"));
     assert_eq!(args.concurrency, 1);
     assert_eq!(args.gateway_url, None);
@@ -499,9 +567,11 @@ async fn test_parse_args() {
     // Test all arguments
     let args = Args::try_parse_from([
         "test",
-        "--name",
+        "--evaluation-name",
         "my-evaluation",
-        "--variant",
+        "--dataset-name",
+        "my-dataset",
+        "--variant-name",
         "my-variant",
         "--config-file",
         "/path/to/config.toml",
@@ -513,8 +583,9 @@ async fn test_parse_args() {
         "jsonl",
     ])
     .unwrap();
-    assert_eq!(args.name, "my-evaluation");
-    assert_eq!(args.variant, "my-variant");
+    assert_eq!(args.evaluation_name, "my-evaluation");
+    assert_eq!(args.dataset_name, "my-dataset");
+    assert_eq!(args.variant_name, "my-variant");
     assert_eq!(args.config_file, PathBuf::from("/path/to/config.toml"));
     assert_eq!(
         args.gateway_url,
@@ -526,9 +597,9 @@ async fn test_parse_args() {
     // Test invalid URL
     let args = Args::try_parse_from([
         "test",
-        "--name",
+        "--evaluation-name",
         "my-evaluation",
-        "--variant",
+        "--variant-name",
         "my-variant",
         "--gateway-url",
         "not-a-url",
@@ -541,9 +612,9 @@ async fn test_parse_args() {
     // Test invalid format
     let args = Args::try_parse_from([
         "test",
-        "--name",
+        "--evaluation-name",
         "my-evaluation",
-        "--variant",
+        "--variant-name",
         "my-variant",
         "--format",
         "invalid",
@@ -582,8 +653,9 @@ async fn run_evaluations_errors() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        name: "entity_extraction".to_string(),
-        variant: "dummy_error".to_string(),
+        evaluation_name: "entity_extraction".to_string(),
+        dataset_name: "extract_entities_0.8".to_string(),
+        variant_name: "dummy_error".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
     };
@@ -682,8 +754,9 @@ async fn test_run_llm_judge_evaluator_chat() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(true)));
+    assert_eq!(result.value, json!(true));
 
     let result = run_llm_judge_evaluator(
         &inference_response,
@@ -695,8 +768,9 @@ async fn test_run_llm_judge_evaluator_chat() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(false)));
+    assert_eq!(result.value, json!(false));
 
     let result = run_llm_judge_evaluator(
         &inference_response,
@@ -708,8 +782,9 @@ async fn test_run_llm_judge_evaluator_chat() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(0)));
+    assert_eq!(result.value, json!(0));
 
     let result = run_llm_judge_evaluator(
         &inference_response,
@@ -721,8 +796,9 @@ async fn test_run_llm_judge_evaluator_chat() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(1)));
+    assert_eq!(result.value, json!(1));
 
     // Try without output
     let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
@@ -757,7 +833,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     )
     .await
     .unwrap();
-    assert_eq!(result, None);
+    assert!(result.is_none());
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -833,8 +909,9 @@ async fn test_run_llm_judge_evaluator_json() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(true)));
+    assert_eq!(result.value, json!(true));
 
     let result = run_llm_judge_evaluator(
         &inference_response,
@@ -846,8 +923,9 @@ async fn test_run_llm_judge_evaluator_json() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(false)));
+    assert_eq!(result.value, json!(false));
 
     let result = run_llm_judge_evaluator(
         &inference_response,
@@ -859,8 +937,9 @@ async fn test_run_llm_judge_evaluator_json() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(0)));
+    assert_eq!(result.value, json!(0));
 
     let result = run_llm_judge_evaluator(
         &inference_response,
@@ -872,8 +951,9 @@ async fn test_run_llm_judge_evaluator_json() {
         Uuid::now_v7(),
     )
     .await
+    .unwrap()
     .unwrap();
-    assert_eq!(result, Some(json!(1)));
+    assert_eq!(result.value, json!(1));
 
     // Try without output
     let datapoint = Datapoint::ChatInference(ChatInferenceDatapoint {
@@ -908,5 +988,5 @@ async fn test_run_llm_judge_evaluator_json() {
     )
     .await
     .unwrap();
-    assert_eq!(result, None);
+    assert!(result.is_none());
 }

@@ -79,6 +79,9 @@ describe("searchEvaluationRuns", () => {
     );
     expect(runIds).toMatchObject([
       {
+        evaluation_run_id: "0195f845-8f85-7822-b904-10630698f99c",
+      },
+      {
         evaluation_run_id: "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
         variant_name: "gpt4o_mini_initial_prompt",
       },
@@ -134,7 +137,6 @@ describe("searchEvaluationRuns", () => {
 describe("getEvaluationResults", () => {
   test("should return correct results for haiku evaluation", async () => {
     const results = await getEvaluationResults(
-      "foo",
       "write_haiku",
       "chat",
       [
@@ -188,7 +190,6 @@ describe("getEvaluationResults", () => {
     // We test here that it is not included and the data is ragged due to the datapoint at the top of the
     // table only having one evaluation run.
     const results = await getEvaluationResults(
-      "foo",
       "extract_entities",
       "json",
       [
@@ -223,7 +224,6 @@ describe("getEvaluationResults", () => {
 
   test("should return correct results for ragged haiku evaluation", async () => {
     const results = await getEvaluationResults(
-      "foo",
       "write_haiku",
       "chat",
       [
@@ -284,7 +284,6 @@ describe("getEvaluationResults", () => {
 describe("getEvaluationStatistics", () => {
   test("should return correct statistics for haiku evaluation", async () => {
     const statistics = await getEvaluationStatistics(
-      "foo",
       "write_haiku",
       "chat",
       [
@@ -316,7 +315,6 @@ describe("getEvaluationStatistics", () => {
 
   test("should return correct statistics for entity_extraction evaluation", async () => {
     const statistics = await getEvaluationStatistics(
-      "foo",
       "extract_entities",
       "json",
       [
@@ -374,7 +372,6 @@ describe("getEvaluationStatistics", () => {
 describe("countDatapointsForEvaluation", () => {
   test("should return correct number of datapoints for haiku evaluation", async () => {
     const datapoints = await countDatapointsForEvaluation(
-      "foo",
       "write_haiku",
       "chat",
       ["0195aef7-96fe-7d60-a2e6-5a6ea990c425"],
@@ -385,7 +382,6 @@ describe("countDatapointsForEvaluation", () => {
 
   test("should return correct number of datapoints for entity_extraction evaluation", async () => {
     const datapoints = await countDatapointsForEvaluation(
-      "foo",
       "extract_entities",
       "json",
       [
@@ -400,7 +396,7 @@ describe("countDatapointsForEvaluation", () => {
 describe("countTotalEvaluationRuns", () => {
   test("should return correct number of evaluation runs", async () => {
     const runs = await countTotalEvaluationRuns();
-    expect(runs).toBe(6);
+    expect(runs).toBe(7);
   });
 });
 
@@ -409,19 +405,20 @@ describe("getEvaluationRunInfo", () => {
     const runs = await getEvaluationRunInfo();
 
     // Check the total number of runs
-    expect(runs.length).toBe(6);
+    expect(runs.length).toBe(7);
 
     // Check structure and content of the first row
     expect(runs[0]).toMatchObject({
-      evaluation_run_id: "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
+      evaluation_run_id: "0195f845-8f85-7822-b904-10630698f99c",
       evaluation_name: "entity_extraction",
       function_name: "extract_entities",
-      variant_name: "llama_8b_initial_prompt",
-      last_inference_timestamp: "2025-03-23T21:56:17Z",
+      variant_name: "gpt4o_mini_initial_prompt",
+      last_inference_timestamp: "2025-04-02T20:51:05Z",
+      dataset_name: "foo",
     });
 
     // Check structure and content of another row
-    expect(runs[2]).toMatchObject({
+    expect(runs[3]).toMatchObject({
       evaluation_run_id: "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
       evaluation_name: "entity_extraction",
       function_name: "extract_entities",
@@ -459,7 +456,7 @@ describe("getEvaluationRunInfo", () => {
     expect(functionNames).toContain("write_haiku");
 
     // Check the last run in the result
-    expect(runs[5]).toMatchObject({
+    expect(runs[6]).toMatchObject({
       evaluation_run_id: "0195aef6-4ed4-7710-ae62-abb10744f153",
       evaluation_name: "haiku",
       function_name: "write_haiku",

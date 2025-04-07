@@ -10,12 +10,12 @@ import {
   countTotalEvaluationRuns,
   getEvaluationRunInfo,
 } from "~/utils/clickhouse/evaluations.server";
-import { getConfig } from "~/utils/config/index.server";
 import EvaluationRunsTable from "./EvaluationRunsTable";
 import { useState } from "react";
 import { EvaluationsActions } from "./EvaluationsActions";
 import LaunchEvaluationModal from "./LaunchEvaluationModal";
 import { runEvaluation } from "~/utils/evaluations.server";
+import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const totalEvaluationRuns = await countTotalEvaluationRuns();
@@ -23,19 +23,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
-  const evaluationRuns = await getEvaluationRunInfo(pageSize, offset);
-  const config = await getConfig();
-  const evaluationRunsWithDataset = evaluationRuns.map((runInfo) => {
-    const dataset = config.evaluations[runInfo.evaluation_name].dataset_name;
-    return {
-      ...runInfo,
-      dataset,
-    };
-  });
+  const [evaluationRuns, datasetCounts] = await Promise.all([
+    getEvaluationRunInfo(pageSize, offset),
+    getDatasetCounts(),
+  ]);
+  const dataset_names = datasetCounts.map((dataset) => dataset.dataset_name);
 
   return {
     totalEvaluationRuns,
-    evaluationRunsWithDataset,
+    evaluationRuns,
+    dataset_names,
     offset,
     pageSize,
   };
@@ -44,18 +41,22 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const evaluation_name = formData.get("evaluation_name");
+  const dataset_name = formData.get("dataset_name");
   const variant_name = formData.get("variant_name");
   const concurrency_limit = formData.get("concurrency_limit");
   let evaluation_start_info;
   try {
     evaluation_start_info = await runEvaluation(
       evaluation_name as string,
+      dataset_name as string,
       variant_name as string,
       parseInt(concurrency_limit as string),
     );
   } catch (error) {
     console.error("Error starting evaluation:", error);
-    throw new Response("Failed to start evaluation", { status: 500 });
+    throw new Response(`Failed to start evaluation: ${error}`, {
+      status: 500,
+    });
   }
   return redirect(
     `/evaluations/${evaluation_name}?evaluation_run_ids=${evaluation_start_info.evaluation_run_id}`,
@@ -66,8 +67,13 @@ export default function EvaluationSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const { totalEvaluationRuns, evaluationRunsWithDataset, offset, pageSize } =
-    loaderData;
+  const {
+    totalEvaluationRuns,
+    evaluationRuns,
+    offset,
+    pageSize,
+    dataset_names,
+  } = loaderData;
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -89,7 +95,7 @@ export default function EvaluationSummaryPage({
         <EvaluationsActions
           onNewRun={() => setLaunchEvaluationModalIsOpen(true)}
         />
-        <EvaluationRunsTable evaluationRuns={evaluationRunsWithDataset} />
+        <EvaluationRunsTable evaluationRuns={evaluationRuns} />
         <PageButtons
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
@@ -100,6 +106,7 @@ export default function EvaluationSummaryPage({
       <LaunchEvaluationModal
         isOpen={launchEvaluationModalIsOpen}
         onClose={() => setLaunchEvaluationModalIsOpen(false)}
+        dataset_names={dataset_names}
       />
     </PageLayout>
   );

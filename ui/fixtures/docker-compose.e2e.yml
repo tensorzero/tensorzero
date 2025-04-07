@@ -32,7 +32,7 @@ services:
     environment:
       - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
     env_file:
-      - ${ENV_FILE:-../.env}
+      - .env
     ports:
       - "3000:3000"
     extra_hosts:

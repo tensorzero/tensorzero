@@ -123,7 +123,6 @@ test("parse e2e config", async () => {
   const sampleEvaluation = validatedConfig.evaluations["entity_test"]; // Using an evaluation from the test config
   if (sampleEvaluation) {
     expect(sampleEvaluation.function_name).toBeDefined();
-    expect(sampleEvaluation.dataset_name).toBeDefined();
     expect(sampleEvaluation.evaluators).toBeDefined();
 
     // Check if evaluators are properly loaded
@@ -200,7 +199,6 @@ test("parse fixture config with evaluations", async () => {
     validatedConfig.evaluations["entity_extraction"];
   expect(entityExtractionEvaluation).toBeDefined();
   expect(entityExtractionEvaluation.function_name).toBe("extract_entities");
-  expect(entityExtractionEvaluation.dataset_name).toBe("foo");
 
   // Check exact_match evaluator
   const exactMatchEvaluator =

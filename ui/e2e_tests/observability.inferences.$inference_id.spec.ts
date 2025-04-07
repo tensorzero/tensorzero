@@ -30,4 +30,56 @@ test("should display inferences with image content", async ({ page }) => {
   // Verify images have loaded correctly
   await expect(firstImage).toHaveJSProperty("complete", true);
   await expect(secondImage).toHaveJSProperty("complete", true);
+
+  // Verify that images display in the modelInference section too
+  // Click on the modelInference section
+  await page.getByText("0195e31b-703c-74a3-bbdd-e252ca10a86d").click();
+  // Assert that the images are visible
+  const newImages = page.locator("img");
+  await expect(newImages).toHaveCount(4);
+  const firstNewImage = newImages.nth(0);
+  const secondNewImage = newImages.nth(1);
+  const thirdNewImage = newImages.nth(2);
+  const fourthNewImage = newImages.nth(3);
+  await expect(firstNewImage).toBeVisible();
+  await expect(secondNewImage).toBeVisible();
+  await expect(thirdNewImage).toBeVisible();
+  await expect(fourthNewImage).toBeVisible();
+});
+
+test("tag navigation works by evaluation_name", async ({ page }) => {
+  await page.goto(
+    "/observability/inferences/0195f845-949b-76c0-b9d4-68b3fd799b50",
+  );
+
+  // Wait for page to load
+  await page.waitForLoadState("networkidle");
+
+  // Use a more specific selector for the code element with entity_extraction
+  // Look for a table cell containing the exact text "entity_extraction"
+  const entityExtractionCell = page
+    .locator("code")
+    .filter({ hasText: /^entity_extraction$/ })
+    .first();
+
+  // Wait for the element to be visible
+  await entityExtractionCell.waitFor({ state: "visible" });
+
+  // Click the element
+  await entityExtractionCell.click();
+
+  // Assert that the page is /evaluations/entity_extraction
+  await expect(page).toHaveURL("/evaluations/entity_extraction");
+});
+
+test("tag navigation works by datapoint_id", async ({ page }) => {
+  await page.goto(
+    "/observability/inferences/0195f845-949b-76c0-b9d4-68b3fd799b50",
+  );
+  // Click on the datapoint ID
+  await page.getByText("tensorzero::datapoint_id").click();
+  // Assert that the page is /datapoints/tensorzero::datapoint_id
+  await expect(page).toHaveURL(
+    "/datasets/foo/datapoint/019368c7-d150-7ba0-819a-88a2cec33663",
+  );
 });

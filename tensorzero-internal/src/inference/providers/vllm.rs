@@ -9,7 +9,7 @@ use serde_json::Value;
 use tokio::time::Instant;
 use url::Url;
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::openai::{
     get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAISystemRequestMessage,
@@ -128,7 +128,7 @@ impl InferenceProvider for VLLMProvider {
                 message: format!("Error serializing VLLM request: {e}"),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -145,6 +145,7 @@ impl InferenceProvider for VLLMProvider {
         }
         let res = request_builder
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
@@ -215,7 +216,7 @@ impl InferenceProvider for VLLMProvider {
                 message: format!("Error serializing VLLM request: {e}"),
             })
         })?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -237,6 +238,7 @@ impl InferenceProvider for VLLMProvider {
         }
         let event_source = request_builder
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
@@ -552,13 +554,10 @@ mod tests {
         let creds = VLLMCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, VLLMCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = VLLMCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, VLLMCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = VLLMCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, VLLMCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

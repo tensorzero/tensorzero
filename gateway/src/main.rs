@@ -1,3 +1,7 @@
+use axum::extract::Request;
+use axum::http::HeaderValue;
+use axum::middleware::Next;
+use axum::response::Response;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
 use clap::Parser;
@@ -47,6 +51,30 @@ struct Args {
     tensorzero_toml: Option<PathBuf>,
 }
 
+async fn add_version_header(request: Request, next: Next) -> Response {
+    #[allow(unused_mut)]
+    let mut version = HeaderValue::from_static(TENSORZERO_VERSION);
+    #[cfg(feature = "e2e_tests")]
+    {
+        if request
+            .headers()
+            .contains_key("x-tensorzero-e2e-version-remove")
+        {
+            tracing::info!("Removing version header due to e2e header");
+            return next.run(request).await;
+        }
+        if let Some(header_version) = request.headers().get("x-tensorzero-e2e-version-override") {
+            tracing::info!("Overriding version header with e2e header: {header_version:?}");
+            version = header_version.clone();
+        }
+    }
+    let mut response = next.run(request).await;
+    response
+        .headers_mut()
+        .insert("x-tensorzero-gateway-version", version);
+    response
+}
+
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
@@ -55,7 +83,7 @@ async fn main() {
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     if args.warn_default_cmd {
-        tracing::warn!("Deprecation warning: Running gateway from Docker container without overriding default CMD. Please override the command to either '--config-file path/to/tensorzero.toml' or '--default-config'.");
+        tracing::warn!("Deprecation Warning: Running gateway from Docker container without overriding default CMD. Please override the command to either `--config-file` to specify a custom configuration file (e.g. `--config-file /path/to/tensorzero.toml`) or `--default-config` to use default settings (i.e. no custom functions, metrics, etc.).");
     }
 
     if args.tensorzero_toml.is_some() && args.config_file.is_some() {
@@ -84,6 +112,7 @@ async fn main() {
         Arc::new(
             Config::load_and_verify_from_path(Path::new(&path))
                 .await
+                .ok() // Don't print the error here, since it was already printed when it was constructed
                 .expect_pretty("Failed to load config"),
         )
     } else {
@@ -152,6 +181,7 @@ async fn main() {
             get(move || std::future::ready(metrics_handle.render())),
         )
         .fallback(endpoints::fallback::handle_404)
+        .layer(axum::middleware::from_fn(add_version_header))
         .with_state(app_state);
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000

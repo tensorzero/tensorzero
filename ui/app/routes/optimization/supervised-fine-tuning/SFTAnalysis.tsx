@@ -59,7 +59,7 @@ export function SFTAnalysis({ status }: Props) {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div className="rounded-lg bg-muted p-4">
+        <div className="bg-muted rounded-lg p-4">
           <h4 className="mb-2 font-medium">Basic Statistics</h4>
           <ul className="space-y-1">
             <li className="">
@@ -80,7 +80,7 @@ export function SFTAnalysis({ status }: Props) {
           </ul>
         </div>
 
-        <div className="rounded-lg bg-muted p-4">
+        <div className="bg-muted rounded-lg p-4">
           <h4 className="mb-2 font-medium">Messages per Example</h4>
           <ul className="space-y-1">
             <li>
@@ -104,7 +104,7 @@ export function SFTAnalysis({ status }: Props) {
           </ul>
         </div>
 
-        <div className="rounded-lg bg-muted p-4">
+        <div className="bg-muted rounded-lg p-4">
           <h4 className="mb-2 font-medium">Total Tokens per Example</h4>
           <ul className="space-y-1">
             <li>
@@ -128,7 +128,7 @@ export function SFTAnalysis({ status }: Props) {
           </ul>
         </div>
 
-        <div className="rounded-lg bg-muted p-4">
+        <div className="bg-muted rounded-lg p-4">
           <h4 className="mb-2 font-medium">Assistant Tokens per Example</h4>
           <ul className="space-y-1">
             <li>
@@ -156,7 +156,7 @@ export function SFTAnalysis({ status }: Props) {
       {analysisData.tooLongCount > 0 && (
         <div className="rounded border-l-4 border-yellow-400 bg-yellow-50 p-4">
           <div className="flex">
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <AlertTriangleIcon className="size-5 text-yellow-400" />
             </div>
             <div className="ml-3">

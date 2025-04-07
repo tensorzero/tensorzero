@@ -669,6 +669,7 @@ impl EvaluatorConfig {
             .into());
         }
         let extra_body = FullExtraBodyConfig {
+            variant_extra_headers: self.inner.extra_headers.clone(),
             extra_body: self.inner.extra_body.clone(),
             inference_extra_body: Default::default(),
         };
@@ -1204,6 +1205,7 @@ mod tests {
                             ..Default::default()
                         }),
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 )]),
             },
@@ -1299,6 +1301,7 @@ mod tests {
                                 ..Default::default()
                             }),
                             extra_body: Default::default(),
+                            extra_headers: Default::default(),
                         },
                     )]),
                 },
@@ -1362,6 +1365,7 @@ mod tests {
                                 ..Default::default()
                             }),
                             extra_body: Default::default(),
+                            extra_headers: Default::default(),
                         },
                     )]),
                 },
@@ -1442,6 +1446,7 @@ mod tests {
                             ..Default::default()
                         }),
                         extra_body: Default::default(),
+                        extra_headers: Default::default(),
                     },
                 )]),
             },

@@ -139,7 +139,6 @@ export const UninitializedEvaluatorConfigSchema = z.discriminatedUnion("type", [
 
 export const UninitializedStaticEvaluationConfigSchema = z.object({
   evaluators: z.record(z.string(), UninitializedEvaluatorConfigSchema),
-  dataset_name: z.string(),
   function_name: z.string(),
 });
 
@@ -427,7 +426,6 @@ export const RawEvaluationConfigSchema =
               EvaluationConfig: {
                 type: "static",
                 evaluators,
-                dataset_name: raw.dataset_name,
                 function_name: raw.function_name,
               },
               functionConfigs,

@@ -29,7 +29,7 @@ use crate::{
     tool::{ToolCall, ToolCallChunk},
 };
 
-use super::helpers::inject_extra_body;
+use super::helpers::inject_extra_request_data;
 use super::{
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
@@ -90,7 +90,6 @@ fn default_api_key_location() -> CredentialLocation {
 pub enum TogetherCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -101,7 +100,6 @@ impl TryFrom<Credential> for TogetherCredentials {
         match credentials {
             Credential::Static(key) => Ok(TogetherCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(TogetherCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(TogetherCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Together provider".to_string(),
@@ -124,7 +122,6 @@ impl TogetherCredentials {
                     },
                 )?))
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             TogetherCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             })?,
@@ -152,7 +149,7 @@ impl InferenceProvider for TogetherProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -166,6 +163,7 @@ impl InferenceProvider for TogetherProvider {
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .send()
             .await
             .map_err(|e| {
@@ -240,7 +238,7 @@ impl InferenceProvider for TogetherProvider {
                     })
                 },
             )?;
-        inject_extra_body(
+        let headers = inject_extra_request_data(
             &request.extra_body,
             model_provider,
             model_name,
@@ -259,6 +257,7 @@ impl InferenceProvider for TogetherProvider {
             .header("Content-Type", "application/json")
             .bearer_auth(api_key.expose_secret())
             .json(&request_body)
+            .headers(headers)
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
@@ -962,13 +961,10 @@ mod tests {
         let creds = TogetherCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, TogetherCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = TogetherCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, TogetherCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = TogetherCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, TogetherCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));
