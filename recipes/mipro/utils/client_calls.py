@@ -1,5 +1,5 @@
 import asyncio
-from typing import AsyncGenerator, Dict, Optional, Union
+from typing import AsyncIterator, Dict, Optional, Union
 
 from tensorzero import (
     AsyncTensorZeroGateway,
@@ -16,7 +16,7 @@ async def get_instructions(
     semaphore: asyncio.Semaphore,
     variant_name: str = "baseline",
     dryrun: bool = True,
-) -> Optional[Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]]:
+) -> Optional[Union[InferenceResponse, AsyncIterator[InferenceChunk]]]:
     """
     Get instructions from the client with retries.
     """
@@ -49,7 +49,7 @@ async def candidate_inference(
     variant_name: str,
     semaphore: asyncio.Semaphore,
     dryrun: bool = True,
-) -> Optional[Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]]:
+) -> Optional[Union[InferenceResponse, AsyncIterator[InferenceChunk]]]:
     try:
         async with semaphore:
             return await client.inference(
@@ -72,7 +72,7 @@ async def judge_answer(
     semaphore: asyncio.Semaphore,
     variant_name: str = "baseline",
     dryrun: bool = True,
-) -> Optional[Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]]:
+) -> Optional[Union[InferenceResponse, AsyncIterator[InferenceChunk]]]:
     try:
         async with semaphore:
             system_args: Dict[str, str] = {  # type: ignore[reportArgumentType]
