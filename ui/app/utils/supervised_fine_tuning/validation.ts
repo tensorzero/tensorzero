@@ -23,6 +23,7 @@ import {
   VALID_MESSAGE_KEYS,
   CURRENT_MODEL_VERSIONS,
 } from "./constants";
+import type { Tiktoken } from "tiktoken";
 
 /**
  * Format error types based on Python implementation
@@ -50,6 +51,7 @@ type FormatErrorType =
 export function validateMessageLength(
   messages: OpenAIMessage[],
   model: string,
+  enc: Tiktoken,
   maxTokens?: number,
 ): { isValid: boolean; tokenCount: number } {
   // Validate model version
@@ -62,7 +64,7 @@ export function validateMessageLength(
     );
   }
 
-  const tokenCount = getTokensFromMessages(messages, model);
+  const tokenCount = getTokensFromMessages(messages, model, enc);
   const tokenLimit = maxTokens ?? getModelTokenLimit(model);
 
   return {
@@ -219,6 +221,7 @@ export function validateDataFormat(data: unknown): {
 export function validateMessage(
   messages: OpenAIMessage[],
   model: string,
+  enc: Tiktoken,
   maxTokens?: number,
 ): {
   isValid: boolean;
@@ -233,7 +236,7 @@ export function validateMessage(
     errors: Record<FormatErrorType, number>;
   };
 } {
-  const lengthValidation = validateMessageLength(messages, model, maxTokens);
+  const lengthValidation = validateMessageLength(messages, model, enc, maxTokens);
   const rolesValidation = validateMessageRoles(messages);
 
   // Create a mock dataset entry for format validation
@@ -261,6 +264,7 @@ export function validateMessage(
 export function analyzeDataset(
   dataset: { messages: OpenAIMessage[] }[],
   model: string,
+  enc: Tiktoken,
   maxTokens?: number,
 ): {
   missingSystemCount: number;
@@ -292,9 +296,9 @@ export function analyzeDataset(
 
     messageCounts.push(messages.length);
 
-    const totalTokens = validateMessageLength(messages, model).tokenCount;
+    const totalTokens = validateMessageLength(messages, model, enc).tokenCount;
     tokenCounts.push(totalTokens);
-    const assistantTokenCount = countAssistantTokens(messages, model);
+    const assistantTokenCount = countAssistantTokens(messages, enc);
     assistantTokenCounts.push(assistantTokenCount);
 
     // Check token limit
@@ -368,6 +372,7 @@ export function calculateDistribution(values: number[]): Distribution {
 export function validateDataset(
   dataset: unknown[],
   model: string,
+  enc: Tiktoken,
   maxTokens?: number,
 ): {
   isValid: boolean;
@@ -417,6 +422,7 @@ export function validateDataset(
     const messageValidation = validateMessage(
       typedEntry.messages,
       model,
+      enc,
       maxTokens,
     );
 
