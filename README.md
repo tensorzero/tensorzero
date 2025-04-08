@@ -299,9 +299,7 @@ Optimize your prompts programmatically using research-driven optimization techni
     <td width="50%" align="center" valign="middle"><b><a href="https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy">DSPy Integration</a></b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="middle">
-      TensorZero implements MIPROv2, an automated prompt engineering algorithm that jointly optimizes instructions and in-context examples for your prompts.
-    </td>
+    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/d81a7c37-382f-4c46-840f-e6c2593301db"></td>
     <td width="50%" align="center" valign="middle">
       TensorZero comes with several optimization recipes, but you can also easily create your own.
       This example shows to optimize a TensorZero function using an arbitrary tool — here, DSPy, a popular library for automated prompt engineering.
@@ -310,8 +308,6 @@ Optimize your prompts programmatically using research-driven optimization techni
 </table>
 
 _More coming soon..._
-
-<br>
 
 ### 🔍 LLM Observability
 
