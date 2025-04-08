@@ -1006,7 +1006,7 @@ mod tests {
             .unwrap();
         match &**function {
             FunctionConfig::Json(json_config) => {
-                assert_eq!(json_config.variants.len(), 1);
+                assert_eq!(json_config.variants.len(), 5);
                 match &json_config.variants["anthropic_promptA"] {
                     VariantConfig::ChatCompletion(chat_config) => {
                         assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
@@ -1017,7 +1017,7 @@ mod tests {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
                                 path: PathBuf::from(
-                                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::system"
+                                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
                                 ),
                                 contents:
                                     "Return True if there is NSFW content in this generation.\n\n"
@@ -1027,6 +1027,36 @@ mod tests {
                         assert_eq!(chat_config.json_mode, Some(JsonMode::ImplicitTool));
                     }
                     _ => panic!("Expected a chat completion variant"),
+                }
+                match &json_config.variants["best_of_3"] {
+                    VariantConfig::BestOfNSampling(best_of_n_config) => {
+                        assert_eq!(best_of_n_config.candidates.len(), 3);
+                        assert_eq!(
+                            best_of_n_config.evaluator.inner.model,
+                            "openai::gpt-4o-mini".into()
+                        );
+                        assert_eq!(
+                            best_of_n_config.evaluator.inner.json_mode,
+                            Some(JsonMode::Strict)
+                        );
+                        assert_eq!(best_of_n_config.evaluator.inner.temperature, Some(0.3));
+                    }
+                    _ => panic!("Expected a best of n sampling variant"),
+                }
+                match &json_config.variants["mixture_of_3"] {
+                    VariantConfig::MixtureOfN(mixture_of_n_config) => {
+                        assert_eq!(mixture_of_n_config.candidates.len(), 3);
+                        assert_eq!(
+                            mixture_of_n_config.fuser.inner.model,
+                            "openai::gpt-4o-mini".into()
+                        );
+                        assert_eq!(
+                            mixture_of_n_config.fuser.inner.json_mode,
+                            Some(JsonMode::Strict)
+                        );
+                        assert_eq!(mixture_of_n_config.fuser.inner.temperature, Some(0.3));
+                    }
+                    _ => panic!("Expected a mixture of n sampling variant"),
                 }
             }
             _ => panic!("Expected a JSON function"),
@@ -2070,33 +2100,85 @@ mod tests {
 
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::system")
+                .get(
+                    "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
+                )
                 .unwrap(),
             "Return True if there is NSFW content in this generation.\n\n".to_string(),
         );
 
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::evaluation1::llm_judge_float::system")
+                .get(
+                    "tensorzero::llm_judge::evaluation1::llm_judge_float::anthropic_promptA::system"
+                )
                 .unwrap(),
             "Return a number between 0 and 1 where 1 is very NSFW and 0 is the least NSFW content.\n\n"
                 .to_string(),
         );
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::user")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::user")
                 .unwrap(),
             include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
         );
         assert_eq!(
             *templates
-                .get("tensorzero::llm_judge::evaluation1::llm_judge_float::user")
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_float::anthropic_promptA::user")
+                .unwrap(),
+            include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::llama_promptA::system")
+                .unwrap(),
+            "Return True if there is NSFW content in this generation.\n\n".to_string(),
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::llama_promptA::user")
+                .unwrap(),
+            include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::openai_promptA::system")
+                .unwrap(),
+            "Return True if there is NSFW content in this generation.\n\n".to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::openai_promptA::user")
+                .unwrap(),
+            include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::best_of_3::system")
+                .unwrap(),
+            "Return True if there is NSFW content in this generation.\n\n".to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::best_of_3::user")
+                .unwrap(),
+            include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::mixture_of_3::system")
+                .unwrap(),
+            "Return True if there is NSFW content in this generation.\n\n".to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::mixture_of_3::user")
                 .unwrap(),
             include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
         );
 
         // Check the total number of templates
-        assert_eq!(templates.len(), 14);
+        assert_eq!(templates.len(), 22);
     }
 
     #[test]
