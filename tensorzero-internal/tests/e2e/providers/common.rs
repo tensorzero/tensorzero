@@ -1083,7 +1083,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     let episode_id = Uuid::now_v7();
     println!("Provider name: {}", provider.model_provider_name);
 
-    let extra_body = if provider.model_provider_name == "aws-bedrock" {
+    let extra_body = if provider.model_provider_name == "aws_bedrock" {
         json!([
             {
                 "variant_name": provider.variant_name,
@@ -1278,7 +1278,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
         0.5
     );
 
-    let top_p = if provider.model_provider_name == "aws-bedrock" {
+    let top_p = if provider.model_provider_name == "aws_bedrock" {
         raw_request_val.get("inferenceConfig").unwrap().get("top_p")
     } else if provider.model_provider_name == "google_ai_studio_gemini"
         || provider.model_provider_name == "gcp_vertex_gemini"
@@ -1361,13 +1361,13 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             // check that an error occurs
             assert!(!res["error"].as_str().unwrap().is_empty());
         }
-        "aws-bedrock" => {
+        "aws_bedrock" => {
             assert!(
                 res["error"].as_str().unwrap().contains("Bad Request"),
                 "Unexpected error: {res}"
             );
         }
-        "aws-sagemaker" => {
+        "aws_sagemaker" => {
             assert!(
                 res["error"]
                     .as_str()
@@ -9424,7 +9424,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     // in our tensorzero.toml. ollama doesn't support 'max_completion_tokens', so this test
     // currently fails. It's fine to skip it, since we really care about testing the sagemaker
     // wrapper code, not whatever container we happen to be wrapping.
-    if provider.model_provider_name == "aws-sagemaker" {
+    if provider.model_provider_name == "aws_sagemaker" {
         return;
     }
 
