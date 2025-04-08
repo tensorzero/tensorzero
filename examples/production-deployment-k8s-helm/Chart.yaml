@@ -1,0 +1,12 @@
+apiVersion: v2
+name: tensorzero
+description: A Helm chart for Kubernetes with deployment, secret, configmap, service, and ingress
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: clickhouse
+    version: 8.0.5
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: clickhouse.deploy
