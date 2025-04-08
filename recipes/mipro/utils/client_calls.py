@@ -1,5 +1,5 @@
 import asyncio
-from typing import AsyncGenerator, Optional, Union
+from typing import Any, AsyncIterator, Dict, Optional, Union
 
 from tensorzero import (
     AsyncTensorZeroGateway,
@@ -16,18 +16,18 @@ async def get_instructions(
     semaphore: asyncio.Semaphore,
     variant_name: str = "baseline",
     dryrun: bool = True,
-) -> Optional[Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]]:
+) -> Optional[Union[InferenceResponse, AsyncIterator[InferenceChunk]]]:
     """
     Get instructions from the client with retries.
     """
-    system_args = {
+    system_args: Dict[str, Any] = {
         "example_instructions": example_instructions,
     }
 
     if example_schema:
         system_args["example_schema"] = example_schema
 
-    inputs = InferenceInput(system=system_args, messages=[])  # type: ignore[reportArgumentType]
+    inputs = InferenceInput(system=system_args, messages=[])
 
     try:
         async with semaphore:
@@ -49,7 +49,7 @@ async def candidate_inference(
     variant_name: str,
     semaphore: asyncio.Semaphore,
     dryrun: bool = True,
-) -> Optional[Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]]:
+) -> Optional[Union[InferenceResponse, AsyncIterator[InferenceChunk]]]:
     try:
         async with semaphore:
             return await client.inference(
@@ -72,15 +72,16 @@ async def judge_answer(
     semaphore: asyncio.Semaphore,
     variant_name: str = "baseline",
     dryrun: bool = True,
-) -> Optional[Union[InferenceResponse, AsyncGenerator[InferenceChunk, None]]]:
+) -> Optional[Union[InferenceResponse, AsyncIterator[InferenceChunk]]]:
     try:
         async with semaphore:
-            system_args = {
+            system_args: Dict[str, Any] = {
                 "task_description": task_description,
                 "metric_properties": metric_properties,
             }
+
             inputs = InferenceInput(
-                system=system_args,  # type: ignore[reportArgumentType]
+                system=system_args,
                 messages=[
                     {
                         "role": "user",
