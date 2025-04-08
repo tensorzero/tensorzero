@@ -4,7 +4,7 @@ Gem::Specification.new do |s|
   s.summary     = 'Next-generation machine learning infrastructure'
   s.description = 'Next-generation machine learning infrastructure'
   s.authors     = ['TensorZero']
-  s.email       = ['info@tensorzero.com']
+  s.email       = ['hello@tensorzero.com']
   s.files       = ['lib/tensorzero.rb']
   s.homepage    = 'https://www.tensorzero.com'
   s.license     = 'Apache-2.0'
