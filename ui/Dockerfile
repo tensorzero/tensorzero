@@ -73,9 +73,15 @@ FROM base AS ui
 
 RUN useradd -m -s /bin/sh ui
 
-USER ui
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 COPY ./ui/package.json ./ui/pnpm-lock.yaml /app/
+
+COPY ./ui/entrypoint.sh /app/entrypoint.sh
+
+RUN chmod +x /app/entrypoint.sh
+
+USER ui
 
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
 
@@ -89,4 +95,4 @@ EXPOSE 4000
 
 ENV HOST=0.0.0.0
 
-CMD ["pnpm", "run", "start"]
+ENTRYPOINT ["./entrypoint.sh"]
