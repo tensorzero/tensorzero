@@ -37,7 +37,7 @@ import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
 import {
   ColorAssignerProvider,
   useColorAssigner,
-} from "~/components/evaluations/ColorAssigner";
+} from "~/hooks/evaluations/ColorAssigner";
 import { getConfig } from "~/utils/config/index.server";
 import type { EvaluationConfig } from "~/utils/config/evaluations";
 import type { ContentBlockOutput } from "~/utils/clickhouse/common";

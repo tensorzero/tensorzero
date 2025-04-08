@@ -40,7 +40,7 @@ import { type EvaluatorConfig } from "~/utils/config/evaluations";
 import {
   useColorAssigner,
   ColorAssignerProvider,
-} from "~/components/evaluations/ColorAssigner";
+} from "~/hooks/evaluations/ColorAssigner";
 import MetricValue, {
   isCutoffFailed,
 } from "~/components/evaluations/MetricValue";

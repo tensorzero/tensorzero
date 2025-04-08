@@ -21,7 +21,7 @@ import type {
   EvaluationRunSearchResult,
 } from "~/utils/clickhouse/evaluations";
 import { useSearchEvaluationRunsFetcher } from "~/routes/api/evaluations/search_runs/$evaluation_name/route";
-import { useColorAssigner } from "./ColorAssigner";
+import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 
