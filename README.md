@@ -309,7 +309,7 @@ Optimize your prompts programmatically using research-driven optimization techni
 
 _More coming soon..._
 
-<br />
+<br>
 
 ### 🔍 LLM Observability
 
