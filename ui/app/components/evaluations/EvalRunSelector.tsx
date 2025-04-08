@@ -16,7 +16,10 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 import { useSearchParams, useNavigate } from "react-router";
-import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
+import type {
+  EvaluationRunInfo,
+  EvaluationRunSearchResult,
+} from "~/utils/clickhouse/evaluations";
 import { useSearchEvaluationRunsFetcher } from "~/routes/api/evaluations/search_runs/$evaluation_name/route";
 import { useColorAssigner } from "./ColorAssigner";
 import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
@@ -24,14 +27,15 @@ import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 
 interface EvalRunSelectorProps {
   evaluationName: string;
-  mostRecentEvaluationInferenceDates: Map<string, Date>;
   selectedRunIdInfos: EvaluationRunInfo[];
+  allowedRunInfos?: EvaluationRunInfo[]; // To be used if only a subset of runs are available,
+  // for example if we're filtering by datapoint_id
 }
 
 export function EvalRunSelector({
   evaluationName,
-  mostRecentEvaluationInferenceDates,
   selectedRunIdInfos,
+  allowedRunInfos,
 }: EvalRunSelectorProps) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -52,10 +56,24 @@ export function EvalRunSelector({
     evaluationName: evaluationName,
     query: searchValue,
   });
-  const availableRunInfos = data || [];
+
+  // Filter the fetched runs based on allowedRunInfos if it's provided
+  const availableRunInfos = data
+    ? allowedRunInfos // Check if allowedRunInfos is provided
+      ? data.filter(
+          (
+            info, // If yes, filter data
+          ) =>
+            allowedRunInfos.some(
+              (allowedInfo) =>
+                allowedInfo.evaluation_run_id === info.evaluation_run_id,
+            ),
+        )
+      : data // If no, use all data
+    : []; // If data itself is null/undefined, use an empty array
 
   // Update the URL with the selected run IDs
-  const updateSelectedRunIds = (runIdInfos: EvaluationRunInfo[]) => {
+  const updateSelectedRunIds = (runIdInfos: EvaluationRunSearchResult[]) => {
     const newParams = new URLSearchParams(searchParams);
     newParams.set(
       "evaluation_run_ids",
@@ -219,9 +237,7 @@ export function EvalRunSelector({
             key={info.evaluation_run_id}
             runInfo={info}
             getColor={getColor}
-            lastUpdateDate={mostRecentEvaluationInferenceDates.get(
-              info.evaluation_run_id,
-            )}
+            lastUpdateDate={new Date(info.most_recent_inference_date)}
             onRemove={(e) => removeRun(info.evaluation_run_id, e)}
           />
         ))}

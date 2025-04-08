@@ -1,7 +1,7 @@
 import {
   getEvaluationRunInfos,
+  getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
-  getMostRecentEvaluationInferenceDate,
 } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/route";
 import {
@@ -61,12 +61,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
   const [
     selected_evaluation_run_infos,
+    allowedEvaluationRunInfos,
     EvaluationResults,
-    mostRecentEvaluationInferenceDates,
   ] = await Promise.all([
     getEvaluationRunInfos(selectedRunIds, function_name),
+    getEvaluationRunInfosForDatapoint(datapoint_id, function_name),
     getEvaluationsForDatapoint(evaluation_name, datapoint_id, selectedRunIds),
-    getMostRecentEvaluationInferenceDate(selectedRunIds),
   ]);
   const consolidatedEvaluationResults =
     consolidate_evaluation_results(EvaluationResults);
@@ -89,7 +89,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     evaluation_name,
     datapoint_id,
     selected_evaluation_run_infos,
-    mostRecentEvaluationInferenceDates,
+    allowedEvaluationRunInfos,
     selectedRunIds,
   };
 }
@@ -102,7 +102,7 @@ export default function EvaluationDatapointPage({
     evaluation_name,
     datapoint_id,
     selected_evaluation_run_infos,
-    mostRecentEvaluationInferenceDates,
+    allowedEvaluationRunInfos,
     selectedRunIds,
   } = loaderData;
   const config = useConfig();
@@ -137,9 +137,8 @@ export default function EvaluationDatapointPage({
           <EvalRunSelector
             evaluationName={evaluation_name}
             selectedRunIdInfos={selected_evaluation_run_infos}
-            mostRecentEvaluationInferenceDates={
-              mostRecentEvaluationInferenceDates
-            }
+            allowedRunInfos={allowedEvaluationRunInfos}
+            // This must be passed so the component can filter by datapoint_id in search
           />
         </PageHeader>
 

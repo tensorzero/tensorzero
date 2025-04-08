@@ -20,7 +20,6 @@ import {
   type EvaluationRunSearchResult,
   EvaluationRunSearchResultSchema,
 } from "./evaluations";
-import { uuidv7ToTimestamp } from "./helpers";
 
 export async function getEvaluationRunInfos(
   evaluation_run_ids: string[],
@@ -404,65 +403,6 @@ OFFSET {offset:UInt32}
   return rows.map((row) => evaluationInfoResultSchema.parse(row));
 }
 
-/*
-Returns a map of evaluation run ids to their most recent inference dates.
-For each evaluation run id, returns the maximum of:
-1. The timestamp from the evaluation run id itself (derived from UUIDv7)
-2. The timestamp of the most recent inference associated with that evaluation run id
-*/
-export async function getMostRecentEvaluationInferenceDate(
-  evaluation_run_ids: string[],
-): Promise<Map<string, Date>> {
-  const query = `
-  SELECT
-    value as evaluation_run_id,
-    formatDateTime(max(UUIDv7ToDateTime(inference_id)), '%Y-%m-%dT%H:%i:%SZ') as last_inference_timestamp
-  FROM TagInference
-  WHERE key = 'tensorzero::evaluation_run_id'
-    AND value IN ({evaluation_run_ids:Array(String)})
-  GROUP BY value
-  `;
-  const result = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      evaluation_run_ids: evaluation_run_ids,
-    },
-  });
-
-  const rows = await result.json<{
-    evaluation_run_id: string;
-    last_inference_timestamp: string;
-  }>();
-
-  // Create a map of evaluation_run_id to its last inference timestamp
-  const inferenceTimestampMap = new Map<string, Date>();
-  rows.forEach((row) => {
-    inferenceTimestampMap.set(
-      row.evaluation_run_id,
-      new Date(row.last_inference_timestamp),
-    );
-  });
-
-  // For each evaluation_run_id, determine the max of its UUID timestamp and its last inference timestamp
-  // This handles the case where the evaluation run id is newer than the last inference timestamp
-  // Only possible if there are no inferences for that evaluation run id yet (we should still return the evaluation run id timestamp)
-  const resultMap = new Map<string, Date>();
-  evaluation_run_ids.forEach((id) => {
-    const uuidTimestamp = uuidv7ToTimestamp(id);
-    const inferenceTimestamp =
-      inferenceTimestampMap.get(id) || new Date("1970-01-01T00:00:00Z");
-    resultMap.set(
-      id,
-      uuidTimestamp > inferenceTimestamp ? uuidTimestamp : inferenceTimestamp,
-    );
-  });
-
-  return resultMap;
-}
-
-// TODO: write a new searchEvaluationRuns function that only allows searches where the datapoint_id is a single value
-// To do this we'll want to join on the inference table rather than the TagInference table
 export async function searchEvaluationRuns(
   evaluation_name: string,
   function_name: string,

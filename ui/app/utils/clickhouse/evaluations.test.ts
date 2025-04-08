@@ -8,7 +8,6 @@ import {
   getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
   getEvaluationStatistics,
-  getMostRecentEvaluationInferenceDate,
   searchEvaluationRuns,
 } from "./evaluations.server";
 import type { ChatEvaluationResultWithVariant } from "./evaluations";
@@ -464,55 +463,6 @@ describe("getEvaluationRunInfo", () => {
       function_name: "write_haiku",
       variant_name: "initial_prompt_haiku_3_5",
     });
-  });
-});
-
-describe("getmostRecentEvaluationInferenceDate", () => {
-  test("should return correct last inference timestamp", async () => {
-    const timestamps = await getMostRecentEvaluationInferenceDate([
-      "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
-    ]);
-    expect(timestamps).toEqual(
-      new Map([
-        [
-          "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
-          new Date("2025-03-23T21:56:27.000Z"),
-        ],
-      ]),
-    );
-  });
-
-  test("should return run timestamp if no inference id is found", async () => {
-    const timestamps = await getMostRecentEvaluationInferenceDate([
-      "0195c501-8e6b-76f2-aa2c-ffffffffffff",
-    ]);
-    expect(timestamps).toEqual(
-      new Map([
-        [
-          "0195c501-8e6b-76f2-aa2c-ffffffffffff",
-          new Date("2025-03-23T21:56:08.427Z"),
-        ],
-      ]),
-    );
-  });
-
-  test("handles multiple evaluation run ids", async () => {
-    const timestamps = await getMostRecentEvaluationInferenceDate([
-      "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
-      "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
-    ]);
-    expect(timestamps).toEqual(
-      new Map([
-        [
-          "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
-          new Date("2025-03-23T21:56:27.000Z"),
-        ],
-        [
-          "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
-          new Date("2025-03-19T15:14:19.000Z"),
-        ],
-      ]),
-    );
   });
 });
 

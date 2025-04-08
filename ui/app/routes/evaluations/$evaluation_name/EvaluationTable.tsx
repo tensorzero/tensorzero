@@ -239,7 +239,6 @@ interface EvaluationTableProps {
   evaluation_statistics: EvaluationStatistics[];
   evaluator_names: string[];
   evaluation_name: string;
-  mostRecentEvaluationInferenceDates: Map<string, Date>;
 }
 
 export function EvaluationTable({
@@ -248,7 +247,6 @@ export function EvaluationTable({
   evaluation_statistics,
   evaluator_names,
   evaluation_name,
-  mostRecentEvaluationInferenceDates,
 }: EvaluationTableProps) {
   const selectedRunIds = selected_evaluation_run_infos.map(
     (info) => info.evaluation_run_id,
@@ -340,9 +338,6 @@ export function EvaluationTable({
         <EvalRunSelector
           evaluationName={evaluation_name}
           selectedRunIdInfos={selected_evaluation_run_infos}
-          mostRecentEvaluationInferenceDates={
-            mostRecentEvaluationInferenceDates
-          }
         />
 
         {selectedRunIds.length > 0 && (
