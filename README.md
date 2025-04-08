@@ -41,8 +41,8 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 
 <table>
   <tr>
-    <td width="50%" align="center" valign="middle">What is TensorZero?</td>
-    <td width="50%" align="center" valign="middle">TensorZero is an open-source framework for building production-grade LLM applications. It features an LLM gateway, observability, optimization, evaluations, and experimentation.</td>
+    <td width="50%" align="left" valign="middle">What is TensorZero?</td>
+    <td width="50%" align="left" valign="middle">TensorZero is an open-source framework for building production-grade LLM applications. It features an LLM gateway, observability, optimization, evaluations, and experimentation.</td>
   </tr>
 </table>
 
