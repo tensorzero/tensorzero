@@ -17,7 +17,7 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
-import { VariantSelector } from "./VariantSelector";
+import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
 import type {
   EvaluationRunInfo,
   EvaluationStatistics,
@@ -37,8 +37,10 @@ import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import type { MetricConfig } from "~/utils/config/metric";
 import { type EvaluatorConfig } from "~/utils/config/evaluations";
-import { useColorAssigner } from "./ColorAssigner";
-import { ColorAssignerProvider } from "./ColorAssigner";
+import {
+  useColorAssigner,
+  ColorAssignerProvider,
+} from "~/components/evaluations/ColorAssigner";
 import MetricValue, {
   isCutoffFailed,
 } from "~/components/evaluations/MetricValue";
@@ -334,8 +336,8 @@ export function EvaluationTable({
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <div>
-        {/* Variant selector */}
-        <VariantSelector
+        {/* Eval run selector */}
+        <EvalRunSelector
           evaluationName={evaluation_name}
           selectedRunIdInfos={selected_evaluation_run_infos}
           mostRecentEvaluationInferenceDates={

@@ -22,17 +22,17 @@ import { useColorAssigner } from "./ColorAssigner";
 import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
 import EvaluationRunBadge from "~/components/evaluations/EvaluationRunBadge";
 
-interface VariantSelectorProps {
+interface EvalRunSelectorProps {
   evaluationName: string;
   mostRecentEvaluationInferenceDates: Map<string, Date>;
   selectedRunIdInfos: EvaluationRunInfo[];
 }
 
-export function VariantSelector({
+export function EvalRunSelector({
   evaluationName,
   mostRecentEvaluationInferenceDates,
   selectedRunIdInfos,
-}: VariantSelectorProps) {
+}: EvalRunSelectorProps) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const selectedRunIds = selectedRunIdInfos.map(
