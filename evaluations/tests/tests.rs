@@ -1493,7 +1493,9 @@ async fn run_evaluations_best_of_3() {
                 .unwrap();
         let mut happy_count = 0;
         for model_inference in &model_inferences {
-            if model_inference["system"] == "Return true if you are happy today!" {
+            if model_inference["system"].as_str().unwrap().trim()
+                == "Return true if you are happy today!"
+            {
                 happy_count += 1;
             } else {
                 assert!(model_inference["system"]
@@ -1625,7 +1627,7 @@ async fn run_evaluations_mixture_of_3() {
 
         assert_eq!(
             feedback["metric_name"].as_str().unwrap(),
-            "tensorzero::evaluation_name::best_of_3::evaluator_name::llm_judge_bool"
+            "tensorzero::evaluation_name::mixture_of_3::evaluator_name::llm_judge_bool"
         );
         assert_eq!(
             feedback["value"],
@@ -1647,7 +1649,10 @@ async fn run_evaluations_mixture_of_3() {
             feedback["tags"]["tensorzero::evaluator_name"],
             "llm_judge_bool"
         );
-        assert_eq!(feedback["tags"]["tensorzero::evaluation_name"], "best_of_3");
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluation_name"],
+            "mixture_of_3"
+        );
         let evaluator_inference_id = Uuid::parse_str(
             feedback["tags"]["tensorzero::evaluator_inference_id"]
                 .as_str()
@@ -1671,13 +1676,15 @@ async fn run_evaluations_mixture_of_3() {
                 .unwrap();
         let mut happy_count = 0;
         for model_inference in &model_inferences {
-            if model_inference["system"] == "Return true if you are happy today!" {
+            if model_inference["system"].as_str().unwrap().trim()
+                == "Return true if you are happy today!"
+            {
                 happy_count += 1;
             } else {
                 assert!(model_inference["system"]
                     .as_str()
                     .unwrap()
-                    .starts_with("You are an assistant tasked with re-ranking"))
+                    .starts_with("You have been provided with a set of responses from various"))
             }
         }
         assert_eq!(happy_count, 3);
