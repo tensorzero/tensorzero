@@ -2787,3 +2787,41 @@ model = "openai::gpt-4o-mini-2024-07-18"
 system_instructions = "../../fixtures/config/evaluations/images/honest_answer/system_instructions.txt"
 temperature = 0
 json_mode = "strict"
+
+[evaluations.best_of_3]
+type = "static"
+function_name = "extract_entities"
+
+[evaluations.best_of_3.evaluators.llm_judge_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "min"
+
+[evaluations.best_of_3.evaluators.llm_judge_bool.variants.anthropic_promptA]
+type = "chat_completion"
+model = "anthropic::claude-3-5-haiku-20241022"
+system_instructions = "../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
+json_mode = "implicit_tool"
+
+[evaluations.best_of_3.evaluators.llm_judge_bool.variants.openai_promptA]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_instructions = "../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.best_of_3.evaluators.llm_judge_bool.variants.llama_promptA]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/llama4-scout-instruct-basic"
+system_instructions = "../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.best_of_3.evaluators.llm_judge_bool.variants.best_of_3]
+active = true
+type = "best_of_n_sampling"
+candidates = ["anthropic_promptA", "openai_promptA", "llama_promptA"]
+
+[evaluations.best_of_3.evaluators.llm_judge_bool.variants.best_of_3.evaluator]
+model = "openai::gpt-4o-mini"
+system_instructions = "../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+temperature = 0.3
