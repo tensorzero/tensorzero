@@ -1327,6 +1327,15 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
 
     let status = response.status();
     let res = response.json::<Value>().await.unwrap();
+    if stream {
+        assert!(
+            res["error"]
+                .as_str()
+                .unwrap()
+                .contains(format!("Error from {} server", provider.model_provider_name).as_str()),
+            "Missing provider type in error: {res}"
+        );
+    }
     // The status codes/messages from providers are inconsistent,
     // so we manually check for auth-related strings (where possible)
     match provider.model_provider_name.as_str() {
