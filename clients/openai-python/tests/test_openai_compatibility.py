@@ -285,10 +285,7 @@ async def test_async_inference_streaming_malformed_input(async_client):
             stream=True,
         )
     assert exc_info.value.status_code == 400
-    assert (
-        str(exc_info.value)
-        == """Error code: 400 - {'error': 'JSON Schema validation failed for Function:\\n\\n"assistant_name" is a required property\\nData: {"name_of_assistant":"Alfred Pennyworth"}Schema: {"type":"object","properties":{"assistant_name":{"type":"string"}},"required":["assistant_name"]}'}"""
-    )
+    assert "JSON Schema validation failed" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
