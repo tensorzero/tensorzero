@@ -1,4 +1,8 @@
-import { getEvaluationsForDatapoint } from "~/utils/clickhouse/evaluations.server";
+import {
+  getEvaluationRunInfos,
+  getEvaluationsForDatapoint,
+  getMostRecentEvaluationInferenceDate,
+} from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/route";
 import {
   PageHeader,
@@ -29,36 +33,46 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
+import {
+  ColorAssignerProvider,
+  useColorAssigner,
+} from "~/components/evaluations/ColorAssigner";
+import { getConfig } from "~/utils/config/index.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const evaluation_name = params.evaluation_name;
   const datapoint_id = params.datapoint_id;
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
+  const config = await getConfig();
+  const evaluation_config = config.evaluations[evaluation_name];
+  const function_name = evaluation_config.function_name;
 
   const selected_evaluation_run_ids = searchParams.get("evaluation_run_ids");
-  const selected_evaluation_run_ids_array = selected_evaluation_run_ids
+  const selectedRunIds = selected_evaluation_run_ids
     ? selected_evaluation_run_ids.split(",")
     : [];
-  if (selected_evaluation_run_ids_array.length === 0) {
+  if (selectedRunIds.length === 0) {
     return redirect(`/evaluations/${evaluation_name}`);
   }
-  const EvaluationResults = await getEvaluationsForDatapoint(
-    evaluation_name,
-    datapoint_id,
-    selected_evaluation_run_ids_array,
-  );
+  const [
+    selected_evaluation_run_infos,
+    EvaluationResults,
+    mostRecentEvaluationInferenceDates,
+  ] = await Promise.all([
+    getEvaluationRunInfos(selectedRunIds, function_name),
+    getEvaluationsForDatapoint(evaluation_name, datapoint_id, selectedRunIds),
+    getMostRecentEvaluationInferenceDate(selectedRunIds),
+  ]);
   const consolidatedEvaluationResults =
     consolidate_evaluation_results(EvaluationResults);
-  if (
-    consolidatedEvaluationResults.length !==
-    selected_evaluation_run_ids_array.length
-  ) {
+  if (consolidatedEvaluationResults.length !== selectedRunIds.length) {
     // Find which evaluation run IDs are missing from the results
     const foundEvaluationRunIds = new Set(
       consolidatedEvaluationResults.map((result) => result.evaluation_run_id),
     );
-    const missingEvaluationRunIds = selected_evaluation_run_ids_array.filter(
+    const missingEvaluationRunIds = selectedRunIds.filter(
       (id) => !foundEvaluationRunIds.has(id),
     );
 
@@ -71,14 +85,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     consolidatedEvaluationResults,
     evaluation_name,
     datapoint_id,
+    selected_evaluation_run_infos,
+    mostRecentEvaluationInferenceDates,
+    selectedRunIds,
   };
 }
 
 export default function EvaluationDatapointPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { consolidatedEvaluationResults, evaluation_name, datapoint_id } =
-    loaderData;
+  const {
+    consolidatedEvaluationResults,
+    evaluation_name,
+    datapoint_id,
+    selected_evaluation_run_infos,
+    mostRecentEvaluationInferenceDates,
+    selectedRunIds,
+  } = loaderData;
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
   const outputsToDisplay = [
@@ -97,71 +120,77 @@ export default function EvaluationDatapointPage({
   ];
 
   // Function to get color for each run
-  const getColor = () => {
-    // Return a fixed color since we don't need dynamic colors
-    return "bg-blue-500 hover:bg-blue-600 text-white";
-  };
+  const { getColor } = useColorAssigner();
 
   return (
-    <PageLayout>
-      <PageHeader label="Datapoint" name={datapoint_id}>
-        <BasicInfo
-          evaluation_name={evaluation_name}
-          evaluation_config={evaluation_config}
-          dataset_name={consolidatedEvaluationResults[0].dataset_name}
-        />
-      </PageHeader>
+    <ColorAssignerProvider selectedRunIds={selectedRunIds}>
+      <PageLayout>
+        <PageHeader label="Datapoint" name={datapoint_id}>
+          <BasicInfo
+            evaluation_name={evaluation_name}
+            evaluation_config={evaluation_config}
+            dataset_name={consolidatedEvaluationResults[0].dataset_name}
+          />
+          <EvalRunSelector
+            evaluationName={evaluation_name}
+            selectedRunIdInfos={selected_evaluation_run_infos}
+            mostRecentEvaluationInferenceDates={
+              mostRecentEvaluationInferenceDates
+            }
+          />
+        </PageHeader>
 
-      <SectionsGroup>
-        <SectionLayout>
-          <SectionHeader heading="Input" />
-          <Input input={consolidatedEvaluationResults[0].input} />
-        </SectionLayout>
-        <SectionLayout>
-          <SectionHeader heading="Output" />
-          <div className="flex gap-4 overflow-x-auto pb-4">
-            {outputsToDisplay.map((result) => (
-              <div
-                key={result.id}
-                className="flex max-w-[450px] min-w-[300px] shrink-0 flex-col justify-between"
-              >
-                <div>
-                  <div className="mb-2 flex">
-                    {result.id === "Reference" ? (
-                      <EvaluationRunBadge
-                        runInfo={{
-                          evaluation_run_id: "",
-                          variant_name: result.variant_name,
-                        }}
-                        getColor={() => "bg-gray-100 text-gray-700"}
-                      />
-                    ) : (
-                      <EvaluationRunBadge
-                        runInfo={{
-                          evaluation_run_id: result.id,
-                          variant_name: result.variant_name,
-                        }}
-                        getColor={getColor}
+        <SectionsGroup>
+          <SectionLayout>
+            <SectionHeader heading="Input" />
+            <Input input={consolidatedEvaluationResults[0].input} />
+          </SectionLayout>
+          <SectionLayout>
+            <SectionHeader heading="Output" />
+            <div className="flex gap-4 overflow-x-auto pb-4">
+              {outputsToDisplay.map((result) => (
+                <div
+                  key={result.id}
+                  className="flex max-w-[450px] min-w-[300px] shrink-0 flex-col justify-between"
+                >
+                  <div>
+                    <div className="mb-2 flex">
+                      {result.id === "Reference" ? (
+                        <EvaluationRunBadge
+                          runInfo={{
+                            evaluation_run_id: "",
+                            variant_name: result.variant_name,
+                          }}
+                          getColor={() => "bg-gray-100 text-gray-700"}
+                        />
+                      ) : (
+                        <EvaluationRunBadge
+                          runInfo={{
+                            evaluation_run_id: result.id,
+                            variant_name: result.variant_name,
+                          }}
+                          getColor={getColor}
+                        />
+                      )}
+                    </div>
+                    <Output output={result.output} />
+                  </div>
+                  {result.id !== "Reference" &&
+                    result.metrics &&
+                    result.metrics.length > 0 && (
+                      <MetricsDisplay
+                        evaluation_name={evaluation_name}
+                        metrics={result.metrics}
+                        evaluatorsConfig={evaluation_config.evaluators}
                       />
                     )}
-                  </div>
-                  <Output output={result.output} />
                 </div>
-                {result.id !== "Reference" &&
-                  result.metrics &&
-                  result.metrics.length > 0 && (
-                    <MetricsDisplay
-                      evaluation_name={evaluation_name}
-                      metrics={result.metrics}
-                      evaluatorsConfig={evaluation_config.evaluators}
-                    />
-                  )}
-              </div>
-            ))}
-          </div>
-        </SectionLayout>
-      </SectionsGroup>
-    </PageLayout>
+              ))}
+            </div>
+          </SectionLayout>
+        </SectionsGroup>
+      </PageLayout>
+    </ColorAssignerProvider>
   );
 }
 
