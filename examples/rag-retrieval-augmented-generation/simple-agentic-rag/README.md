@@ -56,5 +56,5 @@ Feel free to edit it to tune the behavior of the agent!
 
 ### Setup
 
-1. Create a `.env` file with the `OPENAI_API_KEY` environment variable (see `.env.example` for an example).
+1. Set the `OPENAI_API_KEY` environment variable.
 2. Run the `main.ipynb` Jupyter notebook.
