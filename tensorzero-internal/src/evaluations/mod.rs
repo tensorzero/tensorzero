@@ -21,6 +21,7 @@ use crate::{
     variant::{
         best_of_n_sampling::{BestOfNSamplingConfig, EvaluatorConfig as OnlineEvaluatorConfig},
         chat_completion::ChatCompletionConfig,
+        dicl::DiclConfig,
         mixture_of_n::{FuserConfig, MixtureOfNConfig},
         JsonMode, RetryConfig, VariantConfig,
     },
@@ -409,6 +410,8 @@ enum UninitializedLLMJudgeVariantConfig {
     BestOfNSampling(UninitializedLLMJudgeBestOfNVariantConfig),
     #[serde(rename = "experimental_mixture_of_n")]
     MixtureOfNSampling(UninitializedLLMJudgeMixtureOfNVariantConfig),
+    #[serde(rename = "experimental_dynamic_in_context_learning")]
+    Dicl(UninitializedLLMJudgeDiclVariantConfig),
 }
 
 #[derive(Debug, Deserialize)]
@@ -457,6 +460,29 @@ struct UninitializedLLMJudgeMixtureOfNVariantConfig {
     #[serde(default)]
     candidates: Vec<String>,
     fuser: UninitializedLLMJudgeChatCompletionVariantConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct UninitializedLLMJudgeDiclVariantConfig {
+    #[serde(default)]
+    active: Option<bool>,
+    embedding_model: String,
+    k: u32, // k as in k-nearest neighbors
+    model: String,
+    system_instructions: Option<PathBuf>,
+    temperature: Option<f32>,
+    top_p: Option<f32>,
+    presence_penalty: Option<f32>,
+    frequency_penalty: Option<f32>,
+    max_tokens: Option<u32>,
+    seed: Option<u32>,
+    json_mode: Option<JsonMode>,
+    #[serde(default)]
+    extra_body: Option<ExtraBodyConfig>,
+    #[serde(default)]
+    retries: RetryConfig,
+    #[serde(default)]
+    extra_headers: Option<ExtraHeadersConfig>,
 }
 
 fn get_template_path(
@@ -638,6 +664,36 @@ impl UninitializedLLMJudgeVariantConfig {
                             extra_headers: params.fuser.extra_headers,
                         },
                     },
+                }))
+            }
+            UninitializedLLMJudgeVariantConfig::Dicl(params) => {
+                let dicl_system_instructions = params
+                    .system_instructions
+                    .map(|si| read_system_instructions(si, base_path))
+                    .transpose()?
+                    .map(|si| {
+                        format!(
+                            include_str!("llm_judge_system_instructions.txt"),
+                            system_instructions = si,
+                        )
+                    })
+                    .unwrap_or(crate::variant::dicl::default_system_instructions());
+                Ok(VariantConfig::Dicl(DiclConfig {
+                    weight: get_weight(params.active),
+                    embedding_model: params.embedding_model.into(),
+                    k: params.k,
+                    model: params.model.into(),
+                    system_instructions: dicl_system_instructions,
+                    temperature: params.temperature,
+                    top_p: params.top_p,
+                    presence_penalty: params.presence_penalty,
+                    frequency_penalty: params.frequency_penalty,
+                    max_tokens: params.max_tokens,
+                    seed: params.seed,
+                    json_mode: params.json_mode,
+                    extra_body: params.extra_body,
+                    extra_headers: params.extra_headers,
+                    retries: params.retries,
                 }))
             }
         }
