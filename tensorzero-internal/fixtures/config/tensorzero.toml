@@ -215,6 +215,17 @@ system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/sy
 json_mode = "strict"
 temperature = 0.3
 
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.mixture_of_3]
+type = "experimental_mixture_of_n_sampling"
+candidates = ["anthropic_promptA", "openai_promptA", "llama_promptA"]
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.mixture_of_3.fuser]
+model = "openai::gpt-4o-mini"
+system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+temperature = 0.3
+
+
 [evaluations.evaluation1.evaluators.llm_judge_float]
 type = "llm_judge"
 output_type = "float"

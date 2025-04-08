@@ -18,10 +18,11 @@ use crate::{
     inference::types::extra_body::{ExtraBodyConfig, ExtraHeadersConfig},
     jsonschema_util::JSONSchemaFromPath,
     tool::create_implicit_tool_call_config,
-    variant::best_of_n_sampling::EvaluatorConfig as OnlineEvaluatorConfig,
     variant::{
-        best_of_n_sampling::BestOfNSamplingConfig, chat_completion::ChatCompletionConfig, JsonMode,
-        RetryConfig, VariantConfig,
+        best_of_n_sampling::{BestOfNSamplingConfig, EvaluatorConfig as OnlineEvaluatorConfig},
+        chat_completion::ChatCompletionConfig,
+        mixture_of_n::{FuserConfig, MixtureOfNConfig},
+        JsonMode, RetryConfig, VariantConfig,
     },
 };
 
@@ -406,6 +407,8 @@ enum UninitializedLLMJudgeVariantConfig {
     ChatCompletion(UninitializedLLMJudgeChatCompletionVariantConfig),
     #[serde(rename = "experimental_best_of_n_sampling")]
     BestOfNSampling(UninitializedLLMJudgeBestOfNVariantConfig),
+    #[serde(rename = "experimental_mixture_of_n_sampling")]
+    MixtureOfNSampling(UninitializedLLMJudgeMixtureOfNVariantConfig),
 }
 
 #[derive(Debug, Deserialize)]
@@ -443,6 +446,17 @@ struct UninitializedLLMJudgeBestOfNVariantConfig {
     #[serde(default)]
     candidates: Vec<String>,
     evaluator: UninitializedLLMJudgeChatCompletionVariantConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct UninitializedLLMJudgeMixtureOfNVariantConfig {
+    #[serde(default)]
+    active: Option<bool>,
+    #[serde(default = "default_timeout")]
+    timeout_s: f64,
+    #[serde(default)]
+    candidates: Vec<String>,
+    fuser: UninitializedLLMJudgeChatCompletionVariantConfig,
 }
 
 fn get_template_path(
@@ -569,6 +583,59 @@ impl UninitializedLLMJudgeVariantConfig {
                             retries: params.evaluator.retries,
                             extra_body: params.evaluator.extra_body,
                             extra_headers: params.evaluator.extra_headers,
+                        },
+                    },
+                }))
+            }
+            UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(params) => {
+                let fuser_system_instructions =
+                    read_system_instructions(params.fuser.system_instructions, base_path)?;
+                let templated_fuser_system_instructions = format!(
+                    include_str!("llm_judge_system_instructions.txt"),
+                    system_instructions = fuser_system_instructions,
+                );
+                let fuser_system_template = PathWithContents {
+                    path: get_template_path(
+                        evaluation_name,
+                        evaluator_name,
+                        variant_name,
+                        "system",
+                    ),
+                    contents: templated_fuser_system_instructions,
+                };
+                let fuser_user_template = match input_format {
+                    LLMJudgeInputFormat::Serialized => Some(PathWithContents {
+                        path: get_template_path(
+                            evaluation_name,
+                            evaluator_name,
+                            variant_name,
+                            "user",
+                        ),
+                        contents: include_str!("llm_judge_user_template.minijinja").to_string(),
+                    }),
+                    LLMJudgeInputFormat::Messages => None,
+                };
+                Ok(VariantConfig::MixtureOfN(MixtureOfNConfig {
+                    weight: get_weight(params.active),
+                    timeout_s: params.timeout_s,
+                    candidates: params.candidates,
+                    fuser: FuserConfig {
+                        inner: ChatCompletionConfig {
+                            weight: None,
+                            model: params.fuser.model,
+                            system_template: Some(fuser_system_template),
+                            user_template: fuser_user_template,
+                            assistant_template: None,
+                            temperature: params.fuser.temperature,
+                            top_p: params.fuser.top_p,
+                            max_tokens: params.fuser.max_tokens,
+                            presence_penalty: params.fuser.presence_penalty,
+                            frequency_penalty: params.fuser.frequency_penalty,
+                            seed: params.fuser.seed,
+                            json_mode: Some(params.fuser.json_mode),
+                            retries: params.fuser.retries,
+                            extra_body: params.fuser.extra_body,
+                            extra_headers: params.fuser.extra_headers,
                         },
                     },
                 }))

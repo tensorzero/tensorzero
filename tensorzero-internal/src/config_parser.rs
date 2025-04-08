@@ -1006,7 +1006,7 @@ mod tests {
             .unwrap();
         match &**function {
             FunctionConfig::Json(json_config) => {
-                assert_eq!(json_config.variants.len(), 4);
+                assert_eq!(json_config.variants.len(), 5);
                 match &json_config.variants["anthropic_promptA"] {
                     VariantConfig::ChatCompletion(chat_config) => {
                         assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
@@ -1042,6 +1042,21 @@ mod tests {
                         assert_eq!(best_of_n_config.evaluator.inner.temperature, Some(0.3));
                     }
                     _ => panic!("Expected a best of n sampling variant"),
+                }
+                match &json_config.variants["mixture_of_3"] {
+                    VariantConfig::MixtureOfN(mixture_of_n_config) => {
+                        assert_eq!(mixture_of_n_config.candidates.len(), 3);
+                        assert_eq!(
+                            mixture_of_n_config.fuser.inner.model,
+                            "openai::gpt-4o-mini".into()
+                        );
+                        assert_eq!(
+                            mixture_of_n_config.fuser.inner.json_mode,
+                            Some(JsonMode::Strict)
+                        );
+                        assert_eq!(mixture_of_n_config.fuser.inner.temperature, Some(0.3));
+                    }
+                    _ => panic!("Expected a mixture of n sampling variant"),
                 }
             }
             _ => panic!("Expected a JSON function"),
@@ -2149,9 +2164,21 @@ mod tests {
                 .unwrap(),
             include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
         );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::mixture_of_3::system")
+                .unwrap(),
+            "Return True if there is NSFW content in this generation.\n\n".to_string()
+        );
+        assert_eq!(
+            *templates
+                .get("tensorzero::llm_judge::evaluation1::llm_judge_bool::mixture_of_3::user")
+                .unwrap(),
+            include_str!("evaluations/llm_judge_user_template.minijinja").to_string()
+        );
 
         // Check the total number of templates
-        assert_eq!(templates.len(), 20);
+        assert_eq!(templates.len(), 22);
     }
 
     #[test]
