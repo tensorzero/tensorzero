@@ -39,6 +39,13 @@ It provides a **data & learning flywheel for LLMs** by unifying:
   <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Configuration Reference</a></b>
 </p>
 
+<table>
+  <tr>
+    <td width="50%" align="center" valign="middle">What is TensorZero?</td>
+    <td width="50%" align="center" valign="middle">TensorZero is an open-source framework for building production-grade LLM applications. It features an LLM gateway, observability, optimization, evaluations, and experimentation.</td>
+  </tr>
+</table>
+
 ## Features
 
 ### 🌐 LLM Gateway
