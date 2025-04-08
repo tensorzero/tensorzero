@@ -329,25 +329,34 @@ impl UninitializedEvaluatorConfig {
                     .into());
                 } else if variants.len() == 1 {
                     // If there is only one variant, it should have weight 1.0
-                    let res = variants.iter_mut().next();
-                    let variant = if let Some((_, VariantConfig::ChatCompletion(variant))) = res {
-                        variant
-                    } else {
+                    // TODO: yell if the weight is Some(0) here.
+                    let Some((_, variant)) = variants.iter_mut().next() else {
                         return Err(ErrorDetails::Config {
-                            message: format!("Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."),
-                        }
-                        .into());
+                            message: "Failed to grab first variant from variants map. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
+                        }.into());
                     };
-                    if let Some(weight) = variant.weight {
-                        if weight != 1.0 {
+                    if let Some(weight) = variant.weight() {
+                        if weight == 0.0 {
                             return Err(ErrorDetails::Config {
                                 message: format!("Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
                             }
                             .into());
                         }
-                    } else {
-                        variant.weight = Some(1.0);
                     }
+                    match variant {
+                        VariantConfig::ChatCompletion(variant) => {
+                            variant.weight = Some(1.0);
+                        }
+                        VariantConfig::BestOfNSampling(variant) => {
+                            variant.weight = Some(1.0);
+                        }
+                        VariantConfig::MixtureOfN(variant) => {
+                            variant.weight = Some(1.0);
+                        }
+                        VariantConfig::Dicl(variant) => {
+                            variant.weight = Some(1.0);
+                        }
+                    };
                 }
                 let user_schema_value: Option<serde_json::Value> = match params.input_format {
                     LLMJudgeInputFormat::Serialized => Some(serde_json::from_str(LLM_JUDGE_USER_SCHEMA_TEXT)
