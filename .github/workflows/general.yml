@@ -10,6 +10,82 @@ env:
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
 
 jobs:
+
+  clickhouse-tests-cloud:
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cloud_instance:
+          - release_channel: regular
+            url_secret: CLICKHOUSE_CLOUD_URL
+          - release_channel: fast
+            url_secret: CLICKHOUSE_CLOUD_FAST_CHANNEL_URL
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
+        with:
+          tool: cargo-nextest
+
+      - name: Set up TENSORZERO_CLICKHOUSE_URL
+        run: |
+          echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets[matrix.cloud_instance.url_secret] }}" >> $GITHUB_ENV
+
+      - name: Wake up ClickHouse cloud
+        run: |
+          curl $TENSORZERO_CLICKHOUSE_URL --data-binary 'SHOW DATABASES'
+
+      - name: Delete old ClickHouse cloud dbs
+        run: ./ci/delete-clickhouse-dbs.sh
+
+      # We run this as a separate step so that we can see live build logs
+      # (and fail the job immediately if the build fails)
+      - name: Build the gateway for E2E tests
+        run: cargo build-e2e
+
+      - name: Launch the gateway for E2E tests
+        run: |
+          cargo run-e2e > e2e_logs.txt 2>&1 &
+            count=0
+            max_attempts=30
+            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+              echo "Waiting for gateway to be healthy..."
+              sleep 1
+              count=$((count + 1))
+              if [ $count -ge $max_attempts ]; then
+                echo "Gateway failed to become healthy after $max_attempts attempts"
+                exit 1
+              fi
+            done
+          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
+
+      - name: Test (Rust)
+        run: cargo test-e2e-no-creds
+
+      - name: Print e2e logs
+        if: always()
+        run: cat e2e_logs.txt
+
+  # This is the job that we actually mark as required in the branch protection rules
+  #
+  # For PR ci, the 'clickhouse-tests-cloud' job will be skipped, and this job will exit successfully
+  # (since the 'needs' status will be 'skipped')
+  #
+  # For merge_group ci, we'll create a matrix of tests for 'clickhouse-tests-cloud', and this job
+  # will check all of their statuses when they finish.
+  #
+  # See https://github.com/orgs/community/discussions/103114#discussioncomment-8359045
+  clickhouse-tests-cloud-status-check:
+    if: always()
+    needs: [clickhouse-tests-cloud]
+    runs-on: ubuntu-latest
+    steps:
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
+
   check-docker-compose:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -128,18 +204,6 @@ jobs:
         working-directory: clients/python-pyo3
         run: |
           uv run stubtest tensorzero.tensorzero
-
-      - name: "Python: TensorZero Client: Install dependencies"
-        working-directory: clients/python-deprecated
-        run: |
-          uv venv
-          uv pip sync requirements.txt
-
-      - name: "Python: TensorZero Client: pyright"
-        working-directory: clients/python-deprecated
-        run: |
-          uv pip install pyright==1.1.394
-          uv run pyright
 
       - name: "Python: OpenAI Client: Install dependencies"
         working-directory: clients/openai-python

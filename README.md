@@ -299,9 +299,7 @@ Optimize your prompts programmatically using research-driven optimization techni
     <td width="50%" align="center" valign="middle"><b><a href="https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy">DSPy Integration</a></b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="middle">
-      TensorZero implements MIPROv2, an automated prompt engineering algorithm that jointly optimizes instructions and in-context examples for your prompts.
-    </td>
+    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/d81a7c37-382f-4c46-840f-e6c2593301db" alt="MIPROv2 diagram"></td>
     <td width="50%" align="center" valign="middle">
       TensorZero comes with several optimization recipes, but you can also easily create your own.
       This example shows to optimize a TensorZero function using an arbitrary tool — here, DSPy, a popular library for automated prompt engineering.
@@ -387,6 +385,11 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > This example shows how to use TensorZero to optimize a data extraction pipeline.
 > We demonstrate techniques like fine-tuning and dynamic in-context learning (DICL).
 > In the end, a optimized GPT-4o Mini model outperforms GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.
+
+> **[Agentic RAG — Multi-Hop Question Answering with LLMs](https://github.com/tensorzero/tensorzero/tree/main/examples/rag-retrieval-augmented-generation/simple-agentic-rag/)**
+>
+> This example shows how to build a multi-hop retrieval agent using TensorZero.
+> The agent iteratively searches Wikipedia to gather information, and decides when it has enough context to answer a complex question.
 
 > **[Writing Haikus to Satisfy a Judge with Hidden Preferences](https://github.com/tensorzero/tensorzero/tree/main/examples/haiku-hidden-preferences)**
 >

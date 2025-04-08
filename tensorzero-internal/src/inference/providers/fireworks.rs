@@ -1,6 +1,6 @@
 use std::{borrow::Cow, sync::OnceLock};
 
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
@@ -30,7 +30,7 @@ use super::{
         OpenAIResponseChoice, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
         OpenAIToolType,
     },
-    provider_trait::InferenceProvider,
+    provider_trait::{InferenceProvider, TensorZeroEventError},
 };
 
 lazy_static! {
@@ -74,7 +74,6 @@ impl FireworksProvider {
 pub enum FireworksCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -85,7 +84,6 @@ impl TryFrom<Credential> for FireworksCredentials {
         match credentials {
             Credential::Static(key) => Ok(FireworksCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(FireworksCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(FireworksCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Fireworks provider".to_string(),
@@ -109,7 +107,6 @@ impl FireworksCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             &FireworksCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
@@ -271,7 +268,11 @@ impl InferenceProvider for FireworksProvider {
                     raw_response: None,
                 })
             })?;
-        let stream = stream_openai(event_source, start_time).peekable();
+        let stream = stream_openai(
+            event_source.map_err(TensorZeroEventError::EventSource),
+            start_time,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 
@@ -589,13 +590,10 @@ mod tests {
         let creds = FireworksCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, FireworksCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = FireworksCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, FireworksCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = FireworksCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, FireworksCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

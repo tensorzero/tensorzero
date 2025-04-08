@@ -1,4 +1,7 @@
-import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
+import {
+  getDatasetCounts,
+  getNumberOfDatasets,
+} from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
 import DatasetTable from "./DatasetTable";
 import { data, isRouteErrorResponse } from "react-router";
@@ -18,12 +21,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
-  const counts = await getDatasetCounts();
-  return { counts, pageSize, offset };
+  const counts = await getDatasetCounts(pageSize, offset);
+  const numberOfDatasets = await getNumberOfDatasets();
+  return { counts, pageSize, offset, numberOfDatasets };
 }
 
 export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
-  const { counts, pageSize, offset } = loaderData;
+  const { counts, pageSize, offset, numberOfDatasets } = loaderData;
   const navigate = useNavigate();
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -37,7 +41,7 @@ export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
   };
   return (
     <PageLayout>
-      <PageHeader heading="Datasets" count={counts.length} />
+      <PageHeader heading="Datasets" count={numberOfDatasets} />
       <SectionLayout>
         <DatasetsActions onBuildDataset={() => navigate("/datasets/builder")} />
         <DatasetTable counts={counts} />
@@ -45,7 +49,7 @@ export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset === 0}
-          disableNext={offset + pageSize >= counts.length}
+          disableNext={offset + pageSize >= numberOfDatasets}
         />
       </SectionLayout>
     </PageLayout>

@@ -17,7 +17,9 @@ use crate::cache::{
     cache_lookup, cache_lookup_streaming, start_cache_write, start_cache_write_streaming,
     CacheData, ModelProviderRequest, NonStreamingCacheData, StreamingCacheData,
 };
+use crate::config_parser::SKIP_CREDENTIAL_VALIDATION;
 use crate::endpoints::inference::InferenceClients;
+use crate::inference::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::inference::providers::dummy::DummyProvider;
 use crate::inference::providers::google_ai_studio_gemini::GoogleAIStudioGeminiProvider;
@@ -498,6 +500,7 @@ pub struct ModelProviderRequestInfo {
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     AWSBedrock(AWSBedrockProvider),
+    AWSSagemaker(AWSSagemakerProvider),
     Azure(AzureProvider),
     Fireworks(FireworksProvider),
     GCPVertexAnthropic(GCPVertexAnthropicProvider),
@@ -514,6 +517,15 @@ pub enum ProviderConfig {
     DeepSeek(DeepSeekProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
+}
+
+/// Contains all providers which implement `SelfHostedProvider` - these providers
+/// can be used as the target provider hosted by AWS Sagemaker
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[serde(deny_unknown_fields)]
+pub enum HostedProviderKind {
+    OpenAI,
 }
 
 /// Helper struct for deserializing the ProviderConfig.
@@ -537,6 +549,16 @@ pub(super) enum ProviderConfigHelper {
         region: Option<String>,
         #[serde(default)]
         allow_auto_detect_region: bool,
+    },
+    #[strum(serialize = "aws_sagemaker")]
+    #[serde(rename = "aws_sagemaker")]
+    AWSSagemaker {
+        endpoint_name: String,
+        model_name: String,
+        region: Option<String>,
+        #[serde(default)]
+        allow_auto_detect_region: bool,
+        hosted_provider: HostedProviderKind,
     },
     Azure {
         deployment_id: String,
@@ -661,6 +683,41 @@ impl<'de> Deserialize<'de> for ProviderConfig {
                 })?;
 
                 ProviderConfig::AWSBedrock(provider)
+            }
+            ProviderConfigHelper::AWSSagemaker {
+                endpoint_name,
+                region,
+                allow_auto_detect_region,
+                model_name,
+                hosted_provider,
+            } => {
+                let region = region.map(aws_types::region::Region::new);
+                if region.is_none() && !allow_auto_detect_region {
+                    return Err(D::Error::custom("AWS Sagemaker provider requires a region to be provided, or `allow_auto_detect_region = true`."));
+                }
+
+                let self_hosted = match hosted_provider {
+                    HostedProviderKind::OpenAI => {
+                        OpenAIProvider::new(model_name, None, Some(CredentialLocation::None))
+                            .map_err(|e| D::Error::custom(e.to_string()))?
+                    }
+                };
+                // NB: We need to make an async call here to initialize the AWS Sagemaker client.
+
+                let provider = tokio::task::block_in_place(move || {
+                    tokio::runtime::Handle::current()
+                        .block_on(async {
+                            AWSSagemakerProvider::new(endpoint_name, Box::new(self_hosted), region)
+                                .await
+                        })
+                        .map_err(|e| {
+                            serde::de::Error::custom(format!(
+                                "Failed to initialize AWS Sagemaker provider: {e}"
+                            ))
+                        })
+                })?;
+
+                ProviderConfig::AWSSagemaker(provider)
             }
             ProviderConfigHelper::Azure {
                 deployment_id,
@@ -795,6 +852,9 @@ impl ModelProvider {
             ProviderConfig::AWSBedrock(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
+            ProviderConfig::AWSSagemaker(provider) => {
+                provider.infer(request, client, api_keys, self).await
+            }
             ProviderConfig::Azure(provider) => {
                 provider.infer(request, client, api_keys, self).await
             }
@@ -849,6 +909,9 @@ impl ModelProvider {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::AWSBedrock(provider) => {
+                provider.infer_stream(request, client, api_keys, self).await
+            }
+            ProviderConfig::AWSSagemaker(provider) => {
                 provider.infer_stream(request, client, api_keys, self).await
             }
             ProviderConfig::Azure(provider) => {
@@ -913,6 +976,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::AWSBedrock(provider) => {
+                provider
+                    .start_batch_inference(requests, client, api_keys)
+                    .await
+            }
+            ProviderConfig::AWSSagemaker(provider) => {
                 provider
                     .start_batch_inference(requests, client, api_keys)
                     .await
@@ -1009,6 +1077,11 @@ impl ModelProvider {
                     .await
             }
             ProviderConfig::AWSBedrock(provider) => {
+                provider
+                    .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
+                    .await
+            }
+            ProviderConfig::AWSSagemaker(provider) => {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
@@ -1136,7 +1209,6 @@ pub enum Credential {
     FileContents(SecretString),
     Dynamic(String),
     None,
-    #[cfg(any(test, feature = "e2e_tests"))]
     Missing,
 }
 
@@ -1210,16 +1282,16 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
             CredentialLocation::Env(key_name) => match env::var(key_name) {
                 Ok(value) => Ok(Credential::Static(SecretString::from(value))),
                 Err(_) => {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
-                        warn!(
+                    if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                        #[cfg(any(test, feature = "e2e_tests"))]
+                        {
+                            warn!(
                             "You are missing the credentials required for a model provider of type {}, so the associated tests will likely fail.",
                             provider_type
                         );
+                        }
                         Ok(Credential::Missing)
-                    }
-                    #[cfg(not(any(test, feature = "e2e_tests")))]
-                    {
+                    } else {
                         Err(Error::new(ErrorDetails::ApiKeyMissing {
                             provider_name: provider_type.to_string(),
                         }))
@@ -1231,16 +1303,17 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 let path = match env::var(&env_key) {
                     Ok(path) => path,
                     Err(_) => {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
-                            warn!(
+                        if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                            #[cfg(any(test, feature = "e2e_tests"))]
+                            {
+                                warn!(
                                 "Environment variable {} is required for a model provider of type {} but is missing, so the associated tests will likely fail.",
                                 env_key, provider_type
+
                             );
+                            }
                             return Ok(Credential::Missing);
-                        }
-                        #[cfg(not(any(test, feature = "e2e_tests")))]
-                        {
+                        } else {
                             return Err(Error::new(ErrorDetails::ApiKeyMissing {
                                 provider_name: format!(
                                     "{}: Environment variable {} for credentials path is missing",
@@ -1254,16 +1327,16 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
                 match fs::read_to_string(path) {
                     Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                     Err(e) => {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
-                            warn!(
+                        if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                            #[cfg(any(test, feature = "e2e_tests"))]
+                            {
+                                warn!(
                                 "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                                 provider_type, e
                             );
+                            }
                             Ok(Credential::Missing)
-                        }
-                        #[cfg(not(any(test, feature = "e2e_tests")))]
-                        {
+                        } else {
                             Err(Error::new(ErrorDetails::ApiKeyMissing {
                                 provider_name: format!(
                                     "{}: Failed to read credentials file - {}",
@@ -1277,16 +1350,16 @@ impl TryFrom<(CredentialLocation, &str)> for Credential {
             CredentialLocation::Path(path) => match fs::read_to_string(path) {
                 Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
                 Err(e) => {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
-                        warn!(
-                            "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
+                    if SKIP_CREDENTIAL_VALIDATION.is_set() {
+                        #[cfg(any(test, feature = "e2e_tests"))]
+                        {
+                            warn!(
+                                "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
                             provider_type, e
                         );
+                        }
                         Ok(Credential::Missing)
-                    }
-                    #[cfg(not(any(test, feature = "e2e_tests")))]
-                    {
+                    } else {
                         Err(Error::new(ErrorDetails::ApiKeyMissing {
                             provider_name: format!(
                                 "{}: Failed to read credentials file - {}",
@@ -2139,8 +2212,9 @@ mod tests {
             .into()
         );
         // Test that it works with an initialized model
-        let anthropic_provider_config =
-            ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap());
+        let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.set(&(), || {
+            ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap())
+        });
         let anthropic_model_config = ModelConfig {
             routing: vec!["anthropic".into()],
             providers: HashMap::from([(

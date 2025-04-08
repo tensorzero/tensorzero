@@ -23,7 +23,6 @@ export async function loader({
     const result = await queryMetricsWithFeedback({
       function_name: functionName,
       inference_table: inferenceTable,
-      metrics: config.metrics,
     });
     return Response.json(result);
   } catch (error) {

@@ -20,7 +20,7 @@ export function BuildDatasetButton({
       className={className}
       disabled={disabled}
     >
-      <Plus className="mr-2 h-4 w-4 text-fg-tertiary" />
+      <Plus className="text-fg-tertiary mr-2 h-4 w-4" />
       Build Dataset
     </Button>
   );

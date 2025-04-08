@@ -20,7 +20,7 @@ export function MetadataItem({
       {isRaw ? (
         value
       ) : (
-        <code className="rounded bg-muted px-1 py-0.5 text-sm">{value}</code>
+        <code className="bg-muted rounded px-1 py-0.5 text-sm">{value}</code>
       )}
     </div>
   );

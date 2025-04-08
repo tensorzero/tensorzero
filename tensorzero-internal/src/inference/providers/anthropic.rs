@@ -13,7 +13,7 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
@@ -82,7 +82,6 @@ impl AnthropicProvider {
 pub enum AnthropicCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -93,7 +92,6 @@ impl TryFrom<Credential> for AnthropicCredentials {
         match credentials {
             Credential::Static(key) => Ok(AnthropicCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(AnthropicCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(AnthropicCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Anthropic provider".to_string(),
@@ -117,7 +115,6 @@ impl AnthropicCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             AnthropicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             }
@@ -143,7 +140,10 @@ impl InferenceProvider for AnthropicProvider {
             serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
-                        message: format!("Error serializing Anthropic request: {e}"),
+                        message: format!(
+                            "Error serializing Anthropic request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                     })
                 },
             )?;
@@ -166,8 +166,8 @@ impl InferenceProvider for AnthropicProvider {
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request: {e}"),
                     status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -179,7 +179,10 @@ impl InferenceProvider for AnthropicProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -188,7 +191,10 @@ impl InferenceProvider for AnthropicProvider {
 
             let response = serde_json::from_str(&raw_response).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing JSON response: {e}: {raw_response}"),
+                    message: format!(
+                        "Error parsing JSON response: {}: {raw_response}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: Some(raw_response.clone()),
@@ -211,7 +217,7 @@ impl InferenceProvider for AnthropicProvider {
             let response_code = res.status();
             let response_text = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing response: {e}"),
+                    message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -219,7 +225,7 @@ impl InferenceProvider for AnthropicProvider {
             })?;
             let error_body: AnthropicError = serde_json::from_str(&response_text).map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing response: {e}"),
+                    message: format!("Error parsing response: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: Some(response_text),
@@ -249,7 +255,10 @@ impl InferenceProvider for AnthropicProvider {
             serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
-                        message: format!("Error serializing Anthropic request: {e}"),
+                        message: format!(
+                            "Error serializing Anthropic request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                     })
                 },
             )?;
@@ -261,7 +270,10 @@ impl InferenceProvider for AnthropicProvider {
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let start_time = Instant::now();
@@ -276,7 +288,7 @@ impl InferenceProvider for AnthropicProvider {
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request: {e}"),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
@@ -510,7 +522,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, AnthropicMessag
                 let input: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
                     Error::new(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!("Error parsing tool call arguments as JSON Value: {e}"),
+                        message: format!(
+                            "Error parsing tool call arguments as JSON Value: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
@@ -749,7 +764,7 @@ pub(crate) fn prefill_json_response(
     Error::new(ErrorDetails::OutputParsing {
         message: "Expected a single text block in the response from Anthropic".to_string(),
         raw_output: serde_json::to_string(&content).map_err(|e| Error::new(ErrorDetails::Inference {
-            message: format!("Error serializing content as JSON: {e}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"),
+            message: format!("Error serializing content as JSON: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new", DisplayOrDebugGateway::new(e)),
         }))?,
     });
     Ok(content)
@@ -773,7 +788,7 @@ pub(crate) fn prefill_json_chunk_response(chunk: &mut ProviderInferenceResponseC
         Error::new(ErrorDetails::OutputParsing {
             message: "Expected a single text block in the response from Anthropic".to_string(),
             raw_output: serde_json::to_string(&chunk.content).map_err(|e| Error::new(ErrorDetails::Inference {
-                message: format!("Error serializing content as JSON: {e}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new"),
+                message: format!("Error serializing content as JSON: {}. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new", DisplayOrDebugGateway::new(e)),
             })).unwrap_or_default()
         });
     }
@@ -820,7 +835,10 @@ fn convert_to_output(
                 name,
                 arguments: serde_json::to_string(&input).map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing input for tool call: {e}"),
+                        message: format!(
+                            "Error parsing input for tool call: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: None,
                         raw_response: Some(serde_json::to_string(&input).unwrap_or_default()),
@@ -924,7 +942,10 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
 
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
 
@@ -1070,7 +1091,10 @@ fn anthropic_to_tensorzero_stream_message(
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     let raw_message = serde_json::to_string(&message).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
-            message: format!("Error serializing stream message from Anthropic: {e}"),
+            message: format!(
+                "Error serializing stream message from Anthropic: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
         })
     })?;
     match message {
@@ -2665,13 +2689,10 @@ mod tests {
         let creds = AnthropicCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, AnthropicCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = AnthropicCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, AnthropicCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = AnthropicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, AnthropicCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use serde_json::{json, Value};
+use std::fmt::{Debug, Display};
 use tokio::sync::OnceCell;
 use url::Url;
 use uuid::Uuid;
@@ -26,6 +27,27 @@ pub fn set_debug(debug: bool) -> Result<(), Error> {
             message: "Failed to set debug mode".to_string(),
         })
     })
+}
+
+/// Chooses between a `Debug` or `Display` representation based on the gateway-level `DEBUG` flag.
+pub struct DisplayOrDebugGateway<T: Debug + Display> {
+    val: T,
+}
+
+impl<T: Debug + Display> DisplayOrDebugGateway<T> {
+    pub fn new(val: T) -> Self {
+        Self { val }
+    }
+}
+
+impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if *DEBUG.get().unwrap_or(&false) {
+            write!(f, "{:?}", self.val)
+        } else {
+            write!(f, "{}", self.val)
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -717,19 +739,15 @@ impl std::fmt::Display for ErrorDetails {
                 data,
                 schema,
             } => {
+                write!(f, "JSON Schema validation failed:\n{}", messages.join("\n"))?;
                 write!(
                     f,
-                    "JSON Schema validation failed for Function:\n\n{}",
-                    messages.join("\n")
-                )?;
-                write!(
-                    f,
-                    "\nData: {}",
+                    "\n\nData:\n{}",
                     serde_json::to_string(data).map_err(|_| std::fmt::Error)?
                 )?;
                 write!(
                     f,
-                    "Schema: {}",
+                    "\n\nSchema:\n{}",
                     serde_json::to_string(schema).map_err(|_| std::fmt::Error)?
                 )
             }

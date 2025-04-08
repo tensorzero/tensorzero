@@ -40,7 +40,7 @@ export default function FeedbackValue({
   // Handle comments and demonstrations (both have string values)
   if (feedback.type === "comment" && typeof feedback.value === "string") {
     return (
-      <div className="whitespace-pre-wrap break-words">{feedback.value}</div>
+      <div className="break-words whitespace-pre-wrap">{feedback.value}</div>
     );
   }
 

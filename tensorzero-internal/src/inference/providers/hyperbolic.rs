@@ -10,7 +10,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
@@ -23,7 +23,7 @@ use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, stream_openai,
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
 };
-use super::provider_trait::InferenceProvider;
+use super::provider_trait::{InferenceProvider, TensorZeroEventError};
 
 lazy_static! {
     static ref HYPERBOLIC_DEFAULT_BASE_URL: Url = {
@@ -70,7 +70,6 @@ impl HyperbolicProvider {
 pub enum HyperbolicCredentials {
     Static(SecretString),
     Dynamic(String),
-    #[cfg(any(test, feature = "e2e_tests"))]
     None,
 }
 
@@ -81,7 +80,6 @@ impl TryFrom<Credential> for HyperbolicCredentials {
         match credentials {
             Credential::Static(key) => Ok(HyperbolicCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(HyperbolicCredentials::Dynamic(key_name)),
-            #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(HyperbolicCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Hyperbolic provider".to_string(),
@@ -105,7 +103,6 @@ impl HyperbolicCredentials {
                     .into()
                 })
             }
-            #[cfg(any(test, feature = "e2e_tests"))]
             HyperbolicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
             })?,
@@ -258,7 +255,11 @@ impl InferenceProvider for HyperbolicProvider {
                 })
             })?;
 
-        let stream = stream_openai(event_source, start_time).peekable();
+        let stream = stream_openai(
+            event_source.map_err(TensorZeroEventError::EventSource),
+            start_time,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 
@@ -490,13 +491,10 @@ mod tests {
         let creds = HyperbolicCredentials::try_from(generic).unwrap();
         assert!(matches!(creds, HyperbolicCredentials::Dynamic(_)));
 
-        // Test Missing credential (test mode)
-        #[cfg(any(test, feature = "e2e_tests"))]
-        {
-            let generic = Credential::Missing;
-            let creds = HyperbolicCredentials::try_from(generic).unwrap();
-            assert!(matches!(creds, HyperbolicCredentials::None));
-        }
+        // Test Missing credential
+        let generic = Credential::Missing;
+        let creds = HyperbolicCredentials::try_from(generic).unwrap();
+        assert!(matches!(creds, HyperbolicCredentials::None));
 
         // Test invalid type
         let generic = Credential::FileContents(SecretString::from("test"));

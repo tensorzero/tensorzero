@@ -63,7 +63,7 @@ export default function FunctionsTable({
             <TableRow className="hover:bg-bg-primary">
               <TableCell
                 colSpan={4}
-                className="px-3 py-8 text-center text-fg-muted"
+                className="text-fg-muted px-3 py-8 text-center"
               >
                 No functions found.
               </TableCell>
@@ -74,7 +74,7 @@ export default function FunctionsTable({
                 <TableRow key={function_name} id={function_name}>
                   <TableCell className="max-w-[200px] lg:max-w-none">
                     <FunctionLink functionName={function_name}>
-                      <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
+                      <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
                         {function_name}
                       </code>
                     </FunctionLink>
