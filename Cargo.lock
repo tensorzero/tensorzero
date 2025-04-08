@@ -3870,7 +3870,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.4.1"
+version = "2025.4.2"
 dependencies = [
  "futures",
  "pyo3",
