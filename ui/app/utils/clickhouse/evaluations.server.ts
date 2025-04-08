@@ -17,6 +17,8 @@ import {
   JsonEvaluationResultSchema,
   ChatEvaluationResultSchema,
   ParsedEvaluationResultWithVariantSchema,
+  type EvaluationRunSearchResult,
+  EvaluationRunSearchResultSchema,
 } from "./evaluations";
 import { uuidv7ToTimestamp } from "./helpers";
 
@@ -25,12 +27,23 @@ export async function getEvaluationRunInfos(
   function_name: string,
 ): Promise<EvaluationRunInfo[]> {
   const query = `
-    SELECT DISTINCT run_tag.value as evaluation_run_id, run_tag.variant_name as variant_name
-    FROM TagInference AS run_tag
-    WHERE run_tag.key = 'tensorzero::evaluation_run_id'
+    SELECT
+      any(run_tag.value) as evaluation_run_id,
+      any(run_tag.variant_name) as variant_name,
+      formatDateTime(
+        max(UUIDv7ToDateTime(inference_id)),
+        '%Y-%m-%dT%H:%i:%SZ'
+      ) as most_recent_inference_date
+    FROM
+      TagInference AS run_tag
+    WHERE
+      run_tag.key = 'tensorzero::evaluation_run_id'
       AND run_tag.value IN ({evaluation_run_ids:Array(String)})
       AND run_tag.function_name = {function_name:String}
-    ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
+    GROUP BY
+      run_tag.value
+    ORDER BY
+      toUInt128(toUUID(evaluation_run_id)) DESC
   `;
 
   const result = await clickhouseClient.query({
@@ -42,6 +55,44 @@ export async function getEvaluationRunInfos(
     },
   });
 
+  const rows = await result.json<EvaluationRunInfo[]>();
+  return rows.map((row) => EvaluationRunInfoSchema.parse(row));
+}
+
+export async function getEvaluationRunInfosForDatapoint(
+  datapoint_id: string,
+  function_name: string,
+): Promise<EvaluationRunInfo[]> {
+  const config = await getConfig();
+  const function_type = config.functions[function_name].type;
+  const inference_table_name =
+    function_type === "chat" ? "ChatInference" : "JsonInference";
+  const query = `
+    SELECT any(i.tags['tensorzero::evaluation_run_id']) as evaluation_run_id, any(i.variant_name) as variant_name,
+      formatDateTime(
+        max(UUIDv7ToDateTime(inference_id)),
+        '%Y-%m-%dT%H:%i:%SZ'
+      ) as most_recent_inference_date
+    FROM TagInference t
+    INNER JOIN {inference_table_name:Identifier} i
+      ON t.inference_id = i.id
+      AND i.function_name = {function_name:String}
+      AND i.variant_name = t.variant_name
+      AND i.episode_id = t.episode_id
+    WHERE t.key = 'tensorzero::datapoint_id'
+      AND t.value = {datapoint_id:String}
+    GROUP BY
+      i.tags['tensorzero::evaluation_run_id']
+  `;
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: {
+      datapoint_id: datapoint_id,
+      function_name: function_name,
+      inference_table_name: inference_table_name,
+    },
+  });
   const rows = await result.json<EvaluationRunInfo[]>();
   return rows.map((row) => EvaluationRunInfoSchema.parse(row));
 }
@@ -410,6 +461,8 @@ export async function getMostRecentEvaluationInferenceDate(
   return resultMap;
 }
 
+// TODO: write a new searchEvaluationRuns function that only allows searches where the datapoint_id is a single value
+// To do this we'll want to join on the inference table rather than the TagInference table
 export async function searchEvaluationRuns(
   evaluation_name: string,
   function_name: string,
@@ -445,8 +498,8 @@ export async function searchEvaluationRuns(
       search_query: search_query,
     },
   });
-  const rows = await result.json<EvaluationRunInfo[]>();
-  return rows.map((row) => EvaluationRunInfoSchema.parse(row));
+  const rows = await result.json<EvaluationRunSearchResult[]>();
+  return rows.map((row) => EvaluationRunSearchResultSchema.parse(row));
 }
 
 export async function getEvaluationsForDatapoint(

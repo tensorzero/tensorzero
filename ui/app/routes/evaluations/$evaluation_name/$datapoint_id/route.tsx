@@ -39,6 +39,9 @@ import {
   useColorAssigner,
 } from "~/components/evaluations/ColorAssigner";
 import { getConfig } from "~/utils/config/index.server";
+import type { EvaluationConfig } from "~/utils/config/evaluations";
+import type { ContentBlockOutput } from "~/utils/clickhouse/common";
+import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const evaluation_name = params.evaluation_name;
@@ -119,10 +122,10 @@ export default function EvaluationDatapointPage({
     })),
   ];
 
-  // Function to get color for each run
-  const { getColor } = useColorAssigner();
+  // REMOVE useColorAssigner() call from here
 
   return (
+    // Provider remains here
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
         <PageHeader label="Datapoint" name={datapoint_id}>
@@ -145,49 +148,11 @@ export default function EvaluationDatapointPage({
             <SectionHeader heading="Input" />
             <Input input={consolidatedEvaluationResults[0].input} />
           </SectionLayout>
-          <SectionLayout>
-            <SectionHeader heading="Output" />
-            <div className="flex gap-4 overflow-x-auto pb-4">
-              {outputsToDisplay.map((result) => (
-                <div
-                  key={result.id}
-                  className="flex max-w-[450px] min-w-[300px] shrink-0 flex-col justify-between"
-                >
-                  <div>
-                    <div className="mb-2 flex">
-                      {result.id === "Reference" ? (
-                        <EvaluationRunBadge
-                          runInfo={{
-                            evaluation_run_id: "",
-                            variant_name: result.variant_name,
-                          }}
-                          getColor={() => "bg-gray-100 text-gray-700"}
-                        />
-                      ) : (
-                        <EvaluationRunBadge
-                          runInfo={{
-                            evaluation_run_id: result.id,
-                            variant_name: result.variant_name,
-                          }}
-                          getColor={getColor}
-                        />
-                      )}
-                    </div>
-                    <Output output={result.output} />
-                  </div>
-                  {result.id !== "Reference" &&
-                    result.metrics &&
-                    result.metrics.length > 0 && (
-                      <MetricsDisplay
-                        evaluation_name={evaluation_name}
-                        metrics={result.metrics}
-                        evaluatorsConfig={evaluation_config.evaluators}
-                      />
-                    )}
-                </div>
-              ))}
-            </div>
-          </SectionLayout>
+          <OutputsSection
+            outputsToDisplay={outputsToDisplay}
+            evaluation_name={evaluation_name}
+            evaluation_config={evaluation_config}
+          />
         </SectionsGroup>
       </PageLayout>
     </ColorAssignerProvider>
@@ -318,4 +283,70 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </div>
     );
   }
+}
+
+type OutputsSectionProps = {
+  outputsToDisplay: Array<{
+    id: string;
+    variant_name: string;
+    output: ContentBlockOutput[] | JsonInferenceOutput;
+    metrics: ConsolidatedMetric[];
+  }>;
+  evaluation_name: string;
+  evaluation_config: EvaluationConfig; // Use the specific config type
+};
+
+function OutputsSection({
+  outputsToDisplay,
+  evaluation_name,
+  evaluation_config,
+}: OutputsSectionProps) {
+  const { getColor } = useColorAssigner();
+
+  return (
+    <SectionLayout>
+      <SectionHeader heading="Output" />
+      <div className="flex gap-4 overflow-x-auto pb-4">
+        {outputsToDisplay.map((result) => (
+          <div
+            key={result.id}
+            className="flex max-w-[450px] min-w-[300px] shrink-0 flex-col justify-between"
+          >
+            <div>
+              <div className="mb-2 flex">
+                {result.id === "Reference" ? (
+                  <EvaluationRunBadge
+                    runInfo={{
+                      evaluation_run_id: "",
+                      variant_name: result.variant_name,
+                    }}
+                    getColor={() => "bg-gray-100 text-gray-700"}
+                  />
+                ) : (
+                  <EvaluationRunBadge
+                    runInfo={{
+                      evaluation_run_id: result.id,
+                      variant_name: result.variant_name,
+                    }}
+                    // Use the getColor obtained from the correct context
+                    getColor={getColor}
+                  />
+                )}
+              </div>
+              <Output output={result.output} />
+            </div>
+            {result.id !== "Reference" &&
+              result.metrics &&
+              result.metrics.length > 0 && (
+                <MetricsDisplay
+                  evaluation_name={evaluation_name}
+                  metrics={result.metrics}
+                  evaluatorsConfig={evaluation_config.evaluators}
+                />
+              )}
+          </div>
+        ))}
+      </div>
+    </SectionLayout>
+  );
 }
