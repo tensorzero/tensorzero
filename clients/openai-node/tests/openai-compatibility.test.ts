@@ -1096,7 +1096,7 @@ it("should reject string input for function with input schema", async () => {
         },
       }
     )
-  ).rejects.toThrow(/400 "JSON Schema validation failed fo/);
+  ).rejects.toThrow(/400 "JSON Schema validation failed/);
 });
 
 it("should handle multi-turn parallel tool calls", async () => {

@@ -68,6 +68,7 @@ pub struct ExactMatchConfig {
 
 #[derive(Debug)]
 pub struct LLMJudgeConfig {
+    pub input_format: LLMJudgeInputFormat,
     pub output_type: LLMJudgeOutputType,
     pub include: LLMJudgeIncludeConfig,
     pub optimize: LLMJudgeOptimize,
@@ -78,6 +79,14 @@ pub struct LLMJudgeConfig {
 pub struct LLMJudgeIncludeConfig {
     #[serde(default)]
     pub reference_output: bool,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LLMJudgeInputFormat {
+    #[default]
+    Serialized,
+    Messages,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -180,6 +189,7 @@ impl UninitializedStaticEvaluationConfig {
             }
             .into());
         }
+
         // evaluation names cannot have "::" in them since we use it as a delimiter
         if evaluation_name.contains("::") {
             return Err(ErrorDetails::Config {
@@ -246,6 +256,8 @@ enum UninitializedEvaluatorConfig {
 
 #[derive(Debug, Deserialize)]
 struct UninitializedLLMJudgeConfig {
+    #[serde(default)]
+    input_format: LLMJudgeInputFormat,
     variants: HashMap<String, UninitializedLLMJudgeVariantConfig>,
     output_type: LLMJudgeOutputType,
     optimize: LLMJudgeOptimize,
@@ -287,7 +299,12 @@ impl UninitializedEvaluatorConfig {
                     .into_iter()
                     .map(|(name, variant)| {
                         variant
-                            .load(base_path, evaluation_name, evaluator_name)
+                            .load(
+                                base_path,
+                                evaluation_name,
+                                evaluator_name,
+                                &params.input_format,
+                            )
                             .map(|v| (name, v))
                     })
                     .collect::<Result<HashMap<_, _>, Error>>()?;
@@ -325,12 +342,15 @@ impl UninitializedEvaluatorConfig {
                         variant.weight = Some(1.0);
                     }
                 }
-                let user_schema_value = serde_json::from_str(LLM_JUDGE_USER_SCHEMA_TEXT)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::JsonSchema {
-                            message: format!("Failed to parse LLM judge user schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
-                        })
-                    })?;
+                let user_schema_value: Option<serde_json::Value> = match params.input_format {
+                    LLMJudgeInputFormat::Serialized => Some(serde_json::from_str(LLM_JUDGE_USER_SCHEMA_TEXT)
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::JsonSchema {
+                                message: format!("Failed to parse LLM judge user schema: {e}. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports."),
+                            })
+                        })?),
+                    LLMJudgeInputFormat::Messages => None,
+                };
                 let output_schema_str = match params.output_type {
                     LLMJudgeOutputType::Float => LLM_JUDGE_FLOAT_OUTPUT_SCHEMA_TEXT,
                     LLMJudgeOutputType::Boolean => LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT,
@@ -347,13 +367,16 @@ impl UninitializedEvaluatorConfig {
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     system_schema: None,
-                    user_schema: Some(JSONSchemaFromPath::from_value(&user_schema_value)?),
+                    user_schema: user_schema_value
+                        .map(|v| JSONSchemaFromPath::from_value(&v))
+                        .transpose()?,
                     assistant_schema: None,
                     output_schema,
                     implicit_tool_call_config,
                 });
                 Ok((
                     EvaluatorConfig::LLMJudge(LLMJudgeConfig {
+                        input_format: params.input_format,
                         output_type: params.output_type,
                         include: params.include,
                         optimize: params.optimize,
@@ -391,7 +414,7 @@ pub struct UninitializedLLMJudgeChatCompletionVariantConfig {
     pub presence_penalty: Option<f32>,
     pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
-    pub json_mode: JsonMode, // This is JSON
+    pub json_mode: JsonMode, // This is a JSON function
     #[serde(default)]
     pub retries: RetryConfig,
     #[serde(default)]
@@ -406,6 +429,7 @@ impl UninitializedLLMJudgeVariantConfig {
         base_path: &P,
         evaluation_name: &str,
         evaluator_name: &str,
+        input_format: &LLMJudgeInputFormat,
     ) -> Result<VariantConfig, Error> {
         match self {
             UninitializedLLMJudgeVariantConfig::ChatCompletion(params) => {
@@ -422,11 +446,14 @@ impl UninitializedLLMJudgeVariantConfig {
                     )),
                     contents: templated_system_instructions,
                 };
-                let user_template = PathWithContents {
-                    path: PathBuf::from(format!(
-                        "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::user"
-                    )),
-                    contents: include_str!("llm_judge_user_template.minijinja").to_string(),
+                let user_template = match input_format {
+                    LLMJudgeInputFormat::Serialized => Some(PathWithContents {
+                        path: PathBuf::from(format!(
+                            "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::user"
+                        )),
+                        contents: include_str!("llm_judge_user_template.minijinja").to_string(),
+                    }),
+                    LLMJudgeInputFormat::Messages => None,
                 };
                 let weight = match params.active {
                     Some(active) => {
@@ -442,7 +469,7 @@ impl UninitializedLLMJudgeVariantConfig {
                     weight,
                     model: params.model,
                     system_template: Some(system_template),
-                    user_template: Some(user_template),
+                    user_template,
                     assistant_template: None,
                     temperature: params.temperature,
                     top_p: params.top_p,
@@ -601,6 +628,7 @@ mod tests {
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Min,
@@ -721,6 +749,7 @@ mod tests {
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
                 variants,
                 output_type: LLMJudgeOutputType::Float,
                 optimize: LLMJudgeOptimize::Max,
@@ -902,6 +931,7 @@ mod tests {
             }
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Min,
@@ -1003,6 +1033,7 @@ mod tests {
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Min,
@@ -1069,6 +1100,7 @@ mod tests {
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Max,
@@ -1139,6 +1171,7 @@ mod tests {
             );
 
             let llm_judge_config = UninitializedLLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
                 variants,
                 output_type: LLMJudgeOutputType::Boolean,
                 optimize: LLMJudgeOptimize::Max,

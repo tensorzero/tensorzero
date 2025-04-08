@@ -5,10 +5,10 @@
       "prediction": {
         "type": "string"
       },
-      "truth": {
+      "ground_truth": {
         "type": "string"
       }
     },
-    "required": ["prediction", "truth"],
+    "required": ["prediction", "ground_truth"],
     "additionalProperties": false
   }

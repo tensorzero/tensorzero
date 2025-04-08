@@ -129,7 +129,7 @@ cargo test-unit
 
 1. Launch ClickHouse and the gateway in E2E testing mode (see above).
 
-2. Go to the relevant directory (e.g. `cd clients/python-deprecated`)
+2. Go to the relevant directory (e.g. `cd clients/python-pyo3`)
 
 3. Create a virtual environment and install the dependencies
 

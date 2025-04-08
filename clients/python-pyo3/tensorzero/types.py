@@ -175,7 +175,7 @@ class Message(TypedDict):
 
 
 class InferenceInput(TypedDict):
-    messages: Union[List[Message], Dict[str, Any]]
+    messages: List[Message]
     system: Optional[Union[str, Dict[str, Any]]]
 
 

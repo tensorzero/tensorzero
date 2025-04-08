@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
 use reqwest_eventsource::RequestBuilderExt;
 use secrecy::{ExposeSecret, SecretString};
@@ -27,6 +27,7 @@ use super::openai::{
     stream_openai, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
     OpenAIToolChoice, StreamOptions,
 };
+use super::provider_trait::TensorZeroEventError;
 
 lazy_static! {
     static ref XAI_DEFAULT_BASE_URL: Url = {
@@ -256,7 +257,11 @@ impl InferenceProvider for XAIProvider {
                 })
             })?;
 
-        let stream = stream_openai(event_source, start_time).peekable();
+        let stream = stream_openai(
+            event_source.map_err(TensorZeroEventError::EventSource),
+            start_time,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 
@@ -335,12 +340,15 @@ impl<'a> XAIRequest<'a> {
             ..
         } = *request;
 
-        let stream_options = match request.stream {
+        // xAI suddenly started rejecting 'stream_options' as a parameter.
+        // If they change the behavior back, we can start using this again.
+        let _stream_options = match request.stream {
             true => Some(StreamOptions {
                 include_usage: true,
             }),
             false => None,
         };
+        let stream_options = None;
 
         let response_format = Some(XAIResponseFormat::new(
             &request.json_mode,
