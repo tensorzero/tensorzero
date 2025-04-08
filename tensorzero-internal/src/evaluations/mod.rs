@@ -407,7 +407,7 @@ enum UninitializedLLMJudgeVariantConfig {
     ChatCompletion(UninitializedLLMJudgeChatCompletionVariantConfig),
     #[serde(rename = "experimental_best_of_n_sampling")]
     BestOfNSampling(UninitializedLLMJudgeBestOfNVariantConfig),
-    #[serde(rename = "experimental_mixture_of_n_sampling")]
+    #[serde(rename = "experimental_mixture_of_n")]
     MixtureOfNSampling(UninitializedLLMJudgeMixtureOfNVariantConfig),
 }
 

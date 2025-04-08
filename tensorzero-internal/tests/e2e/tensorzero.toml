@@ -2855,7 +2855,7 @@ json_mode = "strict"
 
 [evaluations.mixture_of_3.evaluators.llm_judge_bool.variants.mixture_of_3]
 active = true
-type = "experimental_mixture_of_n_sampling"
+type = "experimental_mixture_of_n"
 candidates = ["anthropic_promptA", "openai_promptA", "llama_promptA"]
 
 [evaluations.mixture_of_3.evaluators.llm_judge_bool.variants.mixture_of_3.fuser]

@@ -236,7 +236,12 @@ export function validateMessage(
     errors: Record<FormatErrorType, number>;
   };
 } {
-  const lengthValidation = validateMessageLength(messages, model, enc, maxTokens);
+  const lengthValidation = validateMessageLength(
+    messages,
+    model,
+    enc,
+    maxTokens,
+  );
   const rolesValidation = validateMessageRoles(messages);
 
   // Create a mock dataset entry for format validation
