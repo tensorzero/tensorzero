@@ -206,7 +206,7 @@ system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/sy
 json_mode = "strict"
 
 [evaluations.evaluation1.evaluators.llm_judge_bool.variants.best_of_3]
-type = "best_of_n_sampling"
+type = "experimental_best_of_n_sampling"
 candidates = ["anthropic_promptA", "openai_promptA", "llama_promptA"]
 
 [evaluations.evaluation1.evaluators.llm_judge_bool.variants.best_of_3.evaluator]

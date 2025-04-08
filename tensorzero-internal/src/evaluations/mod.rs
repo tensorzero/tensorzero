@@ -404,6 +404,7 @@ impl UninitializedEvaluatorConfig {
 #[serde(rename_all = "snake_case")]
 enum UninitializedLLMJudgeVariantConfig {
     ChatCompletion(UninitializedLLMJudgeChatCompletionVariantConfig),
+    #[serde(rename = "experimental_best_of_n_sampling")]
     BestOfNSampling(UninitializedLLMJudgeBestOfNVariantConfig),
 }
 
