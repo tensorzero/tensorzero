@@ -62,7 +62,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
   </tr>
   <tr>
     <td width="30%" valign="top"><b>Is TensorZero production-ready?</b></td>
-    <td width="70%" valign="top">Yes. Here's a case study: <a href="https://www.tensorzero.com/blog/case-study-automating-code-changelogs-at-a-large-bank-with-llms">Automating Code Changelogs at a Large Bank with LLMs</a></td>
+    <td width="70%" valign="top">Yes. Here's a case study: <b><a href="https://www.tensorzero.com/blog/case-study-automating-code-changelogs-at-a-large-bank-with-llms">Automating Code Changelogs at a Large Bank with LLMs</a></b></td>
   </tr>
   <tr>
     <td width="30%" valign="top"><b>How much does TensorZero cost?</b></td>
@@ -74,7 +74,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
   </tr>
   <tr>
     <td width="30%" valign="top"><b>How do I get started?</b></td>
-    <td width="70%" valign="top">You can adopt TensorZero incrementally. Our <a href="https://www.tensorzero.com/docs/quickstart">Quick Start</a> goes from a vanilla OpenAI wrapper to a production-ready LLM application with observability and fine-tuning in just 5 minutes.</td>
+    <td width="70%" valign="top">You can adopt TensorZero incrementally. Our <b><a href="https://www.tensorzero.com/docs/quickstart">Quick Start</a></b> goes from a vanilla OpenAI wrapper to a production-ready LLM application with observability and fine-tuning in just 5 minutes.</td>
   </tr>
 </table>
 
