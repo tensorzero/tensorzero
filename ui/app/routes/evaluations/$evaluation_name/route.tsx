@@ -218,7 +218,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             </>
           )}
           <div className="flex items-center">
-            <SectionHeader heading="Results" className="mr-4" />
+            <SectionHeader heading="Results" />
             <AutoRefreshIndicator isActive={any_evaluation_is_running} />
           </div>
           <EvaluationTable

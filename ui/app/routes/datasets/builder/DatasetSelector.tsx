@@ -17,7 +17,7 @@ import {
   CommandItem,
   CommandList,
 } from "~/components/ui/command";
-import { cn } from "~/utils/common";
+import clsx from "clsx";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import type { DatasetBuilderFormValues } from "./types";
 
@@ -156,7 +156,7 @@ export function DatasetSelector({
                           >
                             <div className="flex items-center">
                               <Check
-                                className={cn(
+                                className={clsx(
                                   "mr-2 h-4 w-4",
                                   field.value === dataset.dataset_name
                                     ? "opacity-100"
