@@ -16,6 +16,8 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 - [x] **Optimization:** from prompts to fine-tuning and RL
 - [x] **Experimentation:** built-in A/B testing, routing, fallbacks
 
+---
+
 <p align="center">
   <b><a href="https://www.tensorzero.com/" target="_blank">Website</a></b>
   ·
@@ -38,6 +40,47 @@ It provides a **data & learning flywheel for LLMs** by unifying:
   ·
   <b><a href="https://www.tensorzero.com/docs/gateway/deployment" target="_blank">Configuration Reference</a></b>
 </p>
+
+---
+
+<table>
+  <tr>
+    <td width="30%" valign="top"><b>What is TensorZero?</b></td>
+    <td width="70%" valign="top">TensorZero is an open-source framework for building production-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluations, and experimentation.</td>
+  </tr>
+  <tr>
+    <td width="30%" valign="top"><b>How is TensorZero different from other LLM frameworks?</b></td>
+    <td width="70%" valign="top">
+      1. TensorZero enables you to optimize complex LLM applications based on production metrics and human feedback.<br>
+      2. TensorZero supports the needs of industrial-scale LLM applications: low latency, high throughput, type safety, self-hosted, GitOps, customizability, etc.<br>
+      3. TensorZero unifies the entire LLMOps stack, creating compounding benefits. For example, LLM evaluations can be used for fine-tuning models alongside AI judges.
+    </td>
+  </tr>
+  <tr>
+    <td width="30%" valign="top"><b>Can I use TensorZero with ___?</b></td>
+    <td width="70%" valign="top">Yes. Every major programming language is supported. You can use TensorZero with our Python client, any OpenAI SDK, or our HTTP API.</td>
+  </tr>
+  <tr>
+    <td width="30%" valign="top"><b>Is TensorZero production-ready?</b></td>
+    <td width="70%" valign="top">Yes. Here's a case study: <b><a href="https://www.tensorzero.com/blog/case-study-automating-code-changelogs-at-a-large-bank-with-llms">Automating Code Changelogs at a Large Bank with LLMs</a></b></td>
+  </tr>
+  <tr>
+    <td width="30%" valign="top"><b>How much does TensorZero cost?</b></td>
+    <td width="70%" valign="top">Nothing. TensorZero is 100% self-hosted and open-source. There are no paid features.</td>
+  </tr>
+  <tr>
+    <td width="30%" valign="top"><b>Who is building TensorZero?</b></td>
+    <td width="70%" valign="top">Our technical team includes a former Rust compiler maintainer, machine learning researchers (Stanford, CMU, Oxford, Columbia) with thousands of citations, and the chief product officer of a decacorn startup. We're backed by the same investors as leading open-source projects (e.g. ClickHouse, CockroachDB) and AI labs (e.g. OpenAI, Anthropic).</td>
+  </tr>
+  <tr>
+    <td width="30%" valign="top"><b>How do I get started?</b></td>
+    <td width="70%" valign="top">You can adopt TensorZero incrementally. Our <b><a href="https://www.tensorzero.com/docs/quickstart">Quick Start</a></b> goes from a vanilla OpenAI wrapper to a production-ready LLM application with observability and fine-tuning in just 5 minutes.</td>
+  </tr>
+</table>
+
+
+
+---
 
 ## Features
 
@@ -299,9 +342,7 @@ Optimize your prompts programmatically using research-driven optimization techni
     <td width="50%" align="center" valign="middle"><b><a href="https://github.com/tensorzero/tensorzero/tree/main/examples/gsm8k-custom-recipe-dspy">DSPy Integration</a></b></td>
   </tr>
   <tr>
-    <td width="50%" align="center" valign="middle">
-      TensorZero implements MIPROv2, an automated prompt engineering algorithm that jointly optimizes instructions and in-context examples for your prompts.
-    </td>
+    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/d81a7c37-382f-4c46-840f-e6c2593301db" alt="MIPROv2 diagram"></td>
     <td width="50%" align="center" valign="middle">
       TensorZero comes with several optimization recipes, but you can also easily create your own.
       This example shows to optimize a TensorZero function using an arbitrary tool — here, DSPy, a popular library for automated prompt engineering.

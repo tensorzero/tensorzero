@@ -64,7 +64,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (metric_name, target_id);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the `CommentFeedback` table
         let query = r#"
@@ -78,7 +81,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY target_id;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the `DemonstrationFeedback` table
         let query = r#"
@@ -91,7 +97,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY inference_id;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the `FloatMetricFeedback` table
         let query = r#"
@@ -105,7 +114,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (metric_name, target_id);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the `ChatInference` table
         let query = r#"
@@ -124,7 +136,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, episode_id);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the `JsonInference` table
         let query = r#"
@@ -143,7 +158,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (function_name, variant_name, episode_id);
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the `ModelInference` table
         let query = r#"
@@ -163,7 +181,10 @@ impl Migration for Migration0000<'_> {
             ) ENGINE = MergeTree()
             ORDER BY inference_id;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         Ok(())
     }

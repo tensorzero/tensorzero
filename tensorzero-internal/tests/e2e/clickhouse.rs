@@ -223,7 +223,7 @@ async fn test_clickhouse_migration_manager() {
     tracing::info!("Attempting to drop test database: {database}");
 
     clickhouse
-        .run_query(format!("DROP DATABASE {database}"), None)
+        .run_query_synchronous(format!("DROP DATABASE {database}"), None)
         .await
         .unwrap();
 }
@@ -339,7 +339,10 @@ async fn test_migration_0013_old_table() {
         ) ENGINE = MergeTree()
         ORDER BY id;
     "#;
-    let _ = clickhouse.run_query(query.to_string(), None).await.unwrap();
+    let _ = clickhouse
+        .run_query_synchronous(query.to_string(), None)
+        .await
+        .unwrap();
     let err = migration_manager::run_migration(&Migration0013 {
         clean_start: false,
         clickhouse: &clickhouse,
@@ -405,7 +408,10 @@ async fn test_migration_0013_data_no_table() {
         INSERT INTO JsonInference (id, function_name, variant_name, episode_id, input, output, output_schema, inference_params, processing_time_ms)
         VALUES (generateUUIDv7(), 'test_function', 'test_variant', generateUUIDv7(), 'input', 'output', 'output_schema', 'params', 100)
     "#;
-    let _ = clickhouse.run_query(query.to_string(), None).await.unwrap();
+    let _ = clickhouse
+        .run_query_synchronous(query.to_string(), None)
+        .await
+        .unwrap();
     let err = migration_manager::run_migration(&Migration0013 {
         clean_start: false,
         clickhouse: &clickhouse,
