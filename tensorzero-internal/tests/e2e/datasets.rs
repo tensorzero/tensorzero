@@ -6,11 +6,11 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_internal::{
     clickhouse::test_helpers::stale_datapoint_clickhouse,
-    endpoints::datasets::CLICKHOUSE_DATETIME_FORMAT,
+    endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
 };
 use uuid::Uuid;
 
-use crate::common::get_gateway_endpoint;
+use crate::common::{delete_datapoint, get_gateway_endpoint};
 use tensorzero_internal::clickhouse::test_helpers::{
     get_clickhouse, select_chat_datapoint_clickhouse, select_json_datapoint_clickhouse,
 };
@@ -944,17 +944,14 @@ async fn test_datapoint_insert_output_inherit_chat() {
     });
     assert_eq!(datapoint, expected);
 
-    let resp = client
-        .delete(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/function/basic_test/kind/chat/datapoint/{datapoint_id}",
-        )))
-        .send()
-        .await
-        .unwrap();
-
-    let status = resp.status();
-    let resp_text = resp.text().await.unwrap();
-    assert_eq!(status, StatusCode::OK, "Delete failed: {resp_text}");
+    delete_datapoint(
+        &clickhouse,
+        DatapointKind::Chat,
+        "basic_test",
+        &dataset_name,
+        datapoint_id,
+    )
+    .await;
 
     // Force deduplication to run
     clickhouse
@@ -1003,34 +1000,6 @@ async fn test_datapoint_insert_output_inherit_chat() {
     assert_ne!(
         updated_at, new_updated_at,
         "Deleting datapoint should change updated_at"
-    );
-}
-
-#[tokio::test]
-async fn test_bad_delete_datapoint() {
-    let client = Client::new();
-
-    let id = Uuid::now_v7();
-    let resp = client
-        .delete(get_gateway_endpoint(&format!(
-            "/datasets/missing/function/basic_test/kind/chat/datapoint/{id}",
-        )))
-        .send()
-        .await
-        .unwrap();
-
-    let status = resp.status();
-    let resp: serde_json::Value = resp.json().await.unwrap();
-    assert_eq!(
-        status,
-        StatusCode::BAD_REQUEST,
-        "Delete should have failed: {resp}"
-    );
-    assert_eq!(
-        resp,
-        json!({
-            "error": format!("Datapoint not found with params DeletePathParams {{ dataset: \"missing\", function: \"basic_test\", kind: Chat, id: {id} }}")
-        })
     );
 }
 
@@ -1366,17 +1335,14 @@ async fn test_datapoint_insert_output_inherit_json() {
     });
     assert_eq!(datapoint, expected);
 
-    let resp = client
-        .delete(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/function/json_success/kind/json/datapoint/{datapoint_id}",
-        )))
-        .send()
-        .await
-        .unwrap();
-
-    let status = resp.status();
-    let resp_text = resp.text().await.unwrap();
-    assert_eq!(status, StatusCode::OK, "Delete failed: {resp_text}");
+    delete_datapoint(
+        &clickhouse,
+        DatapointKind::Json,
+        "json_success",
+        &dataset_name,
+        datapoint_id,
+    )
+    .await;
 
     // Force deduplication to run
     clickhouse
