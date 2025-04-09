@@ -99,7 +99,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (FF_ENABLE_PYTHON) {
     return await startPythonFineTune(jsonData);
   }
-  
+
   const validatedData = SFTFormValuesSchema.parse(jsonData);
   let job;
   try {
@@ -122,18 +122,17 @@ export async function action({ request }: Route.ActionArgs) {
   );
 }
 
-
-async function startPythonFineTune(parsedFormData: any) {
+async function startPythonFineTune(parsedFormData: object) {
   let job;
   try {
     const res = await fetch("http://localhost:7000/optimizations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        "data": {
-          "kind": "sft",
-          ...parsedFormData
-        }
+        data: {
+          kind: "sft",
+          ...parsedFormData,
+        },
       }),
     });
     job = await res.json();
@@ -188,8 +187,8 @@ export default function SupervisedFineTuning({
   const finalResult =
     status.status === "completed"
       ? dump_model_config(
-        get_fine_tuned_model_config(status.result, status.modelProvider),
-      )
+          get_fine_tuned_model_config(status.result, status.modelProvider),
+        )
       : null;
   if (finalResult && submissionPhase !== "complete") {
     setSubmissionPhase("complete");
