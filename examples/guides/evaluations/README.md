@@ -9,7 +9,7 @@ This directory contains the code for the **[TensorZero Evaluations Guide](https:
 We provide a configuration file (`./config/tensorzero.toml`) that specifies:
 
 - A `write_haiku` function that generates a haiku, with `gpt_4o` and `gpt_4o_mini` variants.
-- A `haiku_eval` evaluation, with evaluators for exact match and LLM judges.
+- A `haiku_eval` evaluation, with evaluators for exact match and assorted LLM judges.
 
 ### Prerequisites
 
