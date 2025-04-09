@@ -76,6 +76,10 @@ impl Error {
     pub fn get_owned_details(self) -> ErrorDetails {
         *self.0
     }
+
+    pub fn log(&self) {
+        self.0.log();
+    }
 }
 
 impl std::fmt::Display for Error {
