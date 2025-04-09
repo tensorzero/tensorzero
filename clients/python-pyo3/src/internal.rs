@@ -19,6 +19,8 @@ use tensorzero_internal::{
 use tensorzero_rust::TensorZeroError;
 use uuid::Uuid;
 
+use crate::convert_error;
+
 pub fn get_template_config(
     py: Python<'_>,
     config: &Config<'_>,
@@ -27,10 +29,15 @@ pub fn get_template_config(
 ) -> PyResult<Py<PyDict>> {
     let variant_config = config
         .get_function(function_name)
-        .unwrap()
+        .map_err(|e| convert_error(py, TensorZeroError::Other { source: e.into() }))?
         .variants()
         .get(variant_name)
-        .unwrap();
+        .ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "Variant {} is not a ChatCompletion variant",
+                variant_name
+            ))
+        })?;
     let VariantConfig::ChatCompletion(config) = variant_config else {
         return Err(PyValueError::new_err(format!(
             "Variant {} is not a ChatCompletion variant",
