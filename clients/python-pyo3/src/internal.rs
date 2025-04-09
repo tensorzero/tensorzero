@@ -34,8 +34,7 @@ pub fn get_template_config(
         .get(variant_name)
         .ok_or_else(|| {
             PyValueError::new_err(format!(
-                "Variant {} is not a ChatCompletion variant",
-                variant_name
+                "Variant {variant_name} not found in function {function_name}",
             ))
         })?;
     let VariantConfig::ChatCompletion(config) = variant_config else {
