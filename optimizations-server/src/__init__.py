@@ -20,12 +20,6 @@ TENSORZERO_CLIENT = _tensorzero_client
 app = FastAPI()
 
 
-# @app.exception_handler(RequestValidationError)
-# async def validation_exception_handler(request, exc):
-#    print("Got validation exception: %s" % exc)
-#    return PlainTextResponse(str(exc), status_code=400)
-
-
 class OptimizationRequest(BaseModel):
     # Turn this into 'Union[FineTuningRequest, OtherRequest]' when we have more optimizations implemented
     data: FineTuningRequest = Field(discriminator="kind")
