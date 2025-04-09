@@ -52,16 +52,17 @@ impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
 
 #[derive(Debug, PartialEq)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
-pub struct Error(ErrorDetails);
+// We box `ErrorDetails` per the `clippy::result_large_err` lint
+pub struct Error(Box<ErrorDetails>);
 
 impl Error {
     pub fn new(details: ErrorDetails) -> Self {
         details.log();
-        Error(details)
+        Error(Box::new(details))
     }
 
     pub fn new_without_logging(details: ErrorDetails) -> Self {
-        Error(details)
+        Error(Box::new(details))
     }
 
     pub fn status_code(&self) -> StatusCode {
@@ -73,7 +74,7 @@ impl Error {
     }
 
     pub fn get_owned_details(self) -> ErrorDetails {
-        self.0
+        *self.0
     }
 }
 
