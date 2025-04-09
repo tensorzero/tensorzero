@@ -1,6 +1,6 @@
 # Guide: TensorZero Evaluations
 
-This directory contains the code for the TensorZero Evaluations guide [TODO: link].
+This directory contains the code for the [TensorZero Evaluations Guide](https://www.tensorzero.com/docs/evaluations/guide).
 
 ## Getting Started
 
@@ -36,7 +36,7 @@ Let's generate a dataset composed of our 100 haikus.
 
 > [^TIP]
 >
-> You can also create datasets programmatically with arbitrary data using the gateway. See the TODO.
+> You can also create datasets programmatically with arbitrary data using the gateway. See the [TensorZero Evaluations Configuration Reference](https://www.tensorzero.com/docs/evaluations/configuration-reference).
 
 #### Run an Evaluation &mdash; CLI
 
