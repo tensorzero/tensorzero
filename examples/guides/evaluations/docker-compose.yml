@@ -40,6 +40,20 @@ services:
       clickhouse:
         condition: service_healthy
 
+  evaluations:
+    profiles: [evaluations]
+    image: tensorzero/evaluations
+    volumes:
+      - ./config:/app/config:ro
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
   ui:
     image: tensorzero/ui
     volumes:
@@ -50,19 +64,6 @@ services:
       - TENSORZERO_GATEWAY_URL=http://gateway:3000
     ports:
       - "4000:4000"
-    depends_on:
-      clickhouse:
-        condition: service_healthy
-
-  # Optional: Load fixture data into ClickHouse (`docker compose up load-fixture`)
-  load-fixture:
-    profiles: [load-fixture]
-    image: clickhouse/clickhouse-server:24.12-alpine
-    environment:
-      - CLICKHOUSE_USER=chuser
-      - CLICKHOUSE_PASSWORD=chpassword
-    command: |
-      bash -c "clickhouse-client --host clickhouse --query \"DROP DATABASE IF EXISTS tensorzero; RESTORE DATABASE tensorzero FROM File('mounted/fixture.zip');\" && exit 0"
     depends_on:
       clickhouse:
         condition: service_healthy

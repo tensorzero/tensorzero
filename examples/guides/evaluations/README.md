@@ -1,16 +1,15 @@
-# Guide: TensorZero Evals
+# Guide: TensorZero Evaluations
 
-This directory contains the code for the TensorZero Evals guide. [TODO, DO NOT MERGE: link]
-
-docker build -t tensorzero/ui:latest -f ui/Dockerfile .
-
-docker build -t tensorzero/evaluations:latest -f ui/Dockerfile .
-
-TODO
+This directory contains the code for the TensorZero Evaluations guide [TODO: link].
 
 ## Getting Started
 
 ### TensorZero
+
+We provide a configuration file (`./config/tensorzero.toml`) that specifies:
+
+- A `write_haiku` function that generates a haiku, with `gpt_4o` and `gpt_4o_mini` variants.
+- A `haiku_eval` evaluation, with evaluators for exact match and LLM judges.
 
 ### Prerequisites
 
@@ -24,10 +23,39 @@ TODO
 1. Create a `.env` file with the `OPENAI_API_KEY` environment variable (see `.env.example` for an example).
 2. Run `docker compose up` to launch the TensorZero Gateway, the TensorZero UI, and a development ClickHouse database.
 3. Run the `main.py` script to generate 100 haikus.
-4. TODO...
 
 ### Evaluations
 
-#### TensorZero UI
+#### Create a Dataset
 
-#### CLI
+Let's generate a dataset composed of our 100 haikus.
+
+1. Open the UI, navigate to "Datasets", and select "Build Dataset" (`http://localhost:4000/datasets/builder`).
+2. Create a new dataset for the `write_haiku` called `haiku_dataset`.
+3. Select "Datasets" in the sidebar, with "Inference" as the dataset output.
+
+> [^TIP]
+>
+> You can also create datasets programmatically with arbitrary data using the gateway. See the TODO.
+
+#### Run an Evaluation &mdash; CLI
+
+Let's evaluate our `gpt_4o` variant using the TensorZero Evaluations CLI tool.
+
+1. Launch an evaluation with the CLI:
+
+```bash
+docker compose run --rm evaluations \
+    --evaluation-name haiku_eval \
+    --dataset-name haiku_dataset \
+    --variant-name gpt_4o \
+    --concurrency 5
+```
+
+#### Evaluate a Dataset &mdash; UI
+
+Let's evaluate our `gpt_4o_mini` variant using the TensorZero Evaluations UI, and compare the results.
+
+1. Navigate to "Evaluations" and select "New Run" (`http://localhost:4000/evaluations`).
+2. Launch an evaluation with the `gpt_4o_mini` variant.
+3. Select the previous evaluation run in the dropdown to compare the results.
