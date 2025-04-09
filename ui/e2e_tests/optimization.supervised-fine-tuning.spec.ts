@@ -43,7 +43,7 @@ test("should fine-tune with a mocked OpenAI server", async ({ page }) => {
   if (process.env.TENSORZERO_UI_FF_ENABLE_PYTHON === "1") {
     regex = /\?backend=python$/;
   } else {
-    regex = /\?backend=node$/;
+    regex = /\?backend=nodejs$/;
   }
 
   // Verify that we used the correct fine-tuning backend
