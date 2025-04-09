@@ -19,10 +19,10 @@ import {
   countEpisodes,
 } from "~/utils/clickhouse/inference";
 import { getConfig } from "~/utils/config/index.server";
-import { useLoaderData } from "react-router";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import { useConfig } from "~/context/config";
+import type { Route } from "./+types/index";
 
 const FF_ENABLE_DATASETS =
   import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
@@ -61,7 +61,12 @@ interface FooterLinkProps {
 
 function FooterLink({ source, icon: Icon, children }: FooterLinkProps) {
   return (
-    <Link to={source} className="group flex w-fit items-center">
+    <Link
+      to={source}
+      className="group flex w-fit items-center"
+      rel="noopener noreferrer"
+      target="_blank"
+    >
       <Icon className="text-fg-muted group-hover:text-fg-secondary mr-2 h-4 w-4 transition-colors" />
       <span className="text-fg-secondary group-hover:text-fg-primary transition-colors">
         {children}
@@ -89,14 +94,14 @@ export async function loader() {
   };
 }
 
-export default function Home() {
+export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     totalInferences,
     numFunctions,
     numEpisodes,
     numDatasets,
     numEvaluationRuns,
-  } = useLoaderData<typeof loader>();
+  } = loaderData;
   const config = useConfig();
   const numEvaluations = Object.keys(config.evaluations).length;
 

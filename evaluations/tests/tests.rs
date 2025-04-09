@@ -7,16 +7,20 @@ use clap::Parser;
 use evaluations::evaluators::llm_judge::run_llm_judge_evaluator;
 use evaluations::ThrottledTensorZeroClient;
 use serde_json::json;
+use tensorzero::input_handling::resolved_input_to_client_input;
+use tensorzero_internal::clickhouse::test_helpers::select_model_inferences_clickhouse;
 use tensorzero_internal::endpoints::datasets::Datapoint;
-use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeOutputType};
+use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_internal::inference::types::{
     ResolvedInputMessage, ResolvedInputMessageContent, Text,
 };
+use tokio::time::sleep;
 use url::Url;
 
 use crate::common::write_json_fixture_to_dataset;
 use common::write_chat_fixture_to_dataset;
 use evaluations::{run_evaluation, stats::EvaluationUpdate, Args, OutputFormat};
+use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
 use tensorzero::{ClientBuilder, ClientBuilderMode};
 use tensorzero::{InferenceResponse, Role};
@@ -119,6 +123,7 @@ async fn run_evaluations_json() {
             &clickhouse,
             "BooleanMetricFeedback",
             inference_id,
+            None,
         )
         .await
         .unwrap();
@@ -149,6 +154,7 @@ async fn run_evaluations_json() {
             &clickhouse,
             "FloatMetricFeedback",
             inference_id,
+            None,
         )
         .await
         .unwrap();
@@ -280,6 +286,7 @@ async fn run_exact_match_evaluation_chat() {
             &clickhouse,
             "BooleanMetricFeedback",
             inference_id,
+            None,
         )
         .await
         .unwrap();
@@ -393,6 +400,7 @@ async fn run_llm_judge_evaluation_chat() {
             &clickhouse,
             "FloatMetricFeedback",
             inference_id,
+            None,
         )
         .await
         .is_none());
@@ -404,6 +412,7 @@ async fn run_llm_judge_evaluation_chat() {
             &clickhouse,
             "BooleanMetricFeedback",
             inference_id,
+            None,
         )
         .await
         .unwrap();
@@ -454,6 +463,312 @@ async fn run_llm_judge_evaluation_chat() {
     }
     assert_eq!(parsed_output.len(), 10);
     assert_eq!(total_topic_fs, 3);
+}
+
+/// High level with this test is that the judge is actually just checking if the reference output matches the
+/// generated output.
+/// However, it takes an image and we verify that the image is actually used in the inference.
+#[tokio::test(flavor = "multi_thread")]
+async fn run_image_evaluation() {
+    let clickhouse = get_clickhouse().await;
+    write_chat_fixture_to_dataset(&PathBuf::from(&format!(
+        "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    )))
+    .await;
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let evaluation_run_id = Uuid::now_v7();
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        dataset_name: "baz".to_string(),
+        evaluation_name: "images".to_string(),
+        variant_name: "honest_answer".to_string(),
+        concurrency: 10,
+        format: OutputFormat::Jsonl,
+    };
+
+    let mut output = Vec::new();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
+    clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(1)).await;
+    let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let mut parsed_output = Vec::new();
+    let mut total_honest_answers = 0;
+    let mut total_matches_reference = 0;
+    for line in output_lines {
+        let parsed: EvaluationUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed = match parsed {
+            EvaluationUpdate::Success(evaluation_info) => evaluation_info,
+            EvaluationUpdate::Error(evaluation_error) => {
+                panic!("evaluation error: {}", evaluation_error.message);
+            }
+        };
+        assert!(parsed.evaluator_errors.is_empty());
+        let inference_id = parsed.response.inference_id();
+        let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
+            .await
+            .unwrap();
+        let parsed_response = match parsed.response.clone() {
+            InferenceResponse::Chat(chat_response) => chat_response,
+            InferenceResponse::Json(..) => panic!("Json response not supported"),
+        };
+        // Check the input to the inference parses as ResolvedInput
+        let _clickhouse_input: ResolvedInput =
+            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        // assert_eq!(&clickhouse_input, parsed.datapoint.input());
+        let clickhouse_output: Vec<ContentBlockChatOutput> =
+            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        // Check the output to the inference is the same as the output in the response
+        assert_eq!(clickhouse_output, parsed_response.content);
+        // Check the inference is properly tagged
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
+            "images"
+        );
+
+        // There should be no Float feedback for this evaluation
+        assert!(select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "FloatMetricFeedback",
+            inference_id,
+            None,
+        )
+        .await
+        .is_none());
+        // The exact match evaluation should fail
+        assert!(!parsed.evaluations["exact_match"]
+            .as_ref()
+            .unwrap()
+            .as_bool()
+            .unwrap());
+
+        // There should be Boolean feedback for honest answer
+        let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            Some("tensorzero::evaluation_name::images::evaluator_name::honest_answer"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            clickhouse_feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::evaluation_name::images::evaluator_name::honest_answer"
+        );
+        assert_eq!(
+            clickhouse_feedback["value"],
+            parsed.evaluations["honest_answer"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
+        total_honest_answers += clickhouse_feedback["value"].as_bool().unwrap() as u32;
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
+            "images"
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
+            "honest_answer"
+        );
+        let evaluator_inference_id = Uuid::parse_str(
+            clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let evaluator_inference =
+            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        assert_eq!(
+            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            "images"
+        );
+
+        // There should be Boolean feedback for matches reference
+        let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            Some("tensorzero::evaluation_name::images::evaluator_name::matches_reference"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            clickhouse_feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::evaluation_name::images::evaluator_name::matches_reference"
+        );
+        assert_eq!(
+            clickhouse_feedback["value"],
+            parsed.evaluations["matches_reference"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
+        total_matches_reference += clickhouse_feedback["value"].as_bool().unwrap() as u32;
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluation_name"],
+            "images"
+        );
+        assert_eq!(
+            clickhouse_feedback["tags"]["tensorzero::evaluator_name"],
+            "matches_reference"
+        );
+        let evaluator_inference_id = Uuid::parse_str(
+            clickhouse_feedback["tags"]["tensorzero::evaluator_inference_id"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let evaluator_inference =
+            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        assert_eq!(
+            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            "images"
+        );
+        let input = evaluator_inference["input"].as_str().unwrap();
+        // Check that the input contains the image
+        // Since we test image inputs other places, we can assume this worked as intended.
+        assert!(input.contains("image/png"));
+
+        parsed_output.push(parsed);
+    }
+    assert_eq!(parsed_output.len(), 2);
+    assert_eq!(total_honest_answers, 2);
+    // One of the reference outputs is a lie but this tells the truth
+    assert_eq!(total_matches_reference, 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn check_invalid_image_evaluation() {
+    let clickhouse = get_clickhouse().await;
+    write_chat_fixture_to_dataset(&PathBuf::from(&format!(
+        "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    )))
+    .await;
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let evaluation_run_id = Uuid::now_v7();
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        dataset_name: "baz".to_string(),
+        evaluation_name: "bad_images".to_string(),
+        variant_name: "honest_answer".to_string(),
+        concurrency: 10,
+        format: OutputFormat::Jsonl,
+    };
+
+    let mut output = Vec::new();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
+    clickhouse_flush_async_insert(&clickhouse).await;
+    sleep(Duration::from_secs(1)).await;
+    let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    for line in output_lines {
+        let parsed: EvaluationUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed = match parsed {
+            EvaluationUpdate::Success(evaluation_info) => evaluation_info,
+            EvaluationUpdate::Error(evaluation_error) => {
+                panic!("evaluation error: {}", evaluation_error.message);
+            }
+        };
+        assert_eq!(parsed.evaluator_errors.len(), 1);
+        let honest_answer_error = &parsed.evaluator_errors["honest_answer"];
+        assert_eq!(honest_answer_error, "Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format.");
+        let inference_id = parsed.response.inference_id();
+        let clickhouse_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
+            .await
+            .unwrap();
+        let parsed_response = match parsed.response.clone() {
+            InferenceResponse::Chat(chat_response) => chat_response,
+            InferenceResponse::Json(..) => panic!("Json response not supported"),
+        };
+        // Check the input to the inference parses as ResolvedInput
+        let _clickhouse_input: ResolvedInput =
+            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        // assert_eq!(&clickhouse_input, parsed.datapoint.input());
+        let clickhouse_output: Vec<ContentBlockChatOutput> =
+            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        // Check the output to the inference is the same as the output in the response
+        assert_eq!(clickhouse_output, parsed_response.content);
+        // Check the inference is properly tagged
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
+            "bad_images"
+        );
+
+        // There should be no Float feedback for this evaluation
+        assert!(select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "FloatMetricFeedback",
+            inference_id,
+            None,
+        )
+        .await
+        .is_none());
+
+        // There should be no Boolean feedback for honest answer since it should have failed
+        assert!(select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            Some("tensorzero::evaluation_name::images::evaluator_name::honest_answer"),
+        )
+        .await
+        .is_none());
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -735,8 +1050,10 @@ async fn test_run_llm_judge_evaluator_chat() {
         })]),
         tags: None,
         tool_params: None,
+        source_inference_id: None,
     });
     let llm_judge_config = LLMJudgeConfig {
+        input_format: LLMJudgeInputFormat::Serialized,
         include: LLMJudgeIncludeConfig {
             reference_output: true,
         },
@@ -744,6 +1061,10 @@ async fn test_run_llm_judge_evaluator_chat() {
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
     };
+    let input =
+        resolved_input_to_client_input(datapoint.input().clone(), &tensorzero_client.client)
+            .await
+            .unwrap();
     let result = run_llm_judge_evaluator(
         &inference_response,
         &datapoint,
@@ -752,6 +1073,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         "test_evaluation",
         "happy_bool",
         Uuid::now_v7(),
+        &input,
     )
     .await
     .unwrap()
@@ -766,6 +1088,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         "test_evaluation",
         "sad_bool",
         Uuid::now_v7(),
+        &input,
     )
     .await
     .unwrap()
@@ -780,6 +1103,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         "test_evaluation",
         "zero",
         Uuid::now_v7(),
+        &input,
     )
     .await
     .unwrap()
@@ -794,6 +1118,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         "test_evaluation",
         "one",
         Uuid::now_v7(),
+        &input,
     )
     .await
     .unwrap()
@@ -820,6 +1145,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         output: None,
         tags: None,
         tool_params: None,
+        source_inference_id: None,
     });
 
     let result = run_llm_judge_evaluator(
@@ -830,6 +1156,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         "test_evaluation",
         "happy_bool",
         Uuid::now_v7(),
+        &input,
     )
     .await
     .unwrap();
@@ -890,8 +1217,10 @@ async fn test_run_llm_judge_evaluator_json() {
         }),
         output_schema: json!({"answer": "string"}),
         tags: None,
+        source_inference_id: None,
     });
     let llm_judge_config = LLMJudgeConfig {
+        input_format: LLMJudgeInputFormat::Serialized,
         include: LLMJudgeIncludeConfig {
             reference_output: true,
         },
@@ -899,6 +1228,10 @@ async fn test_run_llm_judge_evaluator_json() {
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
     };
+    let input =
+        resolved_input_to_client_input(datapoint.input().clone(), &tensorzero_client.client)
+            .await
+            .unwrap();
     let result = run_llm_judge_evaluator(
         &inference_response,
         &datapoint,
@@ -907,6 +1240,7 @@ async fn test_run_llm_judge_evaluator_json() {
         "test_evaluation",
         "happy_bool",
         Uuid::now_v7(),
+        &input,
     )
     .await
     .unwrap()
@@ -921,6 +1255,7 @@ async fn test_run_llm_judge_evaluator_json() {
         "test_evaluation",
         "sad_bool",
         Uuid::now_v7(),
+        &input,
     )
     .await
     .unwrap()
@@ -935,6 +1270,7 @@ async fn test_run_llm_judge_evaluator_json() {
         "test_evaluation",
         "zero",
         Uuid::now_v7(),
+        &input,
     )
     .await
     .unwrap()
@@ -949,6 +1285,7 @@ async fn test_run_llm_judge_evaluator_json() {
         "test_evaluation",
         "one",
         Uuid::now_v7(),
+        &input,
     )
     .await
     .unwrap()
@@ -975,6 +1312,7 @@ async fn test_run_llm_judge_evaluator_json() {
         output: None,
         tags: None,
         tool_params: None,
+        source_inference_id: None,
     });
 
     let result = run_llm_judge_evaluator(
@@ -985,8 +1323,372 @@ async fn test_run_llm_judge_evaluator_json() {
         "test_evaluation",
         "happy_bool",
         Uuid::now_v7(),
+        &input,
     )
     .await
     .unwrap();
     assert!(result.is_none());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn run_evaluations_best_of_3() {
+    let clickhouse = get_clickhouse().await;
+    write_json_fixture_to_dataset(&PathBuf::from(&format!(
+        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    )))
+    .await;
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let evaluation_run_id = Uuid::now_v7();
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        evaluation_name: "best_of_3".to_string(),
+        dataset_name: "extract_entities_0.8".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
+        concurrency: 10,
+        format: OutputFormat::Jsonl,
+    };
+
+    let mut output = Vec::new();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
+    clickhouse_flush_async_insert(&clickhouse).await;
+    let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let mut parsed_output = Vec::new();
+    for line in output_lines {
+        let parsed: EvaluationUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed = match parsed {
+            EvaluationUpdate::Success(evaluation_info) => evaluation_info,
+            EvaluationUpdate::Error(evaluation_error) => {
+                panic!("evaluation error: {}", evaluation_error.message);
+            }
+        };
+        assert!(parsed.evaluator_errors.is_empty());
+        let inference_id = parsed.response.inference_id();
+        let clickhouse_inference = select_json_inference_clickhouse(&clickhouse, inference_id)
+            .await
+            .unwrap();
+        let parsed_response = match parsed.response.clone() {
+            InferenceResponse::Json(json_response) => json_response,
+            InferenceResponse::Chat(..) => panic!("Chat response not supported"),
+        };
+        let clickhouse_input: ResolvedInput =
+            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        // Check the input to the inference is the same as the input to the datapoint
+        assert_eq!(&clickhouse_input, parsed.datapoint.input());
+        let clickhouse_output: JsonInferenceOutput =
+            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        // Check the output to the inference is the same as the output in the response
+        assert_eq!(clickhouse_output, parsed_response.output);
+        // Check the inference is properly tagged
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
+            "best_of_3"
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::dataset_name"],
+            "extract_entities_0.8"
+        );
+        // Check boolean feedback was recorded
+        let feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::evaluation_name::best_of_3::evaluator_name::llm_judge_bool"
+        );
+        assert_eq!(
+            feedback["value"],
+            parsed.evaluations["llm_judge_bool"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+
+        // Check bool feedback was recorded
+        let feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::evaluation_name::best_of_3::evaluator_name::llm_judge_bool"
+        );
+        assert_eq!(
+            feedback["value"],
+            parsed.evaluations["llm_judge_bool"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluator_name"],
+            "llm_judge_bool"
+        );
+        assert_eq!(feedback["tags"]["tensorzero::evaluation_name"], "best_of_3");
+        let evaluator_inference_id = Uuid::parse_str(
+            feedback["tags"]["tensorzero::evaluator_inference_id"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let evaluator_inference =
+            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        assert_eq!(
+            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            "best_of_3"
+        );
+        parsed_output.push(parsed);
+
+        // Select Model inferences for the evaluator inference id
+        let model_inferences =
+            select_model_inferences_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        let mut happy_count = 0;
+        for model_inference in &model_inferences {
+            if model_inference["system"].as_str().unwrap().trim()
+                == "Return true if you are happy today!"
+            {
+                happy_count += 1;
+            } else {
+                assert!(model_inference["system"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("You are an assistant tasked with re-ranking"))
+            }
+        }
+        assert_eq!(happy_count, 3);
+        assert_eq!(model_inferences.len(), 4);
+    }
+    assert_eq!(parsed_output.len(), 6);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn run_evaluations_mixture_of_3() {
+    let clickhouse = get_clickhouse().await;
+    write_json_fixture_to_dataset(&PathBuf::from(&format!(
+        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    )))
+    .await;
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let evaluation_run_id = Uuid::now_v7();
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        evaluation_name: "mixture_of_3".to_string(),
+        dataset_name: "extract_entities_0.8".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
+        concurrency: 10,
+        format: OutputFormat::Jsonl,
+    };
+
+    let mut output = Vec::new();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
+    clickhouse_flush_async_insert(&clickhouse).await;
+    let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let mut parsed_output = Vec::new();
+    for line in output_lines {
+        let parsed: EvaluationUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed = match parsed {
+            EvaluationUpdate::Success(evaluation_info) => evaluation_info,
+            EvaluationUpdate::Error(evaluation_error) => {
+                panic!("evaluation error: {}", evaluation_error.message);
+            }
+        };
+        assert!(parsed.evaluator_errors.is_empty());
+        let inference_id = parsed.response.inference_id();
+        let clickhouse_inference = select_json_inference_clickhouse(&clickhouse, inference_id)
+            .await
+            .unwrap();
+        let parsed_response = match parsed.response.clone() {
+            InferenceResponse::Json(json_response) => json_response,
+            InferenceResponse::Chat(..) => panic!("Chat response not supported"),
+        };
+        let clickhouse_input: ResolvedInput =
+            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        // Check the input to the inference is the same as the input to the datapoint
+        assert_eq!(&clickhouse_input, parsed.datapoint.input());
+        let clickhouse_output: JsonInferenceOutput =
+            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        // Check the output to the inference is the same as the output in the response
+        assert_eq!(clickhouse_output, parsed_response.output);
+        // Check the inference is properly tagged
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
+            "mixture_of_3"
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::dataset_name"],
+            "extract_entities_0.8"
+        );
+        // Check boolean feedback was recorded
+        let feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::evaluation_name::mixture_of_3::evaluator_name::llm_judge_bool"
+        );
+        assert_eq!(
+            feedback["value"],
+            parsed.evaluations["llm_judge_bool"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+
+        // Check bool feedback was recorded
+        let feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::evaluation_name::mixture_of_3::evaluator_name::llm_judge_bool"
+        );
+        assert_eq!(
+            feedback["value"],
+            parsed.evaluations["llm_judge_bool"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluator_name"],
+            "llm_judge_bool"
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluation_name"],
+            "mixture_of_3"
+        );
+        let evaluator_inference_id = Uuid::parse_str(
+            feedback["tags"]["tensorzero::evaluator_inference_id"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let evaluator_inference =
+            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        assert_eq!(
+            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            "mixture_of_3"
+        );
+        parsed_output.push(parsed);
+
+        // Select Model inferences for the evaluator inference id
+        let model_inferences =
+            select_model_inferences_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        let mut happy_count = 0;
+        for model_inference in &model_inferences {
+            if model_inference["system"].as_str().unwrap().trim()
+                == "Return true if you are happy today!"
+            {
+                happy_count += 1;
+            } else {
+                assert!(model_inference["system"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("You have been provided with a set of responses from various"))
+            }
+        }
+        assert_eq!(happy_count, 3);
+        assert_eq!(model_inferences.len(), 4);
+    }
+    assert_eq!(parsed_output.len(), 6);
 }

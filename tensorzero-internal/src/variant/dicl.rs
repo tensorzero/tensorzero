@@ -364,7 +364,7 @@ impl DiclConfig {
         // Run the query on the ClickHouse database to find nearest neighbors
         let result = clients
             .clickhouse_connection_info
-            .run_query(query, None)
+            .run_query_synchronous(query, None)
             .await?;
 
         // Parse each line into RawExample (since we will have some serialized JSON strings inside it)

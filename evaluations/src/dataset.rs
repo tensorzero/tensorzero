@@ -24,7 +24,9 @@ pub async fn query_dataset(
         ("function_name", function_name),
     ]);
 
-    let result = clickhouse_client.run_query(query, Some(&params)).await?;
+    let result = clickhouse_client
+        .run_query_synchronous(query, Some(&params))
+        .await?;
     let datapoints: Vec<Datapoint> = match function_config {
         FunctionConfig::Chat(_) => {
             let chat_datapoints: serde_json::Value = serde_json::from_str(&result)?;

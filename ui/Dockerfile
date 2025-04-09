@@ -38,17 +38,17 @@ RUN wasm-pack build --features console_error_panic_hook
 
 FROM rust:latest AS evaluations-build-env
 
+RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
+
 COPY . /tensorzero
 
 WORKDIR /tensorzero
-
-RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
 
 ARG CARGO_BUILD_FLAGS=""
 
 RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
     --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=locked,target=/src/target \
+    --mount=type=cache,id=tensorzero-evaluations-release,sharing=locked,target=/tensorzero/target \
     cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
     cp -r /tensorzero/target/release /release
 
@@ -73,9 +73,15 @@ FROM base AS ui
 
 RUN useradd -m -s /bin/sh ui
 
-USER ui
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 COPY ./ui/package.json ./ui/pnpm-lock.yaml /app/
+
+COPY ./ui/entrypoint.sh /app/entrypoint.sh
+
+RUN chmod +x /app/entrypoint.sh
+
+USER ui
 
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
 
@@ -89,4 +95,4 @@ EXPOSE 4000
 
 ENV HOST=0.0.0.0
 
-CMD ["pnpm", "run", "start"]
+ENTRYPOINT ["./entrypoint.sh"]

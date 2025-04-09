@@ -26,6 +26,7 @@ use tensorzero_internal::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0019::Migration0019;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0020::Migration0020;
 use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0021::Migration0021;
+use tensorzero_internal::clickhouse::migration_manager::migrations::migration_0022::Migration0022;
 use tensorzero_internal::clickhouse::migration_manager::{self};
 use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
@@ -136,6 +137,9 @@ async fn test_clickhouse_migration_manager() {
             clickhouse: &clickhouse,
             clean_start: true,
         }),
+        Box::new(Migration0022 {
+            clickhouse: &clickhouse,
+        }),
     ];
 
     // This runs all migrations up to and including the given migration number,
@@ -211,7 +215,7 @@ async fn test_clickhouse_migration_manager() {
         // will throw an error if it doesn't.
         // This must be an array literal, so that the macro can generate a function
         // for each element in the array.
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     );
     run_all(migrations).await;
 
@@ -219,7 +223,7 @@ async fn test_clickhouse_migration_manager() {
     tracing::info!("Attempting to drop test database: {database}");
 
     clickhouse
-        .run_query(format!("DROP DATABASE {database}"), None)
+        .run_query_synchronous(format!("DROP DATABASE {database}"), None)
         .await
         .unwrap();
 }
@@ -335,7 +339,10 @@ async fn test_migration_0013_old_table() {
         ) ENGINE = MergeTree()
         ORDER BY id;
     "#;
-    let _ = clickhouse.run_query(query.to_string(), None).await.unwrap();
+    let _ = clickhouse
+        .run_query_synchronous(query.to_string(), None)
+        .await
+        .unwrap();
     let err = migration_manager::run_migration(&Migration0013 {
         clean_start: false,
         clickhouse: &clickhouse,
@@ -401,7 +408,10 @@ async fn test_migration_0013_data_no_table() {
         INSERT INTO JsonInference (id, function_name, variant_name, episode_id, input, output, output_schema, inference_params, processing_time_ms)
         VALUES (generateUUIDv7(), 'test_function', 'test_variant', generateUUIDv7(), 'input', 'output', 'output_schema', 'params', 100)
     "#;
-    let _ = clickhouse.run_query(query.to_string(), None).await.unwrap();
+    let _ = clickhouse
+        .run_query_synchronous(query.to_string(), None)
+        .await
+        .unwrap();
     let err = migration_manager::run_migration(&Migration0013 {
         clean_start: false,
         clickhouse: &clickhouse,

@@ -52,7 +52,10 @@ export default function FeedbackTable({
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <span className="font-mono">{getMetricName(item)}</span>
-                    <MetricBadges metric={metrics[getMetricName(item)]} />
+                    <MetricBadges
+                      metric={metrics[getMetricName(item)]}
+                      row={item}
+                    />
                   </div>
                 </TableCell>
                 <TableCell>

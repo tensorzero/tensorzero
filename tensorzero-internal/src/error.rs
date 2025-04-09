@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use serde_json::{json, Value};
+use std::fmt::{Debug, Display};
 use tokio::sync::OnceCell;
 use url::Url;
 use uuid::Uuid;
@@ -28,18 +29,40 @@ pub fn set_debug(debug: bool) -> Result<(), Error> {
     })
 }
 
+/// Chooses between a `Debug` or `Display` representation based on the gateway-level `DEBUG` flag.
+pub struct DisplayOrDebugGateway<T: Debug + Display> {
+    val: T,
+}
+
+impl<T: Debug + Display> DisplayOrDebugGateway<T> {
+    pub fn new(val: T) -> Self {
+        Self { val }
+    }
+}
+
+impl<T: Debug + Display> Display for DisplayOrDebugGateway<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if *DEBUG.get().unwrap_or(&false) {
+            write!(f, "{:?}", self.val)
+        } else {
+            write!(f, "{}", self.val)
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 // As long as the struct member is private, we force people to use the `new` method and log the error.
-pub struct Error(ErrorDetails);
+// We box `ErrorDetails` per the `clippy::result_large_err` lint
+pub struct Error(Box<ErrorDetails>);
 
 impl Error {
     pub fn new(details: ErrorDetails) -> Self {
         details.log();
-        Error(details)
+        Error(Box::new(details))
     }
 
     pub fn new_without_logging(details: ErrorDetails) -> Self {
-        Error(details)
+        Error(Box::new(details))
     }
 
     pub fn status_code(&self) -> StatusCode {
@@ -51,7 +74,7 @@ impl Error {
     }
 
     pub fn get_owned_details(self) -> ErrorDetails {
-        self.0
+        *self.0
     }
 }
 
@@ -717,19 +740,15 @@ impl std::fmt::Display for ErrorDetails {
                 data,
                 schema,
             } => {
+                write!(f, "JSON Schema validation failed:\n{}", messages.join("\n"))?;
                 write!(
                     f,
-                    "JSON Schema validation failed for Function:\n\n{}",
-                    messages.join("\n")
-                )?;
-                write!(
-                    f,
-                    "\nData: {}",
+                    "\n\nData:\n{}",
                     serde_json::to_string(data).map_err(|_| std::fmt::Error)?
                 )?;
                 write!(
                     f,
-                    "Schema: {}",
+                    "\n\nSchema:\n{}",
                     serde_json::to_string(schema).map_err(|_| std::fmt::Error)?
                 )
             }

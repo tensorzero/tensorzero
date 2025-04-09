@@ -97,6 +97,14 @@ export async function loadConfig(config_path?: string): Promise<Config> {
     },
   };
 
+  // Add comment metric to the config
+  loadedConfig.metrics = {
+    ...loadedConfig.metrics,
+    comment: {
+      type: "comment" as const,
+    },
+  };
+
   // Add default function to the config
   loadedConfig.functions = {
     ...loadedConfig.functions,

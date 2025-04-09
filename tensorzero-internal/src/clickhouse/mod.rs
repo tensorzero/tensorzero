@@ -1,5 +1,8 @@
+use reqwest::multipart::Form;
+use reqwest::multipart::Part;
 use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
+use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -190,7 +193,11 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn run_query(
+    /// Runs a query with the given parameters, waiting for mutations to complete
+    /// using `mutations_sync=2` and `alter_sync=2`.
+    /// This ensures that we can run `ALTER TABLE ADD COLUMN` in a migration
+    /// and have the column available once the query completes.
+    pub async fn run_query_synchronous(
         &self,
         query: String,
         parameters: Option<&HashMap<&str, &str>>,
@@ -213,6 +220,12 @@ impl ClickHouseConnectionInfo {
                             .append_pair(&param_key, value);
                     }
                 }
+                database_url
+                    .query_pairs_mut()
+                    .append_pair("mutations_sync", "2");
+                database_url
+                    .query_pairs_mut()
+                    .append_pair("alter_sync", "2");
                 let response = client
                     .post(database_url)
                     .body(query)
@@ -233,6 +246,100 @@ impl ClickHouseConnectionInfo {
 
                 match status {
                     reqwest::StatusCode::OK => Ok(response_body),
+                    _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
+                        message: response_body,
+                    })),
+                }
+            }
+        }
+    }
+
+    /// Sometimes you might want to treat the data you're sending as a table if you're going
+    /// to do some analysis or filtering prior to inserting it into ClickHouse.
+    /// This function allows you to do this with ClickHouse's external data feature.
+    /// https://clickhouse.com/docs/engines/table-engines/special/external-data
+    pub async fn run_query_with_external_data(
+        &self,
+        external_data: ExternalDataInfo,
+        query: String,
+    ) -> Result<ClickHouseResponse, Error> {
+        match self {
+            Self::Disabled | Self::Mock { .. } => Ok(ClickHouseResponse {
+                response: "".to_string(),
+                metadata: ClickHouseResponseMetadata {
+                    read_rows: 0,
+                    written_rows: 0,
+                },
+            }),
+            Self::Production {
+                database_url,
+                client,
+                ..
+            } => {
+                let database_url = Url::parse(database_url.expose_secret()).map_err(|_| {
+                    Error::new(ErrorDetails::Config {
+                        message: "Invalid ClickHouse database URL".to_string(),
+                    })
+                })?;
+                // Create the multipart form
+                let form = Form::new()
+                    .text("new_data_structure", external_data.structure)
+                    .text("new_data_format", external_data.format)
+                    .part(
+                        "new_data",
+                        Part::bytes(external_data.data.into_bytes()).file_name("file.data"),
+                    )
+                    .text("query", query);
+
+                let res = client
+                    .post(database_url)
+                    .multipart(form)
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: e.to_string(),
+                        })
+                    })?;
+
+                let status = res.status();
+                // Get the ClickHouse summary info from the headers
+                let metadata = if let Some(summary) = res.headers().get("x-clickhouse-summary") {
+                    let summary_str = summary.to_str().map_err(|e| {
+                        Error::new(ErrorDetails::ClickHouseQuery {
+                            message: format!("Failed to parse x-clickhouse-summary header: {}", e),
+                        })
+                    })?;
+
+                    serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(
+                        |e| {
+                            Error::new(ErrorDetails::ClickHouseQuery {
+                                message: format!(
+                                    "Failed to deserialize x-clickhouse-summary: {}",
+                                    e
+                                ),
+                            })
+                        },
+                    )?
+                } else {
+                    tracing::warn!("No x-clickhouse-summary header found in ClickHouse response");
+                    ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    }
+                };
+
+                let response_body = res.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: e.to_string(),
+                    })
+                })?;
+
+                match status {
+                    reqwest::StatusCode::OK => Ok(ClickHouseResponse {
+                        response: response_body,
+                        metadata,
+                    }),
                     _ => Err(Error::new(ErrorDetails::ClickHouseQuery {
                         message: response_body,
                     })),
@@ -471,6 +578,35 @@ fn validate_clickhouse_url_get_db_name(url: &Url) -> Result<Option<String>, Erro
         }
         .into()),
     })
+}
+
+#[derive(Debug)]
+pub struct ExternalDataInfo {
+    pub external_data_name: String, // The name of the external data table that was used in the query
+    pub structure: String, // Must be a ClickHouse structure string, e.g. "id UInt32, name String"
+    pub format: String,    // Must be a ClickHouse format string, e.g. "JSONEachRow"
+    pub data: String,      // Must be valid ClickHouse data in the given format
+}
+
+pub struct ClickHouseResponse {
+    pub response: String,
+    pub metadata: ClickHouseResponseMetadata,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ClickHouseResponseMetadata {
+    #[serde(deserialize_with = "deserialize_u64_from_str")]
+    pub read_rows: u64,
+    #[serde(deserialize_with = "deserialize_u64_from_str")]
+    pub written_rows: u64,
+}
+
+fn deserialize_u64_from_str<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    s.parse::<u64>().map_err(serde::de::Error::custom)
 }
 
 #[cfg(test)]

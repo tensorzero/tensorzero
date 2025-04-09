@@ -20,6 +20,7 @@ pub mod migration_0018;
 pub mod migration_0019;
 pub mod migration_0020;
 pub mod migration_0021;
+pub mod migration_0022;
 
 /// Returns true if the table exists, false if it does not
 /// Errors if the query fails
@@ -33,7 +34,7 @@ async fn check_table_exists(
         clickhouse.database(),
         table
     );
-    match clickhouse.run_query(query, None).await {
+    match clickhouse.run_query_synchronous(query, None).await {
         Err(e) => {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: migration_id.to_string(),
@@ -70,7 +71,7 @@ async fn check_column_exists(
         table,
         column,
     );
-    match clickhouse.run_query(query, None).await {
+    match clickhouse.run_query_synchronous(query, None).await {
         Err(e) => {
             return Err(ErrorDetails::ClickHouseMigration {
                 id: migration_id.to_string(),
@@ -99,7 +100,7 @@ async fn get_column_type(
         table,
         column
     );
-    match clickhouse.run_query(query, None).await {
+    match clickhouse.run_query_synchronous(query, None).await {
         Err(e) => Err(ErrorDetails::ClickHouseMigration {
             id: migration_id.to_string(),
             message: e.to_string(),
@@ -121,7 +122,7 @@ async fn get_default_expression(
         table,
         column
     );
-    match clickhouse.run_query(query, None).await {
+    match clickhouse.run_query_synchronous(query, None).await {
         Err(e) => Err(ErrorDetails::ClickHouseMigration {
             id: migration_id.to_string(),
             message: e.to_string(),
@@ -137,7 +138,7 @@ async fn table_is_nonempty(
     migration_id: &str,
 ) -> Result<bool, Error> {
     let query = format!("SELECT COUNT() FROM {} FORMAT CSV", table);
-    let result = clickhouse.run_query(query, None).await?;
+    let result = clickhouse.run_query_synchronous(query, None).await?;
     Ok(result.trim().parse::<i64>().map_err(|e| {
         Error::new(ErrorDetails::ClickHouseMigration {
             id: migration_id.to_string(),
@@ -155,6 +156,6 @@ async fn get_table_engine(
         clickhouse.database(),
         table
     );
-    let result = clickhouse.run_query(query, None).await?;
+    let result = clickhouse.run_query_synchronous(query, None).await?;
     Ok(result.trim().to_string())
 }

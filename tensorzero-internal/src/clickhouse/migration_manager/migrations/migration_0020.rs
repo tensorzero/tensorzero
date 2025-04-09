@@ -102,19 +102,19 @@ impl Migration for Migration0020<'_> {
             return Ok(true);
         }
         let query = "SHOW CREATE TABLE InferenceById".to_string();
-        let result = self.clickhouse.run_query(query, None).await?;
+        let result = self.clickhouse.run_query_synchronous(query, None).await?;
         if !result.contains("UInt128") {
             // Table was created by an older migration. We should drop and recreate
             return Ok(true);
         }
         let query = "SHOW CREATE TABLE InferenceByEpisodeId".to_string();
-        let result = self.clickhouse.run_query(query, None).await?;
+        let result = self.clickhouse.run_query_synchronous(query, None).await?;
         if !result.contains("UInt128") {
             // Table was created by an older migration. We should drop and recreate
             return Ok(true);
         }
         let query = "SELECT 1 FROM system.functions WHERE name = 'uint_to_uuid'".to_string();
-        let result = self.clickhouse.run_query(query, None).await?;
+        let result = self.clickhouse.run_query_synchronous(query, None).await?;
         if !result.contains("1") {
             return Ok(true);
         }
@@ -152,13 +152,22 @@ impl Migration for Migration0020<'_> {
         "#,
             create_table_name = create_table_name
         );
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
         // If the InferenceById table exists then we need to swap this table in and drop old one.
         if inference_by_id_exists {
             let query = format!("EXCHANGE TABLES InferenceById AND {}", create_table_name);
-            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self
+                .clickhouse
+                .run_query_synchronous(query.to_string(), None)
+                .await?;
             let query = format!("DROP TABLE IF EXISTS {}", create_table_name);
-            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self
+                .clickhouse
+                .run_query_synchronous(query.to_string(), None)
+                .await?;
         }
         // Check if the InferenceByEpisodeId table exists
         let inference_by_episode_id_exists =
@@ -188,16 +197,25 @@ impl Migration for Migration0020<'_> {
         "#,
             create_table_name = create_table_name
         );
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
         // If the InferenceByEpisodeId table exists then we need to swap this table in and drop old one.
         if inference_by_episode_id_exists {
             let query = format!(
                 "EXCHANGE TABLES InferenceByEpisodeId AND {}",
                 create_table_name
             );
-            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self
+                .clickhouse
+                .run_query_synchronous(query.to_string(), None)
+                .await?;
             let query = format!("DROP TABLE IF EXISTS {}", create_table_name);
-            let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+            let _ = self
+                .clickhouse
+                .run_query_synchronous(query.to_string(), None)
+                .await?;
         }
         // Create the `uint_to_uuid` function
         let query = r#"CREATE FUNCTION IF NOT EXISTS uint_to_uuid AS (x) -> reinterpretAsUUID(
@@ -206,7 +224,10 @@ impl Migration for Migration0020<'_> {
                 substring(reinterpretAsString(x), 1, 8)
             )
         );"#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
         let view_timestamp = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| {
@@ -242,7 +263,7 @@ impl Migration for Migration0020<'_> {
             "#,
             view_where_clause = view_where_clause
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // IMPORTANT: The function_type column is now correctly set to 'json'
         let query = format!(
@@ -261,7 +282,7 @@ impl Migration for Migration0020<'_> {
             "#,
             view_where_clause = view_where_clause
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // Create the materialized view for the `InferenceByEpisodeId` table from ChatInference
         // IMPORTANT: The function_type column is now correctly set to 'chat'
@@ -281,7 +302,7 @@ impl Migration for Migration0020<'_> {
             "#,
             view_where_clause = view_where_clause
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // Create the materialized view for the `InferenceByEpisodeId` table from JsonInference
         // IMPORTANT: The function_type column is now correctly set to 'json'
@@ -301,7 +322,7 @@ impl Migration for Migration0020<'_> {
             "#,
             view_where_clause = view_where_clause
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         if !self.clean_start {
             // Sleep for the duration specified by view_offset to allow the materialized views to catch up
@@ -323,7 +344,7 @@ impl Migration for Migration0020<'_> {
             "#,
                 view_timestamp = view_timestamp
             );
-            self.clickhouse.run_query(query, None).await?;
+            self.clickhouse.run_query_synchronous(query, None).await?;
 
             // Then, insert data into InferenceById from JsonInference
             let query = format!(
@@ -340,7 +361,7 @@ impl Migration for Migration0020<'_> {
             "#,
                 view_timestamp = view_timestamp
             );
-            self.clickhouse.run_query(query, None).await?;
+            self.clickhouse.run_query_synchronous(query, None).await?;
 
             // Next, insert data into InferenceByEpisodeId from ChatInference
             let query = format!(
@@ -357,7 +378,7 @@ impl Migration for Migration0020<'_> {
             "#,
                 view_timestamp = view_timestamp
             );
-            self.clickhouse.run_query(query, None).await?;
+            self.clickhouse.run_query_synchronous(query, None).await?;
 
             // Finally, insert data into InferenceByEpisodeId from JsonInference
             let query = format!(
@@ -374,7 +395,7 @@ impl Migration for Migration0020<'_> {
             "#,
                 view_timestamp = view_timestamp
             );
-            self.clickhouse.run_query(query, None).await?;
+            self.clickhouse.run_query_synchronous(query, None).await?;
         }
         Ok(())
     }
