@@ -36,7 +36,7 @@ axum = { workspace = true }
 backon = { version = "1.4.1", features = ["tokio-sleep"] }
 blake3 = "1.8.1"
 bytes = "1.6.1"
-chrono = { version = "0.4.40", features = ["serde"] }
+chrono = { workspace = true }
 derive_builder = "0.20.0"
 futures = { workspace = true }
 futures-core = "0.3.30"
@@ -58,7 +58,7 @@ minijinja = { version = "2.9.0", features = [
     "builtins",
 ] }
 object_store = { workspace = true }
-rand = "0.9.0"
+rand = { workspace = true }
 reqwest = { workspace = true }
 reqwest-eventsource = { workspace = true }
 secrecy = { workspace = true }
