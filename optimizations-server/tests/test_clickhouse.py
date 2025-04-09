@@ -1,7 +1,8 @@
-import pytest
 import inspect
-from tensorzero import AsyncTensorZeroGateway
 import os
+
+import pytest
+from tensorzero import AsyncTensorZeroGateway
 
 
 @pytest.mark.asyncio
