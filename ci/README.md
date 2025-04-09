@@ -21,7 +21,7 @@ We have two 'top-level' jobs:
 The `check-all-general-jobs-passed` runs for both PR CI and the merge queue, and depends on all of the other jobs in 'general.yml'.
 It reads the job statuses from all of its dependencies, and fails if any of those jobs failed or were cancelled.
 
-The `check-all-general-jobs-passed` is similar, except we have two versions of it.
+The `check-all-live-tests-passed` is similar, except we have two versions of it.
 In `merge-queue.yml`, it depends on the `live-tests` job. In `dummy.yml`, it's a dummy job that has no dependencies and always succeeds (and runs in PR CI only)
 
 This configuration ensures that both PR CI and merge queue jobs will always have statuses reported for 'check-all-general-jobs-passed' and
