@@ -302,12 +302,17 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         exc_val: Optional[BaseException],
         exc_tb: Optional[object],
     ) -> None: ...
-
-    async def _internal_get_curated_inferences(self, *, function_name: str, metric_name: Optional[str] = None, threshold: Optional[float] = None, max_samples: Optional[int] = None) -> List[Dict[str, Any]]:
-        ...
-
-    def _internal_get_template_config(self, *, function_name: str, variant_name: str) -> Dict[str, Any]:
-        ...
+    async def _internal_get_curated_inferences(
+        self,
+        *,
+        function_name: str,
+        metric_name: Optional[str] = None,
+        threshold: Optional[float] = None,
+        max_samples: Optional[int] = None,
+    ) -> List[Dict[str, Any]]: ...
+    def _internal_get_template_config(
+        self, *, function_name: str, variant_name: str
+    ) -> Dict[str, Any]: ...
 
 # Internal helper method
 def _start_http_gateway(
