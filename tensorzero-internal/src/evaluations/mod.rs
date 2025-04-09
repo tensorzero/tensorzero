@@ -329,7 +329,6 @@ impl UninitializedEvaluatorConfig {
                     .into());
                 } else if variants.len() == 1 {
                     // If there is only one variant, it should have weight 1.0
-                    // TODO: yell if the weight is Some(0) here.
                     let Some((_, variant)) = variants.iter_mut().next() else {
                         return Err(ErrorDetails::Config {
                             message: "Failed to grab first variant from variants map. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
