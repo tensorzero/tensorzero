@@ -49,5 +49,4 @@ routing = [ "mock-inference-finetune-1234" ]
 type = "openai"
 model_name = "mock-inference-finetune-1234"
 `);
-
 });
