@@ -11,6 +11,8 @@ on:
 
 env:
   DOCKERHUB_USER: tensorzero
+  UI_CONTAINER: ${{ github.event_name == 'push' && 'ui-dev' || 'ui' }}
+  GATEWAY_CONTAINER: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
 
 jobs:
   build:
@@ -24,8 +26,8 @@ jobs:
           - runner: ubuntu-24.04-arm
             target: linux/arm64
         container:
-          - name: ui
-          - name: gateway
+          - name: ${{ env.UI_CONTAINER }}
+          - name: ${{ env.GATEWAY_CONTAINER }}
     permissions:
       packages: write
       contents: read
@@ -86,8 +88,8 @@ jobs:
     strategy:
       matrix:
         container:
-          - name: ui
-          - name: gateway
+          - name: ${{ env.UI_CONTAINER }}
+          - name: ${{ env.GATEWAY_CONTAINER }}
     runs-on: ubuntu-latest
     needs:
       - build
