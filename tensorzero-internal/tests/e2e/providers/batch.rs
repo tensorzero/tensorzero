@@ -490,7 +490,7 @@ async fn get_latest_batch_inference(
         "#,
         function_name, variant_name, status, tag_filter
     );
-    let response = clickhouse.run_query(query, None).await.unwrap();
+    let response = clickhouse.run_query_synchronous(query, None).await.unwrap();
     if response.is_empty() {
         return None;
     }
@@ -506,7 +506,7 @@ async fn get_all_batch_inferences(
         "SELECT * FROM BatchModelInference WHERE batch_id = '{}' FORMAT JSONEachRow",
         batch_id,
     );
-    let response = clickhouse.run_query(query, None).await.unwrap();
+    let response = clickhouse.run_query_synchronous(query, None).await.unwrap();
     let rows = response
         .lines()
         .filter(|line| !line.is_empty())

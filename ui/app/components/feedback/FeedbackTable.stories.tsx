@@ -27,6 +27,13 @@ const config: Config = {
       optimize: "min" as const,
       level: "inference" as const,
     },
+    demonstration: {
+      type: "demonstration" as const,
+      level: "inference" as const,
+    },
+    comment: {
+      type: "comment" as const,
+    },
   },
   tools: {},
   evaluations: {},

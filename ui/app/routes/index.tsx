@@ -19,10 +19,10 @@ import {
   countEpisodes,
 } from "~/utils/clickhouse/inference";
 import { getConfig } from "~/utils/config/index.server";
-import { useLoaderData } from "react-router";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import { useConfig } from "~/context/config";
+import type { Route } from "./+types/index";
 
 const FF_ENABLE_DATASETS =
   import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
@@ -94,14 +94,14 @@ export async function loader() {
   };
 }
 
-export default function Home() {
+export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     totalInferences,
     numFunctions,
     numEpisodes,
     numDatasets,
     numEvaluationRuns,
-  } = useLoaderData<typeof loader>();
+  } = loaderData;
   const config = useConfig();
   const numEvaluations = Object.keys(config.evaluations).length;
 

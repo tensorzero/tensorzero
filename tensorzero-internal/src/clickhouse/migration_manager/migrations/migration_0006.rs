@@ -68,7 +68,10 @@ impl Migration for Migration0006<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (batch_id, inference_id)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the `BatchRequest` table
         let query = r#"
@@ -85,7 +88,10 @@ impl Migration for Migration0006<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (batch_id, id)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the BatchIdByInferenceId table
         let query = r#"
@@ -96,7 +102,10 @@ impl Migration for Migration0006<'_> {
             ) ENGINE = MergeTree()
             ORDER BY (inference_id)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Create the materialized view for the BatchIdByInferenceId table
         let query = r#"
@@ -108,7 +117,10 @@ impl Migration for Migration0006<'_> {
                     batch_id
                 FROM BatchModelInference
             "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
         Ok(())
     }
 

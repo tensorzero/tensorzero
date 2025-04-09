@@ -5,7 +5,6 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
-  useLoaderData,
 } from "react-router";
 
 import { ConfigProvider } from "./context/config";
@@ -60,9 +59,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App() {
-  const config = useLoaderData<typeof loader>();
-
+export default function App({ loaderData: config }: Route.ComponentProps) {
   return (
     <ConfigProvider value={config}>
       <SidebarProvider>
