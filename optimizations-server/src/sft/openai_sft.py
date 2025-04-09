@@ -94,7 +94,6 @@ class OpenAISFTJob(BaseSFTJob):
 
         try:
             job = await start_sft_openai(
-                client,
                 data.model.name,
                 curated_inferences,
                 data.validationSplitPercent,
@@ -315,7 +314,6 @@ def validate_and_convert_messages(
 
 
 async def start_sft_openai(
-    tensorzero_client: AsyncTensorZeroGateway,
     model_name: str,
     inferences: List[Dict[str, Any]],
     validation_split_percent: float,

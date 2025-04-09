@@ -36,7 +36,7 @@ test("should fine-tune with a mocked OpenAI server", async ({ page }) => {
   await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
   // Expect redirect
   await page.waitForURL(
-    "/optimization/supervised-fine-tuning/mock-inference-finetune-*",
+    "/optimization/supervised-fine-tuning/*?backend=*",
   );
 
   let regex;

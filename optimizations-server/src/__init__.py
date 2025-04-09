@@ -40,7 +40,7 @@ async def start_sft_job(data: FineTuningRequest):
     else:
         raise RuntimeError("Unsupported model provider: %s" % data.model.provider)
 
-    JOB_STORE[job.jobId] = job
+    JOB_STORE[data.jobId] = job
     return job
 
 

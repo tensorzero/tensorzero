@@ -20,7 +20,7 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { SFTFormValuesSchema } from "./types";
+import { SFTFormValuesSchema, type SFTFormValues } from "./types";
 import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
 
 const FF_ENABLE_PYTHON = process.env.TENSORZERO_UI_FF_ENABLE_PYTHON === "1";
@@ -95,12 +95,11 @@ export async function action({ request }: Route.ActionArgs) {
     throw new Error("Form data must be provided");
   }
   const jsonData = JSON.parse(serializedFormData);
+  const validatedData = SFTFormValuesSchema.parse(jsonData);
 
   if (FF_ENABLE_PYTHON) {
-    return await startPythonFineTune(jsonData);
+    return await startPythonFineTune(jsonData, validatedData);
   }
-
-  const validatedData = SFTFormValuesSchema.parse(jsonData);
   let job;
   try {
     job = await launch_sft_job(validatedData);
@@ -122,8 +121,7 @@ export async function action({ request }: Route.ActionArgs) {
   );
 }
 
-async function startPythonFineTune(parsedFormData: object) {
-  let job;
+async function startPythonFineTune(parsedFormData: object, validatedData: SFTFormValues) {
   try {
     const res = await fetch("http://localhost:7000/optimizations", {
       method: "POST",
@@ -135,7 +133,7 @@ async function startPythonFineTune(parsedFormData: object) {
         },
       }),
     });
-    job = await res.json();
+    await res.json();
   } catch (error) {
     const errors = {
       message:
@@ -147,7 +145,7 @@ async function startPythonFineTune(parsedFormData: object) {
   }
 
   return redirect(
-    `/optimization/supervised-fine-tuning/${job["jobId"]}?backend=python`,
+    `/optimization/supervised-fine-tuning/${validatedData.jobId}?backend=python`,
   );
 }
 
