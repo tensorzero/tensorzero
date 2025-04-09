@@ -11,12 +11,6 @@ services:
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
-    volumes:
-      - ./data/clickhouse:/var/lib/clickhouse/backups/mounted:ro # optional fixture data (see below)
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
     healthcheck:
       test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
       start_period: 30s
@@ -41,6 +35,20 @@ services:
       clickhouse:
         condition: service_healthy
 
+  ui:
+    image: tensorzero/ui
+    volumes:
+      - ./config:/app/config:ro
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
+      - TENSORZERO_GATEWAY_URL=http://gateway:3000
+    ports:
+      - "4000:4000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
   evaluations:
     profiles: [evaluations]
     image: tensorzero/evaluations
@@ -52,20 +60,6 @@ services:
       - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      clickhouse:
-        condition: service_healthy
-
-  ui:
-    image: tensorzero/ui
-    volumes:
-      - ./config:/app/config:ro
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
-      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
-      - TENSORZERO_GATEWAY_URL=http://gateway:3000
-    ports:
-      - "4000:4000"
     depends_on:
       clickhouse:
         condition: service_healthy
