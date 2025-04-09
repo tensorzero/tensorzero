@@ -34,7 +34,7 @@ Let's generate a dataset composed of our 100 haikus.
 2. Create a new dataset for the `write_haiku` called `haiku_dataset`.
 3. Select "Datasets" in the sidebar, with "Inference" as the dataset output.
 
-> [^TIP]
+> [!TIP]
 >
 > You can also create datasets programmatically with arbitrary data using the gateway. See the **[TensorZero Evaluations Configuration Reference](https://www.tensorzero.com/docs/evaluations/configuration-reference)**.
 
