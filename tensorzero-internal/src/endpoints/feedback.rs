@@ -452,7 +452,7 @@ async fn get_function_name(
         table_name, identifier_key, target_id
     );
     let function_name = connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await?
         .trim()
         .to_string();
@@ -630,7 +630,7 @@ async fn get_dynamic_demonstration_info(
         FunctionConfig::Chat(..) => {
             let parameterized_query = "SELECT tool_params FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
             let result = clickhouse_client
-                .run_query(
+                .run_query_synchronous(
                     parameterized_query,
                     Some(&HashMap::from([
                         ("function_name", function_name),
@@ -658,7 +658,7 @@ async fn get_dynamic_demonstration_info(
         FunctionConfig::Json(..) => {
             let parameterized_query = "SELECT output_schema FROM JsonInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
             let result = clickhouse_client
-                .run_query(
+                .run_query_synchronous(
                     parameterized_query,
                     Some(&HashMap::from([
                         ("function_name", function_name),

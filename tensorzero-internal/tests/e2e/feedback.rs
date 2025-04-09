@@ -1239,7 +1239,7 @@ async fn select_feedback_tags_clickhouse(
     );
 
     let text = clickhouse_connection_info
-        .run_query(query, None)
+        .run_query_synchronous(query, None)
         .await
         .unwrap();
     let json: Value = serde_json::from_str(&text).ok()?;

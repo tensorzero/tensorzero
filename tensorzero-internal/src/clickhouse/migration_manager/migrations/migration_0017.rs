@@ -55,7 +55,10 @@ impl Migration for Migration0017<'_> {
             ADD COLUMN IF NOT EXISTS input_tokens UInt32,
             ADD COLUMN IF NOT EXISTS output_tokens UInt32
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         Ok(())
     }
