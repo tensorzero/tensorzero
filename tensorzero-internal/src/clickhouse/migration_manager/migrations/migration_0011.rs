@@ -52,13 +52,19 @@ impl Migration for Migration0011<'_> {
             PRIMARY KEY (short_cache_key)
             SETTINGS index_granularity = 256
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Add the `cached` column to ModelInference
         let query = r#"
             ALTER TABLE ModelInference ADD COLUMN IF NOT EXISTS cached Bool DEFAULT false;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         Ok(())
     }

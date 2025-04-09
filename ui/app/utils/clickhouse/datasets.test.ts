@@ -280,7 +280,10 @@ describe("getDatasetCounts", () => {
 describe("getNumberOfDatasets", () => {
   test("returns the correct number of datasets", async () => {
     const count = await getNumberOfDatasets();
-    expect(count).toBe(3);
+    // This should be equal to 3 in the fixtures but since we want to be able to re-run this test
+    // and run it in parallel to the other tests which add datasets to the DB,
+    // we use a greater than or equal check.
+    expect(count).toBeGreaterThanOrEqual(3);
   });
 });
 

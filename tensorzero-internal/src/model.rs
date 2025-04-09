@@ -596,6 +596,8 @@ pub(super) enum ProviderConfigHelper {
     Fireworks {
         model_name: String,
         api_key_location: Option<CredentialLocation>,
+        #[serde(default = "crate::inference::providers::fireworks::default_parse_think_blocks")]
+        parse_think_blocks: bool,
     },
     Mistral {
         model_name: String,
@@ -730,8 +732,9 @@ impl<'de> Deserialize<'de> for ProviderConfig {
             ProviderConfigHelper::Fireworks {
                 model_name,
                 api_key_location,
+                parse_think_blocks,
             } => ProviderConfig::Fireworks(
-                FireworksProvider::new(model_name, api_key_location)
+                FireworksProvider::new(model_name, api_key_location, parse_think_blocks)
                     .map_err(|e| D::Error::custom(e.to_string()))?,
             ),
             ProviderConfigHelper::GCPVertexAnthropic {
@@ -1398,7 +1401,11 @@ impl ShorthandModelConfig for ModelConfig {
         let provider_config = match provider_type {
             "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
             "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(model_name, None)?),
-            "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(model_name, None)?),
+            "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(
+                model_name,
+                None,
+                crate::inference::providers::fireworks::default_parse_think_blocks(),
+            )?),
             "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
                 GoogleAIStudioGeminiProvider::new(model_name, None)?,
             ),

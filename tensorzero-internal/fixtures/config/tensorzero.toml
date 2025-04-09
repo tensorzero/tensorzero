@@ -193,6 +193,39 @@ model = "anthropic::claude-3.5-sonnet"
 system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
 json_mode = "implicit_tool"
 
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.openai_promptA]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.llama_promptA]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/llama4-maverick-instruct-basic"
+system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.best_of_3]
+type = "experimental_best_of_n_sampling"
+candidates = ["anthropic_promptA", "openai_promptA", "llama_promptA"]
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.best_of_3.evaluator]
+model = "openai::gpt-4o-mini"
+system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+temperature = 0.3
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.mixture_of_3]
+type = "experimental_mixture_of_n"
+candidates = ["anthropic_promptA", "openai_promptA", "llama_promptA"]
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.mixture_of_3.fuser]
+model = "openai::gpt-4o-mini"
+system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+temperature = 0.3
+
+
 [evaluations.evaluation1.evaluators.llm_judge_float]
 type = "llm_judge"
 output_type = "float"

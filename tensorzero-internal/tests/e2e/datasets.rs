@@ -514,7 +514,7 @@ async fn test_datapoint_insert_synthetic_json() {
 
     // Force deduplication to run
     clickhouse
-        .run_query("OPTIMIZE TABLE JsonInferenceDatapoint".to_string(), None)
+        .run_query_synchronous("OPTIMIZE TABLE JsonInferenceDatapoint".to_string(), None)
         .await
         .unwrap();
 
@@ -958,7 +958,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
 
     // Force deduplication to run
     clickhouse
-        .run_query("OPTIMIZE TABLE ChatInferenceDatapoint".to_string(), None)
+        .run_query_synchronous("OPTIMIZE TABLE ChatInferenceDatapoint".to_string(), None)
         .await
         .unwrap();
 
@@ -1380,7 +1380,7 @@ async fn test_datapoint_insert_output_inherit_json() {
 
     // Force deduplication to run
     clickhouse
-        .run_query("OPTIMIZE TABLE JsonInferenceDatapoint".to_string(), None)
+        .run_query_synchronous("OPTIMIZE TABLE JsonInferenceDatapoint".to_string(), None)
         .await
         .unwrap();
 
