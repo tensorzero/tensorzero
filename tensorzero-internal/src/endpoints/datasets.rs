@@ -53,7 +53,7 @@ async fn query_demonstration(
     page_size: u32,
 ) -> Result<Demonstration, Error> {
     let result = clickhouse
-        .run_query(
+        .run_query_synchronous(
             r#"
         SELECT
           id,
@@ -100,7 +100,7 @@ async fn query_inference_for_datapoint(
     inference_id: Uuid,
 ) -> Result<TaggedInferenceDatabaseInsert, Error> {
     let result: String = clickhouse
-        .run_query(
+        .run_query_synchronous(
             r#"
             SELECT
   uint_to_uuid(i.id_uint) AS id,

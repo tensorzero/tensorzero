@@ -111,28 +111,40 @@ impl Migration for Migration0008<'_> {
         // NOTE: this MODIFY COLUMN errors statement would convert data in bad ways
         // HOWEVER, TensorZero at the point of writing has never actually written any errors to the errors column
         // so this is safe to do.
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Alter the `response_time_ms` column of `ModelInference` to be a nullable column
         let query = r#"
             ALTER TABLE ModelInference
             MODIFY COLUMN response_time_ms Nullable(UInt32)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Alter the `processing_time_ms` column of `ChatInference` to be a nullable column
         let query = r#"
             ALTER TABLE ChatInference
             MODIFY COLUMN processing_time_ms Nullable(UInt32)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         // Alter the `processing_time_ms` column of `JsonInference` to be a nullable column
         let query = r#"
             ALTER TABLE JsonInference
             MODIFY COLUMN processing_time_ms Nullable(UInt32)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self
+            .clickhouse
+            .run_query_synchronous(query.to_string(), None)
+            .await?;
 
         Ok(())
     }

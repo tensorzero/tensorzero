@@ -28,7 +28,7 @@ pub async fn delete_datapoint(
     dataset_name: &str,
     datapoint_id: Uuid,
 ) {
-    let datapoint = clickhouse.run_query(
+    let datapoint = clickhouse.run_query_synchronous(
         "SELECT * FROM {table_name:Identifier} WHERE dataset_name={dataset_name:String} AND function_name={function_name:String} AND id = {id:String} ORDER BY updated_at DESC LIMIT 1 FORMAT JSONEachRow;".to_string(),
         Some(&HashMap::from([
             ("table_name", datapoint_kind.table_name()),

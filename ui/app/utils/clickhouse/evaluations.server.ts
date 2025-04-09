@@ -17,20 +17,32 @@ import {
   JsonEvaluationResultSchema,
   ChatEvaluationResultSchema,
   ParsedEvaluationResultWithVariantSchema,
+  type EvaluationRunSearchResult,
+  EvaluationRunSearchResultSchema,
 } from "./evaluations";
-import { uuidv7ToTimestamp } from "./helpers";
 
 export async function getEvaluationRunInfos(
   evaluation_run_ids: string[],
   function_name: string,
 ): Promise<EvaluationRunInfo[]> {
   const query = `
-    SELECT DISTINCT run_tag.value as evaluation_run_id, run_tag.variant_name as variant_name
-    FROM TagInference AS run_tag
-    WHERE run_tag.key = 'tensorzero::evaluation_run_id'
+    SELECT
+      any(run_tag.value) as evaluation_run_id,
+      any(run_tag.variant_name) as variant_name,
+      formatDateTime(
+        max(UUIDv7ToDateTime(inference_id)),
+        '%Y-%m-%dT%H:%i:%SZ'
+      ) as most_recent_inference_date
+    FROM
+      TagInference AS run_tag
+    WHERE
+      run_tag.key = 'tensorzero::evaluation_run_id'
       AND run_tag.value IN ({evaluation_run_ids:Array(String)})
       AND run_tag.function_name = {function_name:String}
-    ORDER BY toUInt128(toUUID(evaluation_run_id)) DESC
+    GROUP BY
+      run_tag.value
+    ORDER BY
+      toUInt128(toUUID(evaluation_run_id)) DESC
   `;
 
   const result = await clickhouseClient.query({
@@ -42,6 +54,44 @@ export async function getEvaluationRunInfos(
     },
   });
 
+  const rows = await result.json<EvaluationRunInfo[]>();
+  return rows.map((row) => EvaluationRunInfoSchema.parse(row));
+}
+
+export async function getEvaluationRunInfosForDatapoint(
+  datapoint_id: string,
+  function_name: string,
+): Promise<EvaluationRunInfo[]> {
+  const config = await getConfig();
+  const function_type = config.functions[function_name].type;
+  const inference_table_name =
+    function_type === "chat" ? "ChatInference" : "JsonInference";
+  const query = `
+    SELECT any(i.tags['tensorzero::evaluation_run_id']) as evaluation_run_id, any(i.variant_name) as variant_name,
+      formatDateTime(
+        max(UUIDv7ToDateTime(inference_id)),
+        '%Y-%m-%dT%H:%i:%SZ'
+      ) as most_recent_inference_date
+    FROM TagInference t
+    INNER JOIN {inference_table_name:Identifier} i
+      ON t.inference_id = i.id
+      AND i.function_name = {function_name:String}
+      AND i.variant_name = t.variant_name
+      AND i.episode_id = t.episode_id
+    WHERE t.key = 'tensorzero::datapoint_id'
+      AND t.value = {datapoint_id:String}
+    GROUP BY
+      i.tags['tensorzero::evaluation_run_id']
+  `;
+  const result = await clickhouseClient.query({
+    query,
+    format: "JSONEachRow",
+    query_params: {
+      datapoint_id: datapoint_id,
+      function_name: function_name,
+      inference_table_name: inference_table_name,
+    },
+  });
   const rows = await result.json<EvaluationRunInfo[]>();
   return rows.map((row) => EvaluationRunInfoSchema.parse(row));
 }
@@ -353,63 +403,6 @@ OFFSET {offset:UInt32}
   return rows.map((row) => evaluationInfoResultSchema.parse(row));
 }
 
-/*
-Returns a map of evaluation run ids to their most recent inference dates.
-For each evaluation run id, returns the maximum of:
-1. The timestamp from the evaluation run id itself (derived from UUIDv7)
-2. The timestamp of the most recent inference associated with that evaluation run id
-*/
-export async function getMostRecentEvaluationInferenceDate(
-  evaluation_run_ids: string[],
-): Promise<Map<string, Date>> {
-  const query = `
-  SELECT
-    value as evaluation_run_id,
-    formatDateTime(max(UUIDv7ToDateTime(inference_id)), '%Y-%m-%dT%H:%i:%SZ') as last_inference_timestamp
-  FROM TagInference
-  WHERE key = 'tensorzero::evaluation_run_id'
-    AND value IN ({evaluation_run_ids:Array(String)})
-  GROUP BY value
-  `;
-  const result = await clickhouseClient.query({
-    query,
-    format: "JSONEachRow",
-    query_params: {
-      evaluation_run_ids: evaluation_run_ids,
-    },
-  });
-
-  const rows = await result.json<{
-    evaluation_run_id: string;
-    last_inference_timestamp: string;
-  }>();
-
-  // Create a map of evaluation_run_id to its last inference timestamp
-  const inferenceTimestampMap = new Map<string, Date>();
-  rows.forEach((row) => {
-    inferenceTimestampMap.set(
-      row.evaluation_run_id,
-      new Date(row.last_inference_timestamp),
-    );
-  });
-
-  // For each evaluation_run_id, determine the max of its UUID timestamp and its last inference timestamp
-  // This handles the case where the evaluation run id is newer than the last inference timestamp
-  // Only possible if there are no inferences for that evaluation run id yet (we should still return the evaluation run id timestamp)
-  const resultMap = new Map<string, Date>();
-  evaluation_run_ids.forEach((id) => {
-    const uuidTimestamp = uuidv7ToTimestamp(id);
-    const inferenceTimestamp =
-      inferenceTimestampMap.get(id) || new Date("1970-01-01T00:00:00Z");
-    resultMap.set(
-      id,
-      uuidTimestamp > inferenceTimestamp ? uuidTimestamp : inferenceTimestamp,
-    );
-  });
-
-  return resultMap;
-}
-
 export async function searchEvaluationRuns(
   evaluation_name: string,
   function_name: string,
@@ -445,8 +438,8 @@ export async function searchEvaluationRuns(
       search_query: search_query,
     },
   });
-  const rows = await result.json<EvaluationRunInfo[]>();
-  return rows.map((row) => EvaluationRunInfoSchema.parse(row));
+  const rows = await result.json<EvaluationRunSearchResult[]>();
+  return rows.map((row) => EvaluationRunSearchResultSchema.parse(row));
 }
 
 export async function getEvaluationsForDatapoint(

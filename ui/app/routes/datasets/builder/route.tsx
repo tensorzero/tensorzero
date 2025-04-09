@@ -1,7 +1,5 @@
 import { data, redirect } from "react-router";
-import { useLoaderData } from "react-router";
 import { DatasetBuilderForm } from "./DatasetBuilderForm";
-import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import {
   countRowsForDataset,
   getDatasetCounts,
@@ -14,6 +12,7 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
+import type { Route } from "./+types/route";
 
 export const meta = () => {
   return [
@@ -56,10 +55,8 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 }
 
-export default function DatasetBuilder() {
-  const { dataset_counts } = useLoaderData() as {
-    dataset_counts: DatasetCountInfo[];
-  };
+export default function DatasetBuilder({ loaderData }: Route.ComponentProps) {
+  const { dataset_counts } = loaderData;
 
   return (
     <PageLayout>
