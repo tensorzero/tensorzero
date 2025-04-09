@@ -343,11 +343,22 @@ jobs:
 
   ui-tests:
     runs-on: ubuntu-latest
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
     strategy:
       matrix:
         clickhouse_version: ["24.12-alpine", "25.2-alpine", "latest-alpine"]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install and configure Namespace CLI
+        uses: namespacelabs/nscloud-setup@v0
+
+      - name: Configure Namespace powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@v0
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4

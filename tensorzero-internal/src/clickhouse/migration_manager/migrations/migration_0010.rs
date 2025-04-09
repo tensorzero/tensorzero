@@ -62,12 +62,12 @@ impl Migration for Migration0010<'_> {
             return Ok(true);
         }
         let query = "SHOW CREATE TABLE JsonInferenceByIdView".to_string();
-        let result = self.clickhouse.run_query(query, None).await?;
+        let result = self.clickhouse.run_query_synchronous(query, None).await?;
         if !result.contains("function_type") {
             return Ok(true);
         }
         let query = "SHOW CREATE TABLE ChatInferenceByIdView".to_string();
-        let result = self.clickhouse.run_query(query, None).await?;
+        let result = self.clickhouse.run_query_synchronous(query, None).await?;
         if !result.contains("function_type") {
             return Ok(true);
         }
@@ -90,11 +90,11 @@ impl Migration for Migration0010<'_> {
 
         // Drop the original tables and materialized views (if they exist)
         let query = "DROP TABLE IF EXISTS InferenceById".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
         let query = "DROP VIEW IF EXISTS ChatInferenceByIdView".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
         let query = "DROP VIEW IF EXISTS JsonInferenceByIdView".to_string();
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // Create the `InferencesById` table
         let query = r#"
@@ -108,7 +108,7 @@ impl Migration for Migration0010<'_> {
             ) ENGINE = MergeTree()
             ORDER BY id;
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query.to_string(), None).await?;
         // Create the materialized view for the `InferencesById` table from ChatInference
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
         let view_where_clause = if !self.clean_start {
@@ -133,7 +133,7 @@ impl Migration for Migration0010<'_> {
             "#,
             view_where_clause = view_where_clause
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // Create the materialized view for the `InferencesById` table from JsonInference
         // If we are not doing a clean start, we need to add a where clause to the view to only include rows that have been created after the view_timestamp
@@ -154,7 +154,7 @@ impl Migration for Migration0010<'_> {
             "#,
             view_where_clause = view_where_clause
         );
-        let _ = self.clickhouse.run_query(query, None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query, None).await?;
 
         // Insert the data from the original tables into the new table (we do this concurrently since it could theoretically take a long time)
         if !self.clean_start {
@@ -176,7 +176,7 @@ impl Migration for Migration0010<'_> {
                 "#,
                     view_timestamp = view_timestamp
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             // IMPORTANT: The function_type column is now correctly set to 'json'
@@ -195,7 +195,7 @@ impl Migration for Migration0010<'_> {
                 "#,
                     view_timestamp = view_timestamp
                 );
-                self.clickhouse.run_query(query, None).await
+                self.clickhouse.run_query_synchronous(query, None).await
             };
 
             tokio::try_join!(insert_chat_inference, insert_json_inference)?;

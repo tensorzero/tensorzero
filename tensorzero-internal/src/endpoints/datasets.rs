@@ -53,7 +53,7 @@ async fn query_demonstration(
     page_size: u32,
 ) -> Result<Demonstration, Error> {
     let result = clickhouse
-        .run_query(
+        .run_query_synchronous(
             r#"
         SELECT
           id,
@@ -100,7 +100,7 @@ async fn query_inference_for_datapoint(
     inference_id: Uuid,
 ) -> Result<TaggedInferenceDatabaseInsert, Error> {
     let result: String = clickhouse
-        .run_query(
+        .run_query_synchronous(
             r#"
             SELECT
   uint_to_uuid(i.id_uint) AS id,
@@ -439,7 +439,7 @@ pub async fn delete_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<DeletePathParams>,
 ) -> Result<Json<DeleteDatapointResponse>, Error> {
-    let datapoint = app_state.clickhouse_connection_info.run_query(
+    let datapoint = app_state.clickhouse_connection_info.run_query_synchronous(
         "SELECT * FROM {table_name:Identifier} WHERE dataset_name={dataset_name:String} AND function_name={function_name:String} AND id = {id:String} ORDER BY updated_at DESC LIMIT 1 FORMAT JSONEachRow;".to_string(),
         Some(&HashMap::from([
             ("table_name", path_params.kind.table_name()),
