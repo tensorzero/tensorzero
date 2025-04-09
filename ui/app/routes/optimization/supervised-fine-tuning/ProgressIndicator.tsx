@@ -23,18 +23,14 @@ export function ProgressIndicator({
   estimatedCompletion,
 }: ProgressIndicatorProps) {
   const [progress, setProgress] = useState(
-    getProgressPercentage(createdAt, estimatedCompletion, new Date())
+    getProgressPercentage(createdAt, estimatedCompletion, new Date()),
   );
 
   useEffect(() => {
     // Update progress every second
     const intervalId = setInterval(() => {
       const now = new Date();
-      setProgress(getProgressPercentage(
-        createdAt,
-        estimatedCompletion,
-        now
-      ));
+      setProgress(getProgressPercentage(createdAt, estimatedCompletion, now));
       if (now >= estimatedCompletion) {
         clearInterval(intervalId);
       }
@@ -50,10 +46,7 @@ export function ProgressIndicator({
         <span className="font-medium">Estimated Completion</span>
         <CountdownTimer targetDate={estimatedCompletion} />
       </div>
-      <Progress
-        value={progress}
-        className="w-full"
-      />
+      <Progress value={progress} className="w-full" />
     </div>
   );
 }
