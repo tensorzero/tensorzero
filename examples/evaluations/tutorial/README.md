@@ -52,6 +52,6 @@ docker compose run --rm evaluations \
 
 Let's evaluate our `gpt_4o_mini` variant using the TensorZero Evaluations UI, and compare the results.
 
-1. Navigate to "Evaluations" and select "New Run" (`http://localhost:4000/evaluations`).
+1. Navigate to "Evaluations" (`http://localhost:4000/evaluations`) and select "New Run".
 2. Launch an evaluation with the `gpt_4o_mini` variant.
 3. Select the previous evaluation run in the dropdown to compare the results.
