@@ -1,3 +1,7 @@
+// This is an internal crate, so we're the only considers of
+// traits with async fns for now.
+#![allow(async_fn_in_trait)]
+
 pub mod cache;
 pub mod clickhouse;
 pub mod config_parser; // TensorZero config file
