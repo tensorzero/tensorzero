@@ -5,6 +5,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableCellTime,
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
@@ -49,9 +50,9 @@ export default function DatasetTable({
                   </Link>
                 </TableCell>
                 <TableCell className="max-w-[200px]">{count.count}</TableCell>
-                <TableCell>
+                <TableCellTime>
                   {formatDate(new Date(count.last_updated))}
-                </TableCell>
+                </TableCellTime>
               </TableRow>
             ))
           )}

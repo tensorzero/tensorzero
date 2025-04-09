@@ -6,6 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableCellTime,
 } from "~/components/ui/table";
 import type { VariantCounts } from "~/utils/clickhouse/function";
 import { formatDate } from "~/utils/date";
@@ -65,9 +66,9 @@ export default function FunctionVariantTable({
               </TableCell>
               <TableCell>{variant_count.weight}</TableCell>
               <TableCell>{variant_count.count}</TableCell>
-              <TableCell>
+              <TableCellTime>
                 {formatDate(new Date(variant_count.last_used))}
-              </TableCell>
+              </TableCellTime>
             </TableRow>
           ))
         )}

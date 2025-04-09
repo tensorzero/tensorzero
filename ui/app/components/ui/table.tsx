@@ -108,6 +108,18 @@ const TableCaption = React.forwardRef<
 ));
 TableCaption.displayName = "TableCaption";
 
+const TableCellTime = React.forwardRef<
+  HTMLTableCellElement,
+  React.TdHTMLAttributes<HTMLTableCellElement>
+>(({ children, ...props }, ref) => {
+  return (
+    <TableCell ref={ref} className="whitespace-nowrap" {...props}>
+      {children}
+    </TableCell>
+  );
+});
+TableCellTime.displayName = "TableCellTime";
+
 export {
   Table,
   TableHeader,
@@ -117,4 +129,5 @@ export {
   TableRow,
   TableCell,
   TableCaption,
+  TableCellTime,
 };

@@ -5,6 +5,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableCellTime,
 } from "~/components/ui/table";
 import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
 import { formatDate } from "~/utils/date";
@@ -69,7 +70,9 @@ export default function FunctionInferenceTable({
                   </code>
                 </VariantLink>
               </TableCell>
-              <TableCell>{formatDate(new Date(inference.timestamp))}</TableCell>
+              <TableCellTime>
+                {formatDate(new Date(inference.timestamp))}
+              </TableCellTime>
             </TableRow>
           ))
         )}

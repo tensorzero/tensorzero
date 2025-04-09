@@ -5,6 +5,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableCellTime,
 } from "~/components/ui/table";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
@@ -64,7 +65,9 @@ export default function FeedbackTable({
                     metric={metrics[getMetricName(item)]}
                   />
                 </TableCell>
-                <TableCell>{formatDate(new Date(item.timestamp))}</TableCell>
+                <TableCellTime>
+                  {formatDate(new Date(item.timestamp))}
+                </TableCellTime>
               </TableRow>
             ))
           )}

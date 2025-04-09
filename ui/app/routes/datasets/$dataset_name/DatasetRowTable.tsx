@@ -5,6 +5,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableCellTime,
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
 import type { DatasetDetailRow } from "~/utils/clickhouse/datasets";
@@ -74,7 +75,9 @@ export default function DatasetRowTable({
                     </code>
                   </FunctionLink>
                 </TableCell>
-                <TableCell>{formatDate(new Date(row.updated_at))}</TableCell>
+                <TableCellTime>
+                  {formatDate(new Date(row.updated_at))}
+                </TableCellTime>
               </TableRow>
             ))
           )}

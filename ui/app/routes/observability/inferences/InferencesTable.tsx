@@ -7,6 +7,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableCellTime,
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
 import { FunctionLink } from "~/components/function/FunctionLink";
@@ -79,9 +80,9 @@ export default function InferencesTable({
                     </code>
                   </VariantLink>
                 </TableCell>
-                <TableCell>
+                <TableCellTime>
                   {formatDate(new Date(inference.timestamp))}
-                </TableCell>
+                </TableCellTime>
               </TableRow>
             ))
           )}

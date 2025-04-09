@@ -5,6 +5,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableCellTime,
 } from "~/components/ui/table";
 import type { FunctionConfig } from "~/utils/config/function";
 import type { FunctionCountInfo } from "~/utils/clickhouse/inference";
@@ -83,11 +84,11 @@ export default function FunctionsTable({
                     <Code>{type}</Code>
                   </TableCell>
                   <TableCell>{count}</TableCell>
-                  <TableCell>
+                  <TableCellTime>
                     {max_timestamp === "Never"
                       ? "Never"
                       : formatDate(new Date(max_timestamp))}
-                  </TableCell>
+                  </TableCellTime>
                 </TableRow>
               ),
             )

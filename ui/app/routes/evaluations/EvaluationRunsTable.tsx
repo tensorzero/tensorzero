@@ -6,6 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableCellTime,
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
 import { FunctionLink } from "~/components/function/FunctionLink";
@@ -93,9 +94,9 @@ export default function EvaluationRunsTable({
                     </code>
                   </VariantLink>
                 </TableCell>
-                <TableCell>
+                <TableCellTime>
                   {formatDate(new Date(evaluationRun.last_inference_timestamp))}
-                </TableCell>
+                </TableCellTime>
               </TableRow>
             ))
           )}

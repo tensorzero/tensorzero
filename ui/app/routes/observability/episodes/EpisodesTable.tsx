@@ -3,6 +3,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableCellTime,
   TableHead,
   TableHeader,
   TableRow,
@@ -65,15 +66,13 @@ export default function EpisodesTable({
                   </Link>
                 </TableCell>
                 <TableCell>{episode.count}</TableCell>
-                <TableCell className="max-w-[200px] lg:max-w-none">
-                  <span className="block overflow-hidden text-ellipsis whitespace-nowrap">
-                    {formatTimeRange(
-                      new Date(episode.start_time),
-                      new Date(episode.end_time),
-                      episode.count,
-                    )}
-                  </span>
-                </TableCell>
+                <TableCellTime>
+                  {formatTimeRange(
+                    new Date(episode.start_time),
+                    new Date(episode.end_time),
+                    episode.count,
+                  )}
+                </TableCellTime>
               </TableRow>
             ))
           )}
