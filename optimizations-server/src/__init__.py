@@ -7,7 +7,7 @@ import typing as t
 import os
 from tensorzero import AsyncTensorZeroGateway
 
-CONFIG_PATH = os.environ["TENSORZERO_UI_CONFIG_PATH"]
+CONFIG_PATH = os.environ.get("TENSORZERO_UI_CONFIG_PATH", "config/tensorzero.toml")
 CLICKHOUSE_URL = os.environ["TENSORZERO_CLICKHOUSE_URL"]
 
 _tensorzero_client = AsyncTensorZeroGateway.build_embedded(
