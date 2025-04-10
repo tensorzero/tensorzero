@@ -21,32 +21,54 @@ interface HumanFeedbackModalProps {
   isOpen: boolean;
   onClose: () => void;
   inferenceOutput?: ContentBlockOutput[] | JsonInferenceOutput;
+  // Exactly one of the following should be provided
+  episodeId?: string;
+  inferenceId?: string;
 }
 
 export function HumanFeedbackModal({
   isOpen,
   onClose,
   inferenceOutput,
+  episodeId,
+  inferenceId,
 }: HumanFeedbackModalProps) {
+  // Exactly one of episodeId and inferenceId should be provided
+  if ((episodeId && inferenceId) || (!episodeId && !inferenceId)) {
+    throw new Error(
+      "Exactly one of episodeId and inferenceId should be provided. This is a bug. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+    );
+  }
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-h-[90vh] sm:max-w-[1200px]">
         <DialogHeader>
           <DialogTitle>Add Feedback</DialogTitle>
         </DialogHeader>
-        <FeedbackForm inferenceOutput={inferenceOutput} onClose={onClose} />
+        <FeedbackForm
+          inferenceOutput={inferenceOutput}
+          onClose={onClose}
+          episodeId={episodeId}
+          inferenceId={inferenceId}
+        />
       </DialogContent>
     </Dialog>
   );
 }
 
+interface FeedbackFormProps {
+  inferenceOutput?: ContentBlockOutput[] | JsonInferenceOutput;
+  onClose: () => void;
+  episodeId?: string;
+  inferenceId?: string;
+}
+
 function FeedbackForm({
   inferenceOutput,
   onClose,
-}: {
-  inferenceOutput?: ContentBlockOutput[] | JsonInferenceOutput;
-  onClose: () => void;
-}) {
+  episodeId,
+  inferenceId,
+}: FeedbackFormProps) {
   const config = useConfig();
   const fetcher = useFetcher();
   // If there is no inference output this is likely an episode-level feedback and
@@ -153,6 +175,12 @@ function FeedbackForm({
 
       {fetcher.data?.error && (
         <p className="text-sm text-red-500">{fetcher.data.error}</p>
+      )}
+
+      <input type="hidden" name="_action" value="addFeedback" />
+      {episodeId && <input type="hidden" name="episodeId" value={episodeId} />}
+      {inferenceId && (
+        <input type="hidden" name="inferenceId" value={inferenceId} />
       )}
 
       <div className="flex justify-end">

@@ -27,6 +27,7 @@ interface InferenceActionsProps {
   hasDemonstration: boolean;
   className?: string;
   inferenceOutput?: ContentBlockOutput[] | JsonInferenceOutput;
+  inferenceId: string;
 }
 
 export function InferenceActions({
@@ -37,6 +38,7 @@ export function InferenceActions({
   onDatasetSelect,
   hasDemonstration,
   inferenceOutput,
+  inferenceId,
 }: InferenceActionsProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -62,6 +64,7 @@ export function InferenceActions({
         isOpen={isModalOpen}
         onClose={handleModalClose}
         inferenceOutput={inferenceOutput}
+        inferenceId={inferenceId}
       />
     </ActionBar>
   );

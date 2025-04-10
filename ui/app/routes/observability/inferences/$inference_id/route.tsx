@@ -20,7 +20,7 @@ import BasicInfo from "./InferenceBasicInfo";
 import Input from "~/components/inference/Input";
 import Output from "~/components/inference/NewOutput";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
-import { tensorZeroClient } from "~/utils/tensorzero.server";
+import { addHumanFeedback, tensorZeroClient } from "~/utils/tensorzero.server";
 import { ParameterCard } from "./InferenceParameters";
 import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesTable } from "./ModelInferencesTable";
@@ -89,6 +89,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
+  const _action = formData.get("_action");
+  switch (_action) {
+    case "addToDataset":
+      return addToDataset(formData);
+    case "addFeedback":
+      return addHumanFeedback(formData);
+  }
+}
+
+async function addToDataset(formData: FormData) {
   const dataset = formData.get("dataset");
   const output = formData.get("output");
   const inference_id = formData.get("inference_id");
@@ -190,6 +200,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     formData.append("dataset", dataset);
     formData.append("output", output);
     formData.append("inference_id", inference.id);
+    formData.append("_action", "addToDataset");
     addToDatasetFetcher.submit(formData, { method: "post", action: "." });
   };
 
@@ -217,6 +228,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           onDatasetSelect={handleAddToDataset}
           hasDemonstration={hasDemonstration}
           inferenceOutput={inference.output}
+          inferenceId={inference.id}
         />
       </PageHeader>
 

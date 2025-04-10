@@ -231,8 +231,8 @@ export type InferenceResponse = z.infer<typeof InferenceResponseSchema>;
  */
 export const FeedbackRequestSchema = z.object({
   dryrun: z.boolean().optional(),
-  episode_id: z.string().optional(),
-  inference_id: z.string().optional(),
+  episode_id: z.string().nullable(),
+  inference_id: z.string().nullable(),
   metric_name: z.string(),
   tags: z.record(z.string()).optional(),
   value: JSONValueSchema,
