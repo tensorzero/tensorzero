@@ -97,7 +97,7 @@ function FeedbackForm({
     (selectedMetricType === "comment" && commentValue.trim() === "");
 
   return (
-    <Form method="post">
+    <Form method="post" onSubmit={onClose}>
       {selectedMetricName && (
         <input type="hidden" name="metricName" value={selectedMetricName} />
       )}
@@ -174,11 +174,16 @@ function FeedbackForm({
         <input type="hidden" name="inferenceId" value={inferenceId} />
       )}
 
-      <div className="flex justify-end">
-        <Button type="submit" disabled={!selectedMetricName || isInputMissing}>
-          Submit Feedback
-        </Button>
-      </div>
+      {selectedMetricName && (
+        <div className="flex justify-end">
+          <Button
+            type="submit"
+            disabled={!selectedMetricName || isInputMissing}
+          >
+            Submit Feedback
+          </Button>
+        </div>
+      )}
     </Form>
   );
 }
