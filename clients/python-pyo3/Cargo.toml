@@ -7,6 +7,9 @@ version = "2025.4.3"
 edition = "2021"
 license = "Apache-2.0"
 
+[lints]
+workspace = true
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 # This is used by 'maturin' as the name of the Python package
