@@ -10,6 +10,7 @@ use tensorzero_internal::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
 use tokio::time::{sleep, Duration};
+use tracing_test::traced_test;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -1247,6 +1248,7 @@ async fn select_feedback_tags_clickhouse(
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[traced_test]
 async fn test_fast_inference_then_feedback() {
     use serde_json::json;
     use std::collections::HashMap;
@@ -1311,4 +1313,5 @@ async fn test_fast_inference_then_feedback() {
 
     // Wait for all tasks to finish.
     futures::future::join_all(tasks).await;
+    assert!(!logs_contain("does not exist"));
 }
