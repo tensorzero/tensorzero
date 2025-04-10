@@ -28,8 +28,11 @@ jobs:
           # Otherwise, use the unsuffixed name (which will be invoked by a release or manual dispatch)
           # Unfortunately, we can't use 'env' in 'strategy.matrix'
           - name: ${{ github.event_name == 'push' && 'ui-dev' || 'ui' }}
+            path: ui
           - name: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
+            path: gateway
           - name: ${{ github.event_name == 'push' && 'evaluations-dev' || 'evaluations' }}
+            path: evaluations
 
     permissions:
       packages: write
@@ -65,7 +68,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           platforms: ${{ matrix.platform.target }}
-          file: ./${{ matrix.container.name }}/Dockerfile
+          file: ./${{ matrix.container.path }}/Dockerfile
           push: true
           provenance: mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
