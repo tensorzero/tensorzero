@@ -8,7 +8,6 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { TableItemId, TableItemTime } from "~/components/ui/TableItems";
-import { formatDate } from "~/utils/date";
 import { FunctionLink } from "~/components/function/FunctionLink";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 

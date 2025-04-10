@@ -17,7 +17,7 @@ const TableItemId = React.forwardRef<HTMLSpanElement, TableItemIdProps>(
   ({ id, link }, ref) => {
     const content = (
       <span ref={ref} className="font-mono whitespace-nowrap">
-        {id.length > 5 ? `…${id.slice(-8)}` : id}
+        {id.length > 8 ? `…${id.slice(-8)}` : id}
       </span>
     );
 

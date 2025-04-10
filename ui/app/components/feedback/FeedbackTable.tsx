@@ -9,7 +9,6 @@ import {
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
-import { formatDate } from "~/utils/date";
 import { MetricBadges } from "~/components/metric/MetricBadges";
 import { useConfig } from "~/context/config";
 import { TableItemId, TableItemTime } from "~/components/ui/TableItems";
