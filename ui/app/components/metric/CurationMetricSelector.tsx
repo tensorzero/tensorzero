@@ -22,7 +22,7 @@ import { useFetcher } from "react-router";
 import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";
 import { Badge } from "~/components/ui/badge";
 
-type MetricSelectorProps<T extends Record<string, unknown>> = {
+type CurationMetricSelectorProps<T extends Record<string, unknown>> = {
   control: Control<T>;
   name: Path<T>;
   functionFieldName: Path<T>;
@@ -32,7 +32,19 @@ type MetricSelectorProps<T extends Record<string, unknown>> = {
   config: Config;
 };
 
-export function MetricSelector<T extends Record<string, unknown>>({
+/**
+ * This component is used to select a metric for a function.
+ * It is used in the DatasetBuilderForm and SFTForm, where we are curating a dataset for either
+ * fine-tuning or just to build the dataset.
+ * You should use this component if you're using react-hook-form and you want to display the counts
+ * of feedbacks and curated inferences for the selected metric.
+ *
+ * In the future we should refactor this so it works in this context as well as in the
+ * context used in the feedback modal and the selection for variants.
+ */
+export default function CurationMetricSelector<
+  T extends Record<string, unknown>,
+>({
   control,
   name,
   functionFieldName,
@@ -40,7 +52,7 @@ export function MetricSelector<T extends Record<string, unknown>>({
   curatedInferenceCount,
   config,
   removeDemonstrations = false,
-}: MetricSelectorProps<T>) {
+}: CurationMetricSelectorProps<T>) {
   const metricsFetcher = useFetcher<MetricsWithFeedbackData>();
   const { getValues, setValue } = useFormContext<T>();
 

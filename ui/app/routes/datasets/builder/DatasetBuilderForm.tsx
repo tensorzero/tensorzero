@@ -8,7 +8,7 @@ import {
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { useConfig } from "~/context/config";
-import { MetricSelector } from "~/components/metric/MetricSelector";
+import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { useFetcher } from "react-router";
 import { useEffect, useState } from "react";
@@ -133,7 +133,7 @@ export function DatasetBuilderForm({
             inferenceCount={counts.inferenceCount}
             config={config}
           />
-          <MetricSelector<DatasetBuilderFormValues>
+          <CurationMetricSelector<DatasetBuilderFormValues>
             control={form.control}
             name="metric_name"
             functionFieldName="function"
