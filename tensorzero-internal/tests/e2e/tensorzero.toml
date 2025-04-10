@@ -325,6 +325,13 @@ routing = ["openai"]
 type = "openai"
 model_name = "o1-mini"
 
+[models.o3-mini]
+routing = ["openai"]
+
+[models.o3-mini.providers.openai]
+type = "openai"
+model_name = "o3-mini"
+
 [models."grok_2_1212"]
 routing = ["xai"]
 
@@ -884,6 +891,12 @@ type = "chat_completion"
 model = "o1-mini"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 
+[functions.basic_test.variants.o3-mini]
+type = "chat_completion"
+model = "o3-mini"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+extra_body = [{ pointer = "/reasoning_effort", value = "low" }]
+
 [functions.basic_test.variants.tgi]
 type = "chat_completion"
 model = "phi-3.5-mini-instruct-tgi"
@@ -1442,6 +1455,7 @@ system_template = "../../fixtures/config/functions/json_success/prompt/system_te
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 max_tokens = 100
 json_mode = "strict"
+
 [functions.json_success.variants.openai]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
