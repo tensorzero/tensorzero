@@ -2446,7 +2446,7 @@ dependencies = [
 
 [[package]]
 name = "mock-inference-provider"
-version = "2025.4.2"
+version = "0.1.0"
 dependencies = [
  "async-stream",
  "axum",
