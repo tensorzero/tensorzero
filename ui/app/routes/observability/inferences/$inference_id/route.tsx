@@ -38,7 +38,7 @@ import {
 import { InferenceActions } from "./InferenceActions";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { Toaster } from "~/components/ui/toaster";
-import { toast, useToast } from "~/hooks/use-toast";
+import { useToast } from "~/hooks/use-toast";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
@@ -91,17 +91,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-export async function action({ request, params }: Route.ActionArgs) {
+export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const _action = formData.get("_action");
   switch (_action) {
     case "addToDataset":
       return addToDataset(formData);
-    case "addFeedback":
+    case "addFeedback": {
       const response = await addHumanFeedback(formData);
       const url = new URL(request.url);
       url.searchParams.set("newFeedbackId", response.feedback_id);
       return redirect(url.toString());
+    }
+    default:
+      console.error(`Unknown action: ${_action}`);
+      return null;
   }
 }
 
