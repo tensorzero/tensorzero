@@ -1,6 +1,6 @@
 [package]
 name = "gateway"
-version = "2025.4.2"
+version.workspace = true
 edition = "2021"
 
 [dependencies]
