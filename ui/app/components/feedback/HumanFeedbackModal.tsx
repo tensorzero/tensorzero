@@ -6,7 +6,7 @@ import {
 } from "~/components/ui/dialog";
 import { useConfig } from "~/context/config";
 import { MetricSelector } from "../metric/MetricSelector";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Label } from "~/components/ui/label";
 import { Input } from "~/components/ui/input";
@@ -14,7 +14,7 @@ import { Textarea } from "~/components/ui/textarea";
 import type { ContentBlockOutput } from "~/utils/clickhouse/common";
 import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
 import Output from "../inference/Output";
-import { Link, useFetcher } from "react-router";
+import { Link, Form } from "react-router";
 import { Button } from "~/components/ui/button";
 
 interface HumanFeedbackModalProps {
@@ -70,7 +70,6 @@ function FeedbackForm({
   inferenceId,
 }: FeedbackFormProps) {
   const config = useConfig();
-  const fetcher = useFetcher();
   // If there is no inference output this is likely an episode-level feedback and
   // we should filter demonstration out of the list of metrics.
   const metrics =
@@ -91,8 +90,6 @@ function FeedbackForm({
     ContentBlockOutput[] | JsonInferenceOutput | undefined
   >(inferenceOutput);
 
-  const isSubmitting = fetcher.state !== "idle";
-
   // Calculate if input is missing based on the selected metric type
   const isInputMissing =
     (selectedMetricType === "boolean" && booleanValue === null) ||
@@ -100,7 +97,7 @@ function FeedbackForm({
     (selectedMetricType === "comment" && commentValue.trim() === "");
 
   return (
-    <fetcher.Form method="post" className="space-y-4">
+    <Form method="post">
       {selectedMetricName && (
         <input type="hidden" name="metricName" value={selectedMetricName} />
       )}
@@ -171,10 +168,6 @@ function FeedbackForm({
           </div>
         ))}
 
-      {fetcher.data?.error && (
-        <p className="text-sm text-red-500">{fetcher.data.error}</p>
-      )}
-
       <input type="hidden" name="_action" value="addFeedback" />
       {episodeId && <input type="hidden" name="episodeId" value={episodeId} />}
       {inferenceId && (
@@ -182,14 +175,11 @@ function FeedbackForm({
       )}
 
       <div className="flex justify-end">
-        <Button
-          type="submit"
-          disabled={!selectedMetricName || isSubmitting || isInputMissing}
-        >
-          {isSubmitting ? "Submitting..." : "Submit Feedback"}
+        <Button type="submit" disabled={!selectedMetricName || isInputMissing}>
+          Submit Feedback
         </Button>
       </div>
-    </fetcher.Form>
+    </Form>
   );
 }
 
