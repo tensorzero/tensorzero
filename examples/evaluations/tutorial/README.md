@@ -31,8 +31,8 @@ We provide a configuration file (`./config/tensorzero.toml`) that specifies:
 Let's generate a dataset composed of our 100 haikus.
 
 1. Open the UI, navigate to "Datasets", and select "Build Dataset" (`http://localhost:4000/datasets/builder`).
-2. Create a new dataset for the `write_haiku` called `haiku_dataset`.
-3. Select "Datasets" in the sidebar, with "Inference" as the dataset output.
+2. Create a new dataset called `haiku_dataset`.
+   Select your `write_haiku` function, "None" as the metric, and "Inference" as the dataset output.
 
 #### Run an Evaluation &mdash; CLI
 
