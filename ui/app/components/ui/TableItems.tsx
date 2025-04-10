@@ -6,16 +6,17 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "./tooltip";
+import { formatDate } from "~/utils/date";
 
-interface TableItemIdProps extends React.HTMLAttributes<HTMLSpanElement> {
+interface TableItemIdProps {
   id: string;
   link?: string;
 }
 
 const TableItemId = React.forwardRef<HTMLSpanElement, TableItemIdProps>(
-  ({ id, link, ...props }, ref) => {
+  ({ id, link }, ref) => {
     const content = (
-      <span ref={ref} className="font-mono whitespace-nowrap" {...props}>
+      <span ref={ref} className="font-mono whitespace-nowrap">
         {id.length > 5 ? `…${id.slice(-8)}` : id}
       </span>
     );
@@ -48,4 +49,19 @@ const TableItemId = React.forwardRef<HTMLSpanElement, TableItemIdProps>(
 );
 TableItemId.displayName = "TableItemId";
 
-export { TableItemId };
+interface TableItemTimeProps {
+  timestamp: string | Date;
+}
+
+const TableItemTime = React.forwardRef<HTMLSpanElement, TableItemTimeProps>(
+  ({ timestamp }, ref) => {
+    return (
+      <span ref={ref} className="whitespace-nowrap">
+        {formatDate(new Date(timestamp))}
+      </span>
+    );
+  },
+);
+TableItemTime.displayName = "TableItemTime";
+
+export { TableItemId, TableItemTime };

@@ -12,7 +12,7 @@ import type { FeedbackRow } from "~/utils/clickhouse/feedback";
 import { formatDate } from "~/utils/date";
 import { MetricBadges } from "~/components/metric/MetricBadges";
 import { useConfig } from "~/context/config";
-import { TableItemId } from "~/components/ui/TableItems";
+import { TableItemId, TableItemTime } from "~/components/ui/TableItems";
 export default function FeedbackTable({
   feedback,
 }: {
@@ -62,7 +62,9 @@ export default function FeedbackTable({
                     metric={metrics[getMetricName(item)]}
                   />
                 </TableCell>
-                <TableCell>{formatDate(new Date(item.timestamp))}</TableCell>
+                <TableCell>
+                  <TableItemTime timestamp={item.timestamp} />
+                </TableCell>
               </TableRow>
             ))
           )}
