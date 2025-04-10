@@ -59,7 +59,7 @@ FROM base AS build-env
 
 COPY ./ui /app/
 
-COPY --from=minijinja-build-env /minijinja/pkg /app/app/utils/minijinja/pkg
+COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg /app/app/utils/minijinja/pkg
 
 COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 
