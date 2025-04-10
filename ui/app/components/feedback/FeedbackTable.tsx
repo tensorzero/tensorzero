@@ -12,7 +12,7 @@ import type { FeedbackRow } from "~/utils/clickhouse/feedback";
 import { formatDate } from "~/utils/date";
 import { MetricBadges } from "~/components/metric/MetricBadges";
 import { useConfig } from "~/context/config";
-
+import { TableItemId } from "~/components/ui/TableItems";
 export default function FeedbackTable({
   feedback,
 }: {
@@ -45,9 +45,7 @@ export default function FeedbackTable({
             feedback.map((item) => (
               <TableRow key={item.id}>
                 <TableCell className="max-w-[200px]">
-                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap">
-                    {item.id}
-                  </code>
+                  <TableItemId id={item.id} />
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">

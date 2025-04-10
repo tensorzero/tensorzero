@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
 import {
   Table,
@@ -8,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import { TableItemId } from "~/components/ui/TableItems";
 import { formatDate } from "~/utils/date";
 import { FunctionLink } from "~/components/function/FunctionLink";
 import { VariantLink } from "~/components/function/variant/VariantLink";
@@ -42,25 +42,17 @@ export default function InferencesTable({
           ) : (
             inferences.map((inference) => (
               <TableRow key={inference.id} id={inference.id}>
-                <TableCell className="max-w-[200px]">
-                  <Link
-                    to={`/observability/inferences/${inference.id}`}
-                    className="block no-underline"
-                  >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                      {inference.id}
-                    </code>
-                  </Link>
+                <TableCell>
+                  <TableItemId
+                    id={inference.id}
+                    link={`/observability/inferences/${inference.id}`}
+                  />
                 </TableCell>
-                <TableCell className="max-w-[200px]">
-                  <Link
-                    to={`/observability/episodes/${inference.episode_id}`}
-                    className="block no-underline"
-                  >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                      {inference.episode_id}
-                    </code>
-                  </Link>
+                <TableCell>
+                  <TableItemId
+                    id={inference.episode_id}
+                    link={`/observability/episodes/${inference.episode_id}`}
+                  />
                 </TableCell>
                 <TableCell>
                   <FunctionLink functionName={inference.function_name}>
