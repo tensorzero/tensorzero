@@ -1,8 +1,4 @@
-import {
-  FeedbackRequestSchema,
-  TensorZeroClient,
-  type JSONValue,
-} from "./tensorzero";
+import { FeedbackRequestSchema, TensorZeroClient } from "./tensorzero";
 
 if (!process.env.TENSORZERO_GATEWAY_URL) {
   throw new Error("TENSORZERO_GATEWAY_URL environment variable is required");
@@ -34,5 +30,6 @@ export async function addHumanFeedback(formData: FormData) {
     inference_id: inferenceId,
     tags,
   });
-  const feedback = await tensorZeroClient.feedback(feedbackRequest);
+  const response = await tensorZeroClient.feedback(feedbackRequest);
+  return response;
 }

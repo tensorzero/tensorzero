@@ -104,6 +104,12 @@ function FeedbackForm({
 
   const isSubmitting = fetcher.state !== "idle";
 
+  // Calculate if input is missing based on the selected metric type
+  const isInputMissing =
+    (selectedMetricType === "boolean" && booleanValue === null) ||
+    (selectedMetricType === "float" && floatValue.trim() === "") ||
+    (selectedMetricType === "comment" && commentValue.trim() === "");
+
   return (
     <fetcher.Form method="post" className="space-y-4">
       {selectedMetricName && (
@@ -184,7 +190,10 @@ function FeedbackForm({
       )}
 
       <div className="flex justify-end">
-        <Button type="submit" disabled={!selectedMetricName || isSubmitting}>
+        <Button
+          type="submit"
+          disabled={!selectedMetricName || isSubmitting || isInputMissing}
+        >
           {isSubmitting ? "Submitting..." : "Submit Feedback"}
         </Button>
       </div>
