@@ -25,4 +25,11 @@ export default defineConfig({
   build: {
     target: "es2022",
   },
+  server: shouldLoadReactRouter
+    ? // This should fix a bug in React Router that causes the dev server to crash
+      // on the first page load after clearing node_modules. Remove this when the
+      // issue is fixed.
+      // https://github.com/remix-run/react-router/issues/12786#issuecomment-2634033513
+      { warmup: { clientFiles: ["./app/root.tsx"] } }
+    : undefined,
 });

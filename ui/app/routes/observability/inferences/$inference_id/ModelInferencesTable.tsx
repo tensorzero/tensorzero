@@ -6,6 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import { Sheet, SheetContent } from "~/components/ui/sheet";
 import type { ParsedModelInferenceRow } from "~/utils/clickhouse/inference";
@@ -38,11 +39,7 @@ export function ModelInferencesTable({
         </TableHeader>
         <TableBody>
           {modelInferences.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={2} className="text-fg-muted py-4 text-center">
-                No model inferences available.
-              </TableCell>
-            </TableRow>
+            <TableEmptyState message="No model inferences available" />
           ) : (
             modelInferences.map((inference) => (
               <TableRow

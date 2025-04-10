@@ -108,6 +108,28 @@ const TableCaption = React.forwardRef<
 ));
 TableCaption.displayName = "TableCaption";
 
+interface TableEmptyStateProps
+  extends React.TdHTMLAttributes<HTMLTableCellElement> {
+  message?: string;
+}
+
+const TableEmptyState = React.forwardRef<
+  HTMLTableCellElement,
+  TableEmptyStateProps
+>(({ message = "No data found", ...props }, ref) => (
+  <TableRow>
+    <TableCell
+      ref={ref}
+      colSpan={1000}
+      className="text-fg-muted py-10 text-center"
+      {...props}
+    >
+      {message}
+    </TableCell>
+  </TableRow>
+));
+TableEmptyState.displayName = "TableEmptyState";
+
 export {
   Table,
   TableHeader,
@@ -117,4 +139,5 @@ export {
   TableRow,
   TableCell,
   TableCaption,
+  TableEmptyState,
 };

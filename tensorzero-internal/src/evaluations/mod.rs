@@ -21,6 +21,7 @@ use crate::{
     variant::{
         best_of_n_sampling::{BestOfNSamplingConfig, EvaluatorConfig as OnlineEvaluatorConfig},
         chat_completion::ChatCompletionConfig,
+        dicl::DiclConfig,
         mixture_of_n::{FuserConfig, MixtureOfNConfig},
         JsonMode, RetryConfig, VariantConfig,
     },
@@ -328,25 +329,33 @@ impl UninitializedEvaluatorConfig {
                     .into());
                 } else if variants.len() == 1 {
                     // If there is only one variant, it should have weight 1.0
-                    let res = variants.iter_mut().next();
-                    let variant = if let Some((_, VariantConfig::ChatCompletion(variant))) = res {
-                        variant
-                    } else {
+                    let Some((_, variant)) = variants.iter_mut().next() else {
                         return Err(ErrorDetails::Config {
-                            message: format!("Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. Found {nonzero_weights} variants with nonzero weights."),
-                        }
-                        .into());
+                            message: "Failed to grab first variant from variants map. This should never happen, please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
+                        }.into());
                     };
-                    if let Some(weight) = variant.weight {
-                        if weight != 1.0 {
+                    if let Some(weight) = variant.weight() {
+                        if weight == 0.0 {
                             return Err(ErrorDetails::Config {
                                 message: format!("Evaluator `{evaluator_name}` in `[evaluations.{evaluation_name}]` must have exactly 1 variant that is active. You have specified a single inactive variant."),
                             }
                             .into());
                         }
-                    } else {
-                        variant.weight = Some(1.0);
                     }
+                    match variant {
+                        VariantConfig::ChatCompletion(variant) => {
+                            variant.weight = Some(1.0);
+                        }
+                        VariantConfig::BestOfNSampling(variant) => {
+                            variant.weight = Some(1.0);
+                        }
+                        VariantConfig::MixtureOfN(variant) => {
+                            variant.weight = Some(1.0);
+                        }
+                        VariantConfig::Dicl(variant) => {
+                            variant.weight = Some(1.0);
+                        }
+                    };
                 }
                 let user_schema_value: Option<serde_json::Value> = match params.input_format {
                     LLMJudgeInputFormat::Serialized => Some(serde_json::from_str(LLM_JUDGE_USER_SCHEMA_TEXT)
@@ -409,6 +418,8 @@ enum UninitializedLLMJudgeVariantConfig {
     BestOfNSampling(UninitializedLLMJudgeBestOfNVariantConfig),
     #[serde(rename = "experimental_mixture_of_n")]
     MixtureOfNSampling(UninitializedLLMJudgeMixtureOfNVariantConfig),
+    #[serde(rename = "experimental_dynamic_in_context_learning")]
+    Dicl(UninitializedLLMJudgeDiclVariantConfig),
 }
 
 #[derive(Debug, Deserialize)]
@@ -457,6 +468,29 @@ struct UninitializedLLMJudgeMixtureOfNVariantConfig {
     #[serde(default)]
     candidates: Vec<String>,
     fuser: UninitializedLLMJudgeChatCompletionVariantConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct UninitializedLLMJudgeDiclVariantConfig {
+    #[serde(default)]
+    active: Option<bool>,
+    embedding_model: String,
+    k: u32, // k as in k-nearest neighbors
+    model: String,
+    system_instructions: Option<PathBuf>,
+    temperature: Option<f32>,
+    top_p: Option<f32>,
+    presence_penalty: Option<f32>,
+    frequency_penalty: Option<f32>,
+    max_tokens: Option<u32>,
+    seed: Option<u32>,
+    json_mode: Option<JsonMode>,
+    #[serde(default)]
+    extra_body: Option<ExtraBodyConfig>,
+    #[serde(default)]
+    retries: RetryConfig,
+    #[serde(default)]
+    extra_headers: Option<ExtraHeadersConfig>,
 }
 
 fn get_template_path(
@@ -640,6 +674,36 @@ impl UninitializedLLMJudgeVariantConfig {
                     },
                 }))
             }
+            UninitializedLLMJudgeVariantConfig::Dicl(params) => {
+                let dicl_system_instructions = params
+                    .system_instructions
+                    .map(|si| read_system_instructions(si, base_path))
+                    .transpose()?
+                    .map(|si| {
+                        format!(
+                            include_str!("llm_judge_system_instructions.txt"),
+                            system_instructions = si,
+                        )
+                    })
+                    .unwrap_or(crate::variant::dicl::default_system_instructions());
+                Ok(VariantConfig::Dicl(DiclConfig {
+                    weight: get_weight(params.active),
+                    embedding_model: params.embedding_model.into(),
+                    k: params.k,
+                    model: params.model.into(),
+                    system_instructions: dicl_system_instructions,
+                    temperature: params.temperature,
+                    top_p: params.top_p,
+                    presence_penalty: params.presence_penalty,
+                    frequency_penalty: params.frequency_penalty,
+                    max_tokens: params.max_tokens,
+                    seed: params.seed,
+                    json_mode: params.json_mode,
+                    extra_body: params.extra_body,
+                    extra_headers: params.extra_headers,
+                    retries: params.retries,
+                }))
+            }
         }
     }
 }
@@ -664,6 +728,104 @@ fn read_system_instructions<P1: AsRef<Path>, P2: AsRef<Path>>(
         })
     })?;
     Ok(contents)
+}
+
+/// NOTE: this function should not be called.
+/// In the code we already have a conversion from UnintializedLLMJudgeVariantConfig to VariantConfig.
+/// We want to make sure that there is an UninitializedLLMJudgeVariantConfig for each VariantConfig.
+/// This function should complain at compile time if we forget to update it when adding a new variant type.
+#[allow(dead_code)]
+fn check_convert_variant_to_llm_judge_variant(
+    variant: VariantConfig,
+) -> Result<UninitializedLLMJudgeVariantConfig, Error> {
+    match variant {
+        VariantConfig::ChatCompletion(variant) => {
+            Ok(UninitializedLLMJudgeVariantConfig::ChatCompletion(
+                UninitializedLLMJudgeChatCompletionVariantConfig {
+                    active: Some(false),
+                    model: variant.model,
+                    system_instructions: PathBuf::from(""),
+                    temperature: variant.temperature,
+                    top_p: variant.top_p,
+                    max_tokens: variant.max_tokens,
+                    presence_penalty: variant.presence_penalty,
+                    frequency_penalty: variant.frequency_penalty,
+                    seed: variant.seed,
+                    json_mode: JsonMode::Off,
+                    retries: variant.retries,
+                    extra_body: variant.extra_body,
+                    extra_headers: variant.extra_headers,
+                },
+            ))
+        }
+        VariantConfig::BestOfNSampling(variant) => {
+            Ok(UninitializedLLMJudgeVariantConfig::BestOfNSampling(
+                UninitializedLLMJudgeBestOfNVariantConfig {
+                    active: Some(false),
+                    timeout_s: variant.timeout_s,
+                    candidates: variant.candidates,
+                    evaluator: UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: Some(false),
+                        model: variant.evaluator.inner.model,
+                        system_instructions: PathBuf::from(""),
+                        temperature: variant.evaluator.inner.temperature,
+                        top_p: variant.evaluator.inner.top_p,
+                        max_tokens: variant.evaluator.inner.max_tokens,
+                        presence_penalty: variant.evaluator.inner.presence_penalty,
+                        frequency_penalty: variant.evaluator.inner.frequency_penalty,
+                        seed: variant.evaluator.inner.seed,
+                        json_mode: JsonMode::Off,
+                        retries: variant.evaluator.inner.retries,
+                        extra_body: variant.evaluator.inner.extra_body,
+                        extra_headers: variant.evaluator.inner.extra_headers,
+                    },
+                },
+            ))
+        }
+        VariantConfig::MixtureOfN(variant) => {
+            Ok(UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(
+                UninitializedLLMJudgeMixtureOfNVariantConfig {
+                    active: Some(false),
+                    timeout_s: variant.timeout_s,
+                    candidates: variant.candidates,
+                    fuser: UninitializedLLMJudgeChatCompletionVariantConfig {
+                        active: Some(false),
+                        model: variant.fuser.inner.model,
+                        system_instructions: PathBuf::from(""),
+                        temperature: variant.fuser.inner.temperature,
+                        top_p: variant.fuser.inner.top_p,
+                        max_tokens: variant.fuser.inner.max_tokens,
+                        presence_penalty: variant.fuser.inner.presence_penalty,
+                        frequency_penalty: variant.fuser.inner.frequency_penalty,
+                        seed: variant.fuser.inner.seed,
+                        json_mode: JsonMode::Off,
+                        retries: variant.fuser.inner.retries,
+                        extra_body: variant.fuser.inner.extra_body,
+                        extra_headers: variant.fuser.inner.extra_headers,
+                    },
+                },
+            ))
+        }
+        VariantConfig::Dicl(variant) => Ok(UninitializedLLMJudgeVariantConfig::Dicl(
+            UninitializedLLMJudgeDiclVariantConfig {
+                active: Some(false),
+                embedding_model: variant.embedding_model.to_string(),
+                k: variant.k,
+                model: variant.model.to_string(),
+                system_instructions: None,
+                temperature: variant.temperature,
+                top_p: variant.top_p,
+                presence_penalty: variant.presence_penalty,
+                frequency_penalty: variant.frequency_penalty,
+                max_tokens: variant.max_tokens,
+                seed: variant.seed,
+                json_mode: variant.json_mode,
+                extra_body: variant.extra_body,
+                extra_headers: variant.extra_headers,
+                retries: variant.retries,
+            },
+        )),
+    }
 }
 
 #[cfg(test)]

@@ -5,6 +5,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
@@ -27,14 +28,7 @@ export default function DatasetTable({
         </TableHeader>
         <TableBody>
           {counts.length === 0 ? (
-            <TableRow className="hover:bg-bg-primary">
-              <TableCell
-                colSpan={3}
-                className="text-fg-muted px-3 py-8 text-center"
-              >
-                No datasets found.
-              </TableCell>
-            </TableRow>
+            <TableEmptyState message="No datasets found" />
           ) : (
             counts.map((count) => (
               <TableRow key={count.dataset_name} id={count.dataset_name}>

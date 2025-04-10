@@ -225,6 +225,18 @@ system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/sy
 json_mode = "strict"
 temperature = 0.3
 
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.dicl]
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "text-embedding-3-small"
+k = 3
+model = "openai::gpt-4o-mini"
+
+[evaluations.evaluation1.evaluators.llm_judge_bool.variants.dicl_custom_system]
+system_instructions = "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt"
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "text-embedding-3-small"
+k = 3
+model = "openai::gpt-4o-mini"
 
 [evaluations.evaluation1.evaluators.llm_judge_float]
 type = "llm_judge"

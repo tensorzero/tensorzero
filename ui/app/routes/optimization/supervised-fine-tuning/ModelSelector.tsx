@@ -18,7 +18,7 @@ import {
   CommandItem,
   CommandList,
 } from "~/components/ui/command";
-import { cn } from "~/utils/common";
+import clsx from "clsx";
 import { ModelBadge } from "~/components/model/ModelBadge";
 
 export function ModelSelector({
@@ -127,7 +127,7 @@ export function ModelSelector({
                           >
                             <div className="flex items-center">
                               <Check
-                                className={cn(
+                                className={clsx(
                                   "mr-2 h-4 w-4",
                                   field.value?.displayName ===
                                     model.displayName &&

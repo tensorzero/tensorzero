@@ -1692,3 +1692,189 @@ async fn run_evaluations_mixture_of_3() {
     }
     assert_eq!(parsed_output.len(), 6);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn run_evaluations_dicl() {
+    let clickhouse = get_clickhouse().await;
+    write_json_fixture_to_dataset(&PathBuf::from(&format!(
+        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    )))
+    .await;
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let evaluation_run_id = Uuid::now_v7();
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        evaluation_name: "dicl".to_string(),
+        dataset_name: "extract_entities_0.8".to_string(),
+        variant_name: "gpt_4o_mini".to_string(),
+        concurrency: 10,
+        format: OutputFormat::Jsonl,
+    };
+
+    let mut output = Vec::new();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
+    clickhouse_flush_async_insert(&clickhouse).await;
+    let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let mut parsed_output = Vec::new();
+    for line in output_lines {
+        let parsed: EvaluationUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed = match parsed {
+            EvaluationUpdate::Success(evaluation_info) => evaluation_info,
+            EvaluationUpdate::Error(evaluation_error) => {
+                panic!("evaluation error: {}", evaluation_error.message);
+            }
+        };
+        assert!(parsed.evaluator_errors.is_empty());
+        let inference_id = parsed.response.inference_id();
+        let clickhouse_inference = select_json_inference_clickhouse(&clickhouse, inference_id)
+            .await
+            .unwrap();
+        let parsed_response = match parsed.response.clone() {
+            InferenceResponse::Json(json_response) => json_response,
+            InferenceResponse::Chat(..) => panic!("Chat response not supported"),
+        };
+        let clickhouse_input: ResolvedInput =
+            serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
+        // Check the input to the inference is the same as the input to the datapoint
+        assert_eq!(&clickhouse_input, parsed.datapoint.input());
+        let clickhouse_output: JsonInferenceOutput =
+            serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
+        // Check the output to the inference is the same as the output in the response
+        assert_eq!(clickhouse_output, parsed_response.output);
+        // Check the inference is properly tagged
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::evaluation_name"],
+            "dicl"
+        );
+        assert_eq!(
+            clickhouse_inference["tags"]["tensorzero::dataset_name"],
+            "extract_entities_0.8"
+        );
+        // Check boolean feedback was recorded
+        let feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::evaluation_name::dicl::evaluator_name::llm_judge_bool"
+        );
+        assert_eq!(
+            feedback["value"],
+            parsed.evaluations["llm_judge_bool"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+
+        // Check bool feedback was recorded
+        let feedback = select_feedback_by_target_id_clickhouse(
+            &clickhouse,
+            "BooleanMetricFeedback",
+            inference_id,
+            None,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            feedback["metric_name"].as_str().unwrap(),
+            "tensorzero::evaluation_name::dicl::evaluator_name::llm_judge_bool"
+        );
+        assert_eq!(
+            feedback["value"],
+            parsed.evaluations["llm_judge_bool"]
+                .as_ref()
+                .unwrap()
+                .as_bool()
+                .unwrap()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluation_run_id"],
+            evaluation_run_id.to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::datapoint_id"],
+            parsed.datapoint.id().to_string()
+        );
+        assert_eq!(
+            feedback["tags"]["tensorzero::evaluator_name"],
+            "llm_judge_bool"
+        );
+        assert_eq!(feedback["tags"]["tensorzero::evaluation_name"], "dicl");
+        let evaluator_inference_id = Uuid::parse_str(
+            feedback["tags"]["tensorzero::evaluator_inference_id"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let evaluator_inference =
+            select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        assert_eq!(
+            evaluator_inference["tags"]["tensorzero::evaluation_name"],
+            "dicl"
+        );
+        parsed_output.push(parsed);
+
+        // Select Model inferences for the evaluator inference id
+        let model_inferences =
+            select_model_inferences_clickhouse(&clickhouse, evaluator_inference_id)
+                .await
+                .unwrap();
+        for model_inference in &model_inferences {
+            match model_inference["model_name"].as_str().unwrap() {
+                "openai::gpt-4o-mini" => {
+                    let system = model_inference["system"].as_str().unwrap();
+                    assert!(system.starts_with("You are tasked with learning by induction"));
+                }
+                "text-embedding-3-small" => {
+                    assert!(model_inference["system"].is_null());
+                    let messages = model_inference["input_messages"].as_str().unwrap();
+                    // messages should be a json array of objects
+                    assert!(messages.starts_with("[{"));
+                }
+                _ => {
+                    panic!(
+                        "Unknown model name: {}",
+                        model_inference["model_name"].as_str().unwrap()
+                    );
+                }
+            }
+        }
+        assert_eq!(model_inferences.len(), 2);
+    }
+    assert_eq!(parsed_output.len(), 6);
+}
