@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
-use tensorzero::DynamicToolParams;
-use tensorzero_internal::{function::FunctionConfig, tool::ToolCallConfigDatabaseInsert};
+use tensorzero::{CacheParamsOptions, DynamicToolParams};
+use tensorzero_internal::{
+    cache::CacheEnabledMode, function::FunctionConfig, tool::ToolCallConfigDatabaseInsert,
+};
 
 use crate::{Args, OutputFormat};
 
@@ -53,6 +55,17 @@ pub fn setup_logging(args: &Args) -> Result<()> {
             tracing::subscriber::set_global_default(subscriber)
                 .map_err(|e| anyhow!("Failed to initialize tracing: {}", e))
         }
+    }
+}
+
+pub fn get_cache_options(skip_cache_read: bool) -> CacheParamsOptions {
+    CacheParamsOptions {
+        enabled: if skip_cache_read {
+            CacheEnabledMode::WriteOnly
+        } else {
+            CacheEnabledMode::On
+        },
+        max_age_s: None,
     }
 }
 

@@ -5,17 +5,16 @@ use std::{collections::HashMap, path::PathBuf};
 use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use dataset::query_dataset;
-use evaluators::evaluate_inference;
-use helpers::{get_tool_params_args, setup_logging};
+use evaluators::{evaluate_inference, EvaluateInferenceParams};
+use helpers::{get_cache_options, get_tool_params_args, setup_logging};
 use serde::{Deserialize, Serialize};
 use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
 use tensorzero::ClientInput;
 use tensorzero::{
-    input_handling::resolved_input_to_client_input, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceResponse,
+    input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
+    ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
+    InferenceResponse,
 };
-use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::config_parser::MetricConfigOptimize;
 use tensorzero_internal::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_internal::{
@@ -30,11 +29,6 @@ pub mod dataset;
 pub mod evaluators;
 pub mod helpers;
 pub mod stats;
-
-const CACHE_OPTIONS: CacheParamsOptions = CacheParamsOptions {
-    enabled: CacheEnabledMode::On,
-    max_age_s: None,
-};
 
 #[derive(clap::ValueEnum, Clone, Debug, Default, PartialEq)]
 pub enum OutputFormat {
@@ -72,6 +66,9 @@ pub struct Args {
 
     #[arg(short, long, default_value = "human-readable")]
     pub format: OutputFormat,
+
+    #[arg(long, default_value = "false")]
+    pub skip_cache_read: bool,
 }
 
 pub async fn run_evaluation(
@@ -162,20 +159,23 @@ pub async fn run_evaluation(
                     evaluation_name: &evaluation_name,
                     function_config: &function_config,
                     input: &input,
+                    skip_cache_read: args.skip_cache_read,
                 })
                 .await?,
             );
 
             let evaluation_result = evaluate_inference(
-                inference_response.clone(),
-                datapoint.clone(),
-                input,
-                evaluation_config,
-                evaluation_name,
-                client_clone,
-                evaluation_run_id_clone,
-            )
-            .await?;
+                EvaluateInferenceParams {
+                    inference_response: inference_response.clone(),
+                    datapoint: datapoint.clone(),
+                    input,
+                    evaluation_config,
+                    evaluation_name,
+                    tensorzero_client: client_clone,
+                    evaluation_run_id: evaluation_run_id_clone,
+                    skip_cache_read: args.skip_cache_read,
+                })
+                .await?;
 
             Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
                 Arc::into_inner(datapoint).ok_or_else(|| anyhow!("Failed to get datapoint for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
@@ -309,6 +309,7 @@ struct InferDatapointParams<'a> {
     input: &'a ClientInput,
     evaluation_name: &'a str,
     function_config: &'a FunctionConfig,
+    skip_cache_read: bool,
 }
 
 async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceResponse> {
@@ -322,6 +323,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         evaluation_name,
         function_config,
         input,
+        skip_cache_read,
     } = params;
 
     let dynamic_tool_params = match datapoint.tool_call_config() {
@@ -367,7 +369,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         dynamic_tool_params,
         output_schema: output_schema.cloned(),
         credentials: HashMap::new(),
-        cache_options: CACHE_OPTIONS,
+        cache_options: get_cache_options(skip_cache_read),
         dryrun: Some(false),
         episode_id: None,
         model_name: None,
