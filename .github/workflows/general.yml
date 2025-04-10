@@ -395,6 +395,10 @@ jobs:
 
   ui-tests-e2e:
     runs-on: ubuntu-latest
+    # We currently only run this job when we have secrets available, since we need to use an S3 object_store
+    # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
+    # For now, it just runs in the merge queue
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
     permissions:
       # Permission to checkout the repository
       contents: read
