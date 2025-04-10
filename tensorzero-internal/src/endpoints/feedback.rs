@@ -408,7 +408,14 @@ async fn throttled_get_function_name(
             Ok(identifier) => return Ok(identifier),
             Err(err) => {
                 if Instant::now() >= deadline {
+                    // We log here since this means we were not able to find the target_id in the database
+                    // and are timing out.
+                    err.log();
                     return Err(err);
+                } else {
+                    tracing::info!(
+                        "Failed to find function name for target_id: {target_id}. Retrying..."
+                    );
                 }
             }
         }
@@ -457,7 +464,8 @@ async fn get_function_name(
         .trim()
         .to_string();
     if function_name.is_empty() {
-        return Err(Error::new(ErrorDetails::InvalidRequest {
+        // We don't want to log here since this can happen if we send feedback immediately after the target is created.
+        return Err(Error::new_without_logging(ErrorDetails::InvalidRequest {
             message: format!("{identifier_type} ID: {target_id} does not exist"),
         }));
     };
