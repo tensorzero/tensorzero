@@ -162,10 +162,13 @@ function FeedbackForm({
               isEditing={true}
               onOutputChange={setDemonstrationValue}
             />
+
             <input
               type="hidden"
               name="value"
-              value={JSON.stringify(demonstrationValue)}
+              value={JSON.stringify(
+                getDemonstrationValueToSubmit(demonstrationValue),
+              )}
             />
           </>
         ) : (
@@ -268,4 +271,19 @@ function CommentFeedbackInput({ value, onChange }: CommentFeedbackInputProps) {
       />
     </div>
   );
+}
+
+/**
+ * If the type of the demonstration value is JsonInferenceOutput,
+ * we need to submit only demonstrationValue.parsed and not the entire
+ * demonstrationValue object.
+ * For ContentBlockOutput[], we submit the entire object.
+ */
+function getDemonstrationValueToSubmit(
+  demonstrationValue: ContentBlockOutput[] | JsonInferenceOutput,
+) {
+  if (Array.isArray(demonstrationValue)) {
+    return demonstrationValue;
+  }
+  return demonstrationValue.parsed;
 }

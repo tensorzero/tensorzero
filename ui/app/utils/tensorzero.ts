@@ -236,6 +236,7 @@ export const FeedbackRequestSchema = z.object({
   metric_name: z.string(),
   tags: z.record(z.string()).optional(),
   value: JSONValueSchema,
+  internal: z.boolean().optional(),
 });
 export type FeedbackRequest = z.infer<typeof FeedbackRequestSchema>;
 
