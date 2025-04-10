@@ -216,6 +216,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           dataset_counts={dataset_counts}
           onDatasetSelect={handleAddToDataset}
           hasDemonstration={hasDemonstration}
+          inferenceOutput={inference.output}
         />
       </PageHeader>
 

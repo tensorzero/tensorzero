@@ -11,15 +11,21 @@ import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Label } from "~/components/ui/label";
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
+import type { ContentBlockOutput } from "~/utils/clickhouse/common";
+import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
+import Output from "../inference/Output";
+import { Link } from "react-router";
 
 interface HumanFeedbackModalProps {
   isOpen: boolean;
   onClose: () => void;
+  inferenceOutput?: ContentBlockOutput[] | JsonInferenceOutput;
 }
 
 export function HumanFeedbackModal({
   isOpen,
   onClose,
+  inferenceOutput,
 }: HumanFeedbackModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -27,21 +33,37 @@ export function HumanFeedbackModal({
         <DialogHeader>
           <DialogTitle>Add Feedback</DialogTitle>
         </DialogHeader>
-        <FeedbackForm />
+        <FeedbackForm inferenceOutput={inferenceOutput} />
       </DialogContent>
     </Dialog>
   );
 }
 
-function FeedbackForm() {
+function FeedbackForm({
+  inferenceOutput,
+}: {
+  inferenceOutput?: ContentBlockOutput[] | JsonInferenceOutput;
+}) {
   const config = useConfig();
-  const metrics = config.metrics;
+  // If there is no inference output this is likely an episode-level feedback and
+  // we should filter demonstration out of the list of metrics.
+  const metrics =
+    inferenceOutput === undefined
+      ? Object.fromEntries(
+          Object.entries(config.metrics).filter(
+            ([, metric]) => metric.type !== "demonstration",
+          ),
+        )
+      : config.metrics;
   const [selectedMetricName, setSelectedMetricName] = useState<string>("");
   const selectedMetric = metrics[selectedMetricName];
   const selectedMetricType = selectedMetric?.type;
   const [booleanValue, setBooleanValue] = useState<string | null>(null);
   const [floatValue, setFloatValue] = useState<string>("");
   const [commentValue, setCommentValue] = useState<string>("");
+  const [demonstrationValue, setDemonstrationValue] = useState<
+    ContentBlockOutput[] | JsonInferenceOutput | undefined
+  >(inferenceOutput);
 
   return (
     <div>
@@ -63,6 +85,24 @@ function FeedbackForm() {
       {selectedMetric && selectedMetricType === "comment" && (
         <CommentFeedbackInput value={commentValue} onChange={setCommentValue} />
       )}
+      {selectedMetric &&
+        selectedMetricType === "demonstration" &&
+        (demonstrationValue ? (
+          <Output
+            output={demonstrationValue}
+            isEditing={true}
+            onOutputChange={setDemonstrationValue}
+          />
+        ) : (
+          <div className="text-red-500">
+            Initial output missing for demonstration value. This is most likely
+            a bug. Please file a bug report{" "}
+            <Link to="https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports">
+              here
+            </Link>
+            .
+          </div>
+        ))}
     </div>
   );
 }

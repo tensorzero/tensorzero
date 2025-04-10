@@ -5,6 +5,10 @@ import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { useState } from "react";
+import type {
+  ContentBlockOutput,
+  JsonInferenceOutput,
+} from "~/utils/clickhouse/common";
 
 const FF_ENABLE_DATASETS =
   import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
@@ -22,6 +26,7 @@ interface InferenceActionsProps {
   ) => void;
   hasDemonstration: boolean;
   className?: string;
+  inferenceOutput?: ContentBlockOutput[] | JsonInferenceOutput;
 }
 
 export function InferenceActions({
@@ -31,6 +36,7 @@ export function InferenceActions({
   dataset_counts,
   onDatasetSelect,
   hasDemonstration,
+  inferenceOutput,
 }: InferenceActionsProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -52,7 +58,11 @@ export function InferenceActions({
         />
       )}
       {FF_ENABLE_FEEDBACK && <HumanFeedbackButton onClick={handleModalOpen} />}
-      <HumanFeedbackModal isOpen={isModalOpen} onClose={handleModalClose} />
+      <HumanFeedbackModal
+        isOpen={isModalOpen}
+        onClose={handleModalClose}
+        inferenceOutput={inferenceOutput}
+      />
     </ActionBar>
   );
 }
