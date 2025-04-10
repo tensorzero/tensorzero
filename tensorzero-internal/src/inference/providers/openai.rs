@@ -182,7 +182,7 @@ impl WrappedProvider for OpenAIProvider {
         >,
         start_time: Instant,
     ) -> ProviderInferenceResponseStreamInner {
-        stream_openai(event_source, start_time)
+        stream_openai(PROVIDER_TYPE.to_string(), event_source, start_time)
     }
 }
 
@@ -332,6 +332,7 @@ impl InferenceProvider for OpenAIProvider {
             })?;
 
         let stream = stream_openai(
+            PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
         )
@@ -680,6 +681,7 @@ pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource:
 }
 
 pub fn stream_openai(
+    provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
 ) -> ProviderInferenceResponseStreamInner {
@@ -695,7 +697,7 @@ pub fn stream_openai(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                            yield Err(convert_stream_error(provider_type.clone(), e).await);
                         }
                     }
                 }
@@ -713,7 +715,7 @@ pub fn stream_openai(
                                 ),
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
-                                provider_type: PROVIDER_TYPE.to_string(),
+                                provider_type: provider_type.clone(),
                             }));
 
                         let latency = start_time.elapsed();
