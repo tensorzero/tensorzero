@@ -91,17 +91,6 @@ function FeedbackForm({
     ContentBlockOutput[] | JsonInferenceOutput | undefined
   >(inferenceOutput);
 
-  // Close modal on successful submission
-  useEffect(() => {
-    // Check if the fetcher was submitting/loading and is now idle,
-    // and if the action returned a success flag (e.g., { ok: true }).
-    // Adjust `fetcher.data?.ok` based on your action's actual success response.
-    if (fetcher.state === "idle" && fetcher.data?.ok === true) {
-      onClose();
-    }
-    // Depend on state, data, and onClose to ensure effect runs correctly
-  }, [fetcher.state, fetcher.data, onClose]);
-
   const isSubmitting = fetcher.state !== "idle";
 
   // Calculate if input is missing based on the selected metric type

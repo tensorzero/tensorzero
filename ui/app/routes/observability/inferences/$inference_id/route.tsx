@@ -24,7 +24,7 @@ import { addHumanFeedback, tensorZeroClient } from "~/utils/tensorzero.server";
 import { ParameterCard } from "./InferenceParameters";
 import { TagsTable } from "~/components/utils/TagsTable";
 import { ModelInferencesTable } from "./ModelInferencesTable";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useConfig } from "~/context/config";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import { getTotalInferenceUsage } from "~/utils/clickhouse/helpers";
@@ -37,10 +37,13 @@ import {
 } from "~/components/layout/PageLayout";
 import { InferenceActions } from "./InferenceActions";
 import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
+import { Toaster } from "~/components/ui/toaster";
+import { toast, useToast } from "~/hooks/use-toast";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
   const url = new URL(request.url);
+  const newFeedbackId = url.searchParams.get("newFeedbackId");
   const beforeFeedback = url.searchParams.get("beforeFeedback");
   const afterFeedback = url.searchParams.get("afterFeedback");
   const pageSize = Number(url.searchParams.get("pageSize")) || 10;
@@ -84,17 +87,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     feedback_bounds,
     dataset_counts,
     hasDemonstration: demonstration_feedback.length > 0,
+    newFeedbackId,
   };
 }
 
-export async function action({ request }: Route.ActionArgs) {
+export async function action({ request, params }: Route.ActionArgs) {
   const formData = await request.formData();
   const _action = formData.get("_action");
   switch (_action) {
     case "addToDataset":
       return addToDataset(formData);
     case "addFeedback":
-      return addHumanFeedback(formData);
+      const response = await addHumanFeedback(formData);
+      const url = new URL(request.url);
+      url.searchParams.set("newFeedbackId", response.feedback_id);
+      return redirect(url.toString());
   }
 }
 
@@ -131,6 +138,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     feedback_bounds,
     dataset_counts,
     hasDemonstration,
+    newFeedbackId,
   } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -203,6 +211,16 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     formData.append("_action", "addToDataset");
     addToDatasetFetcher.submit(formData, { method: "post", action: "." });
   };
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (newFeedbackId) {
+      toast({
+        title: "Feedback Added",
+        description: `${newFeedbackId}`,
+      });
+    }
+  }, [newFeedbackId, toast]);
 
   return (
     <PageLayout>
@@ -306,6 +324,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           source="inference"
         />
       )}
+      <Toaster />
     </PageLayout>
   );
 }
