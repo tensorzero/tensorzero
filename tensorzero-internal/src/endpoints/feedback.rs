@@ -412,6 +412,10 @@ async fn throttled_get_function_name(
                     // and are timing out.
                     err.log();
                     return Err(err);
+                } else {
+                    tracing::info!(
+                        "Failed to find function name for target_id: {target_id}. Retrying..."
+                    );
                 }
             }
         }
