@@ -2885,3 +2885,34 @@ model = "openai::gpt-4o-mini"
 system_instructions = "../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
 json_mode = "strict"
 temperature = 0.3
+
+[evaluations.dicl]
+type = "static"
+function_name = "extract_entities"
+
+[evaluations.dicl.evaluators.llm_judge_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "min"
+
+[evaluations.dicl.evaluators.llm_judge_bool.variants.dicl]
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "text-embedding-3-small"
+k = 3
+model = "openai::gpt-4o-mini"
+
+[evaluations.dicl_custom_system]
+type = "static"
+function_name = "extract_entities"
+
+[evaluations.dicl_custom_system.evaluators.llm_judge_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "min"
+
+[evaluations.dicl_custom_system.evaluators.llm_judge_bool.variants.dicl_custom_system]
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "text-embedding-3-small"
+k = 3
+model = "openai::gpt-4o-mini"
+system_instructions = "../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
