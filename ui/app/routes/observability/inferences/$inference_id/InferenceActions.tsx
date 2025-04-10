@@ -2,9 +2,12 @@ import { ActionBar } from "~/components/layout/ActionBar";
 import { TryWithVariantButton } from "~/components/inference/TryWithVariantButton";
 import { AddToDatasetButton } from "./AddToDatasetButton";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
+import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 
 const FF_ENABLE_DATASETS =
   import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
+const FF_ENABLE_FEEDBACK =
+  import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK === "1";
 
 interface InferenceActionsProps {
   variants: string[];
@@ -41,6 +44,7 @@ export function InferenceActions({
           hasDemonstration={hasDemonstration}
         />
       )}
+      {FF_ENABLE_FEEDBACK && <HumanFeedbackButton onClick={() => {}} />}
     </ActionBar>
   );
 }
