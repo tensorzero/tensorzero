@@ -20,6 +20,7 @@ import {
   SectionsGroup,
   SectionHeader,
 } from "~/components/layout/PageLayout";
+import { EpisodeActions } from "./EpisodeActions";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { episode_id } = params;
@@ -146,7 +147,9 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader label="Episode" name={episode_id} />
+      <PageHeader label="Episode" name={episode_id}>
+        <EpisodeActions />
+      </PageHeader>
 
       <SectionsGroup>
         <SectionLayout>
