@@ -2,7 +2,7 @@ use axum::extract::Request;
 use axum::http::HeaderValue;
 use axum::middleware::Next;
 use axum::response::Response;
-use axum::routing::{delete, get, post, put};
+use axum::routing::{get, post, put};
 use axum::Router;
 use clap::Parser;
 use mimalloc::MiMalloc;
@@ -161,16 +161,12 @@ async fn main() {
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
         .route(
-            "/datasets/{dataset}/datapoints",
+            "/internal/datasets/{dataset}/datapoints",
             post(endpoints::datasets::create_datapoint_handler),
         )
         .route(
-            "/datasets/{dataset}/datapoints/{id}",
+            "/internal/datasets/{dataset}/datapoints/{id}",
             put(endpoints::datasets::update_datapoint_handler),
-        )
-        .route(
-            "/datasets/{dataset}/function/{function}/kind/{kind}/datapoint/{id}",
-            delete(endpoints::datasets::delete_datapoint_handler),
         )
         .route(
             "/internal/object_storage",

@@ -444,7 +444,7 @@ export class TensorZeroClient {
       throw new Error("Inference ID must be a non-empty string");
     }
 
-    const url = `${this.baseUrl}/datasets/${encodeURIComponent(datasetName)}/datapoints`;
+    const url = `${this.baseUrl}/internal/datasets/${encodeURIComponent(datasetName)}/datapoints`;
 
     const request = {
       inference_id: inferenceId,
@@ -501,7 +501,7 @@ export class TensorZeroClient {
       throw new Error(`Invalid datapoint: ${validationResult.error.message}`);
     }
 
-    const url = `${this.baseUrl}/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapointId)}`;
+    const url = `${this.baseUrl}/internal/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapointId)}`;
 
     const response = await fetch(url, {
       method: "PUT",

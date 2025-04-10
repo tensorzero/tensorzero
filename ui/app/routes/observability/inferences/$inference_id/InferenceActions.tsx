@@ -26,10 +26,9 @@ export function InferenceActions({
   dataset_counts,
   onDatasetSelect,
   hasDemonstration,
-  className,
 }: InferenceActionsProps) {
   return (
-    <ActionBar className={className}>
+    <ActionBar>
       <TryWithVariantButton
         variants={variants}
         onVariantSelect={onVariantSelect}
