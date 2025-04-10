@@ -11,10 +11,6 @@ on:
 
 env:
   DOCKERHUB_USER: tensorzero
-  # Set the container name to a '-dev' name when this workflow is invoked by a push event
-  # Otherwise, use the unsuffixed name (which will be invoked by a release or manual dispatch)
-  UI_CONTAINER: ${{ github.event_name == 'push' && 'ui-dev' || 'ui' }}
-  GATEWAY_CONTAINER: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
 
 jobs:
   build:
@@ -28,8 +24,11 @@ jobs:
           - runner: ubuntu-24.04-arm
             target: linux/arm64
         container:
-          - name: ${{ env.UI_CONTAINER }}
-          - name: ${{ env.GATEWAY_CONTAINER }}
+          # Set the container name to a '-dev' name when this workflow is invoked by a push event
+          # Otherwise, use the unsuffixed name (which will be invoked by a release or manual dispatch)
+          # Unfortunately, we can't use 'env' in 'strategy.matrix'
+          - name: ${{ github.event_name == 'push' && 'ui-dev' || 'ui' }}
+          - name: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
     permissions:
       packages: write
       contents: read
@@ -90,8 +89,8 @@ jobs:
     strategy:
       matrix:
         container:
-          - name: ${{ env.UI_CONTAINER }}
-          - name: ${{ env.GATEWAY_CONTAINER }}
+          - name: ${{ github.event_name == 'push' && 'ui-dev' || 'ui' }}
+          - name: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
     runs-on: ubuntu-latest
     needs:
       - build
