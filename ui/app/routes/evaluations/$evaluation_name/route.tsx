@@ -5,7 +5,6 @@ import {
   getEvaluationResults,
   getEvaluationRunInfos,
   countDatapointsForEvaluation,
-  getMostRecentEvaluationInferenceDate,
 } from "~/utils/clickhouse/evaluations.server";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
 import { EvaluationTable } from "./EvaluationTable";
@@ -58,9 +57,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     function_name,
   );
 
-  const mostRecentEvaluationInferenceDatePromise =
-    getMostRecentEvaluationInferenceDate(selected_evaluation_run_ids_array);
-
   // Create placeholder promises for results and statistics that will be used conditionally
   let resultsPromise;
   if (selected_evaluation_run_ids_array.length > 0) {
@@ -105,13 +101,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     evaluation_results,
     evaluation_statistics,
     total_datapoints,
-    mostRecentEvaluationInferenceDates,
   ] = await Promise.all([
     evaluationRunInfosPromise,
     resultsPromise,
     statisticsPromise,
     total_datapoints_promise,
-    mostRecentEvaluationInferenceDatePromise,
   ]);
 
   const any_evaluation_is_running = Object.values(
@@ -161,7 +155,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     pageSize,
     total_datapoints,
     evaluator_names,
-    mostRecentEvaluationInferenceDates,
     any_evaluation_is_running,
     errors,
   };
@@ -178,7 +171,6 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     pageSize,
     total_datapoints,
     evaluator_names,
-    mostRecentEvaluationInferenceDates,
     any_evaluation_is_running,
     errors,
   } = loaderData;
@@ -218,7 +210,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             </>
           )}
           <div className="flex items-center">
-            <SectionHeader heading="Results" className="mr-4" />
+            <SectionHeader heading="Results" />
             <AutoRefreshIndicator isActive={any_evaluation_is_running} />
           </div>
           <EvaluationTable
@@ -227,9 +219,6 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             evaluation_results={evaluation_results}
             evaluation_statistics={evaluation_statistics}
             evaluator_names={evaluator_names}
-            mostRecentEvaluationInferenceDates={
-              mostRecentEvaluationInferenceDates
-            }
           />
           <PageButtons
             onPreviousPage={handlePreviousPage}

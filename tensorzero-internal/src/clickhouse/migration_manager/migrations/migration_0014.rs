@@ -79,10 +79,10 @@ impl Migration for Migration0014<'_> {
 
         // First, drop the tables if they were created in 0012
         let query = "DROP TABLE IF EXISTS ChatInferenceDataset";
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query.to_string(), None).await?;
 
         let query = "DROP TABLE IF EXISTS JsonInferenceDataset";
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query.to_string(), None).await?;
 
         // Create the `ChatInferenceDataset` table
         let query = r#"
@@ -107,7 +107,7 @@ impl Migration for Migration0014<'_> {
             ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query.to_string(), None).await?;
 
         // Create the `JsonInferenceDataset` table
         let query = r#"
@@ -127,7 +127,7 @@ impl Migration for Migration0014<'_> {
             ) ENGINE = ReplacingMergeTree(updated_at, is_deleted)
             ORDER BY (dataset_name, function_name, id)
         "#;
-        let _ = self.clickhouse.run_query(query.to_string(), None).await?;
+        let _ = self.clickhouse.run_query_synchronous(query.to_string(), None).await?;
 
         Ok(())
     }

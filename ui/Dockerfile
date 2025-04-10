@@ -38,17 +38,17 @@ RUN wasm-pack build --features console_error_panic_hook
 
 FROM rust:latest AS evaluations-build-env
 
+RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
+
 COPY . /tensorzero
 
 WORKDIR /tensorzero
-
-RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
 
 ARG CARGO_BUILD_FLAGS=""
 
 RUN --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/registry \
     --mount=type=cache,id=tensorzero-evaluations-release,sharing=shared,target=/usr/local/cargo/git \
-    --mount=type=cache,id=tensorzero-evaluations-release,sharing=locked,target=/src/target \
+    --mount=type=cache,id=tensorzero-evaluations-release,sharing=locked,target=/tensorzero/target \
     cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
     cp -r /tensorzero/target/release /release
 
@@ -64,6 +64,8 @@ COPY --from=minijinja-build-env /minijinja/pkg /app/app/utils/minijinja/pkg
 COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 
 WORKDIR /app
+
+ENV VITE_TENSORZERO_UI_FF_ENABLE_DATASETS=1
 
 RUN pnpm run build
 

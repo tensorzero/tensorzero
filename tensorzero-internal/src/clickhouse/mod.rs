@@ -193,7 +193,11 @@ impl ClickHouseConnectionInfo {
         }
     }
 
-    pub async fn run_query(
+    /// Runs a query with the given parameters, waiting for mutations to complete
+    /// using `mutations_sync=2` and `alter_sync=2`.
+    /// This ensures that we can run `ALTER TABLE ADD COLUMN` in a migration
+    /// and have the column available once the query completes.
+    pub async fn run_query_synchronous(
         &self,
         query: String,
         parameters: Option<&HashMap<&str, &str>>,
@@ -216,6 +220,12 @@ impl ClickHouseConnectionInfo {
                             .append_pair(&param_key, value);
                     }
                 }
+                database_url
+                    .query_pairs_mut()
+                    .append_pair("mutations_sync", "2");
+                database_url
+                    .query_pairs_mut()
+                    .append_pair("alter_sync", "2");
                 let response = client
                     .post(database_url)
                     .body(query)

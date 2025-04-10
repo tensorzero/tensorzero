@@ -8,9 +8,19 @@ import {
 export const EvaluationRunInfoSchema = z.object({
   evaluation_run_id: z.string(),
   variant_name: z.string(),
+  most_recent_inference_date: z.string().datetime(),
 });
 
 export type EvaluationRunInfo = z.infer<typeof EvaluationRunInfoSchema>;
+
+export const EvaluationRunSearchResultSchema = z.object({
+  evaluation_run_id: z.string(),
+  variant_name: z.string(),
+});
+
+export type EvaluationRunSearchResult = z.infer<
+  typeof EvaluationRunSearchResultSchema
+>;
 
 export const EvaluationResultSchema = z.object({
   datapoint_id: z.string().uuid(),

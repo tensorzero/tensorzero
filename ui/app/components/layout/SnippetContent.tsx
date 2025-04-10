@@ -1,23 +1,13 @@
 import { Badge } from "~/components/ui/badge";
-import { cn } from "~/utils/common";
 
 // Empty message component
 interface EmptyMessageProps {
   message?: string;
-  className?: string;
 }
 
-export function EmptyMessage({
-  message = "No content defined",
-  className,
-}: EmptyMessageProps) {
+function EmptyMessage({ message = "No content defined" }: EmptyMessageProps) {
   return (
-    <div
-      className={cn(
-        "text-fg-muted flex items-center justify-center py-16 text-sm",
-        className,
-      )}
-    >
+    <div className="text-fg-muted flex items-center justify-center py-16 text-sm">
       {message}
     </div>
   );
@@ -26,18 +16,13 @@ export function EmptyMessage({
 // Label component
 interface LabelProps {
   text?: string;
-  className?: string;
 }
 
-export function Label({ text, className }: LabelProps) {
+function Label({ text }: LabelProps) {
   if (!text) return null;
 
   return (
-    <Badge
-      className={cn("bg-bg-muted text-fg-primary mx-4 mt-4 mb-0", className)}
-    >
-      {text}
-    </Badge>
+    <Badge className="bg-bg-muted text-fg-primary mx-4 mt-4 mb-0">{text}</Badge>
   );
 }
 
@@ -47,7 +32,6 @@ interface CodeMessageProps {
   content?: string;
   showLineNumbers?: boolean;
   emptyMessage?: string;
-  className?: string;
 }
 
 export function CodeMessage({
@@ -55,7 +39,6 @@ export function CodeMessage({
   content,
   showLineNumbers = false,
   emptyMessage,
-  className,
 }: CodeMessageProps) {
   if (!content) {
     return <EmptyMessage message={emptyMessage} />;
@@ -65,7 +48,7 @@ export function CodeMessage({
   const lineCount = content ? content.split("\n").length : 0;
 
   return (
-    <div className={cn("relative w-full", className)}>
+    <div className="relative w-full">
       <Label text={label} />
 
       <div className="bg-bg-primary w-full overflow-hidden rounded-lg">
@@ -99,21 +82,19 @@ interface TextMessageProps {
   label?: string;
   content?: string;
   emptyMessage?: string;
-  className?: string;
 }
 
 export function TextMessage({
   label,
   content,
   emptyMessage,
-  className,
 }: TextMessageProps) {
   if (!content) {
     return <EmptyMessage message={emptyMessage} />;
   }
 
   return (
-    <div className={cn("relative w-full", className)}>
+    <div className="relative w-full">
       <Label text={label} />
 
       <div className="bg-bg-primary w-full overflow-hidden rounded-lg">

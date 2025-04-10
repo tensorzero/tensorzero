@@ -5,9 +5,9 @@ import {
   getEvaluationResults,
   getEvaluationRunInfo,
   getEvaluationRunInfos,
+  getEvaluationRunInfosForDatapoint,
   getEvaluationsForDatapoint,
   getEvaluationStatistics,
-  getMostRecentEvaluationInferenceDate,
   searchEvaluationRuns,
 } from "./evaluations.server";
 import type { ChatEvaluationResultWithVariant } from "./evaluations";
@@ -25,6 +25,7 @@ describe("getEvaluationRunInfos", () => {
     expect(runInfos).toMatchObject([
       {
         evaluation_run_id: "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
+        most_recent_inference_date: "2025-03-23T21:56:17Z",
         variant_name: "llama_8b_initial_prompt",
       },
       {
@@ -465,55 +466,6 @@ describe("getEvaluationRunInfo", () => {
   });
 });
 
-describe("getmostRecentEvaluationInferenceDate", () => {
-  test("should return correct last inference timestamp", async () => {
-    const timestamps = await getMostRecentEvaluationInferenceDate([
-      "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
-    ]);
-    expect(timestamps).toEqual(
-      new Map([
-        [
-          "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
-          new Date("2025-03-23T21:56:27.000Z"),
-        ],
-      ]),
-    );
-  });
-
-  test("should return run timestamp if no inference id is found", async () => {
-    const timestamps = await getMostRecentEvaluationInferenceDate([
-      "0195c501-8e6b-76f2-aa2c-ffffffffffff",
-    ]);
-    expect(timestamps).toEqual(
-      new Map([
-        [
-          "0195c501-8e6b-76f2-aa2c-ffffffffffff",
-          new Date("2025-03-23T21:56:08.427Z"),
-        ],
-      ]),
-    );
-  });
-
-  test("handles multiple evaluation run ids", async () => {
-    const timestamps = await getMostRecentEvaluationInferenceDate([
-      "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
-      "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
-    ]);
-    expect(timestamps).toEqual(
-      new Map([
-        [
-          "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
-          new Date("2025-03-23T21:56:27.000Z"),
-        ],
-        [
-          "0195aef8-36bf-7c02-b8a2-40d78049a4a0",
-          new Date("2025-03-19T15:14:19.000Z"),
-        ],
-      ]),
-    );
-  });
-});
-
 describe("getEvaluationsForDatapoint", () => {
   test("should return empty array for nonexistent datapoint", async () => {
     const evaluations = await getEvaluationsForDatapoint(
@@ -623,5 +575,46 @@ describe("getEvaluationsForDatapoint", () => {
       "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match",
     );
     expect(second_evaluation.metric_value).toBeDefined();
+  });
+});
+
+describe("getEvaluationRunInfosForDatapoint", () => {
+  test("should return correct evaluation run info for ragged json datapoint", async () => {
+    const evaluationRunInfos = await getEvaluationRunInfosForDatapoint(
+      "0195c4ff-bc90-7bf1-8b99-3ebcf9e2a6f0",
+      "extract_entities",
+    );
+    expect(evaluationRunInfos.length).toBe(2);
+
+    // Check that the evaluation run ids are correct
+    const expected1 = {
+      evaluation_run_id: "0195f845-8f85-7822-b904-10630698f99c",
+      most_recent_inference_date: "2025-04-02T20:51:03Z",
+      variant_name: "gpt4o_mini_initial_prompt",
+    };
+    const expected2 = {
+      evaluation_run_id: "0195c501-8e6b-76f2-aa2c-d7d379fe22a5",
+      most_recent_inference_date: "2025-03-23T21:56:10Z",
+      variant_name: "llama_8b_initial_prompt",
+    };
+    expect(evaluationRunInfos).toHaveLength(2); // Ensure exactly two items
+    expect(evaluationRunInfos).toEqual(
+      expect.arrayContaining([expected1, expected2]),
+    );
+  });
+
+  test("should return correct evaluation run info for ragged haiku datapoint", async () => {
+    const evaluationRunInfos = await getEvaluationRunInfosForDatapoint(
+      "0195c497-03c2-7523-aa83-9caf73dd47d5",
+      "write_haiku",
+    );
+
+    const expected = {
+      evaluation_run_id: "0195c498-1cbe-7ac0-b5b2-5856741f5890",
+      variant_name: "better_prompt_haiku_3_5",
+      most_recent_inference_date: "2025-03-23T20:01:25Z",
+    };
+    expect(evaluationRunInfos).toHaveLength(1); // Ensure exactly one item
+    expect(evaluationRunInfos).toEqual(expect.arrayContaining([expected]));
   });
 });

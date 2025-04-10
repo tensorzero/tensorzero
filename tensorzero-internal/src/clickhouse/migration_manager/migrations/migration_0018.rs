@@ -53,14 +53,14 @@ impl Migration for Migration0018<'_> {
 
     async fn apply(&self) -> Result<(), Error> {
         self.clickhouse
-            .run_query(
+            .run_query_synchronous(
                 "ALTER TABLE ModelInference ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))".to_string(),
                 None,
             )
             .await?;
 
         self.clickhouse
-            .run_query(
+            .run_query_synchronous(
                 "ALTER TABLE ModelInferenceCache ADD COLUMN IF NOT EXISTS finish_reason Nullable(Enum8('stop', 'length', 'tool_call', 'content_filter', 'unknown'))".to_string(),
                 None,
             )
