@@ -4,6 +4,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
+import { useConfig } from "~/context/config";
+import { MetricSelector } from "../metric/MetricSelector";
+import { useState } from "react";
+
 interface HumanFeedbackModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -19,8 +23,25 @@ export function HumanFeedbackModal({
         <DialogHeader>
           <DialogTitle>Add Feedback</DialogTitle>
         </DialogHeader>
-        <div className="mt-4 max-h-[70vh] overflow-y-auto">Sup bb</div>
+        <FeedbackForm />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function FeedbackForm() {
+  const config = useConfig();
+  const [selectedMetric, setSelectedMetric] = useState<string>("");
+
+  const metrics = config.metrics;
+
+  return (
+    <div>
+      <MetricSelector
+        metrics={metrics}
+        selectedMetric={selectedMetric}
+        onMetricChange={setSelectedMetric}
+      />
+    </div>
   );
 }
