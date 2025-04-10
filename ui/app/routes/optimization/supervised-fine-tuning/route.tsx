@@ -22,10 +22,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { SFTFormValuesSchema, type SFTFormValues } from "./types";
 import { launch_sft_job } from "~/utils/supervised_fine_tuning/client";
-
-const FF_ENABLE_PYTHON = process.env.TENSORZERO_UI_FF_ENABLE_PYTHON === "1";
-
-console.log("FF_ENABLE_PYTHON: " + FF_ENABLE_PYTHON);
+import { FF_ENABLE_PYTHON } from "./featureflag.server";
 
 export const meta: MetaFunction = () => {
   return [
