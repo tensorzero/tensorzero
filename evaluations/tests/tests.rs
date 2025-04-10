@@ -8,6 +8,7 @@ use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEva
 use evaluations::ThrottledTensorZeroClient;
 use serde_json::json;
 use tensorzero::input_handling::resolved_input_to_client_input;
+use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::clickhouse::test_helpers::select_model_inferences_clickhouse;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
@@ -62,7 +63,7 @@ async fn run_evaluations_json() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -230,7 +231,7 @@ async fn run_exact_match_evaluation_chat() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -346,7 +347,7 @@ async fn run_llm_judge_evaluation_chat() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -492,7 +493,7 @@ async fn run_image_evaluation() {
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        skip_cache_read: true, // We don't want to cache this one since it occasionally fails
+        inference_cache: CacheEnabledMode::WriteOnly,
     };
 
     let mut output = Vec::new();
@@ -701,7 +702,7 @@ async fn check_invalid_image_evaluation() {
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -796,7 +797,7 @@ async fn run_llm_judge_evaluation_chat_human_readable() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::HumanReadable,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -833,7 +834,7 @@ async fn run_llm_judge_evaluation_json_human_readable() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::HumanReadable,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -885,7 +886,7 @@ async fn test_parse_args() {
     assert_eq!(args.concurrency, 1);
     assert_eq!(args.gateway_url, None);
     assert_eq!(args.format, OutputFormat::HumanReadable);
-    assert!(!args.skip_cache_read);
+    assert_eq!(args.inference_cache, CacheEnabledMode::On);
 
     // Test all arguments
     let args = Args::try_parse_from([
@@ -904,7 +905,8 @@ async fn test_parse_args() {
         "10",
         "--format",
         "jsonl",
-        "--skip-cache-read",
+        "--inference-cache",
+        "write-only",
     ])
     .unwrap();
     assert_eq!(args.evaluation_name, "my-evaluation");
@@ -917,7 +919,7 @@ async fn test_parse_args() {
     );
     assert_eq!(args.concurrency, 10);
     assert_eq!(args.format, OutputFormat::Jsonl);
-    assert!(args.skip_cache_read);
+    assert_eq!(args.inference_cache, CacheEnabledMode::WriteOnly);
     // Test invalid URL
     let args = Args::try_parse_from([
         "test",
@@ -982,7 +984,7 @@ async fn run_evaluations_errors() {
         variant_name: "dummy_error".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -1084,7 +1086,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "happy_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     })
     .await
     .unwrap()
@@ -1100,7 +1102,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "sad_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     })
     .await
     .unwrap()
@@ -1116,7 +1118,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "zero",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     })
     .await
     .unwrap()
@@ -1132,7 +1134,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "one",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     })
     .await
     .unwrap()
@@ -1171,7 +1173,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         evaluator_name: "happy_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     })
     .await
     .unwrap();
@@ -1256,7 +1258,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "happy_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     })
     .await
     .unwrap()
@@ -1272,7 +1274,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "sad_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     })
     .await
     .unwrap()
@@ -1288,7 +1290,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "zero",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     })
     .await
     .unwrap()
@@ -1304,7 +1306,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "one",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     })
     .await
     .unwrap()
@@ -1343,7 +1345,7 @@ async fn test_run_llm_judge_evaluator_json() {
         evaluator_name: "happy_bool",
         evaluation_run_id: Uuid::now_v7(),
         input: &input,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     })
     .await
     .unwrap();
@@ -1371,7 +1373,7 @@ async fn run_evaluations_best_of_3() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -1552,7 +1554,7 @@ async fn run_evaluations_mixture_of_3() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
@@ -1736,7 +1738,7 @@ async fn run_evaluations_dicl() {
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
-        skip_cache_read: false,
+        inference_cache: CacheEnabledMode::On,
     };
 
     let mut output = Vec::new();
