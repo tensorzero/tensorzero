@@ -1566,7 +1566,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "0.1.0"
+version = "2025.4.2"
 dependencies = [
  "axum",
  "clap",
@@ -2407,7 +2407,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-bindings"
-version = "0.1.0"
+version = "2025.4.2"
 dependencies = [
  "console_error_panic_hook",
  "minijinja",
@@ -2446,7 +2446,7 @@ dependencies = [
 
 [[package]]
 name = "mock-inference-provider"
-version = "0.1.0"
+version = "2025.4.2"
 dependencies = [
  "async-stream",
  "axum",

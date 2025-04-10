@@ -1,6 +1,6 @@
 [package]
 name = "minijinja-bindings"
-version = "0.1.0"
+version = "2025.4.2"
 edition = "2021"
 
 [lib]
