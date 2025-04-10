@@ -1,4 +1,4 @@
-# This workflow builds and pushes the gateway and ui docker images to Docker Hub
+# This workflow builds and pushes the gateway, ui, and evaluations docker images to Docker Hub
 # when we tag a release.
 name: Publish docker images
 
@@ -11,6 +11,7 @@ on:
 
 env:
   DOCKERHUB_USER: tensorzero
+  EVALUATIONS_CONTAINER: ${{ github.event_name == 'push' && 'evaluations-dev' || 'evaluations' }}
 
 jobs:
   build:
@@ -26,6 +27,7 @@ jobs:
         container:
           - name: ui
           - name: gateway
+          - name: ${{ env.EVALUATIONS_CONTAINER }}
     permissions:
       packages: write
       contents: read
@@ -88,6 +90,7 @@ jobs:
         container:
           - name: ui
           - name: gateway
+          - name: ${{ env.EVALUATIONS_CONTAINER }}
     runs-on: ubuntu-latest
     needs:
       - build
