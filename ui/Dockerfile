@@ -65,6 +65,8 @@ COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 
 WORKDIR /app
 
+ENV VITE_TENSORZERO_UI_FF_ENABLE_DATASETS=1
+
 RUN pnpm run build
 
 # ========== ui ==========

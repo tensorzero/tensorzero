@@ -17,7 +17,6 @@ interface DatapointActionsProps {
   isEditing: boolean;
   onReset: () => void;
   showTryWithVariant: boolean;
-  className?: string;
 }
 
 export function DatapointActions({
@@ -32,14 +31,13 @@ export function DatapointActions({
   isEditing,
   onReset,
   showTryWithVariant,
-  className,
 }: DatapointActionsProps) {
   const handleCancel = () => {
     onReset();
     toggleEditing();
   };
   return (
-    <ActionBar className={className}>
+    <ActionBar>
       {showTryWithVariant && (
         <TryWithVariantButton
           variants={variants}
