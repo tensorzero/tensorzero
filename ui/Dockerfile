@@ -28,9 +28,9 @@ RUN pnpm install --frozen-lockfile --prod
 
 FROM rust:latest AS minijinja-build-env
 
-COPY ./ui/app/utils/minijinja /minijinja/
+COPY . /build
 
-WORKDIR /minijinja
+WORKDIR /build/ui/app/utils/minijinja
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 RUN wasm-pack build --features console_error_panic_hook
 
