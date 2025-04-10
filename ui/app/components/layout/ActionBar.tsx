@@ -1,4 +1,3 @@
-import { cn } from "~/utils/common";
 import { type ReactNode } from "react";
 
 interface ActionBarProps {
@@ -6,6 +5,6 @@ interface ActionBarProps {
   className?: string;
 }
 
-export function ActionBar({ children, className }: ActionBarProps) {
-  return <div className={cn("flex gap-2", className)}>{children}</div>;
+export function ActionBar({ children }: ActionBarProps) {
+  return <div className="flex gap-2">{children}</div>;
 }
