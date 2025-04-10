@@ -371,6 +371,32 @@ _More coming soon..._
   </tr>
 </table>
 
+### 📊 LLM Evaluations
+
+> **Compare prompts, models, inference strategies, and more using TensorZero Evaluations &mdash; with support for heuristics and LLM judges.**
+
+<table>
+  <tr></tr> <!-- flip highlight order -->
+  <tr>
+    <td width="50%" align="center" valign="middle"><b>Evaluation » UI</b></td>
+    <td width="50%" align="center" valign="middle"><b>Evaluation » CLI</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/2cc3cc9a-f33f-4e94-b8de-07522326f80a"></td>
+    <td width="50%" align="center" valign="middle">
+
+      ```bash
+      docker compose run --rm evaluations \
+        --evaluation-name extract_data \
+        --dataset-name hard_test_cases \
+        --variant-name gpt_4o \
+        --concurrency 5
+      ```
+
+    </td>
+  </tr>
+</table>
+
 ## Demo
 
 > **Watch LLMs get better at data extraction in real-time with TensorZero!**
