@@ -10,7 +10,7 @@ use aws_types::SdkConfig;
 use reqwest::StatusCode;
 
 use crate::{
-    error::{Error, ErrorDetails},
+    error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{extra_body::FullExtraBodyConfig, ModelInferenceRequest},
     model::{ModelProvider, ModelProviderRequestInfo},
 };
@@ -81,7 +81,10 @@ impl Intercept for TensorZeroInterceptor {
         })?;
         let mut body_json: serde_json::Value = serde_json::from_slice(bytes).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to deserialize AWS request body: {e}"),
+                message: format!(
+                    "Failed to deserialize AWS request body: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let headers = inject_extra_request_data(
@@ -92,7 +95,10 @@ impl Intercept for TensorZeroInterceptor {
         )?;
         let raw_request = serde_json::to_string(&body_json).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize AWS request body: {e}"),
+                message: format!(
+                    "Failed to serialize AWS request body: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         // AWS inexplicably sets this header before calling this interceptor, so we need to update
