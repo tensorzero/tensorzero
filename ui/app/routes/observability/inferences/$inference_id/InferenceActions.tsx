@@ -3,6 +3,8 @@ import { TryWithVariantButton } from "~/components/inference/TryWithVariantButto
 import { AddToDatasetButton } from "./AddToDatasetButton";
 import type { DatasetCountInfo } from "~/utils/clickhouse/datasets";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
+import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
+import { useState } from "react";
 
 const FF_ENABLE_DATASETS =
   import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_DATASETS === "1";
@@ -30,6 +32,11 @@ export function InferenceActions({
   onDatasetSelect,
   hasDemonstration,
 }: InferenceActionsProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleModalOpen = () => setIsModalOpen(true);
+  const handleModalClose = () => setIsModalOpen(false);
+
   return (
     <ActionBar>
       <TryWithVariantButton
@@ -44,7 +51,8 @@ export function InferenceActions({
           hasDemonstration={hasDemonstration}
         />
       )}
-      {FF_ENABLE_FEEDBACK && <HumanFeedbackButton onClick={() => {}} />}
+      {FF_ENABLE_FEEDBACK && <HumanFeedbackButton onClick={handleModalOpen} />}
+      <HumanFeedbackModal isOpen={isModalOpen} onClose={handleModalClose} />
     </ActionBar>
   );
 }
