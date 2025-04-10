@@ -14,6 +14,7 @@ It provides a **data & learning flywheel for LLMs** by unifying:
 - [x] **Inference:** one API for all LLMs, with <1ms P99 overhead
 - [x] **Observability:** inference & feedback → your database
 - [x] **Optimization:** from prompts to fine-tuning and RL
+- [x] **Evaluations:** compare prompts, models, inference strategies
 - [x] **Experimentation:** built-in A/B testing, routing, fallbacks
 
 ---
@@ -367,6 +368,36 @@ _More coming soon..._
   <tr>
     <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/2cc3cc9a-f33f-4e94-b8de-07522326f80a"></td>
     <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/00ae6605-8fa0-4efd-8238-ae8ea589860f"></td>
+  </tr>
+</table>
+
+<br>
+
+### 📊 LLM Evaluations
+
+> **Compare prompts, models, and inference strategies using TensorZero Evaluations &mdash; with support for heuristics and LLM judges.**
+
+<table>
+  <tr></tr> <!-- flip highlight order -->
+  <tr>
+    <td width="50%" align="center" valign="middle"><b>Evaluation » UI</b></td>
+    <td width="50%" align="center" valign="middle"><b>Evaluation » CLI</b></td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="middle"><img src="https://github.com/user-attachments/assets/f4bf54e3-1b63-46c8-be12-2eaabf615699"></td>
+    <td width="50%" align="left" valign="middle">  
+<pre><code class="language-bash">docker compose run --rm evaluations \
+  --evaluation-name extract_data \
+  --dataset-name hard_test_cases \
+  --variant-name gpt_4o \
+  --concurrency 5</code></pre>
+<pre><code class="language-bash">Run ID: 01961de9-c8a4-7c60-ab8d-15491a9708e4
+Number of datapoints: 100
+██████████████████████████████████████ 100/100
+exact_match: 0.83 ± 0.03
+semantic_match: 0.98 ± 0.01
+item_count: 7.15 ± 0.39</code></pre>
+    </td>
   </tr>
 </table>
 
