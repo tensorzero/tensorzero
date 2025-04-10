@@ -121,7 +121,10 @@ export async function action({ request }: Route.ActionArgs) {
   );
 }
 
-async function startPythonFineTune(parsedFormData: object, validatedData: SFTFormValues) {
+async function startPythonFineTune(
+  parsedFormData: object,
+  validatedData: SFTFormValues,
+) {
   try {
     const res = await fetch("http://localhost:7000/optimizations", {
       method: "POST",
@@ -133,7 +136,13 @@ async function startPythonFineTune(parsedFormData: object, validatedData: SFTFor
         },
       }),
     });
-    await res.json();
+    const resText = await res.text();
+    if (!res.ok) {
+      return data(
+        { message: `Error ${res.status} from fine-tuning server: ${resText}` },
+        { status: 500 },
+      );
+    }
   } catch (error) {
     const errors = {
       message:

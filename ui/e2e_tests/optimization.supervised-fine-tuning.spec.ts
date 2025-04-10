@@ -35,9 +35,7 @@ test("should fine-tune with a mocked OpenAI server", async ({ page }) => {
   await page.getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" }).click();
   await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
   // Expect redirect
-  await page.waitForURL(
-    "/optimization/supervised-fine-tuning/*?backend=*",
-  );
+  await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
 
   let regex;
   if (process.env.TENSORZERO_UI_FF_ENABLE_PYTHON === "1") {
