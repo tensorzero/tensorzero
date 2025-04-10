@@ -70,6 +70,11 @@ jobs:
         run: cat e2e_logs.txt
 
   check-docker-compose:
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
