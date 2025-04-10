@@ -1,4 +1,4 @@
-import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
+import type { EvaluationRunSearchResult } from "~/utils/clickhouse/evaluations";
 import {
   Tooltip,
   TooltipContent,
@@ -10,7 +10,7 @@ import { X } from "lucide-react";
 import { formatDate } from "~/utils/date";
 
 interface EvaluationRunBadgeProps {
-  runInfo: EvaluationRunInfo;
+  runInfo: EvaluationRunSearchResult;
   getColor: (runId: string) => string;
   lastUpdateDate?: Date;
   onRemove?: (e: React.MouseEvent) => void;

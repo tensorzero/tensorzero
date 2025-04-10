@@ -2,7 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { useEffect } from "react";
 import { useFetcher } from "react-router";
 import { searchEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
-import type { EvaluationRunInfo } from "~/utils/clickhouse/evaluations";
+import type { EvaluationRunSearchResult } from "~/utils/clickhouse/evaluations";
 import { getConfig } from "~/utils/config/index.server";
 
 export async function loader({
@@ -43,7 +43,7 @@ export async function loader({
 export function useSearchEvaluationRunsFetcher(params: {
   evaluationName?: string;
   query?: string;
-}): { data?: EvaluationRunInfo[]; isLoading: boolean } {
+}): { data?: EvaluationRunSearchResult[]; isLoading: boolean } {
   const runsFetcher = useFetcher();
 
   useEffect(() => {

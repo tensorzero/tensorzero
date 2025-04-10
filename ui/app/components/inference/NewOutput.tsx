@@ -105,7 +105,7 @@ export function OutputContent({ output, outputSchema }: OutputProps) {
 
 export default function Output({ output, outputSchema }: OutputProps) {
   return (
-    <SnippetLayout className="w-full">
+    <SnippetLayout>
       <OutputContent output={output} outputSchema={outputSchema} />
     </SnippetLayout>
   );
