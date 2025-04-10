@@ -11,6 +11,8 @@ on:
 
 env:
   DOCKERHUB_USER: tensorzero
+  # Set the container name to a '-dev' name when this workflow is invoked by a push event
+  # Otherwise, use the unsuffixed name (which will be invoked by a release or manual dispatch)
   UI_CONTAINER: ${{ github.event_name == 'push' && 'ui-dev' || 'ui' }}
   GATEWAY_CONTAINER: ${{ github.event_name == 'push' && 'gateway-dev' || 'gateway' }}
 
