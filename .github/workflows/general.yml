@@ -421,6 +421,13 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+    strategy:
+      matrix:
+        feature_flag:
+          - behavior: node-optimizations-server
+            enable_python: 0
+          - behavior: python-optimizations-server
+            enable_python: 1
     steps:
       - uses: actions/checkout@v4
 
@@ -464,6 +471,7 @@ jobs:
           echo "AWS_REGION=us-east-1" >> fixtures/.env
           echo "S3_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> fixtures/.env
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
+          echo "TENSORZERO_UI_FF_ENABLE_PYTHON=${{ matrix.feature_flag.enable_python }}" >> fixtures/.env
           docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml up --wait --build --force-recreate
 
       - name: Install playwright dependencies
@@ -474,7 +482,7 @@ jobs:
         working-directory: ui
         env:
           TENSORZERO_CI: 1
-        run: pnpm test-e2e
+        run: TENSORZERO_UI_FF_ENABLE_PYTHON=${{ matrix.feature_flag.enable_python }} pnpm test-e2e
         continue-on-error: true
         id: e2e_tests
 

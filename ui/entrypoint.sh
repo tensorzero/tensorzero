@@ -6,7 +6,6 @@ if [ -z "$TENSORZERO_CLICKHOUSE_URL" ]; then
   echo "Error: TENSORZERO_CLICKHOUSE_URL environment variable is not set."
   exit 1
 fi
-
 # Extract the base URL without path from TENSORZERO_CLICKHOUSE_URL
 BASE_URL=$(echo "$TENSORZERO_CLICKHOUSE_URL" | sed -E 's#(https?://[^/]+).*#\1#')
 
@@ -30,4 +29,19 @@ if ! evaluations -h &> /dev/null; then
   exit 1
 fi
 
-pnpm run start
+cd /app
+
+pnpm run start &
+
+
+source /build/optimizations-server/.venv/bin/activate
+
+# TODO: use 'uv run' once this issue is fixed: https://github.com/astral-sh/uv/issues/9191
+#RUST_LOG=trace uv run --verbose --frozen --no-dev fastapi run --port 7000 src/ &
+
+fastapi run --port 7000 /build/optimizations-server/src/ &
+
+# Wait for any process to exit
+wait -n
+# Exit with status of process that exited first
+exit $?
