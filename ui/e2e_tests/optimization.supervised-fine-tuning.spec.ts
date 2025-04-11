@@ -137,12 +137,12 @@ model_name = "mock-inference-finetune-1234"
       .getByText("completed", { exact: true })
     await expect(page.locator("body")).toContainText("Configuration");
     await expect(page.locator("body")).toContainText(`
-[models."accounts/viraj-ebfe5a/models/mock-fireworks-model"]
-routing = [ "accounts/viraj-ebfe5a/models/mock-fireworks-model" ]
+[models."accounts/fake_fireworks_account/models/mock-fireworks-model"]
+routing = [ "accounts/fake_fireworks_account/models/mock-fireworks-model" ]
 
-[models."accounts/viraj-ebfe5a/models/mock-fireworks-model".providers."accounts/viraj-ebfe5a/models/mock-fireworks-model"]
+[models."accounts/fake_fireworks_account/models/mock-fireworks-model".providers."accounts/fake_fireworks_account/models/mock-fireworks-model"]
 type = "fireworks"
-model_name = "accounts/viraj-ebfe5a/models/mock-fireworks-model"
+model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
 `);
   });
 })
