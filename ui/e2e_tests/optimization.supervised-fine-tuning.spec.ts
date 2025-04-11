@@ -9,11 +9,10 @@ test("should show the supervised fine-tuning page", async ({ page }) => {
 });
 
 test.describe("Custom user agent", () => {
-  // We look for this user agent in the fine-tuning code, and configure a 
+  // We look for this user agent in the fine-tuning code, and configure a
   // shorter polling interval. This avoids the need to wait 10 seconds in
   // between polling mock-inference-provider
-  test.use({ userAgent: 'TensorZeroE2E' });
-
+  test.use({ userAgent: "TensorZeroE2E" });
 
   test("should fine-tune with a mocked OpenAI server", async ({ page }) => {
     await page.goto("/optimization/supervised-fine-tuning");
@@ -39,7 +38,9 @@ test.describe("Custom user agent", () => {
       .getByRole("combobox")
       .filter({ hasText: "Select a model..." })
       .click();
-    await page.getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" }).click();
+    await page
+      .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
+      .click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
     // Expect redirect
     await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
@@ -70,7 +71,7 @@ test.describe("Custom user agent", () => {
     // so wait for 3 seconds here to make sure it completes
     await page
       .getByText("completed", { exact: true })
-      .waitFor({ timeout: 3000 })
+      .waitFor({ timeout: 3000 });
     await expect(page.locator("body")).toContainText("Configuration");
     await expect(page.locator("body")).toContainText(`
 [models.mock-inference-finetune-1234]
@@ -106,7 +107,9 @@ model_name = "mock-inference-finetune-1234"
       .getByRole("combobox")
       .filter({ hasText: "Select a model..." })
       .click();
-    await page.getByRole("option", { name: "llama-3.2-3b-instruct Fireworks" }).click();
+    await page
+      .getByRole("option", { name: "llama-3.2-3b-instruct Fireworks" })
+      .click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
     // Expect redirect
     await page.waitForURL("/optimization/supervised-fine-tuning/*?backend=*");
@@ -133,8 +136,7 @@ model_name = "mock-inference-finetune-1234"
       "Prompt: gpt4o_mini_initial_prompt",
     );
 
-    await page
-      .getByText("completed", { exact: true })
+    await page.getByText("completed", { exact: true });
     await expect(page.locator("body")).toContainText("Configuration");
     await expect(page.locator("body")).toContainText(`
 [models."accounts/fake_fireworks_account/models/mock-fireworks-model"]
@@ -145,4 +147,4 @@ type = "fireworks"
 model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
 `);
   });
-})
+});

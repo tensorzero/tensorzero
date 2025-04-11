@@ -182,9 +182,12 @@ export default function SupervisedFineTuning({
   useEffect(() => {
     if (status.status === "running") {
       setSubmissionPhase("pending");
-      const interval = setInterval(() => {
-        revalidator.revalidate();
-      }, navigator.userAgent === "TensorZeroE2E" ? 500 : 10000);
+      const interval = setInterval(
+        () => {
+          revalidator.revalidate();
+        },
+        navigator.userAgent === "TensorZeroE2E" ? 500 : 10000,
+      );
       return () => clearInterval(interval);
     }
   }, [status, revalidator]);
