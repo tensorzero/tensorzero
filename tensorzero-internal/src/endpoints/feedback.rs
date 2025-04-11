@@ -406,6 +406,9 @@ async fn write_boolean(
     Ok(())
 }
 
+/// Represents a future that resolves to writing a piece of feedback data.
+type FeedbackWriteTask<'a> = Pin<Box<dyn Future<Output = Result<(), Error>> + Send + 'a>>;
+
 /// Concurrently writes the feedback to ClickHouse as well as human feedback if needed.
 async fn write_feedback_concurrently(
     connection_info: &ClickHouseConnectionInfo,
@@ -417,7 +420,7 @@ async fn write_feedback_concurrently(
     table_name: &'static str,
 ) -> Result<(), Error> {
     if !dryrun {
-        let mut tasks: Vec<Pin<Box<dyn Future<Output = Result<(), Error>> + Send>>> = Vec::new();
+        let mut tasks: Vec<FeedbackWriteTask<'_>> = Vec::new();
 
         // If human feedback tag is present, add the task to write it.
         if params.tags.contains_key(HUMAN_FEEDBACK_TAG_KEY) {
