@@ -186,8 +186,10 @@ TENSORZERO_UI_CONFIG_PATH=<path-to-config-file> # For testing, set to ./fixtures
 4. Run the dependencies: `docker compose -f fixtures/docker-compose.yml up --build --force-recreate`
    (you can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway)
 
-With the dependencies running, you can run the tests with `pnpm run test`.
+With the dependencies running, you can run the tests with `pnpm run test` and the Playwright tests with `pnpm run test-e2e`.
 Similarly, you can start a development server with `pnpm run dev`.
+There may be some Playwright tests in `main` that require feature flags to be on, so be aware of that if they fail for nonobvious reasons.
+
 
 ---
 
