@@ -1,0 +1,57 @@
+use crate::clickhouse::migration_manager::migration_trait::Migration;
+use crate::clickhouse::ClickHouseConnectionInfo;
+use crate::error::Error;
+use async_trait::async_trait;
+
+use super::check_table_exists;
+
+/// This migration adds a table HumanFeedback that stores human feedback in an easy-to-reference format.
+/// This is technically an auxiliary table as the primary store is still the various feedback tables.
+/// The gateway should write to this table when a feedback is tagged with key "tensorzero::human_feedback"
+pub struct Migration0023<'a> {
+    pub clickhouse: &'a ClickHouseConnectionInfo,
+}
+
+#[async_trait]
+impl Migration for Migration0023<'_> {
+    async fn can_apply(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn should_apply(&self) -> Result<bool, Error> {
+        let human_feedback_table_exists =
+            check_table_exists(self.clickhouse, "HumanFeedback", "0023").await?;
+
+        Ok(!human_feedback_table_exists)
+    }
+
+    async fn apply(&self) -> Result<(), Error> {
+        self.clickhouse
+            .run_query_synchronous(
+                r#"CREATE TABLE IF NOT EXISTS HumanFeedback (
+                    function_name LowCardinality(String),
+                    metric_name LowCardinality(String),
+                    input_output_hash UInt64, // Blake3 hash of the input and output for indexing and easy lookup
+                    input String,
+                    output String,
+                    value String,  // JSON encoded value of the feedback
+                    feedback_id UUID,
+                ) ENGINE = MergeTree()
+                ORDER BY (function_name, metric_name, input_output_hash)
+            "#.to_string(),
+                None,
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    fn rollback_instructions(&self) -> String {
+        "DROP TABLE IF EXISTS HumanFeedback".to_string()
+    }
+
+    async fn has_succeeded(&self) -> Result<bool, Error> {
+        let should_apply = self.should_apply().await?;
+        Ok(!should_apply)
+    }
+}
