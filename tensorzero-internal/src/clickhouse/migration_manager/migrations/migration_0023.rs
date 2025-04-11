@@ -31,13 +31,14 @@ impl Migration for Migration0023<'_> {
                 r#"CREATE TABLE IF NOT EXISTS HumanFeedback (
                     function_name LowCardinality(String),
                     metric_name LowCardinality(String),
-                    input_output_hash UInt64, // Blake3 hash of the input and output for indexing and easy lookup
+                    input_output_hash UInt64,  -- Blake3 hash of the input and output for indexing and easy lookup
                     input String,
                     output String,
-                    value String,  // JSON encoded value of the feedback
+                    value String,  -- JSON encoded value of the feedback
                     feedback_id UUID,
                 ) ENGINE = MergeTree()
                 ORDER BY (function_name, metric_name, input_output_hash)
+                SETTINGS index_granularity = 256 -- We use a small index granularity to improve lookup performance
             "#.to_string(),
                 None,
             )

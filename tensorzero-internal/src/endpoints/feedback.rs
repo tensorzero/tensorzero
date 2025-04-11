@@ -11,6 +11,7 @@ use tokio::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
 
+use crate::cache::CacheKey;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
 use crate::error::{Error, ErrorDetails};
@@ -36,6 +37,10 @@ const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
 /// (the ID is generated at the start of the inference), we wait a minimum amount of time
 /// before we decide that the target was actually not written because we can't find it in the database.
 const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1200);
+
+/// Everywhere in the UI we take human feedback, we add this tag.
+/// If this tag is present, we will also write human feedback to a separate table.
+const HUMAN_FEEDBACK_TAG_KEY: &str = "tensorzero::human_feedback";
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Serialize, Deserialize)]
@@ -132,6 +137,7 @@ pub async fn feedback(
         FeedbackType::Comment => {
             write_comment(
                 clickhouse_connection_info,
+                &config,
                 &params,
                 feedback_metadata.target_id,
                 feedback_metadata.level,
@@ -244,6 +250,7 @@ fn get_feedback_metadata<'a>(
 
 async fn write_comment(
     connection_info: ClickHouseConnectionInfo,
+    config: &Config<'_>,
     params: &Params,
     target_id: Uuid,
     level: &MetricConfigLevel,
@@ -252,7 +259,7 @@ async fn write_comment(
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
     // Verify that the function name exists.
-    let _ = throttled_get_function_name(&connection_info, level, &target_id).await?;
+    let target_info = throttled_get_target_info(&connection_info, level, &target_id).await?;
     let value = value.as_str().ok_or_else(|| ErrorDetails::InvalidRequest {
         message: "Feedback value for a comment must be a string".to_string(),
     })?;
@@ -264,6 +271,10 @@ async fn write_comment(
         "tags": tags
     });
     if !dryrun {
+        // TODO: run these concurrently
+        if tags.contains_key(HUMAN_FEEDBACK_TAG_KEY) {
+            write_human_feedback(&connection_info, config, &target_info, params).await?;
+        }
         tokio::spawn(async move {
             let _ = connection_info.write(&[payload], "CommentFeedback").await;
         });
@@ -280,17 +291,17 @@ async fn write_demonstration(
     dryrun: bool,
 ) -> Result<(), Error> {
     let Params { value, tags, .. } = params;
-    let function_name = throttled_get_function_name(
+    let target_info = throttled_get_target_info(
         &connection_info,
         &MetricConfigLevel::Inference,
         &inference_id,
     )
     .await?;
-    let function_config = config.get_function(&function_name)?;
+    let function_config = config.get_function(&target_info.function_name)?;
     let dynamic_demonstration_info = get_dynamic_demonstration_info(
         &connection_info,
         inference_id,
-        &function_name,
+        &target_info.function_name,
         function_config,
     )
     .await?;
@@ -303,6 +314,10 @@ async fn write_demonstration(
     })?;
     let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
     if !dryrun {
+        // TODO: run these concurrently
+        if tags.contains_key(HUMAN_FEEDBACK_TAG_KEY) {
+            write_human_feedback(&connection_info, config, &target_info, params).await?;
+        }
         tokio::spawn(async move {
             let _ = connection_info
                 .write(&[payload], "DemonstrationFeedback")
@@ -329,7 +344,8 @@ async fn write_float(
     let metric_config: &crate::config_parser::MetricConfig =
         config.get_metric_or_err(metric_name)?;
     // Verify that the function name exists.
-    let _ = throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
+    let target_info =
+        throttled_get_target_info(&connection_info, &metric_config.level, &target_id).await?;
 
     let value = value.as_f64().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
@@ -338,6 +354,10 @@ async fn write_float(
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
+        // TODO: run these concurrently
+        if tags.contains_key(HUMAN_FEEDBACK_TAG_KEY) {
+            write_human_feedback(&connection_info, config, &target_info, params).await?;
+        }
         tokio::spawn(async move {
             let _ = connection_info
                 .write(&[payload], "FloatMetricFeedback")
@@ -363,7 +383,8 @@ async fn write_boolean(
     } = params;
     let metric_config = config.get_metric_or_err(metric_name)?;
     // Verify that the function name exists.
-    let _ = throttled_get_function_name(&connection_info, &metric_config.level, &target_id).await?;
+    let target_info =
+        throttled_get_target_info(&connection_info, &metric_config.level, &target_id).await?;
     let value = value.as_bool().ok_or_else(|| {
         Error::new(ErrorDetails::InvalidRequest {
             message: format!("Feedback value for metric `{metric_name}` must be a boolean"),
@@ -371,6 +392,10 @@ async fn write_boolean(
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
+        // TODO: run these concurrently
+        if tags.contains_key(HUMAN_FEEDBACK_TAG_KEY) {
+            write_human_feedback(&connection_info, config, &target_info, params).await?;
+        }
         tokio::spawn(async move {
             let _ = connection_info
                 .write(&[payload], "BooleanMetricFeedback")
@@ -387,11 +412,11 @@ async fn write_boolean(
 /// We compute an amount of time to wait by max(FEEDBACK_COOLDOWN_PERIOD - elapsed_from_target_id, FEEDBACK_MINIMUM_WAIT_TIME)
 /// We then poll every 500ms until that time has passed.
 /// If the time has passed and the id is still not found, we return an error.
-async fn throttled_get_function_name(
+async fn throttled_get_target_info(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
-) -> Result<String, Error> {
+) -> Result<TargetInfo, Error> {
     // Compute how long ago the target_id was created.
     let elapsed = uuid_elapsed(target_id)?;
 
@@ -404,8 +429,8 @@ async fn throttled_get_function_name(
 
     // Poll every 500ms until the deadline is reached.
     loop {
-        match get_function_name(connection_info, metric_config_level, target_id).await {
-            Ok(identifier) => return Ok(identifier),
+        match get_target_info(connection_info, metric_config_level, target_id).await {
+            Ok(target_info) => return Ok(target_info),
             Err(err) => {
                 if Instant::now() >= deadline {
                     // We log here since this means we were not able to find the target_id in the database
@@ -414,13 +439,21 @@ async fn throttled_get_function_name(
                     return Err(err);
                 } else {
                     tracing::info!(
-                        "Failed to find function name for target_id: {target_id}. Retrying..."
+                        "Failed to find target info for target_id: {target_id}. Retrying..."
                     );
                 }
             }
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct TargetInfo {
+    function_name: String,
+    variant_name: String,
+    inference_id: Uuid,
+    episode_id: Uuid,
 }
 
 /// Retrieves the function name associated with a given `target_id` of the inference or episode.
@@ -434,14 +467,14 @@ async fn throttled_get_function_name(
 /// # Returns
 ///
 /// * On success:
-///   - Returns the `function_name` associated with the `target_id`.
+///   - Returns a `TargetInfo` struct containing the `function_name`, `variant_name`, `inference_id`, and `episode_id`.
 /// * On failure:
 ///   - Returns an `Error` if the `target_id` is invalid or does not exist.
-async fn get_function_name(
+async fn get_target_info(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
-) -> Result<String, Error> {
+) -> Result<TargetInfo, Error> {
     let table_name = match metric_config_level {
         MetricConfigLevel::Inference => "InferenceById",
         MetricConfigLevel::Episode => "InferenceByEpisodeId",
@@ -455,21 +488,23 @@ async fn get_function_name(
         MetricConfigLevel::Episode => "episode_id_uint",
     };
     let query = format!(
-        "SELECT function_name FROM {} FINAL WHERE {} = toUInt128(toUUID('{}'))",
+        "SELECT function_name, variant_name, uint_to_uuid(id_uint) as inference_id, uint_to_uuid(episode_id_uint) as episode_id FROM {} FINAL WHERE {} = toUInt128(toUUID('{}'))",
         table_name, identifier_key, target_id
     );
-    let function_name = connection_info
-        .run_query_synchronous(query, None)
-        .await?
-        .trim()
-        .to_string();
-    if function_name.is_empty() {
+    let result = connection_info.run_query_synchronous(query, None).await?;
+    let result = result.trim();
+    if result.is_empty() {
         // We don't want to log here since this can happen if we send feedback immediately after the target is created.
         return Err(Error::new_without_logging(ErrorDetails::InvalidRequest {
             message: format!("{identifier_type} ID: {target_id} does not exist"),
         }));
     };
-    Ok(function_name)
+    let target_info = serde_json::from_str::<TargetInfo>(result).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseQuery {
+            message: format!("Failed to parse target info: {}", e),
+        })
+    })?;
+    Ok(target_info)
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -697,6 +732,99 @@ async fn get_dynamic_demonstration_info(
             Ok(DynamicDemonstrationInfo::Json(output_schema))
         }
     }
+}
+
+/// TODO: document heavily. Especially include that there are potential performance issues here and
+/// they could concievably be fixed with a Materialized View.
+/// Probably want to make this public so we can write e2e tests.
+async fn write_human_feedback(
+    clickhouse: &ClickHouseConnectionInfo,
+    config: &Config<'_>,
+    target_info: &TargetInfo,
+    params: &Params,
+) -> Result<(), Error> {
+    let input_output = fetch_input_output(clickhouse, config, target_info).await?;
+    // Hash the input and output concatenated using blake3
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(input_output.input.as_bytes());
+    hasher.update(input_output.output.as_bytes());
+    let cache_key: CacheKey = hasher.finalize().into();
+    let input_output_hash = cache_key.get_short_key()?.to_string();
+    let query = r#"
+        INSERT INTO HumanFeedback (
+            function_name,
+            metric_name,
+            input_output_hash,
+            input,
+            output,
+            value,
+            feedback_id
+        ) VALUES (
+            {function_name:String},
+            {metric_name:String},
+            {input_output_hash:UInt64},
+            {input:String},
+            {output:String},
+            {value:String},
+            {feedback_id:UUID}
+        )
+    "#;
+    let parameters = HashMap::from([
+        ("function_name", target_info.function_name.as_str()),
+        ("metric_name", params.metric_name.as_str()),
+        ("input_output_hash", input_output_hash.as_str()),
+        ("input", input_output.input.as_str()),
+        ("output", input_output.output.as_str()),
+    ]);
+    clickhouse
+        .run_query_synchronous(query.to_string(), Some(&parameters))
+        .await?;
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+struct InputOutput {
+    input: String,
+    output: String,
+}
+
+async fn fetch_input_output(
+    clickhouse: &ClickHouseConnectionInfo,
+    config: &Config<'_>,
+    target_info: &TargetInfo,
+) -> Result<InputOutput, Error> {
+    let function_config = config.get_function(&target_info.function_name)?;
+    let table_name = match &**function_config {
+        FunctionConfig::Chat(..) => "ChatInference",
+        FunctionConfig::Json(..) => "JsonInference",
+    };
+    let query = r#"SELECT
+        input,
+        output
+    FROM {table_name:Identifier}
+    WHERE function_name={function_name:String}
+    AND variant_name={variant_name:String}
+    AND episode_id={episode_id:String}
+    AND id={inference_id:String}
+    "#;
+    let inference_id = target_info.inference_id.to_string();
+    let episode_id = target_info.episode_id.to_string();
+    let parameters = HashMap::from([
+        ("table_name", table_name),
+        ("function_name", &target_info.function_name),
+        ("variant_name", &target_info.variant_name),
+        ("episode_id", &episode_id),
+        ("inference_id", &inference_id),
+    ]);
+    let result = clickhouse
+        .run_query_synchronous(query.to_string(), Some(&parameters))
+        .await?;
+    let result = result.trim();
+    serde_json::from_str::<InputOutput>(result).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseQuery {
+            message: format!("Failed to parse input/output: {}", e),
+        })
+    })
 }
 
 #[cfg(test)]
