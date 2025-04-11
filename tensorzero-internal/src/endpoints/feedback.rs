@@ -1097,6 +1097,7 @@ mod tests {
                 tools: vec!["get_temperature".to_string()],
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
+                description: None,
             })));
 
         // Case 1: a string passed to a chat function
@@ -1224,6 +1225,7 @@ mod tests {
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         })));
 
         // Case 5: a JSON function with correct output

@@ -944,6 +944,7 @@ mod tests {
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
+            description: None,
         });
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
@@ -1212,6 +1213,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
+            description: None,
         });
 
         let result = mixture_of_n_variant
