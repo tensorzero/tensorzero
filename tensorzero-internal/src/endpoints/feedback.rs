@@ -798,9 +798,9 @@ async fn get_dynamic_demonstration_info(
     }
 }
 
-/// TODO: document heavily. Especially include that there are potential performance issues here and
-/// they could concievably be fixed with a Materialized View.
-/// Probably want to make this public so we can write e2e tests.
+/// Writes human evaluation feedback to the database.
+/// Should only be called if the params contain both the human feedback tag
+/// and a datapoint id tag.
 async fn write_human_feedback(
     clickhouse: &ClickHouseConnectionInfo,
     config: &Config<'_>,
