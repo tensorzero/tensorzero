@@ -458,7 +458,7 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 >
 > This example shows how to use TensorZero to optimize a data extraction pipeline.
 > We demonstrate techniques like fine-tuning and dynamic in-context learning (DICL).
-> In the end, a optimized GPT-4o Mini model outperforms GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.
+> In the end, an optimized GPT-4o Mini model outperforms GPT-4o on this task &mdash; at a fraction of the cost and latency &mdash; using a small amount of training data.
 
 > **[Agentic RAG — Multi-Hop Question Answering with LLMs](https://github.com/tensorzero/tensorzero/tree/main/examples/rag-retrieval-augmented-generation/simple-agentic-rag/)**
 >
