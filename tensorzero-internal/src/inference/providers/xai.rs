@@ -341,15 +341,12 @@ impl<'a> XAIRequest<'a> {
             ..
         } = *request;
 
-        // xAI suddenly started rejecting 'stream_options' as a parameter.
-        // If they change the behavior back, we can start using this again.
-        let _stream_options = match request.stream {
+        let stream_options = match request.stream {
             true => Some(StreamOptions {
                 include_usage: true,
             }),
             false => None,
         };
-        let stream_options = None;
 
         let response_format = Some(XAIResponseFormat::new(
             &request.json_mode,
