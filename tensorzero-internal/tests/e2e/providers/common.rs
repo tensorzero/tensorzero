@@ -9174,7 +9174,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Japan"}}]
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": true,
