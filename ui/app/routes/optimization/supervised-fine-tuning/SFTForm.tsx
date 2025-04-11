@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { v7 as uuid } from "uuid";
 import { type SFTFormValues, SFTFormValuesResolver } from "./types";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
-import { MetricSelector } from "~/components/metric/MetricSelector";
+import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { VariantSelector } from "./VariantSelector";
 import { ModelSelector } from "./ModelSelector";
 import { AdvancedParametersAccordion } from "./AdvancedParametersAccordion";
@@ -151,7 +151,7 @@ export function SFTForm({
             </div>
 
             <div className="flex flex-col">
-              <MetricSelector<SFTFormValues>
+              <CurationMetricSelector<SFTFormValues>
                 control={form.control}
                 name="metric"
                 functionFieldName="function"

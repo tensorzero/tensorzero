@@ -45,3 +45,33 @@ export function getComparisonOperator(
 ): "<" | ">" {
   return optimize === "max" ? ">" : "<";
 }
+
+export function filterMetricsByLevel(
+  metrics: Record<string, MetricConfig>,
+  level: MetricConfigLevel,
+): Record<string, MetricConfig> {
+  // First filter the metrics by level
+  const filteredEntries = Object.entries(metrics).filter(([, metric]) => {
+    // The demonstration and comment configs need special handling because they don't have a level
+    if (metric.type === "demonstration") {
+      return metric.level === level;
+    }
+    if (metric.type === "comment") {
+      return true;
+    }
+    return metric.level === level;
+  });
+
+  // Then sort to put demonstration and comment at the top
+  filteredEntries.sort(([, metricA], [, metricB]) => {
+    if (metricA.type === "demonstration" || metricA.type === "comment") {
+      return -1;
+    }
+    if (metricB.type === "demonstration" || metricB.type === "comment") {
+      return 1;
+    }
+    return 0;
+  });
+
+  return Object.fromEntries(filteredEntries);
+}
