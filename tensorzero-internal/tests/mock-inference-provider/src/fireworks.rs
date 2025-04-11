@@ -108,15 +108,15 @@ pub async fn get_dataset(Path(params): Path<DatasetKeyParams>) -> Result<Json<se
 
     dataset.poll_count += 1;
     if dataset.poll_count < POLLS_UNTIL_READY {
-        return Ok(Json(serde_json::json!({
+        Ok(Json(serde_json::json!({
             "state": "PENDING",
             "poll_count": dataset.poll_count,
-        })));
+        })))
     } else {
-        return Ok(Json(serde_json::json!({
+        Ok(Json(serde_json::json!({
             "state": "READY",
             "poll_count": dataset.poll_count,
-        })));
+        })))
     }
 }
 
@@ -191,7 +191,7 @@ pub async fn create_fine_tuning_job(
         .unwrap()
         .insert(
             FineTuningJobKey {
-                account_id: account_id,
+                account_id,
                 job_id: job_id.clone(),
             },
             FineTuningJob { poll_count: 0 },
@@ -247,19 +247,19 @@ pub async fn create_deployed_model(
         .or_insert(DeployedModel { poll_count: 0 });
 
     if model.poll_count < POLLS_UNTIL_READY {
-        return Ok((
+        Ok((
             status_code,
             Json(serde_json::json!({
                 "message": "PENDING"
             })),
-        ));
+        ))
     } else {
-        return Ok((
+        Ok((
             status_code,
             Json(serde_json::json!({
                 "message": "DEPLOYED",
             })),
-        ));
+        ))
     }
 }
 
@@ -292,13 +292,13 @@ pub async fn get_fine_tuning_job(
 
     job.poll_count += 1;
     if job.poll_count < POLLS_UNTIL_READY {
-        return Ok(Json(serde_json::json!({
+        Ok(Json(serde_json::json!({
             "state": "RUNNING",
-        })));
+        })))
     } else {
-        return Ok(Json(serde_json::json!({
+        Ok(Json(serde_json::json!({
             "state": "COMPLETED",
             "modelId": format!("mock-fireworks-model"),
-        })));
+        })))
     }
 }
