@@ -1,14 +1,46 @@
 import { Code } from "~/components/ui/code";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
 import type { MetricConfig } from "~/utils/config/metric";
+import { cn } from "~/utils/common";
+import { getFeedbackIcon } from "~/utils/icon";
+import type { ReactNode } from "react";
+
+type FeedbackStatus = "success" | "failure" | "neutral";
+
+interface FeedbackItemProps {
+  status: FeedbackStatus;
+  children: ReactNode;
+  className?: string;
+}
+
+function FeedbackItem({ 
+  status, 
+  children, 
+  className 
+}: FeedbackItemProps) {
+  const { icon, iconBg } = getFeedbackIcon(status);
+  
+  return (
+    <div className={cn("flex items-center gap-2", className)}>
+      <div className={cn("flex h-5 w-5 items-center justify-center rounded-md", iconBg)}>
+        {icon}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+interface FeedbackValueProps {
+  feedback: FeedbackRow;
+  metric?: MetricConfig;
+  truncate?: boolean;
+}
 
 export default function FeedbackValue({
   feedback,
   metric,
-}: {
-  feedback: FeedbackRow;
-  metric?: MetricConfig;
-}) {
+  truncate = true,
+}: FeedbackValueProps) {
   // Handle boolean metrics
   if (feedback.type === "boolean" && typeof feedback.value === "boolean") {
     const optimize = metric?.type === "boolean" ? metric.optimize : "unknown";
@@ -20,38 +52,64 @@ export default function FeedbackValue({
       (feedback.value === true && optimize === "min") ||
       (feedback.value === false && optimize === "max");
 
+    let status: FeedbackStatus = "neutral";
+
+    if (success) {
+      status = "success";
+    } else if (failure) {
+      status = "failure";
+    }
+
     return (
-      <div className="flex items-center gap-2">
-        <div
-          className={`h-2 w-2 rounded-full ${
-            success ? "bg-green-700" : failure ? "bg-red-700" : "bg-gray-700"
-          }`}
-        />
+      <FeedbackItem status={status}>
         <span>{feedback.value ? "True" : "False"}</span>
-      </div>
+      </FeedbackItem>
     );
   }
 
   // Handle float metrics
   if (feedback.type === "float" && typeof feedback.value === "number") {
-    return <div>{feedback.value.toFixed(3)}</div>;
+    return (
+      <FeedbackItem status="neutral">
+        <div>{feedback.value.toFixed(3)}</div>
+      </FeedbackItem>
+    );
   }
 
   // Handle comments and demonstrations (both have string values)
   if (feedback.type === "comment" && typeof feedback.value === "string") {
+    if (truncate) {
+      return (
+        <FeedbackItem status="neutral">
+          <div className="overflow-hidden text-ellipsis whitespace-nowrap">
+            {feedback.value}
+          </div>
+        </FeedbackItem>
+      );
+    }
     return (
-      <div className="break-words whitespace-pre-wrap">{feedback.value}</div>
+      <FeedbackItem status="neutral">
+        <div className="whitespace-pre-wrap break-words">{feedback.value}</div>
+      </FeedbackItem>
     );
   }
 
   if (feedback.type === "demonstration" && typeof feedback.value === "string") {
-    // truncate to 1000 characters
+    if (truncate) {
+      return (
+        <FeedbackItem status="neutral">
+          <div className="overflow-hidden text-ellipsis whitespace-nowrap font-mono">
+            {feedback.value}
+          </div>
+        </FeedbackItem>
+      );
+    }
     return (
-      <Code className="text-sm font-normal">
-        {feedback.value.length > 1000
-          ? feedback.value.slice(0, 1000) + "..."
-          : feedback.value}
-      </Code>
+      <FeedbackItem status="neutral">
+        <div className="font-normal text-sm">
+          <Code>{feedback.value}</Code>
+        </div>
+      </FeedbackItem>
     );
   }
 
