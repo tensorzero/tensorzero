@@ -102,8 +102,8 @@ test("should be able to add float feedback via the inference page", async ({
   await page.goto(
     "/observability/inferences/0195f845-a261-72d2-8686-774b967d938e",
   );
-  // Click on the Add Feedback button
-  await page.getByText("Add Feedback").click();
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
 
   // Click "Select a metric"
   await page.getByText("Select a metric").click();
@@ -144,8 +144,8 @@ test("should be able to add boolean feedback via the inference page", async ({
   await page.goto(
     "/observability/inferences/0195f845-a261-72d2-8686-774b967d938e",
   );
-  // Click on the Add Feedback button
-  await page.getByText("Add Feedback").click();
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
 
   // Click "Select a metric"
   await page.getByText("Select a metric").click();
@@ -186,8 +186,8 @@ test("should be able to add json demonstration feedback via the inference page",
   await page.goto(
     "/observability/inferences/0195f845-a261-72d2-8686-774b967d938e",
   );
-  // Click on the Add Feedback button
-  await page.getByText("Add Feedback").click();
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
 
   // Click "Select a metric"
   await page.getByText("Select a metric").click();
@@ -237,8 +237,8 @@ test("should be able to add chat demonstration feedback via the inference page",
   await page.goto(
     "/observability/inferences/0195c498-70e3-71f3-bbd9-a2db26b8d349",
   );
-  // Click on the Add Feedback button
-  await page.getByText("Add Feedback").click();
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
 
   // Click "Select a metric"
   await page.getByText("Select a metric").click();
@@ -288,8 +288,8 @@ test("should be able to add comment feedback via the episode page", async ({
   await page.goto(
     "/observability/episodes/0195f845-a261-72d2-8686-775bc929a221",
   );
-  // Click on the Add Feedback button
-  await page.getByText("Add Feedback").click();
+  // Click on the Add feedback button
+  await page.getByText("Add feedback").click();
 
   // Click "Select a metric"
   await page.getByText("Select a metric").click();
