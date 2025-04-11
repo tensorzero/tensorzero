@@ -21,6 +21,7 @@ import {
   SectionHeader,
 } from "~/components/layout/PageLayout";
 import { EpisodeActions } from "./EpisodeActions";
+import { addHumanFeedback } from "~/utils/tensorzero.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { episode_id } = params;
@@ -78,6 +79,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     num_inferences,
     num_feedbacks,
   };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const _action = formData.get("_action");
+  switch (_action) {
+    case "addFeedback":
+      return addHumanFeedback(formData);
+  }
 }
 
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
@@ -148,7 +158,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader label="Episode" name={episode_id}>
-        <EpisodeActions />
+        <EpisodeActions episodeId={episode_id} />
       </PageHeader>
 
       <SectionsGroup>

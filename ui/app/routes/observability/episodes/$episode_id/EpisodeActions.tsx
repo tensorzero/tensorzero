@@ -6,7 +6,11 @@ import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 const FF_ENABLE_FEEDBACK =
   import.meta.env.VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK === "1";
 
-export function EpisodeActions() {
+interface EpisodeActionsProps {
+  episodeId: string;
+}
+
+export function EpisodeActions({ episodeId }: EpisodeActionsProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleModalOpen = () => setIsModalOpen(true);
@@ -15,7 +19,11 @@ export function EpisodeActions() {
   return (
     <ActionBar>
       {FF_ENABLE_FEEDBACK && <HumanFeedbackButton onClick={handleModalOpen} />}
-      <HumanFeedbackModal isOpen={isModalOpen} onClose={handleModalClose} />
+      <HumanFeedbackModal
+        isOpen={isModalOpen}
+        onClose={handleModalClose}
+        episodeId={episodeId}
+      />
     </ActionBar>
   );
 }

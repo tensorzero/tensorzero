@@ -16,6 +16,7 @@ import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
 import Output from "../inference/Output";
 import { Link, Form } from "react-router";
 import { Button } from "~/components/ui/button";
+import { filterMetricsByLevel } from "~/utils/config/metric";
 
 interface HumanFeedbackModalProps {
   isOpen: boolean;
@@ -64,6 +65,8 @@ interface FeedbackFormProps {
 }
 
 function FeedbackForm({
+  // This should be provided if the feedback is for an inference
+  // and omitted if the feedback is for an episode
   inferenceOutput,
   onClose,
   episodeId,
@@ -74,12 +77,8 @@ function FeedbackForm({
   // we should filter demonstration out of the list of metrics.
   const metrics =
     inferenceOutput === undefined
-      ? Object.fromEntries(
-          Object.entries(config.metrics).filter(
-            ([, metric]) => metric.type !== "demonstration",
-          ),
-        )
-      : config.metrics;
+      ? filterMetricsByLevel(config.metrics, "episode")
+      : filterMetricsByLevel(config.metrics, "inference");
   const [selectedMetricName, setSelectedMetricName] = useState<string>("");
   const selectedMetric = metrics[selectedMetricName];
   const selectedMetricType = selectedMetric?.type;
