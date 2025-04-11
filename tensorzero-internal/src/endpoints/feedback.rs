@@ -1,9 +1,12 @@
 use std::cmp::max;
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::time::Duration;
 
 use axum::extract::State;
 use axum::{debug_handler, Json};
+use futures::future::try_join_all;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -270,15 +273,16 @@ async fn write_comment(
         "id": feedback_id,
         "tags": tags
     });
-    if !dryrun {
-        // TODO: run these concurrently
-        if tags.contains_key(HUMAN_FEEDBACK_TAG_KEY) {
-            write_human_feedback(&connection_info, config, &target_info, params).await?;
-        }
-        tokio::spawn(async move {
-            let _ = connection_info.write(&[payload], "CommentFeedback").await;
-        });
-    }
+    write_feedback_concurrently(
+        &connection_info,
+        config,
+        params,
+        &target_info,
+        dryrun,
+        payload,
+        "CommentFeedback",
+    )
+    .await?;
     Ok(())
 }
 
@@ -313,17 +317,16 @@ async fn write_demonstration(
         })
     })?;
     let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
-    if !dryrun {
-        // TODO: run these concurrently
-        if tags.contains_key(HUMAN_FEEDBACK_TAG_KEY) {
-            write_human_feedback(&connection_info, config, &target_info, params).await?;
-        }
-        tokio::spawn(async move {
-            let _ = connection_info
-                .write(&[payload], "DemonstrationFeedback")
-                .await;
-        });
-    }
+    write_feedback_concurrently(
+        &connection_info,
+        config,
+        params,
+        &target_info,
+        dryrun,
+        payload,
+        "DemonstrationFeedback",
+    )
+    .await?;
     Ok(())
 }
 
@@ -353,17 +356,16 @@ async fn write_float(
         })
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
-    if !dryrun {
-        // TODO: run these concurrently
-        if tags.contains_key(HUMAN_FEEDBACK_TAG_KEY) {
-            write_human_feedback(&connection_info, config, &target_info, params).await?;
-        }
-        tokio::spawn(async move {
-            let _ = connection_info
-                .write(&[payload], "FloatMetricFeedback")
-                .await;
-        });
-    }
+    write_feedback_concurrently(
+        &connection_info,
+        config,
+        params,
+        &target_info,
+        dryrun,
+        payload,
+        "FloatMetricFeedback",
+    )
+    .await?;
     Ok(())
 }
 
@@ -391,16 +393,52 @@ async fn write_boolean(
         })
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
+    write_feedback_concurrently(
+        &connection_info,
+        config,
+        params,
+        &target_info,
+        dryrun,
+        payload,
+        "BooleanMetricFeedback",
+    )
+    .await?;
+    Ok(())
+}
+
+/// Concurrently writes the feedback to ClickHouse as well as human feedback if needed.
+async fn write_feedback_concurrently(
+    connection_info: &ClickHouseConnectionInfo,
+    config: &Config<'_>,
+    params: &Params,
+    target_info: &TargetInfo,
+    dryrun: bool,
+    main_payload: Value,
+    table_name: &'static str,
+) -> Result<(), Error> {
     if !dryrun {
-        // TODO: run these concurrently
-        if tags.contains_key(HUMAN_FEEDBACK_TAG_KEY) {
-            write_human_feedback(&connection_info, config, &target_info, params).await?;
+        let mut tasks: Vec<Pin<Box<dyn Future<Output = Result<(), Error>> + Send>>> = Vec::new();
+
+        // If human feedback tag is present, add the task to write it.
+        if params.tags.contains_key(HUMAN_FEEDBACK_TAG_KEY) {
+            tasks.push(Box::pin(write_human_feedback(
+                connection_info,
+                config,
+                target_info,
+                params,
+            )));
         }
-        tokio::spawn(async move {
-            let _ = connection_info
-                .write(&[payload], "BooleanMetricFeedback")
-                .await;
-        });
+
+        // Add the task to write the main feedback payload.
+        let connection_info_clone = connection_info.clone();
+        tasks.push(Box::pin(async move {
+            connection_info_clone
+                .write(&[main_payload], table_name)
+                .await
+        }));
+
+        // Run tasks concurrently and propagate errors.
+        try_join_all(tasks).await?;
     }
     Ok(())
 }
