@@ -27,6 +27,7 @@ function TableItemId({ id, link }: TableItemIdProps) {
           {link ? (
             <Link
               to={link}
+              aria-label={id}
               className="block no-underline transition-colors duration-300 hover:text-gray-500"
             >
               {content}
