@@ -3,9 +3,11 @@ import {
   queryModelInferencesByInferenceId,
 } from "~/utils/clickhouse/inference";
 import {
+  pollForFeedbackItem,
   queryDemonstrationFeedbackByInferenceId,
   queryFeedbackBoundsByTargetId,
   queryFeedbackByTargetId,
+  type FeedbackRow,
 } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
 import {
@@ -40,56 +42,6 @@ import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 
-// Helper function for polling delay
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Define the type for the feedback query function more explicitly
-type QueryFeedbackFn = typeof queryFeedbackByTargetId;
-type FeedbackItem = Awaited<ReturnType<QueryFeedbackFn>>[number]; // Infer the item type
-
-/**
- * Polls for a specific feedback item on the first page.
- * @param queryFn The function to fetch feedback (e.g., queryFeedbackByTargetId).
- * @param targetId The ID of the target (e.g., inference_id).
- * @param feedbackId The ID of the feedback item to find.
- * @param pageSize The number of items per page to fetch.
- * @param maxRetries Maximum number of polling attempts.
- * @param retryDelay Delay between retries in milliseconds.
- * @returns An object containing the fetched feedback list and a boolean indicating if the specific item was found.
- */
-async function pollForFeedbackItem(
-  queryFn: QueryFeedbackFn,
-  targetId: string,
-  feedbackId: string,
-  pageSize: number,
-  maxRetries: number = 10,
-  retryDelay: number = 200,
-): Promise<{ feedback: FeedbackItem[]; found: boolean }> {
-  let feedback: FeedbackItem[] = [];
-  let found = false;
-  for (let i = 0; i < maxRetries; i++) {
-    feedback = await queryFn({
-      target_id: targetId,
-      page_size: pageSize,
-      // Only fetch the first page
-    });
-    if (feedback.some((f) => f.id === feedbackId)) {
-      found = true;
-      break;
-    }
-    if (i < maxRetries - 1) {
-      // Don't sleep after the last attempt
-      await sleep(retryDelay);
-    }
-  }
-  if (!found) {
-    console.warn(
-      `Feedback ${feedbackId} for target ${targetId} not found after ${maxRetries} retries.`,
-    );
-  }
-  return { feedback, found };
-}
-
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { inference_id } = params;
   const url = new URL(request.url);
@@ -118,18 +70,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // Conditionally define the promise for fetching feedback data
   const feedbackDataPromise = newFeedbackId
-    ? pollForFeedbackItem(
-        queryFeedbackByTargetId,
-        inference_id,
-        newFeedbackId,
-        pageSize,
-      ) // Returns Promise<{ feedback: FeedbackItem[], found: boolean }>
+    ? pollForFeedbackItem(inference_id, newFeedbackId, pageSize)
     : queryFeedbackByTargetId({
         target_id: inference_id,
         before: beforeFeedback || undefined,
         after: afterFeedback || undefined,
         page_size: pageSize,
-      }); // Returns Promise<FeedbackItem[]>
+      });
 
   // --- Execute all promises concurrently ---
 
@@ -158,7 +105,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   // Extract the actual feedback array, handling the two possible shapes of feedbackResult
-  const feedback: FeedbackItem[] = newFeedbackId
+  const feedback: FeedbackRow[] = newFeedbackId
     ? (feedbackResult as Awaited<ReturnType<typeof pollForFeedbackItem>>)
         .feedback
     : (feedbackResult as Awaited<ReturnType<typeof queryFeedbackByTargetId>>);
