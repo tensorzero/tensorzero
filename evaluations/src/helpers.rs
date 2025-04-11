@@ -96,6 +96,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Specific("tool_1".to_string()),
             parallel_tool_calls: None,
+            description: None,
         });
         let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config).await;
         assert_eq!(
@@ -132,6 +133,7 @@ mod tests {
             tools: vec!["tool_1".to_string()],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
         let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config).await;
         assert_eq!(
