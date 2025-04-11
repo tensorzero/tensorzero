@@ -7,7 +7,6 @@ import {
   queryDemonstrationFeedbackByInferenceId,
   queryFeedbackBoundsByTargetId,
   queryFeedbackByTargetId,
-  type FeedbackRow,
 } from "~/utils/clickhouse/feedback";
 import type { Route } from "./+types/route";
 import {
@@ -68,7 +67,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     target_id: inference_id,
   });
 
-  // Conditionally define the promise for fetching feedback data
+  // If there is a freshly inserted feedback, ClickHouse may take some time to
+  // update the feedback table as it is eventually consistent.
+  // In this case, we poll for the feedback item until it is found but time out and log a warning.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(inference_id, newFeedbackId, pageSize)
     : queryFeedbackByTargetId({
@@ -86,7 +87,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     dataset_counts,
     demonstration_feedback,
     feedback_bounds,
-    feedbackResult, // This will be either FeedbackItem[] or { feedback: FeedbackItem[], found: boolean }
+    feedback,
   ] = await Promise.all([
     inferencePromise,
     modelInferencesPromise,
@@ -104,20 +105,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
 
-  // Extract the actual feedback array, handling the two possible shapes of feedbackResult
-  const feedback: FeedbackRow[] = newFeedbackId
-    ? (feedbackResult as Awaited<ReturnType<typeof pollForFeedbackItem>>)
-        .feedback
-    : (feedbackResult as Awaited<ReturnType<typeof queryFeedbackByTargetId>>);
-
   return {
     inference,
     model_inferences,
-    feedback, // Use the extracted feedback array
+    feedback,
     feedback_bounds,
     dataset_counts,
     hasDemonstration: demonstration_feedback.length > 0,
-    newFeedbackId, // Still pass this for the toast notification/highlighting
+    newFeedbackId,
   };
 }
 

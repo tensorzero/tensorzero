@@ -10,7 +10,7 @@ interface EpisodeActionsProps {
   episodeId: string;
 }
 
-export function EpisodeActions({ episodeId }: EpisodeActionsProps) {
+export default function EpisodeActions({ episodeId }: EpisodeActionsProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleModalOpen = () => setIsModalOpen(true);

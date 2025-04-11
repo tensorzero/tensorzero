@@ -909,7 +909,7 @@ export async function pollForFeedbackItem(
   pageSize: number,
   maxRetries: number = 10,
   retryDelay: number = 200,
-): Promise<{ feedback: FeedbackRow[]; found: boolean }> {
+): Promise<FeedbackRow[]> {
   let feedback: FeedbackRow[] = [];
   let found = false;
   for (let i = 0; i < maxRetries; i++) {
@@ -932,5 +932,5 @@ export async function pollForFeedbackItem(
       `Feedback ${feedbackId} for target ${targetId} not found after ${maxRetries} retries.`,
     );
   }
-  return { feedback, found };
+  return feedback;
 }
