@@ -1,10 +1,13 @@
 [package]
 name = "minijinja-bindings"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
 
 [features]
 default = []

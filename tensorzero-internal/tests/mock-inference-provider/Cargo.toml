@@ -3,6 +3,9 @@ name = "mock-inference-provider"
 version = "0.1.0"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [dependencies]
 async-stream = { workspace = true }
 axum = { workspace = true, features = ["multipart"] }

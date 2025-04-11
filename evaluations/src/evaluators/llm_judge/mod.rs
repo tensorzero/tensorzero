@@ -16,6 +16,7 @@ use tensorzero_internal::inference::types::{
 };
 use uuid::Uuid;
 
+use crate::helpers::get_cache_options;
 use crate::ThrottledTensorZeroClient;
 
 pub struct LLMJudgeEvaluationResult {
@@ -23,17 +24,33 @@ pub struct LLMJudgeEvaluationResult {
     pub value: Value,
 }
 
+pub struct RunLLMJudgeEvaluatorParams<'a> {
+    pub inference_response: &'a InferenceResponse,
+    pub datapoint: &'a Datapoint,
+    pub tensorzero_client: &'a ThrottledTensorZeroClient,
+    pub llm_judge_config: &'a LLMJudgeConfig,
+    pub evaluation_name: &'a str,
+    pub evaluator_name: &'a str,
+    pub evaluation_run_id: Uuid,
+    pub input: &'a ClientInput,
+    pub inference_cache: CacheEnabledMode,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn run_llm_judge_evaluator(
-    inference_response: &InferenceResponse,
-    datapoint: &Datapoint,
-    tensorzero_client: &ThrottledTensorZeroClient,
-    llm_judge_config: &LLMJudgeConfig,
-    evaluation_name: &str,
-    evaluator_name: &str,
-    evaluation_run_id: Uuid,
-    input: &ClientInput,
+    params: RunLLMJudgeEvaluatorParams<'_>,
 ) -> Result<Option<LLMJudgeEvaluationResult>> {
+    let RunLLMJudgeEvaluatorParams {
+        inference_response,
+        datapoint,
+        tensorzero_client,
+        llm_judge_config,
+        evaluation_name,
+        evaluator_name,
+        evaluation_run_id,
+        input,
+        inference_cache,
+    } = params;
     let judge_input =
         match prepare_llm_judge_input(llm_judge_config, input, inference_response, datapoint)? {
             Some(input) => input,
@@ -64,10 +81,7 @@ pub async fn run_llm_judge_evaluator(
         dynamic_tool_params: DynamicToolParams::default(),
         output_schema: None,
         credentials: HashMap::new(),
-        cache_options: tensorzero::CacheParamsOptions {
-            max_age_s: None,
-            enabled: CacheEnabledMode::On,
-        },
+        cache_options: get_cache_options(inference_cache),
         extra_body: Default::default(),
     };
     let result = tensorzero_client.inference(params).await?;
