@@ -90,7 +90,6 @@ def analyze_dataset(dataset: t.Any, model: str, encoding: tiktoken.Encoding):
 
     for entry in dataset:
         messages = entry["messages"]
-        print("Messages: ", messages)
 
         # Check for missing system/user messages
         if not any(m["role"] == "system" for m in messages):

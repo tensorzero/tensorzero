@@ -554,7 +554,6 @@ async def create_fine_tuning_job(
         response = await session.post(url, headers=headers, json=body)
         response.raise_for_status()
         data = response.json()
-        print("Fireworks response: ", data)
         if "name" not in data:
             raise ValueError("Fine tuning job response missing name field")
         return data
