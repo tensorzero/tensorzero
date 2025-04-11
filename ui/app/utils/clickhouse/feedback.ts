@@ -902,7 +902,6 @@ export async function queryMetricsWithFeedback(params: {
  * @param retryDelay Delay between retries in milliseconds.
  * @returns An object containing the fetched feedback list and a boolean indicating if the specific item was found.
  */
-// TODO(Viraj): test
 export async function pollForFeedbackItem(
   targetId: string,
   feedbackId: string,
