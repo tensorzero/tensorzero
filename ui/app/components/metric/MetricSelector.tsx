@@ -48,8 +48,6 @@ export function MetricSelector({
           Metric
         </label>
       </div>
-      {/* Hidden input might not be needed depending on your form setup */}
-      {/* <input type="hidden" name="metric" value={selectedMetric || ""} /> */}
       <Popover open={metricPopoverOpen} onOpenChange={setMetricPopoverOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -99,7 +97,6 @@ export function MetricSelector({
                       />
                       <span>{metricName}</span>
                     </div>
-                    {/* Keep the badges */}
                     <MetricBadges metric={metricConfig} />
                   </CommandItem>
                 ))}

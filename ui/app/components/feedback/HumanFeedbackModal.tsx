@@ -21,6 +21,8 @@ import { filterMetricsByLevel } from "~/utils/config/metric";
 interface HumanFeedbackModalProps {
   isOpen: boolean;
   onClose: () => void;
+  // This should be provided if the feedback is for an inference
+  // and omitted if the feedback is for an episode
   inferenceOutput?: ContentBlockOutput[] | JsonInferenceOutput;
   // Exactly one of the following should be provided
   episodeId?: string;
@@ -65,8 +67,6 @@ interface FeedbackFormProps {
 }
 
 function FeedbackForm({
-  // This should be provided if the feedback is for an inference
-  // and omitted if the feedback is for an episode
   inferenceOutput,
   onClose,
   episodeId,
