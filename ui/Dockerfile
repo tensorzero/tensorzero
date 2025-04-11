@@ -100,7 +100,7 @@ COPY --from=python-build-env /build/optimizations-server/.venv  /build/optimizat
 # Workaround for uv issue
 #COPY ./clients/python-pyo3 /clients/python-pyo3
 
-#USER ui
+USER ui
 
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
 

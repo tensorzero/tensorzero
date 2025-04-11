@@ -305,7 +305,6 @@ def validate_and_convert_messages(
 ) -> List[List[Dict]]:
     all_messages = []
 
-    # TODO - do we want to port the validation logic from typescript?
     for inference in inferences:
         messages = tensorzero_inference_to_openai_messages(inference, template_env)
         all_messages.append(messages)
