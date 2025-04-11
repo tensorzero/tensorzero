@@ -1,4 +1,3 @@
-import * as React from "react";
 import { Link } from "react-router";
 import {
   Tooltip,
@@ -8,12 +7,12 @@ import {
 } from "./tooltip";
 import { formatDate } from "~/utils/date";
 
-interface TableItemIdProps {
+interface TableItemShortUuidProps {
   id: string;
   link?: string;
 }
 
-function TableItemId({ id, link }: TableItemIdProps) {
+function TableItemShortUuid({ id, link }: TableItemShortUuidProps) {
   const content = (
     <span className="font-mono whitespace-nowrap">
       {id.length > 8 ? `…${id.slice(-8)}` : id}
@@ -57,4 +56,4 @@ function TableItemTime({ timestamp }: TableItemTimeProps) {
   );
 }
 
-export { TableItemId, TableItemTime };
+export { TableItemShortUuid, TableItemTime };

@@ -7,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import { TableItemId, TableItemTime } from "~/components/ui/TableItems";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import { FunctionLink } from "~/components/function/FunctionLink";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 
@@ -42,13 +42,13 @@ export default function InferencesTable({
             inferences.map((inference) => (
               <TableRow key={inference.id} id={inference.id}>
                 <TableCell>
-                  <TableItemId
+                  <TableItemShortUuid
                     id={inference.id}
                     link={`/observability/inferences/${inference.id}`}
                   />
                 </TableCell>
                 <TableCell>
-                  <TableItemId
+                  <TableItemShortUuid
                     id={inference.episode_id}
                     link={`/observability/episodes/${inference.episode_id}`}
                   />
