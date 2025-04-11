@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::providers::provider_trait::InferenceProvider;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::resolved_input::ImageWithPath;
@@ -195,7 +195,10 @@ impl GCPServiceAccountCredentials {
     pub fn from_json_str(credential_str: &str) -> Result<Self, Error> {
         let credential_value: Value = serde_json::from_str(credential_str).map_err(|e| {
             Error::new(ErrorDetails::GCPCredentials {
-                message: format!("Failed to parse GCP Vertex Gemini credentials: {e}"),
+                message: format!(
+                    "Failed to parse GCP Vertex Gemini credentials: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         match (
@@ -252,7 +255,7 @@ impl GCPServiceAccountCredentials {
         let claims = Claims::new(&self.client_email, &self.client_email, audience);
         let token = encode(&header, &claims, &self.private_key).map_err(|e| {
             Error::new(ErrorDetails::GCPCredentials {
-                message: format!("Failed to encode JWT: {e}"),
+                message: format!("Failed to encode JWT: {}", DisplayOrDebugGateway::new(e)),
             })
         })?;
         Ok(token)
@@ -276,7 +279,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             serde_json::to_value(GCPVertexGeminiRequest::new(request, &self.model_id)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
-                        message: format!("Error serializing GCP Vertex Gemini request: {e}"),
+                        message: format!(
+                            "Error serializing GCP Vertex Gemini request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                     })
                 },
             )?;
@@ -299,8 +305,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request: {e}"),
                     status_code: e.status(),
+                    message: format!("Error sending request: {}", DisplayOrDebugGateway::new(e)),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -312,7 +318,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -339,7 +348,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             let response_code = res.status();
             let error_body = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -365,7 +377,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             serde_json::to_value(GCPVertexGeminiRequest::new(request, &self.model_id)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
-                        message: format!("Error serializing GCP Vertex Gemini request: {e}"),
+                        message: format!(
+                            "Error serializing GCP Vertex Gemini request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                     })
                 },
             )?;
@@ -377,7 +392,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let api_key = self
@@ -392,7 +410,10 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to GCP Vertex Gemini: {e}"),
+                    message: format!(
+                        "Error sending request to GCP Vertex Gemini: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
@@ -446,7 +467,7 @@ fn stream_gcp_vertex_gemini(
                     Event::Message(message) => {
                         let data: Result<GCPVertexGeminiResponse, Error> = serde_json::from_str(&message.data).map_err(|e| {
                             Error::new(ErrorDetails::InferenceServer {
-                                message: format!("Error parsing streaming JSON response: {e}"),
+                                message: format!("Error parsing streaming JSON response: {}", DisplayOrDebugGateway::new(e)),
                                 provider_type: PROVIDER_TYPE.to_string(),
                                 raw_request: None,
                                 raw_response: Some(message.data.clone()),
@@ -539,7 +560,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
                 let response: Value = serde_json::from_str(&tool_result.result).map_err(|e| {
                     Error::new(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!("Error parsing tool result as JSON Value: {e}"),
+                        message: format!(
+                            "Error parsing tool result as JSON Value: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: None,
                         raw_response: Some(tool_result.result.clone()),
@@ -566,7 +590,10 @@ impl<'a> TryFrom<&'a ContentBlock> for Option<FlattenUnknown<'a, GCPVertexGemini
                 let args: Value = serde_json::from_str(&tool_call.arguments).map_err(|e| {
                     Error::new(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
-                        message: format!("Error parsing tool call arguments as JSON Value: {e}"),
+                        message: format!(
+                            "Error parsing tool call arguments as JSON Value: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
@@ -1096,7 +1123,10 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             .into();
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request: {e}"),
+                message: format!(
+                    "Error serializing request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let system = generic_request.system.clone();

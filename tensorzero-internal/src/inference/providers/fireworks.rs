@@ -13,7 +13,7 @@ use url::Url;
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails},
+    error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
@@ -150,7 +150,10 @@ impl InferenceProvider for FireworksProvider {
             serde_json::to_value(FireworksRequest::new(&self.model_name, request)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
-                        message: format!("Error serializing Fireworks request: {e}"),
+                        message: format!(
+                            "Error serializing Fireworks request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                     })
                 },
             )?;
@@ -173,8 +176,11 @@ impl InferenceProvider for FireworksProvider {
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to Fireworks: {e}"),
                     status_code: e.status(),
+                    message: format!(
+                        "Error sending request to Fireworks: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -186,7 +192,10 @@ impl InferenceProvider for FireworksProvider {
         if res.status().is_success() {
             let raw_response = res.text().await.map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
-                    message: format!("Error parsing text response: {e}"),
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                     raw_response: None,
@@ -216,7 +225,10 @@ impl InferenceProvider for FireworksProvider {
                 res.status(),
                 &res.text().await.map_err(|e| {
                     Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing error response: {e}"),
+                        message: format!(
+                            "Error parsing error response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                         provider_type: PROVIDER_TYPE.to_string(),
                         raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                         raw_response: None,
@@ -242,7 +254,10 @@ impl InferenceProvider for FireworksProvider {
             serde_json::to_value(FireworksRequest::new(&self.model_name, request)?).map_err(
                 |e| {
                     Error::new(ErrorDetails::Serialization {
-                        message: format!("Error serializing Fireworks request: {e}"),
+                        message: format!(
+                            "Error serializing Fireworks request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
                     })
                 },
             )?;
@@ -254,7 +269,10 @@ impl InferenceProvider for FireworksProvider {
         )?;
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
-                message: format!("Error serializing request body: {e}"),
+                message: format!(
+                    "Error serializing request body: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
                 provider_type: PROVIDER_TYPE.to_string(),
                 raw_request: Some(serde_json::to_string(&request_body).unwrap_or_default()),
                 raw_response: None,
@@ -272,7 +290,10 @@ impl InferenceProvider for FireworksProvider {
             .eventsource()
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
-                    message: format!("Error sending request to Fireworks: {e}"),
+                    message: format!(
+                        "Error sending request to Fireworks: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
                     status_code: None,
                     provider_type: PROVIDER_TYPE.to_string(),
                     raw_request: Some(raw_request.clone()),
@@ -599,7 +620,10 @@ fn fireworks_to_tensorzero_chunk(
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let raw_message = serde_json::to_string(&chunk).map_err(|e| {
         Error::new(ErrorDetails::InferenceServer {
-            message: format!("Error parsing response from Fireworks: {e}"),
+            message: format!(
+                "Error parsing response from Fireworks: {}",
+                DisplayOrDebugGateway::new(e)
+            ),
             raw_request: None,
             raw_response: Some(serde_json::to_string(&chunk).unwrap_or_default()),
             provider_type: PROVIDER_TYPE.to_string(),
@@ -771,7 +795,10 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
         }
         let raw_request = serde_json::to_string(&request_body).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing request body as JSON: {e}"),
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
             })
         })?;
         let system = generic_request.system.clone();
