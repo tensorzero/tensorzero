@@ -431,6 +431,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build ui container
+        # Enable feedback in the UI for this job so the playwright tests can use it
+        env:
+          VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK: 1
         run: docker build -f ui/Dockerfile . -t tensorzero/ui
 
       - name: Start services for ui e2e tests
@@ -455,7 +458,6 @@ jobs:
         working-directory: ui
         env:
           TENSORZERO_CI: 1
-          VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK: 1
         run: pnpm test-e2e
         continue-on-error: true
         id: e2e_tests
