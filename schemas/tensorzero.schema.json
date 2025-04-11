@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",  
+  "title": "TensorZero Configuration Toml file", 
+  "description": "The configuration for a [`tensorzero`](https://www.tensorzero.com) project.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "functions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["json"],
+            "description": "The type of function."
+          },
+          "output_schema": {
+            "type": "string",
+            "format": "uri",
+            "description": "output schema path"
+          }, 
+          "variants": {
+            "type": "object", 
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string", "enum": ["chat_completion", "experimental_dynamic_in_context_learning"] },
+                  "model": { "type": "string", "pattern": "^openai::(gpt-4o|gpt-4o-mini|ft:gpt-4o-mini)-[0-9]{4}-[0-9]{2}-[0-9]{2}.*$" },
+                  "system_template": { "type": "string", "format": "uri" },
+                  "embedding_model": { "type": "string", "enum": ["openai::text-embedding-3-small"] },
+                  "k": { "type": "integer", "minimum": 1 },
+                  "system_instructions": { "type": "string", "format": "uri" }
+                },
+                "required": ["type", "model"]
+              }
+            }
+          },
+          "required": ["type", "output_schema", "variants"]
+        }
+      }
+    }, 
+    "metrics": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "enum": ["boolean", "float"] },
+          "level": { "type": "string", "enum": ["inference", "episode"] },
+          "optimize": { "type": "string", "enum": ["max"] }
+        },
+        "required": ["type", "level", "optimize"]
+      }
+    }
+  },
+  "required": ["functions", "metrics"]
+}
