@@ -450,7 +450,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build ui container
-        run: docker build -f ui/Dockerfile . -t tensorzero/ui
+        run: docker buildx build -f ui/Dockerfile . -t tensorzero/ui
 
       - name: Start services for ui e2e tests
         working-directory: ui
