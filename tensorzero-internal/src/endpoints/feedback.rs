@@ -14,7 +14,6 @@ use tokio::time::Instant;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::cache::CacheKey;
 use crate::clickhouse::ClickHouseConnectionInfo;
 use crate::config_parser::{Config, MetricConfigLevel, MetricConfigType};
 use crate::error::{Error, ErrorDetails};
@@ -42,8 +41,12 @@ const FEEDBACK_COOLDOWN_PERIOD: Duration = Duration::from_secs(5);
 const FEEDBACK_MINIMUM_WAIT_TIME: Duration = Duration::from_millis(1200);
 
 /// Everywhere in the UI we take human feedback, we add this tag.
-/// If this tag is present, we will also write human feedback to a separate table.
+/// If this tag is present and a datapoint ID is present, we will also write human feedback to a separate table.
 const HUMAN_FEEDBACK_TAG_KEY: &str = "tensorzero::human_feedback";
+
+/// The tag key that gives the datapoint ID for the feedback.
+/// If this tag is present and a human feedback tag is present, we will also write human feedback to a separate table.
+const DATAPOINT_TAG_KEY: &str = "tensorzero::datapoint_id";
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Serialize, Deserialize)]
@@ -273,15 +276,16 @@ async fn write_comment(
         "id": feedback_id,
         "tags": tags
     });
-    write_feedback_concurrently(
-        &connection_info,
+    write_feedback_concurrently(WriteFeedbackParams {
+        connection_info: &connection_info,
+        feedback_id,
         config,
         params,
-        &target_info,
+        target_info: &target_info,
         dryrun,
-        payload,
-        "CommentFeedback",
-    )
+        feedback_value: payload,
+        feedback_table_name: "CommentFeedback",
+    })
     .await?;
     Ok(())
 }
@@ -317,15 +321,16 @@ async fn write_demonstration(
         })
     })?;
     let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
-    write_feedback_concurrently(
-        &connection_info,
+    write_feedback_concurrently(WriteFeedbackParams {
+        connection_info: &connection_info,
+        feedback_id,
         config,
         params,
-        &target_info,
+        target_info: &target_info,
         dryrun,
-        payload,
-        "DemonstrationFeedback",
-    )
+        feedback_value: payload,
+        feedback_table_name: "DemonstrationFeedback",
+    })
     .await?;
     Ok(())
 }
@@ -356,15 +361,16 @@ async fn write_float(
         })
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
-    write_feedback_concurrently(
-        &connection_info,
+    write_feedback_concurrently(WriteFeedbackParams {
+        connection_info: &connection_info,
+        feedback_id,
         config,
         params,
-        &target_info,
+        target_info: &target_info,
         dryrun,
-        payload,
-        "FloatMetricFeedback",
-    )
+        feedback_value: payload,
+        feedback_table_name: "FloatMetricFeedback",
+    })
     .await?;
     Ok(())
 }
@@ -393,42 +399,59 @@ async fn write_boolean(
         })
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
-    write_feedback_concurrently(
-        &connection_info,
+    write_feedback_concurrently(WriteFeedbackParams {
+        connection_info: &connection_info,
+        feedback_id,
         config,
         params,
-        &target_info,
+        target_info: &target_info,
         dryrun,
-        payload,
-        "BooleanMetricFeedback",
-    )
+        feedback_value: payload,
+        feedback_table_name: "BooleanMetricFeedback",
+    })
     .await?;
     Ok(())
+}
+
+struct WriteFeedbackParams<'a> {
+    connection_info: &'a ClickHouseConnectionInfo,
+    feedback_id: Uuid,
+    config: &'a Config<'a>,
+    params: &'a Params,
+    target_info: &'a TargetInfo,
+    dryrun: bool,
+    feedback_value: Value,
+    feedback_table_name: &'static str,
 }
 
 /// Represents a future that resolves to writing a piece of feedback data.
 type FeedbackWriteTask<'a> = Pin<Box<dyn Future<Output = Result<(), Error>> + Send + 'a>>;
 
 /// Concurrently writes the feedback to ClickHouse as well as human feedback if needed.
-async fn write_feedback_concurrently(
-    connection_info: &ClickHouseConnectionInfo,
-    config: &Config<'_>,
-    params: &Params,
-    target_info: &TargetInfo,
-    dryrun: bool,
-    main_payload: Value,
-    table_name: &'static str,
-) -> Result<(), Error> {
+async fn write_feedback_concurrently(params: WriteFeedbackParams<'_>) -> Result<(), Error> {
+    let WriteFeedbackParams {
+        connection_info,
+        feedback_id,
+        config,
+        params,
+        target_info,
+        dryrun,
+        feedback_value,
+        feedback_table_name,
+    } = params;
     if !dryrun {
         let mut tasks: Vec<FeedbackWriteTask<'_>> = Vec::new();
 
         // If human feedback tag is present, add the task to write it.
-        if params.tags.contains_key(HUMAN_FEEDBACK_TAG_KEY) {
+        if params.tags.contains_key(HUMAN_FEEDBACK_TAG_KEY)
+            && params.tags.contains_key(DATAPOINT_TAG_KEY)
+        {
             tasks.push(Box::pin(write_human_feedback(
                 connection_info,
                 config,
                 target_info,
                 params,
+                feedback_id,
             )));
         }
 
@@ -436,7 +459,7 @@ async fn write_feedback_concurrently(
         let connection_info_clone = connection_info.clone();
         tasks.push(Box::pin(async move {
             connection_info_clone
-                .write(&[main_payload], table_name)
+                .write(&[feedback_value], feedback_table_name)
                 .await
         }));
 
@@ -783,89 +806,72 @@ async fn write_human_feedback(
     config: &Config<'_>,
     target_info: &TargetInfo,
     params: &Params,
+    feedback_id: Uuid,
 ) -> Result<(), Error> {
-    let input_output = fetch_input_output(clickhouse, config, target_info).await?;
-    // Hash the input and output concatenated using blake3
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(input_output.input.as_bytes());
-    hasher.update(input_output.output.as_bytes());
-    let cache_key: CacheKey = hasher.finalize().into();
-    let input_output_hash = cache_key.get_short_key()?.to_string();
-    let query = r#"
-        INSERT INTO HumanFeedback (
-            function_name,
-            metric_name,
-            input_output_hash,
-            input,
-            output,
-            value,
-            feedback_id
-        ) VALUES (
-            {function_name:String},
-            {metric_name:String},
-            {input_output_hash:UInt64},
-            {input:String},
-            {output:String},
-            {value:String},
-            {feedback_id:UUID}
-        )
-    "#;
-    let parameters = HashMap::from([
-        ("function_name", target_info.function_name.as_str()),
-        ("metric_name", params.metric_name.as_str()),
-        ("input_output_hash", input_output_hash.as_str()),
-        ("input", input_output.input.as_str()),
-        ("output", input_output.output.as_str()),
-    ]);
-    clickhouse
-        .run_query_synchronous(query.to_string(), Some(&parameters))
-        .await?;
-    Ok(())
-}
-
-#[derive(Debug, Deserialize)]
-struct InputOutput {
-    input: String,
-    output: String,
-}
-
-async fn fetch_input_output(
-    clickhouse: &ClickHouseConnectionInfo,
-    config: &Config<'_>,
-    target_info: &TargetInfo,
-) -> Result<InputOutput, Error> {
+    let datapoint_id =
+        params
+            .tags
+            .get(DATAPOINT_TAG_KEY)
+            .ok_or(Error::new(ErrorDetails::InvalidRequest {
+                message: "Datapoint ID is required for writing human evaluation feedback. This is a bug and should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
+            }))?
+            .parse::<Uuid>()
+            .map_err(|e| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Invalid datapoint ID: {}", e),
+                })
+            })?;
     let function_config = config.get_function(&target_info.function_name)?;
     let table_name = match &**function_config {
         FunctionConfig::Chat(..) => "ChatInference",
         FunctionConfig::Json(..) => "JsonInference",
     };
-    let query = r#"SELECT
-        input,
-        output
-    FROM {table_name:Identifier}
-    WHERE function_name={function_name:String}
-    AND variant_name={variant_name:String}
-    AND episode_id={episode_id:String}
-    AND id={inference_id:String}
+    let query = r#"
+        INSERT INTO HumanEvaluationFeedback (
+            metric_name,
+            datapoint_id,
+            output,
+            value,
+            feedback_id
+        ) VALUES (
+            {metric_name:String},
+            {datapoint_id:UUID},
+            (
+                SELECT output
+                FROM {table_name:Identifier}
+                WHERE function_name = {function_name:String}
+                AND variant_name = {variant_name:String}
+                AND episode_id = {episode_id:String}
+                AND id = {inference_id:String}
+            ),
+            {value:String},
+            {feedback_id:UUID}
+        )
     "#;
-    let inference_id = target_info.inference_id.to_string();
-    let episode_id = target_info.episode_id.to_string();
+    let value = serde_json::to_string(&params.value).map_err(|e| {
+        Error::new(ErrorDetails::InvalidRequest {
+            message: format!("Failed to serialize value: {}", e),
+        })
+    })?;
+    let datapoint_id_str = datapoint_id.to_string();
+    let feedback_id_str = feedback_id.to_string();
+    let episode_id_str = target_info.episode_id.to_string();
+    let inference_id_str = target_info.inference_id.to_string();
     let parameters = HashMap::from([
+        ("metric_name", params.metric_name.as_str()),
+        ("datapoint_id", datapoint_id_str.as_str()),
+        ("value", value.as_str()),
+        ("feedback_id", feedback_id_str.as_str()),
         ("table_name", table_name),
         ("function_name", &target_info.function_name),
         ("variant_name", &target_info.variant_name),
-        ("episode_id", &episode_id),
-        ("inference_id", &inference_id),
+        ("episode_id", episode_id_str.as_str()),
+        ("inference_id", inference_id_str.as_str()),
     ]);
-    let result = clickhouse
+    clickhouse
         .run_query_synchronous(query.to_string(), Some(&parameters))
         .await?;
-    let result = result.trim();
-    serde_json::from_str::<InputOutput>(result).map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseQuery {
-            message: format!("Failed to parse input/output: {}", e),
-        })
-    })
+    Ok(())
 }
 
 #[cfg(test)]

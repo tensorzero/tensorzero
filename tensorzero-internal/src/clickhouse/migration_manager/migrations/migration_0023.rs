@@ -5,7 +5,7 @@ use async_trait::async_trait;
 
 use super::check_table_exists;
 
-/// This migration adds a table HumanFeedback that stores human feedback in an easy-to-reference format.
+/// This migration adds a table HumanEvaluationFeedback that stores human feedback in an easy-to-reference format.
 /// This is technically an auxiliary table as the primary store is still the various feedback tables.
 /// The gateway should write to this table when a feedback is tagged with key "tensorzero::human_feedback"
 pub struct Migration0023<'a> {
@@ -20,7 +20,7 @@ impl Migration for Migration0023<'_> {
 
     async fn should_apply(&self) -> Result<bool, Error> {
         let human_feedback_table_exists =
-            check_table_exists(self.clickhouse, "HumanFeedback", "0023").await?;
+            check_table_exists(self.clickhouse, "HumanEvaluationFeedback", "0023").await?;
 
         Ok(!human_feedback_table_exists)
     }
@@ -28,15 +28,15 @@ impl Migration for Migration0023<'_> {
     async fn apply(&self) -> Result<(), Error> {
         self.clickhouse
             .run_query_synchronous(
-                r#"CREATE TABLE IF NOT EXISTS HumanFeedback (
-                    function_name LowCardinality(String),
+                r#"CREATE TABLE IF NOT EXISTS HumanEvaluationFeedback (
                     metric_name LowCardinality(String),
+                    datapoint_id UUID,
                     output String,
                     value String,  -- JSON encoded value of the feedback
                     feedback_id UUID,
                     timestamp DateTime MATERIALIZED UUIDv7ToDateTime(feedback_id),
                 ) ENGINE = MergeTree()
-                ORDER BY (function_name, metric_name, output)
+                ORDER BY (metric_name, datapoint_id, output)
                 SETTINGS index_granularity = 256 -- We use a small index granularity to improve lookup performance
             "#.to_string(),
                 None,
@@ -47,7 +47,7 @@ impl Migration for Migration0023<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "DROP TABLE IF EXISTS HumanFeedback".to_string()
+        "DROP TABLE IF EXISTS HumanEvaluationFeedback".to_string()
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
