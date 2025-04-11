@@ -12,7 +12,7 @@ import {
   CommandList,
 } from "../ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { MetricBadges } from "./MetricBadges";
+import MetricBadges from "./MetricBadges";
 import clsx from "clsx";
 
 interface MetricSelectorProps {
@@ -20,12 +20,14 @@ interface MetricSelectorProps {
   metrics: Record<string, MetricConfig>;
   selectedMetric: string | undefined; // Allow undefined for placeholder
   onMetricChange: (metric: string) => void;
+  showLevelBadges?: boolean;
 }
 
-export function MetricSelector({
+export default function MetricSelector({
   metrics,
   selectedMetric,
   onMetricChange,
+  showLevelBadges = true,
 }: MetricSelectorProps) {
   const [metricPopoverOpen, setMetricPopoverOpen] = useState(false);
   const [metricInputValue, setMetricInputValue] = useState("");
@@ -97,7 +99,10 @@ export function MetricSelector({
                       />
                       <span>{metricName}</span>
                     </div>
-                    <MetricBadges metric={metricConfig} />
+                    <MetricBadges
+                      metric={metricConfig}
+                      showLevel={showLevelBadges}
+                    />
                   </CommandItem>
                 ))}
               </CommandGroup>

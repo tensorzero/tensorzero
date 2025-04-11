@@ -16,7 +16,7 @@ import {
 } from "~/components/ui/select";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Input } from "~/components/ui/input";
-import { MetricBadges } from "~/components/metric/MetricBadges";
+import MetricBadges from "~/components/metric/MetricBadges";
 import { useEffect, useMemo } from "react";
 import { useFetcher } from "react-router";
 import type { MetricsWithFeedbackData } from "~/utils/clickhouse/feedback";

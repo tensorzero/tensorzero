@@ -5,7 +5,7 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { useConfig } from "~/context/config";
-import { MetricSelector } from "../metric/MetricSelector";
+import MetricSelector from "../metric/MetricSelector";
 import { useState } from "react";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Label } from "~/components/ui/label";
@@ -106,6 +106,9 @@ function FeedbackForm({
         metrics={metrics}
         selectedMetric={selectedMetricName}
         onMetricChange={setSelectedMetricName}
+        showLevelBadges={false}
+        // We don't need to show the level badges since this is currently only used for
+        // the inference and episode detail pages where it is obvious
       />
 
       {selectedMetric && selectedMetricType === "boolean" && (
@@ -141,7 +144,7 @@ function FeedbackForm({
       {selectedMetric &&
         selectedMetricType === "demonstration" &&
         (demonstrationValue ? (
-          <>
+          <div className="mt-4">
             <Output
               output={demonstrationValue}
               isEditing={true}
@@ -155,9 +158,9 @@ function FeedbackForm({
                 getDemonstrationValueToSubmit(demonstrationValue),
               )}
             />
-          </>
+          </div>
         ) : (
-          <div className="text-red-500">
+          <div className="mt-4 text-red-500">
             Initial output missing for demonstration value. This is most likely
             a bug. Please file a bug report{" "}
             <Link to="https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports">
@@ -178,6 +181,7 @@ function FeedbackForm({
           <Button
             type="submit"
             disabled={!selectedMetricName || isInputMissing}
+            className="mt-2"
           >
             Submit Feedback
           </Button>
