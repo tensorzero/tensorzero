@@ -792,7 +792,12 @@ async def test_async_json_streaming_reasoning(async_client: AsyncTensorZeroGatew
         variant_name="json_reasoner",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         stream=True,
     )
@@ -832,7 +837,12 @@ async def test_async_json_success(async_client: AsyncTensorZeroGateway):
         function_name="json_success",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         stream=False,
@@ -852,7 +862,12 @@ async def test_async_json_reasoning(async_client: AsyncTensorZeroGateway):
         variant_name="json_reasoner",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         stream=False,
     )
@@ -1513,7 +1528,12 @@ def test_sync_json_streaming(sync_client: TensorZeroGateway):
         function_name="json_success",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         stream=True,
     )
@@ -1563,7 +1583,12 @@ def test_sync_json_streaming_reasoning(sync_client: TensorZeroGateway):
         variant_name="json_reasoner",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         stream=True,
     )
@@ -1602,7 +1627,12 @@ def test_sync_json_success(sync_client: TensorZeroGateway):
         function_name="json_success",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         output_schema={"type": "object", "properties": {"answer": {"type": "string"}}},
         stream=False,
@@ -1621,7 +1651,12 @@ def test_sync_json_reasoning(sync_client: TensorZeroGateway):
         variant_name="json_reasoner",
         input={
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": {"country": "Japan"}}],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}],
+                }
+            ],
         },
         stream=False,
     )

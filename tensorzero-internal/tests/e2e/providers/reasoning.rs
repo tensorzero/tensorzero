@@ -536,7 +536,7 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
                "messages": [
                 {
                     "role": "user",
-                    "content": {"country": "Japan"}
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,

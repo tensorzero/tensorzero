@@ -8691,7 +8691,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
                "messages": [
                 {
                     "role": "user",
-                    "content": {"country": "Japan"}
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -8933,7 +8933,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
                "messages": [
                 {
                     "role": "user",
-                    "content": {"country": "Japan"}
+                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
