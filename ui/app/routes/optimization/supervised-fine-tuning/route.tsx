@@ -97,6 +97,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (FF_ENABLE_PYTHON) {
     return await startPythonFineTune(jsonData, validatedData);
   }
+
   let job;
   try {
     job = await launch_sft_job(validatedData);
@@ -181,9 +182,12 @@ export default function SupervisedFineTuning({
   useEffect(() => {
     if (status.status === "running") {
       setSubmissionPhase("pending");
-      const interval = setInterval(() => {
-        revalidator.revalidate();
-      }, 10000);
+      const interval = setInterval(
+        () => {
+          revalidator.revalidate();
+        },
+        navigator.userAgent === "TensorZeroE2E" ? 500 : 10000,
+      );
       return () => clearInterval(interval);
     }
   }, [status, revalidator]);

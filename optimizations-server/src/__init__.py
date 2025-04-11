@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from tensorzero import AsyncTensorZeroGateway
 
 from .sft.common import FineTuningRequest
+from .sft.fireworks_sft import FireworksSFTJob
 from .sft.openai_sft import BaseSFTJob, OpenAISFTJob
 
 CONFIG_PATH = os.environ.get("TENSORZERO_UI_CONFIG_PATH", "config/tensorzero.toml")
@@ -28,9 +29,11 @@ class OptimizationRequest(BaseModel):
 JOB_STORE: t.Dict[str, BaseSFTJob] = {}
 
 
-async def start_sft_job(data: FineTuningRequest):
+async def start_sft_job(data: FineTuningRequest) -> BaseSFTJob:
     if data.model.provider == "openai":
         job = await OpenAISFTJob.from_form_data(TENSORZERO_CLIENT, data)
+    elif data.model.provider == "fireworks":
+        job = await FireworksSFTJob.from_form_data(TENSORZERO_CLIENT, data)
     else:
         raise RuntimeError("Unsupported model provider: %s" % data.model.provider)
 
@@ -49,7 +52,7 @@ async def poll_optimization(job_id: str):
 
 
 @app.post("/optimizations/")
-async def start_optimization(request: OptimizationRequest):
+async def start_optimization(request: OptimizationRequest) -> BaseSFTJob:
     if request.data.kind == "sft":
         return await start_sft_job(request.data)
     raise ValueError("Unsupported optimization kind: %s" % request.data.kind)

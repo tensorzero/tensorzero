@@ -11,6 +11,9 @@ dependencies = [
     "clickhouse_connect",
     "tensorzero",
     "openai",
+    "tiktoken>=0.9.0",
+    "httpx>=0.28.1",
+    "uuid_utils"
 ]
 
 [dependency-groups]

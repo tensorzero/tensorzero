@@ -20,6 +20,7 @@ chrono = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 tower-http = { version = "0.6.2", features = ["trace"] }
+anyhow.workspace = true
 
 [dev-dependencies]
 eventsource-stream = "0.2.3"

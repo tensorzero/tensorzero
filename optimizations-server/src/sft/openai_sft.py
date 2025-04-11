@@ -3,21 +3,24 @@ import json
 import os
 import typing as t
 import warnings
-from abc import abstractmethod
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
-from minijinja import Environment, TemplateError
+from minijinja import Environment
 from openai import AsyncOpenAI
 from openai.types.fine_tuning import FineTuningJob
 from tensorzero.tensorzero import AsyncTensorZeroGateway
+from typing_extensions import TypedDict
 
 from ..rendering import get_template_env
-from .common import FineTuningRequest, split_validation_data
-
-
-class ValidationError(Exception):
-    pass
-
+from .common import (
+    BaseSFTJob,
+    FineTuningRequest,
+    ValidationError,
+    render_message,
+    split_validation_data,
+    try_template_system,
+)
+from .openai_analysis import analyze_dataset, get_encoding_for_model
 
 # Initialize OpenAI client
 openai_client = None
@@ -47,35 +50,13 @@ class JobInfoError(TypedDict):
 JobInfo = Union[JobInfoOk, JobInfoError]
 
 
-class OpenAISFTJobParams(TypedDict):
+class OpenAISFTJob(BaseSFTJob):
     jobId: str
-    status: str
+    jobStatus: str
     fineTunedModel: Optional[str]
     job: JobInfo
     formData: FineTuningRequest
     analysisData: Optional[Dict[str, Any]]  # AnalysisData type
-
-
-class BaseSFTJob:
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    async def poll(self) -> "BaseSFTJob": ...
-
-    @abstractmethod
-    def status(self) -> t.Any: ...
-
-
-class OpenAISFTJob(BaseSFTJob):
-    def __init__(self, params: OpenAISFTJobParams):
-        super().__init__()
-        self.jobId = params["jobId"]
-        self.jobStatus = params["status"]
-        self.fineTunedModel = params.get("fineTunedModel")
-        self.job = params["job"]
-        self.formData = params["formData"]
-        self.analysisData = params.get("analysisData")
 
     @staticmethod
     async def from_form_data(
@@ -92,16 +73,13 @@ class OpenAISFTJob(BaseSFTJob):
         if not curated_inferences or len(curated_inferences) == 0:
             raise ValueError("No curated inferences found")
 
-        try:
-            job = await start_sft_openai(
-                data.model.name,
-                curated_inferences,
-                data.validationSplitPercent,
-                template_env,
-                data,
-            )
-        except Exception as error:
-            raise ValueError(f"Failed to start OpenAI SFT job: {str(error)}")
+        job = await start_sft_openai(
+            data.model.name,
+            curated_inferences,
+            data.validationSplitPercent,
+            template_env,
+            data,
+        )
 
         return job
 
@@ -165,75 +143,33 @@ class OpenAISFTJob(BaseSFTJob):
             job_info = await openai_client.fine_tuning.jobs.retrieve(self.jobId)
         except Exception as error:
             return OpenAISFTJob(
-                OpenAISFTJobParams(
-                    jobId=self.jobId,
-                    status="error",
-                    fineTunedModel=None,
-                    job=JobInfoError(
-                        status="error", info=self.job["info"], message=str(error)
-                    ),
-                    formData=self.formData,
-                    analysisData=self.analysisData,
-                )
-            )
-
-        return OpenAISFTJob(
-            OpenAISFTJobParams(
-                jobId=job_info.id,
-                status=job_info.status,
-                fineTunedModel=job_info.fine_tuned_model,
-                job=JobInfoOk(status="ok", info=job_info),
+                jobId=self.jobId,
+                jobStatus="error",
+                fineTunedModel=None,
+                job=JobInfoError(
+                    status="error", info=self.job["info"], message=str(error)
+                ),
                 formData=self.formData,
                 analysisData=self.analysisData,
             )
+
+        return OpenAISFTJob(
+            jobId=job_info.id,
+            jobStatus=job_info.status,
+            fineTunedModel=job_info.fine_tuned_model,
+            job=JobInfoOk(status="ok", info=job_info),
+            formData=self.formData,
+            analysisData=self.analysisData,
         )
-
-
-def render_message(content: Dict[str, Any], role: str, env: Environment) -> str:
-    assert role in ["user", "assistant"], f"Invalid role: {role}"
-
-    if content["type"] != "text":
-        raise ValueError(f"Content block must be of type text: {content}")
-
-    content = content["value"]
-
-    if isinstance(content, str):
-        return content
-    else:
-        return env.render_template(role, **content)
 
 
 def tensorzero_inference_to_openai_messages(
     sample: Dict[str, t.Any], env: Environment
 ) -> List[Dict]:
-    system = sample["input"].get("system")
     messages = []
-
-    if system is not None:
-        # TODO - add a 'has_template' to the minijinja python bindings
-        try:
-            # TODO - better error message when 'system' is a string and we have a template
-            rendered_system = env.render_template("system", **system)
-            messages.append(
-                {
-                    "role": "system",
-                    "content": rendered_system,
-                }
-            )
-        except TemplateError as e:
-            if "template not found" in str(e):
-                if not isinstance(system, str):
-                    raise ValidationError(
-                        "System message must be a string when not using templates"
-                    )
-                messages.append(
-                    {
-                        "role": "system",
-                        "content": system,
-                    }
-                )
-            else:
-                raise
+    system = try_template_system(sample, env)
+    if system:
+        messages.append(system)
 
     for message in sample["input"]["messages"]:
         for content in message["content"]:
@@ -346,9 +282,9 @@ async def start_sft_openai(
         messages = tensorzero_inference_to_openai_messages(inference, template_env)
         train_messages_for_analysis.append({"messages": messages})
 
-    # TODO - port this over from typescript
-    analysis = {}
+    encoding = get_encoding_for_model(model_name)
 
+    analysis = analyze_dataset(train_messages_for_analysis, model_name, encoding)
     # Prepare analysis data
     first_example_messages = []
     if train_messages_for_analysis and train_messages_for_analysis[0].get("messages"):
@@ -405,14 +341,12 @@ async def start_sft_openai(
 
     # Create and return OpenAISFTJob
     return OpenAISFTJob(
-        OpenAISFTJobParams(
-            jobId=job.id,
-            status="created",
-            fineTunedModel=None,
-            job={"status": "ok", "info": job},
-            formData=request,
-            analysisData=analysis_data,
-        )
+        jobId=job.id,
+        jobStatus="created",
+        fineTunedModel=None,
+        job={"status": "ok", "info": job},
+        formData=request,
+        analysisData=analysis_data,
     )
 
 
