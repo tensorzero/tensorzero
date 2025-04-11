@@ -1,0 +1,16 @@
+[models.gemma_3]
+routing = ["aws_sagemaker"]
+
+[models.gemma_3.providers.aws_sagemaker]
+type = "aws_sagemaker"
+model_name = "gemma3:1b"
+endpoint_name = "my-sagemaker-endpoint"
+allow_auto_detect_region = true
+hosted_provider = "openai"
+
+[functions.my_function_name]
+type = "chat"
+
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "gemma_3"

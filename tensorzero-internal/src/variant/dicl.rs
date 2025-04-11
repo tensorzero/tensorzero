@@ -595,6 +595,10 @@ fn parse_raw_examples(
     Ok(examples)
 }
 
+pub fn default_system_instructions() -> String {
+    "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.".to_string()
+}
+
 impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
     /// Since the system instructions are optional and may be a path to a file,
     /// we need to load them here so that we can use the base_path to resolve
@@ -609,7 +613,7 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
                     })
                 })?
             }
-            None => "You are tasked with learning by induction and then solving a problem below. You will be shown several examples of inputs followed by outputs. Then, in the same format you will be given one last set of inputs. Your job is to use the provided examples to inform your response to the last set of inputs.".to_string(),
+            None => default_system_instructions(),
         };
 
         Ok(DiclConfig {

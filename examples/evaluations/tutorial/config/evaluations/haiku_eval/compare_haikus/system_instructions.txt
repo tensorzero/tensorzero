@@ -1,0 +1,1 @@
+Does the generated haiku include the same figures of speech as the reference haiku?

@@ -5,6 +5,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import { Code } from "~/components/ui/code";
 import { useNavigate } from "react-router";
@@ -79,14 +80,7 @@ export function TagsTable({ tags }: TagsTableProps) {
       </TableHeader>
       <TableBody>
         {Object.keys(tags).length === 0 ? (
-          <TableRow className="hover:bg-bg-primary">
-            <TableCell
-              colSpan={2}
-              className="text-fg-muted px-3 py-8 text-center"
-            >
-              No tags found.
-            </TableCell>
-          </TableRow>
+          <TableEmptyState message="No tags found" />
         ) : (
           Object.entries(tags).map(([key, value]) => (
             <TableRow

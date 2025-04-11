@@ -1006,7 +1006,7 @@ mod tests {
             .unwrap();
         match &**function {
             FunctionConfig::Json(json_config) => {
-                assert_eq!(json_config.variants.len(), 5);
+                assert_eq!(json_config.variants.len(), 7);
                 match &json_config.variants["anthropic_promptA"] {
                     VariantConfig::ChatCompletion(chat_config) => {
                         assert_eq!(chat_config.model, "anthropic::claude-3.5-sonnet".into());
@@ -1057,6 +1057,30 @@ mod tests {
                         assert_eq!(mixture_of_n_config.fuser.inner.temperature, Some(0.3));
                     }
                     _ => panic!("Expected a mixture of n sampling variant"),
+                }
+                match &json_config.variants["dicl"] {
+                    VariantConfig::Dicl(dicl_config) => {
+                        assert_eq!(
+                            dicl_config.system_instructions,
+                            crate::variant::dicl::default_system_instructions()
+                        );
+                        assert_eq!(dicl_config.embedding_model, "text-embedding-3-small".into());
+                        assert_eq!(dicl_config.k, 3);
+                        assert_eq!(dicl_config.model, "openai::gpt-4o-mini".into());
+                    }
+                    _ => panic!("Expected a Dicl variant"),
+                }
+                match &json_config.variants["dicl_custom_system"] {
+                    VariantConfig::Dicl(dicl_config) => {
+                        assert_eq!(
+                            dicl_config.system_instructions,
+                            "Return True if there is NSFW content in this generation.\n\n"
+                        );
+                        assert_eq!(dicl_config.embedding_model, "text-embedding-3-small".into());
+                        assert_eq!(dicl_config.k, 3);
+                        assert_eq!(dicl_config.model, "openai::gpt-4o-mini".into());
+                    }
+                    _ => panic!("Expected a Dicl variant"),
                 }
             }
             _ => panic!("Expected a JSON function"),

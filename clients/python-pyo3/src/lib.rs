@@ -54,15 +54,12 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
     let json_dumps = py_json.getattr("dumps")?;
-    JSON_LOADS
-        .set(m.py(), json_loads.unbind())
-        .expect("Failed to set JSON_LOADS");
-    JSON_DUMPS
-        .set(m.py(), json_dumps.unbind())
-        .expect("Failed to set JSON_DUMPS");
 
-    m.add_wrapped(wrap_pyfunction!(_start_http_gateway))
-        .expect("Failed to add start_http_gateway");
+    // We don't care if the GILOnceCell was already set
+    let _ = JSON_LOADS.set(m.py(), json_loads.unbind());
+    let _ = JSON_DUMPS.set(m.py(), json_dumps.unbind());
+
+    m.add_wrapped(wrap_pyfunction!(_start_http_gateway))?;
 
     Ok(())
 }
@@ -1105,7 +1102,8 @@ pub fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyErr {
         // Required due to the `#[non_exhaustive]` attribute on `TensorZeroError` - we want to force
         // downstream consumers to handle all possible error types, but the compiler also requires us
         // to do this (since our python bindings are in a different crate from the Rust client.)
-        _ => unreachable!(),
+        _ => tensorzero_internal_error(py, &format!("Unexpected TensorZero error: {e:?}"))
+            .unwrap_or_else(|e| e),
     }
 }
 

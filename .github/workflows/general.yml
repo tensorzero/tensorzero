@@ -70,11 +70,28 @@ jobs:
         run: cat e2e_logs.txt
 
   check-docker-compose:
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Configure Namespace-powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
 
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
@@ -111,11 +128,16 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
       - name: Install Namespace CLI
         uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace-powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@84ca8c58fdf372d6a4750476cd09b7b96ee778ca
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Print Rust version
         run: rustc --version
@@ -337,11 +359,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
+
       - name: Install and configure Namespace CLI
         uses: namespacelabs/nscloud-setup@v0
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@v0
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -384,6 +412,10 @@ jobs:
 
   ui-tests-e2e:
     runs-on: ubuntu-latest
+    # We currently only run this job when we have secrets available, since we need to use an S3 object_store
+    # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
+    # For now, it just runs in the merge queue and on prs from the main repo
+    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || github.event_name == 'merge_group' }}
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -399,11 +431,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
       - name: Install and configure Namespace CLI
         uses: namespacelabs/nscloud-setup@v0
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Configure Namespace powered Buildx
         uses: namespacelabs/nscloud-setup-buildx-action@v0
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -420,9 +457,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build ui container
-        run: |
-          docker buildx inspect
-          docker buildx build -f ui/Dockerfile . -t tensorzero/ui
+        run: docker buildx build -f ui/Dockerfile . -t tensorzero/ui
 
       - name: Start services for ui e2e tests
         working-directory: ui
