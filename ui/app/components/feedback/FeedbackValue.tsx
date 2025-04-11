@@ -13,16 +13,17 @@ interface FeedbackItemProps {
   className?: string;
 }
 
-function FeedbackItem({ 
-  status, 
-  children, 
-  className 
-}: FeedbackItemProps) {
+function FeedbackItem({ status, children, className }: FeedbackItemProps) {
   const { icon, iconBg } = getFeedbackIcon(status);
-  
+
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <div className={cn("flex h-5 w-5 items-center justify-center rounded-md", iconBg)}>
+      <div
+        className={cn(
+          "flex h-5 w-5 items-center justify-center rounded-md",
+          iconBg,
+        )}
+      >
         {icon}
       </div>
       {children}
@@ -89,7 +90,7 @@ export default function FeedbackValue({
     }
     return (
       <FeedbackItem status="neutral">
-        <div className="whitespace-pre-wrap break-words">{feedback.value}</div>
+        <div className="break-words whitespace-pre-wrap">{feedback.value}</div>
       </FeedbackItem>
     );
   }
@@ -98,7 +99,7 @@ export default function FeedbackValue({
     if (truncate) {
       return (
         <FeedbackItem status="neutral">
-          <div className="overflow-hidden text-ellipsis whitespace-nowrap font-mono">
+          <div className="overflow-hidden font-mono text-ellipsis whitespace-nowrap">
             {feedback.value}
           </div>
         </FeedbackItem>
@@ -106,7 +107,7 @@ export default function FeedbackValue({
     }
     return (
       <FeedbackItem status="neutral">
-        <div className="font-normal text-sm">
+        <div className="text-sm font-normal">
           <Code>{feedback.value}</Code>
         </div>
       </FeedbackItem>

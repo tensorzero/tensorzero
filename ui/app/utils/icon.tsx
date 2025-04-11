@@ -32,7 +32,9 @@ export function getFunctionTypeIcon(functionType: string): IconConfig {
  * @param status The status ("success", "failure", or "neutral")
  * @returns IconConfig with icon component and background class
  */
-export function getFeedbackIcon(status: "success" | "failure" | "neutral"): IconConfig {
+export function getFeedbackIcon(
+  status: "success" | "failure" | "neutral",
+): IconConfig {
   switch (status) {
     case "success":
       return {
