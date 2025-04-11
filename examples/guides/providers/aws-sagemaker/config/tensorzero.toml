@@ -4,7 +4,7 @@ routing = ["aws_sagemaker"]
 [models.gemma_3.providers.aws_sagemaker]
 type = "aws_sagemaker"
 model_name = "gemma3:1b"
-endpoint_name = "your_endpoint_name"
+endpoint_name = "my-sagemaker-endpoint"
 region = "us-east-1"
 # ... or use `allow_auto_detect_region = true` to infer region with the AWS SDK
 hosted_provider = "openai" # Ollama is OpenAI-compatible
