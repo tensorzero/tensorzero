@@ -33,7 +33,6 @@ import {
 } from "~/components/ui/popover";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "~/utils/common";
-import { Badge } from "~/components/ui/badge";
 
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
@@ -45,14 +44,12 @@ interface DatasetSelectorProps {
   dataset_names: string[];
   selectedDatasetName: string | null;
   setSelectedDatasetName: (value: string | null) => void;
-  count: number | null;
 }
 
 function DatasetSelector({
   dataset_names,
   selectedDatasetName,
   setSelectedDatasetName,
-  count,
 }: DatasetSelectorProps) {
   const [datasetPopoverOpen, setDatasetPopoverOpen] = useState(false);
   const [datasetInputValue, setDatasetInputValue] = useState("");
@@ -204,7 +201,6 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
         dataset_names={dataset_names}
         selectedDatasetName={selectedDatasetName}
         setSelectedDatasetName={setSelectedDatasetName}
-        count={count}
       />
 
       <div className="text-muted-foreground mt-2 mb-1 text-xs">
