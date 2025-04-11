@@ -40,10 +40,6 @@ from ..rendering import get_template_env
 # Import modules from equivalent Python packages
 from .common import BaseSFTJob, FineTuningRequest, render_message, try_template_system
 
-# Base URL for the Fireworks API
-FIREWORKS_API_URL = os.environ.get("FIREWORKS_BASE_URL", "https://api.fireworks.ai")
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -58,6 +54,15 @@ def get_api_key():
 
 
 FIREWORKS_API_KEY = get_api_key()
+
+# Base URL for the Fireworks API
+FIREWORKS_API_URL = os.environ.get("FIREWORKS_BASE_URL", "https://api.fireworks.ai")
+FIREWORKS_CLIENT = httpx.AsyncClient(
+    base_url=FIREWORKS_API_URL,
+    headers={
+        "Authorization": f"Bearer {FIREWORKS_API_KEY}",
+    },
+)
 
 
 # Retrieves the account ID for the Fireworks API from environment variables
@@ -324,19 +329,15 @@ class FireworksSFTJob(BaseSFTJob):
 
 async def get_fine_tuning_job_details(job_path: str) -> FineTuningJobResponse:
     """Get details about a fine-tuning job"""
-    url = f"{FIREWORKS_API_URL}/v1/{job_path}"
+    url = f"/v1/{job_path}"
+    response = await FIREWORKS_CLIENT.get(url)
+    response.raise_for_status()
+    data = response.text
 
-    headers = {"Authorization": f"Bearer {FIREWORKS_API_KEY}"}
-
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.text
-
-        try:
-            return FineTuningJobResponse.model_validate_json(data)
-        except Exception as e:
-            raise ValueError(f"Invalid API response format: {str(e)}")
+    try:
+        return FineTuningJobResponse.model_validate_json(data)
+    except Exception as e:
+        raise ValueError(f"Invalid API response format: {str(e)}")
 
 
 async def deploy_model_request(account_id: str, model_id: str) -> Dict[str, Any]:
@@ -347,7 +348,7 @@ async def deploy_model_request(account_id: str, model_id: str) -> Dict[str, Any]
     If the model has already been requested to be deployed,
     the API returns 400 along with the deployment status in the message.
     """
-    url = f"{FIREWORKS_API_URL}/v1/accounts/{account_id}/deployedModels"
+    url = f"/v1/accounts/{account_id}/deployedModels"
 
     model_path = f"accounts/{account_id}/models/{model_id}"
     body = {
@@ -359,16 +360,14 @@ async def deploy_model_request(account_id: str, model_id: str) -> Dict[str, Any]
     }
 
     headers = {
-        "Authorization": f"Bearer {FIREWORKS_API_KEY}",
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient() as session:
-        res = await session.post(url, headers=headers, json=body)
-        data = res.json()
-        if not data:
-            raise ValueError("Empty response received from deploy model request")
-        return data
+    res = await FIREWORKS_CLIENT.post(url, headers=headers, json=body)
+    data = res.json()
+    if not data:
+        raise ValueError("Empty response received from deploy model request")
+    return data
 
 
 def get_deployment_status(deploy_model_response: Dict[str, Any]) -> str:
@@ -463,10 +462,9 @@ async def create_dataset_record(account_id: str, example_count: int) -> str:
     This is a placeholder for the dataset that gets uploaded in a subsequent call.
     """
     dataset_id = str(uuid7())
-    url = f"{FIREWORKS_API_URL}/v1/accounts/{account_id}/datasets"
+    url = f"/v1/accounts/{account_id}/datasets"
 
     headers = {
-        "Authorization": f"Bearer {FIREWORKS_API_KEY}",
         "Content-Type": "application/json",
     }
 
@@ -480,10 +478,9 @@ async def create_dataset_record(account_id: str, example_count: int) -> str:
         },
     }
 
-    async with httpx.AsyncClient() as session:
-        response = await session.post(url, headers=headers, json=body)
-        response.raise_for_status()
-        response.json()
+    response = await FIREWORKS_CLIENT.post(url, headers=headers, json=body)
+    response.raise_for_status()
+    response.json()
 
     return dataset_id
 
@@ -492,39 +489,31 @@ async def upload_dataset(
     account_id: str, dataset_id: str, examples: List[FireworksExample]
 ) -> Dict[str, Any]:
     """Upload dataset to Fireworks for fine-tuning"""
-    url = f"{FIREWORKS_API_URL}/v1/accounts/{account_id}/datasets/{dataset_id}:upload"
+    url = f"/v1/accounts/{account_id}/datasets/{dataset_id}:upload"
 
     # Convert examples to JSONL format
     jsonl_data = "\n".join([json.dumps(example) for example in examples])
 
-    headers = {
-        "Authorization": f"Bearer {FIREWORKS_API_KEY}",
-    }
-
     files = {"file": ("dataset.jsonl", jsonl_data, "application/jsonl")}
 
-    async with httpx.AsyncClient() as session:
-        response = await session.post(url, headers=headers, files=files)
-        response.raise_for_status()
-        data = response.json()
-        if not data:
-            raise ValueError("Empty response received from upload dataset request")
-        return data
+    response = await FIREWORKS_CLIENT.post(url, files=files)
+    response.raise_for_status()
+    data = response.json()
+    if not data:
+        raise ValueError("Empty response received from upload dataset request")
+    return data
 
 
 async def dataset_is_ready(account_id: str, dataset_id: str) -> bool:
     """Check if a dataset is ready for fine-tuning"""
-    url = f"{FIREWORKS_API_URL}/v1/accounts/{account_id}/datasets/{dataset_id}"
+    url = f"/v1/accounts/{account_id}/datasets/{dataset_id}"
 
-    headers = {"Authorization": f"Bearer {FIREWORKS_API_KEY}"}
-
-    async with httpx.AsyncClient() as session:
-        response = await session.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        if "state" not in data:
-            raise ValueError("Dataset status response missing state field")
-        return data["state"] == "READY"
+    response = await FIREWORKS_CLIENT.get(url)
+    response.raise_for_status()
+    data = response.json()
+    if "state" not in data:
+        raise ValueError("Dataset status response missing state field")
+    return data["state"] == "READY"
 
 
 async def create_fine_tuning_job(
@@ -536,7 +525,11 @@ async def create_fine_tuning_job(
     Returns a path like "accounts/viraj-ebfe5a/fineTuningJobs/2aecc5ff56364010a143b6b0b0568b5a"
     which is needed for getting the job status
     """
-    url = f"{FIREWORKS_API_URL}/v1/accounts/{account_id}/fineTuningJobs"
+    url = f"/v1/accounts/{account_id}/fineTuningJobs"
+
+    headers = {
+        "Content-Type": "application/json",
+    }
 
     body = {
         "dataset": f"accounts/{account_id}/datasets/{dataset_id}",
@@ -545,15 +538,9 @@ async def create_fine_tuning_job(
         "evaluationSplit": val_split / 100,
     }
 
-    headers = {
-        "Authorization": f"Bearer {FIREWORKS_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    async with httpx.AsyncClient() as session:
-        response = await session.post(url, headers=headers, json=body)
-        response.raise_for_status()
-        data = response.json()
-        if "name" not in data:
-            raise ValueError("Fine tuning job response missing name field")
-        return data
+    response = await FIREWORKS_CLIENT.post(url, headers=headers, json=body)
+    response.raise_for_status()
+    data = response.json()
+    if "name" not in data:
+        raise ValueError("Fine tuning job response missing name field")
+    return data
