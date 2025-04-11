@@ -21,6 +21,10 @@ jobs:
             url_secret: CLICKHOUSE_CLOUD_URL
           - release_channel: fast
             url_secret: CLICKHOUSE_CLOUD_FAST_CHANNEL_URL
+    # Only run a single instance of the job (per release channel) within the repository at once
+    # This prevents us from overloading the ClickHouse cloud instance with our concurrent migration tests
+    concurrency:
+      group: clickhouse-cloud-${{ matrix.release_channel }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: dtolnay/rust-toolchain@stable
