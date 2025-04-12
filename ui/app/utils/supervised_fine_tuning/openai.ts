@@ -243,7 +243,7 @@ export function tensorzero_inference_to_openai_messages(
   } else if ("raw" in sample.output) {
     // Must be a JSON inference if it has "raw"
     const output = sample.output as JsonInferenceOutput;
-    messages.push({ role: "assistant", content: output.raw ? output.raw : "" });
+    messages.push({ role: "assistant", content: output.raw || "" });
   } else {
     throw new Error("Invalid inference type");
   }
