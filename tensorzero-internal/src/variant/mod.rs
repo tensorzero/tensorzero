@@ -1063,8 +1063,10 @@ mod tests {
         let inference_result = result.unwrap();
         match inference_result {
             InferenceResult::Json(json_result) => {
-                let expected_raw_output = DUMMY_JSON_RESPONSE_RAW.to_string();
-                assert_eq!(json_result.output.raw, expected_raw_output);
+                assert_eq!(
+                    json_result.output.raw,
+                    Some(DUMMY_JSON_RESPONSE_RAW.to_string())
+                );
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
                 assert_eq!(json_result.usage, DUMMY_INFER_USAGE.clone());
                 assert_eq!(json_result.model_inference_results.len(), 1);
@@ -1074,7 +1076,7 @@ mod tests {
                 );
                 assert_eq!(
                     json_result.model_inference_results[0].output,
-                    vec![expected_raw_output.into()]
+                    vec![DUMMY_JSON_RESPONSE_RAW.to_string().into()]
                 );
             }
             _ => panic!("Expected Json inference result"),

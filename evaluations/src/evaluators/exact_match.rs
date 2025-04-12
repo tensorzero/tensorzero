@@ -166,7 +166,7 @@ mod tests {
             episode_id: Some(Uuid::now_v7()),
             output: Some(JsonInferenceOutput {
                 parsed: Some(json!({"foo": "bar"})),
-                raw: r#"{"foo": "bar"}"#.to_string(),
+                raw: Some(r#"{"foo": "bar"}"#.to_string()),
             }),
             tags: None,
             auxiliary: "".to_string(),
@@ -179,7 +179,7 @@ mod tests {
             variant_name: "test".to_string(),
             output: JsonInferenceOutput {
                 parsed: Some(json!({"foo": "bar"})),
-                raw: r#"{"foo": "bar"}"#.to_string(),
+                raw: Some(r#"{"foo": "bar"}"#.to_string()),
             },
             usage: Usage {
                 input_tokens: 10,
@@ -198,7 +198,7 @@ mod tests {
             variant_name: "test".to_string(),
             output: JsonInferenceOutput {
                 parsed: Some(json!({"foo": "baz"})),
-                raw: r#"{"foo": "baz"}"#.to_string(),
+                raw: Some(r#"{"foo": "baz"}"#.to_string()),
             },
             usage: Usage {
                 input_tokens: 10,
@@ -259,7 +259,7 @@ mod tests {
             episode_id: Some(Uuid::now_v7()),
             output: Some(JsonInferenceOutput {
                 parsed: None,
-                raw: r#"{"foo": "bar"}"#.to_string(),
+                raw: Some(r#"{"foo": "bar"}"#.to_string()),
             }),
             output_schema: json!({
                 "type": "object",

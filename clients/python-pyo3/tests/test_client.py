@@ -2710,3 +2710,42 @@ def test_content_block_text_init_validation():
     text = Text(type="text", arguments=arguments)
     assert text.text is None
     assert text.arguments == arguments
+
+
+def test_sync_chat_function_null_response(sync_client: TensorZeroGateway):
+    """
+    Test that an chat inference with null response (i.e. no generated content blocks) works as expected.
+    """
+    result = sync_client.inference(
+        function_name="null_chat",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "No yapping!",
+                }
+            ],
+        },
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert len(result.content) == 0
+
+
+def test_sync_json_function_null_response(sync_client: TensorZeroGateway):
+    """
+    Test that a JSON inference with null response (i.e. no generated content blocks) works as expected.
+    """
+    result = sync_client.inference(
+        function_name="null_json",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Extract no data!",
+                }
+            ],
+        },
+    )
+    assert isinstance(result, JsonInferenceResponse)
+    assert result.output.raw is None
+    assert result.output.parsed is None

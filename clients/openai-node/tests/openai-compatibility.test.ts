@@ -1337,3 +1337,37 @@ it("should handle multi-turn parallel tool calls using TensorZero gateway direct
   expect(finalAssistantMessage.content).toContain("70");
   expect(finalAssistantMessage.content).toContain("30");
 });
+
+it("should handle chat function null response", async () => {
+  const result = await client.chat.completions.create({
+    model: "tensorzero::function_name::null_chat",
+    messages: [
+      {
+        role: "user",
+        content: "No yapping!",
+      },
+    ],
+  });
+
+  expect(result.model).toBe(
+    "tensorzero::function_name::null_chat::variant_name::variant"
+  );
+  expect(result.choices[0].message.content).toBeNull();
+});
+
+it("should handle json function null response", async () => {
+  const result = await client.chat.completions.create({
+    model: "tensorzero::function_name::null_json",
+    messages: [
+      {
+        role: "user",
+        content: "Extract no data!",
+      },
+    ],
+  });
+
+  expect(result.model).toBe(
+    "tensorzero::function_name::null_json::variant_name::variant"
+  );
+  expect(result.choices[0].message.content).toBeNull();
+});

@@ -569,11 +569,11 @@ impl EvaluatorConfig {
                     candidate_outputs.push(serialized_content);
                 }
                 InferenceResult::Json(json_result) => {
-                    if json_result.output.parsed.is_some() {
-                        candidate_outputs.push(json_result.output.raw.clone());
-                    } else {
-                        // Skip if the JSON output is not correctly parsed
-                        skipped_indices.push(i);
+                    match (&json_result.output.raw, &json_result.output.parsed) {
+                        (Some(raw), Some(_)) => {
+                            candidate_outputs.push(raw.clone());
+                        }
+                        _ => skipped_indices.push(i),
                     }
                 }
             }
@@ -1025,7 +1025,7 @@ mod tests {
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
             Uuid::now_v7(),
-            "{\"response\": \"Valid JSON response\"}".to_string(),
+            Some("{\"response\": \"Valid JSON response\"}".to_string()),
             Some(json!({"response": "Valid JSON response"})),
             Usage {
                 input_tokens: 10,
@@ -1065,7 +1065,7 @@ mod tests {
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
             Uuid::now_v7(),
-            "{\"oops: \"Malformed JSON response\"".to_string(),
+            Some("{\"oops: \"Malformed JSON response\"".to_string()),
             None, // malformed
             Usage {
                 input_tokens: 15,
