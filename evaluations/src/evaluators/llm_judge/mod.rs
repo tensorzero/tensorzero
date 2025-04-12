@@ -6,6 +6,7 @@ use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     DynamicToolParams, Image, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
+use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{
     get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType,
@@ -32,7 +33,7 @@ pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub evaluator_name: &'a str,
     pub evaluation_run_id: Uuid,
     pub input: &'a ClientInput,
-    pub skip_cache_read: bool,
+    pub inference_cache: CacheEnabledMode,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -48,7 +49,7 @@ pub async fn run_llm_judge_evaluator(
         evaluator_name,
         evaluation_run_id,
         input,
-        skip_cache_read,
+        inference_cache,
     } = params;
     let judge_input =
         match prepare_llm_judge_input(llm_judge_config, input, inference_response, datapoint)? {
@@ -80,7 +81,7 @@ pub async fn run_llm_judge_evaluator(
         dynamic_tool_params: DynamicToolParams::default(),
         output_schema: None,
         credentials: HashMap::new(),
-        cache_options: get_cache_options(skip_cache_read),
+        cache_options: get_cache_options(inference_cache),
         extra_body: Default::default(),
     };
     let result = tensorzero_client.inference(params).await?;

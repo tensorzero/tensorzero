@@ -58,13 +58,9 @@ pub fn setup_logging(args: &Args) -> Result<()> {
     }
 }
 
-pub fn get_cache_options(skip_cache_read: bool) -> CacheParamsOptions {
+pub fn get_cache_options(inference_cache: CacheEnabledMode) -> CacheParamsOptions {
     CacheParamsOptions {
-        enabled: if skip_cache_read {
-            CacheEnabledMode::WriteOnly
-        } else {
-            CacheEnabledMode::On
-        },
+        enabled: inference_cache,
         max_age_s: None,
     }
 }
