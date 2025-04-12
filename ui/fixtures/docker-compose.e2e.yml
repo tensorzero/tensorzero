@@ -21,7 +21,7 @@ services:
       start_interval: 1s
       timeout: 1s
 
-  # We set 'OPENAI_BASE_URL=http://localhost:3030/openai' when starting the ui server in ci
+  # We set 'OPENAI_FINE_TUNING_BASE_URL=http://localhost:3030/openai' when starting the ui server in ci
   # so that we use the mock server for SFT jobs
   mock-inference-provider:
     build:
@@ -35,7 +35,7 @@ services:
       test: wget --spider --tries 1 http://localhost:3030/status
       start_period: 30s
       start_interval: 1s
-      timeout: 1s     
+      timeout: 1s
 
   gateway:
     build:
