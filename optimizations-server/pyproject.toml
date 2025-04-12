@@ -1,0 +1,21 @@
+[project]
+name = "optimizations-server"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi[standard]",
+    "pydantic",
+    "minijinja",
+    "clickhouse_connect",
+    "tensorzero",
+    "openai",
+]
+
+[dependency-groups]
+dev = ["pyright", "ruff", "pytest-asyncio", "pytest-xdist", "pytest"]
+
+
+[tool.uv.sources]
+tensorzero = { path = "${PROJECT_ROOT}/../../clients/python-pyo3", editable = true }

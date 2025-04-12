@@ -15,6 +15,7 @@ use tensorzero::{
     ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
     InferenceResponse,
 };
+use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::config_parser::MetricConfigOptimize;
 use tensorzero_internal::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_internal::{
@@ -67,8 +68,8 @@ pub struct Args {
     #[arg(short, long, default_value = "human-readable")]
     pub format: OutputFormat,
 
-    #[arg(long, default_value = "false")]
-    pub skip_cache_read: bool,
+    #[arg(long, default_value = "on")]
+    pub inference_cache: CacheEnabledMode,
 }
 
 pub async fn run_evaluation(
@@ -159,7 +160,7 @@ pub async fn run_evaluation(
                     evaluation_name: &evaluation_name,
                     function_config: &function_config,
                     input: &input,
-                    skip_cache_read: args.skip_cache_read,
+                    inference_cache: args.inference_cache,
                 })
                 .await?,
             );
@@ -173,7 +174,7 @@ pub async fn run_evaluation(
                     evaluation_name,
                     tensorzero_client: client_clone,
                     evaluation_run_id: evaluation_run_id_clone,
-                    skip_cache_read: args.skip_cache_read,
+                    inference_cache: args.inference_cache,
                 })
                 .await?;
 
@@ -309,7 +310,7 @@ struct InferDatapointParams<'a> {
     input: &'a ClientInput,
     evaluation_name: &'a str,
     function_config: &'a FunctionConfig,
-    skip_cache_read: bool,
+    inference_cache: CacheEnabledMode,
 }
 
 async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceResponse> {
@@ -323,7 +324,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         evaluation_name,
         function_config,
         input,
-        skip_cache_read,
+        inference_cache,
     } = params;
 
     let dynamic_tool_params = match datapoint.tool_call_config() {
@@ -369,7 +370,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         dynamic_tool_params,
         output_schema: output_schema.cloned(),
         credentials: HashMap::new(),
-        cache_options: get_cache_options(skip_cache_read),
+        cache_options: get_cache_options(inference_cache),
         dryrun: Some(false),
         episode_id: None,
         model_name: None,

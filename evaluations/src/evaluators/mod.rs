@@ -4,6 +4,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use serde_json::Value;
 use tensorzero::{ClientInput, FeedbackParams, InferenceResponse};
+use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{
     get_evaluator_metric_name, EvaluationConfig, EvaluatorConfig,
@@ -28,7 +29,7 @@ pub struct EvaluateInferenceParams {
     pub evaluation_name: Arc<String>,
     pub tensorzero_client: Arc<ThrottledTensorZeroClient>,
     pub evaluation_run_id: Uuid,
-    pub skip_cache_read: bool,
+    pub inference_cache: CacheEnabledMode,
 }
 
 /// Evaluates the inference response for the given datapoint using all the evaluators specified in the evaluation config.
@@ -48,7 +49,7 @@ pub(crate) async fn evaluate_inference(
         evaluation_name,
         tensorzero_client,
         evaluation_run_id,
-        skip_cache_read,
+        inference_cache,
     } = params;
     let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
     let results: EvaluationResult =
@@ -72,7 +73,7 @@ pub(crate) async fn evaluate_inference(
                     evaluation_name: &evaluation_name,
                     evaluation_run_id,
                     input: &input,
-                    skip_cache_read,
+                    inference_cache,
                 })
                 .await;
 
@@ -145,7 +146,7 @@ struct RunEvaluatorParams<'a> {
     evaluation_name: &'a str,
     evaluation_run_id: Uuid,
     input: &'a ClientInput,
-    skip_cache_read: bool,
+    inference_cache: CacheEnabledMode,
 }
 
 /// Runs the evaluator specified by evaluator_name on the given inference response and datapoint.
@@ -168,7 +169,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
         evaluation_name,
         evaluation_run_id,
         input,
-        skip_cache_read,
+        inference_cache,
     } = params;
     let EvaluationConfig::Static(static_evaluation_config) = evaluation_config;
     let evaluator_config = match static_evaluation_config.evaluators.get(&evaluator_name) {
@@ -191,7 +192,7 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
                 evaluator_name: &evaluator_name,
                 evaluation_run_id,
                 input,
-                skip_cache_read,
+                inference_cache,
             })
             .await?,
         ),

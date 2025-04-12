@@ -18,11 +18,111 @@ import {
 import { useDatasetCountFetcher } from "~/routes/api/datasets/count_dataset_function.route";
 import { useConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "~/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "~/components/ui/popover";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "~/utils/common";
 
 interface LaunchEvaluationModalProps {
   isOpen: boolean;
   onClose: () => void;
   dataset_names: string[];
+}
+
+interface DatasetSelectorProps {
+  dataset_names: string[];
+  selectedDatasetName: string | null;
+  setSelectedDatasetName: (value: string | null) => void;
+}
+
+function DatasetSelector({
+  dataset_names,
+  selectedDatasetName,
+  setSelectedDatasetName,
+}: DatasetSelectorProps) {
+  const [datasetPopoverOpen, setDatasetPopoverOpen] = useState(false);
+  const [datasetInputValue, setDatasetInputValue] = useState("");
+
+  const filteredDatasets = datasetInputValue
+    ? dataset_names.filter((name) =>
+        name.toLowerCase().includes(datasetInputValue.toLowerCase()),
+      )
+    : dataset_names;
+
+  return (
+    <>
+      <input
+        type="hidden"
+        name="dataset_name"
+        value={selectedDatasetName || ""}
+      />
+      <Popover open={datasetPopoverOpen} onOpenChange={setDatasetPopoverOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={datasetPopoverOpen}
+            className="w-full justify-between font-normal"
+          >
+            {selectedDatasetName || "Select a dataset"}
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+          <Command>
+            <CommandInput
+              placeholder="Search datasets..."
+              value={datasetInputValue}
+              onValueChange={setDatasetInputValue}
+              className="h-9"
+            />
+            <CommandList>
+              <CommandEmpty className="px-4 py-2 text-sm">
+                No datasets found.
+              </CommandEmpty>
+              <CommandGroup heading="Datasets">
+                {filteredDatasets.map((dataset_name) => (
+                  <CommandItem
+                    key={dataset_name}
+                    value={dataset_name}
+                    onSelect={() => {
+                      setSelectedDatasetName(dataset_name);
+                      setDatasetInputValue("");
+                      setDatasetPopoverOpen(false);
+                    }}
+                    className="flex items-center justify-between"
+                  >
+                    <div className="flex items-center">
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          selectedDatasetName === dataset_name
+                            ? "opacity-100"
+                            : "opacity-0",
+                        )}
+                      />
+                      <span>{dataset_name}</span>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </>
+  );
 }
 
 function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
@@ -39,6 +139,7 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
     null,
   );
   const [concurrencyLimit, setConcurrencyLimit] = useState<string>("5");
+
   let count = null;
   let isLoading = false;
   let function_name = null;
@@ -89,27 +190,19 @@ function EvaluationForm({ dataset_names }: { dataset_names: string[] }) {
       </Select>
       <div className="mt-4">
         <label
-          htmlFor="evaluation_name"
+          htmlFor="dataset_name"
           className="mb-1 block text-sm font-medium"
         >
           Dataset
         </label>
       </div>
-      <Select
-        name="dataset_name"
-        onValueChange={(value) => setSelectedDatasetName(value)}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="Select a dataset" />
-        </SelectTrigger>
-        <SelectContent>
-          {dataset_names.map((dataset_name) => (
-            <SelectItem key={dataset_name} value={dataset_name}>
-              {dataset_name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+
+      <DatasetSelector
+        dataset_names={dataset_names}
+        selectedDatasetName={selectedDatasetName}
+        setSelectedDatasetName={setSelectedDatasetName}
+      />
+
       <div className="text-muted-foreground mt-2 mb-1 text-xs">
         Function:{" "}
         {function_name ? (

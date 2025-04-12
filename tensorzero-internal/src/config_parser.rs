@@ -247,7 +247,7 @@ pub enum MetricConfigType {
     Float,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum MetricConfigOptimize {
     Min,
