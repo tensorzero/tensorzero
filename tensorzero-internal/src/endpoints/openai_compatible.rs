@@ -239,6 +239,8 @@ pub struct OpenAICompatibleParams {
     tensorzero_dryrun: Option<bool>,
     #[serde(rename = "tensorzero::episode_id")]
     tensorzero_episode_id: Option<Uuid>,
+    #[serde(rename = "tensorzero::cache_options")]
+    tensorzero_cache_options: Option<CacheParamsOptions>,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
 }
@@ -467,7 +469,9 @@ impl Params {
             output_schema,
             // OpenAI compatible endpoint does not support dynamic credentials
             credentials: InferenceCredentials::default(),
-            cache_options: CacheParamsOptions::default(),
+            cache_options: openai_compatible_params
+                .tensorzero_cache_options
+                .unwrap_or_default(),
             // For now, we don't support internal inference for OpenAI compatible endpoint
             internal: false,
             tags: HashMap::new(),
@@ -1001,12 +1005,14 @@ impl From<ToolCallChunk> for OpenAICompatibleToolCall {
 
 #[cfg(test)]
 mod tests {
-    use crate::inference::types::{Text, TextChunk};
 
     use super::*;
     use axum::http::header::{HeaderName, HeaderValue};
     use serde_json::json;
     use tracing_test::traced_test;
+
+    use crate::cache::CacheEnabledMode;
+    use crate::inference::types::{Text, TextChunk};
 
     #[test]
     fn test_try_from_openai_compatible_params() {
@@ -1044,6 +1050,7 @@ mod tests {
                 tensorzero_episode_id: None,
                 tensorzero_variant_name: None,
                 tensorzero_dryrun: None,
+                tensorzero_cache_options: None,
                 unknown_fields: Default::default(),
             },
         )
@@ -1476,6 +1483,158 @@ mod tests {
         assert!(
             err.contains("Unsupported content type `image/svg`"),
             "Unexpected error message: {err}"
+        );
+    }
+
+    #[test]
+    fn test_cache_options() {
+        let headers = HeaderMap::new();
+
+        // Test default cache options (should be write-only)
+        let params = Params::try_from_openai(
+            headers.clone(),
+            OpenAICompatibleParams {
+                messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                    content: Value::String("test".to_string()),
+                })],
+                model: "tensorzero::function_name::test_function".into(),
+                frequency_penalty: None,
+                max_tokens: None,
+                max_completion_tokens: None,
+                presence_penalty: None,
+                response_format: None,
+                seed: None,
+                stream: None,
+                temperature: None,
+                tools: None,
+                tool_choice: None,
+                top_p: None,
+                parallel_tool_calls: None,
+                tensorzero_variant_name: None,
+                tensorzero_dryrun: None,
+                tensorzero_episode_id: None,
+                tensorzero_cache_options: None,
+                unknown_fields: Default::default(),
+            },
+        )
+        .unwrap();
+        assert_eq!(params.cache_options, CacheParamsOptions::default());
+
+        // Test explicit cache options
+        let params = Params::try_from_openai(
+            headers.clone(),
+            OpenAICompatibleParams {
+                messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                    content: Value::String("test".to_string()),
+                })],
+                model: "tensorzero::function_name::test_function".into(),
+                frequency_penalty: None,
+                max_tokens: None,
+                max_completion_tokens: None,
+                presence_penalty: None,
+                response_format: None,
+                seed: None,
+                stream: None,
+                temperature: None,
+                tools: None,
+                tool_choice: None,
+                top_p: None,
+                parallel_tool_calls: None,
+                tensorzero_variant_name: None,
+                tensorzero_dryrun: None,
+                tensorzero_episode_id: None,
+                tensorzero_cache_options: Some(CacheParamsOptions {
+                    max_age_s: Some(3600),
+                    enabled: CacheEnabledMode::On,
+                }),
+                unknown_fields: Default::default(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            params.cache_options,
+            CacheParamsOptions {
+                max_age_s: Some(3600),
+                enabled: CacheEnabledMode::On
+            }
+        );
+
+        // Test interaction with dryrun
+        let params = Params::try_from_openai(
+            headers.clone(),
+            OpenAICompatibleParams {
+                messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                    content: Value::String("test".to_string()),
+                })],
+                model: "tensorzero::function_name::test_function".into(),
+                frequency_penalty: None,
+                max_tokens: None,
+                max_completion_tokens: None,
+                presence_penalty: None,
+                response_format: None,
+                seed: None,
+                stream: None,
+                temperature: None,
+                tools: None,
+                tool_choice: None,
+                top_p: None,
+                parallel_tool_calls: None,
+                tensorzero_variant_name: None,
+                tensorzero_dryrun: Some(true),
+                tensorzero_episode_id: None,
+                tensorzero_cache_options: Some(CacheParamsOptions {
+                    max_age_s: Some(3600),
+                    enabled: CacheEnabledMode::On,
+                }),
+                unknown_fields: Default::default(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            params.cache_options,
+            CacheParamsOptions {
+                max_age_s: Some(3600),
+                enabled: CacheEnabledMode::On,
+            }
+        );
+
+        // Test write-only with dryrun (should become Off)
+        let params = Params::try_from_openai(
+            headers,
+            OpenAICompatibleParams {
+                messages: vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                    content: Value::String("test".to_string()),
+                })],
+                model: "tensorzero::function_name::test_function".into(),
+                frequency_penalty: None,
+                max_tokens: None,
+                max_completion_tokens: None,
+                presence_penalty: None,
+                response_format: None,
+                seed: None,
+                stream: None,
+                temperature: None,
+                tools: None,
+                tool_choice: None,
+                top_p: None,
+                parallel_tool_calls: None,
+                tensorzero_variant_name: None,
+                tensorzero_dryrun: Some(true),
+                tensorzero_episode_id: None,
+                tensorzero_cache_options: Some(CacheParamsOptions {
+                    max_age_s: None,
+                    enabled: CacheEnabledMode::WriteOnly,
+                }),
+                unknown_fields: Default::default(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            params.cache_options,
+            CacheParamsOptions {
+                max_age_s: None,
+                enabled: CacheEnabledMode::WriteOnly
+            }
         );
     }
 }

@@ -1006,7 +1006,7 @@ def sync_client(request: FixtureRequest):
             yield client
 
 
-def test_sync_basic_inference(sync_client: TensorZeroGateway):
+def test_sync_inference_caching(sync_client: TensorZeroGateway):
     result = sync_client.inference(
         function_name="basic_test",
         input={
@@ -1052,6 +1052,82 @@ def test_sync_basic_inference(sync_client: TensorZeroGateway):
     usage = result.usage
     assert usage.input_tokens == 0  # should be cached
     assert usage.output_tokens == 0  # should be cached
+
+
+def test_sync_inference_streaming_caching(sync_client: TensorZeroGateway):
+    stream = sync_client.inference(
+        function_name="basic_test",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        stream=True,
+    )
+    assert isinstance(stream, t.Iterator)
+
+    chunks: t.List[InferenceChunk] = []
+    for chunk in stream:
+        chunks.append(chunk)
+
+    expected_text = [
+        "Wally,",
+        " the",
+        " golden",
+        " retriever,",
+        " wagged",
+        " his",
+        " tail",
+        " excitedly",
+        " as",
+        " he",
+        " devoured",
+        " a",
+        " slice",
+        " of",
+        " cheese",
+        " pizza.",
+    ]
+    for i, chunk in enumerate(chunks[:-1]):
+        assert isinstance(chunk, ChatChunk)
+        assert len(chunk.content) == 1
+        assert chunk.content[0].type == "text"
+        assert isinstance(chunk.content[0], TextChunk)
+        assert chunk.content[0].text == expected_text[i]
+
+    final_chunk = chunks[-1]
+    assert len(final_chunk.content) == 0
+    assert final_chunk.usage is not None
+    assert final_chunk.usage.input_tokens == 10
+    assert final_chunk.usage.output_tokens == 16
+
+    # Test caching
+    stream = sync_client.inference(
+        function_name="basic_test",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Hello"}],
+        },
+        stream=True,
+        cache_options={"max_age_s": 10, "enabled": "on"},
+    )
+    assert isinstance(stream, t.Iterator)
+
+    chunks: t.List[InferenceChunk] = []
+    for chunk in stream:
+        chunks.append(chunk)
+
+    for i, chunk in enumerate(chunks[:-1]):
+        assert isinstance(chunk, ChatChunk)
+        assert len(chunk.content) == 1
+        assert chunk.content[0].type == "text"
+        assert isinstance(chunk.content[0], TextChunk)
+        assert chunk.content[0].text == expected_text[i]
+
+    final_chunk = chunks[-1]
+    assert len(final_chunk.content) == 0
+    if final_chunk.usage is not None:
+        assert final_chunk.usage.input_tokens == 0  # should be cached
+        assert final_chunk.usage.output_tokens == 0  # should be cached
 
 
 def test_default_function_inference(sync_client: TensorZeroGateway):
