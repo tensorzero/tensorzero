@@ -125,14 +125,21 @@ test("should be able to add float feedback via the inference page", async ({
   // Fill in the value using the correct role and label
   // generate a random float between 0 and 1
   const randomFloat = Math.random();
-  await page
-    .getByRole("spinbutton", { name: "Value" })
-    .fill(randomFloat.toString());
-  // Click the submit button
-  await page.getByText("Submit Feedback").click();
   // Assert that the feedback value is visible in its table cell
   // Truncate the float to 3 decimal places
   const truncatedFloat = Math.floor(randomFloat * 1000) / 1000;
+  await page
+    .getByRole("spinbutton", { name: "Value" })
+    .fill(truncatedFloat.toString());
+  // Click the submit button
+  await page.getByText("Submit Feedback").click();
+
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
+
+  // sleep for 500ms
+  await page.waitForTimeout(500);
+
   await expect(
     page.getByRole("cell", { name: truncatedFloat.toString() }),
   ).toBeVisible();
@@ -170,6 +177,9 @@ test("should be able to add boolean feedback via the inference page", async ({
 
   // Wait for the page to load
   await page.waitForLoadState("networkidle");
+
+  // sleep for 500ms
+  await page.waitForTimeout(500);
 
   // Get the search param `newFeedbackId` from the url
   const newFeedbackId = new URL(page.url()).searchParams.get("newFeedbackId");
