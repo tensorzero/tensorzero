@@ -364,11 +364,17 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   }
 }
 
-function transformOutputForTensorZero(output: ParsedDatasetRow["output"]) {
+function transformOutputForTensorZero(
+  output: ParsedDatasetRow["output"],
+): string | null {
   if (output === null || output === undefined) {
     return null;
   } else if ("raw" in output) {
-    return JSON.parse(output.raw);
+    if (output.raw === null) {
+      return null;
+    } else {
+      return JSON.parse(output.raw);
+    }
   } else if (typeof output === "object") {
     return JSON.parse(JSON.stringify(output));
   } else {
