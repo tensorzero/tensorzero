@@ -71,6 +71,11 @@ pub struct Args {
     pub skip_cache_read: bool,
 }
 
+pub struct Clients {
+    pub tensorzero_client: ThrottledTensorZeroClient,
+    pub clickhouse_client: ClickHouseConnectionInfo,
+}
+
 pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
@@ -106,14 +111,15 @@ pub async fn run_evaluation(
     .build()
     .await
     .map_err(|e| anyhow!("Failed to build client: {}", e))?;
-    let tensorzero_client_with_semaphore =
-        Arc::new(ThrottledTensorZeroClient::new(tensorzero_client, semaphore));
+    let clients = Arc::new(Clients {
+        tensorzero_client: ThrottledTensorZeroClient::new(tensorzero_client, semaphore),
+        clickhouse_client: ClickHouseConnectionInfo::new(&clickhouse_url).await?,
+    });
 
-    let clickhouse_client = ClickHouseConnectionInfo::new(&clickhouse_url).await?;
     let mut join_set = JoinSet::new();
 
     let dataset = query_dataset(
-        &clickhouse_client,
+        &clients.clickhouse_client,
         &args.dataset_name,
         &static_evaluation_config.function_name,
         function_config,
@@ -136,7 +142,7 @@ pub async fn run_evaluation(
 
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
-        let client_clone = tensorzero_client_with_semaphore.clone();
+        let clients_clone = clients.clone();
         let variant_name = variant_name.clone();
         let function_config = function_config.clone();
         let evaluation_config = evaluation_config.clone();
@@ -147,10 +153,10 @@ pub async fn run_evaluation(
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let abort_handle = join_set.spawn(async move {
-            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone(), &client_clone.client).await?);
+            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone(), &clients_clone.tensorzero_client.client).await?);
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
-                    tensorzero_client: &client_clone,
+                    clients: &clients_clone,
                     function_name: &function_name,
                     variant_name: &variant_name,
                     evaluation_run_id: evaluation_run_id_clone,
@@ -171,7 +177,7 @@ pub async fn run_evaluation(
                     input,
                     evaluation_config,
                     evaluation_name,
-                    tensorzero_client: client_clone,
+                    clients: clients_clone.clone(),
                     evaluation_run_id: evaluation_run_id_clone,
                     skip_cache_read: args.skip_cache_read,
                 })
@@ -300,7 +306,7 @@ pub fn format_cutoff_failures(failures: &[(String, f32, f32)]) -> String {
 }
 
 struct InferDatapointParams<'a> {
-    tensorzero_client: &'a ThrottledTensorZeroClient,
+    clients: &'a Clients,
     function_name: &'a str,
     variant_name: &'a str,
     evaluation_run_id: Uuid,
@@ -314,7 +320,7 @@ struct InferDatapointParams<'a> {
 
 async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceResponse> {
     let InferDatapointParams {
-        tensorzero_client,
+        clients,
         function_name,
         variant_name,
         evaluation_run_id,
@@ -379,7 +385,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         internal: true,
         extra_body: Default::default(),
     };
-    let inference_result = tensorzero_client.inference(params).await?;
+    let inference_result = clients.tensorzero_client.inference(params).await?;
     match inference_result {
         InferenceOutput::NonStreaming(inference_response) => Ok(inference_response),
         InferenceOutput::Streaming(_inference_stream) => {

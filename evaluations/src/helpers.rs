@@ -1,8 +1,15 @@
+use std::collections::HashMap;
+
 use anyhow::{anyhow, Result};
-use tensorzero::{CacheParamsOptions, DynamicToolParams};
+use serde::Deserialize;
+use serde_json::Value;
+use tensorzero::{CacheParamsOptions, DynamicToolParams, InferenceResponse};
+use tensorzero_internal::clickhouse::escape_backslashes_for_string_comparison;
 use tensorzero_internal::{
-    cache::CacheEnabledMode, function::FunctionConfig, tool::ToolCallConfigDatabaseInsert,
+    cache::CacheEnabledMode, clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
+    tool::ToolCallConfigDatabaseInsert,
 };
+use uuid::Uuid;
 
 use crate::{Args, OutputFormat};
 
@@ -67,6 +74,46 @@ pub fn get_cache_options(skip_cache_read: bool) -> CacheParamsOptions {
         },
         max_age_s: None,
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct HumanFeedbackResult {
+    pub value: Value,
+}
+
+pub async fn check_static_eval_human_feedback(
+    clickhouse: &ClickHouseConnectionInfo,
+    metric_name: &str,
+    datapoint_id: Uuid,
+    inference_output: &InferenceResponse,
+) -> Result<Option<Value>> {
+    let serialized_output = inference_output.get_serialized_output()?;
+    let query = r#"
+        SELECT value FROM HumanStaticEvaluationFeedback
+        WHERE
+            metric_name = {metric_name:String}
+        AND datapoint_id = {datapoint_id:UUID}
+        AND output = {output:String}
+        LIMIT 1
+        FORMAT JSONEachRow
+    "#;
+    let escaped_serialized_output = escape_backslashes_for_string_comparison(&serialized_output);
+    let result = clickhouse
+        .run_query_synchronous(
+            query.to_string(),
+            Some(&HashMap::from([
+                ("metric_name", metric_name),
+                ("datapoint_id", &datapoint_id.to_string()),
+                ("output", &escaped_serialized_output),
+            ])),
+        )
+        .await?;
+    if result.is_empty() {
+        return Ok(None);
+    }
+    let human_feedback_result: HumanFeedbackResult = serde_json::from_str(&result)
+        .map_err(|e| anyhow!("Failed to parse human feedback result: {}", e))?;
+    Ok(Some(human_feedback_result.value))
 }
 
 #[cfg(test)]

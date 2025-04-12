@@ -15,8 +15,8 @@ use tensorzero_internal::inference::types::{
 };
 use uuid::Uuid;
 
-use crate::helpers::get_cache_options;
-use crate::ThrottledTensorZeroClient;
+use crate::helpers::{check_static_eval_human_feedback, get_cache_options};
+use crate::Clients;
 
 pub struct LLMJudgeEvaluationResult {
     pub inference_id: Uuid,
@@ -26,7 +26,7 @@ pub struct LLMJudgeEvaluationResult {
 pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub inference_response: &'a InferenceResponse,
     pub datapoint: &'a Datapoint,
-    pub tensorzero_client: &'a ThrottledTensorZeroClient,
+    pub clients: &'a Clients,
     pub llm_judge_config: &'a LLMJudgeConfig,
     pub evaluation_name: &'a str,
     pub evaluator_name: &'a str,
@@ -42,7 +42,7 @@ pub async fn run_llm_judge_evaluator(
     let RunLLMJudgeEvaluatorParams {
         inference_response,
         datapoint,
-        tensorzero_client,
+        clients,
         llm_judge_config,
         evaluation_name,
         evaluator_name,
@@ -50,6 +50,19 @@ pub async fn run_llm_judge_evaluator(
         input,
         skip_cache_read,
     } = params;
+    if let Some(human_feedback) = check_static_eval_human_feedback(
+        &clients.clickhouse_client,
+        evaluation_name,
+        datapoint.id(),
+        inference_response,
+    )
+    .await?
+    {
+        return Ok(Some(LLMJudgeEvaluationResult {
+            inference_id: inference_response.inference_id(),
+            value: human_feedback,
+        }));
+    }
     let judge_input =
         match prepare_llm_judge_input(llm_judge_config, input, inference_response, datapoint)? {
             Some(input) => input,
@@ -83,7 +96,7 @@ pub async fn run_llm_judge_evaluator(
         cache_options: get_cache_options(skip_cache_read),
         extra_body: Default::default(),
     };
-    let result = tensorzero_client.inference(params).await?;
+    let result = clients.tensorzero_client.inference(params).await?;
     let response = match result {
         InferenceOutput::NonStreaming(response) => response,
         InferenceOutput::Streaming(..) => {

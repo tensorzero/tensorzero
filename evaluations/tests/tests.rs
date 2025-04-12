@@ -5,10 +5,11 @@
 mod common;
 use clap::Parser;
 use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEvaluatorParams};
-use evaluations::ThrottledTensorZeroClient;
+use evaluations::{Clients, ThrottledTensorZeroClient};
 use serde_json::json;
 use tensorzero::input_handling::resolved_input_to_client_input;
 use tensorzero_internal::clickhouse::test_helpers::select_model_inferences_clickhouse;
+use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_internal::inference::types::{
@@ -1025,6 +1026,10 @@ async fn test_run_llm_judge_evaluator_chat() {
         tensorzero_client,
         Semaphore::new(1),
     ));
+    let clients = Arc::new(Clients {
+        tensorzero_client,
+        clickhouse_client: ClickHouseConnectionInfo::new(&clickhouse_url).await?,
+    });
     let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
         content: vec![ContentBlockChatOutput::Text(Text {
             text: "Hello, world!".to_string(),
@@ -1078,7 +1083,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
-        tensorzero_client: &tensorzero_client,
+        clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: "test_evaluation",
         evaluator_name: "happy_bool",
