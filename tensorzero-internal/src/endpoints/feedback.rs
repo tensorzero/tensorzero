@@ -305,11 +305,20 @@ async fn write_demonstration(
         &inference_id,
     )
     .await?;
-    let function_config = config.get_function(&target_info.function_name)?;
+    let function_name =
+        match &target_info {
+            TargetInfo::Inference { function_name, .. } => function_name,
+            _ => return Err(Error::new(ErrorDetails::InvalidRequest {
+                message:
+                    "Demonstration feedback is only supported for inference targets. This is a bug."
+                        .to_string(),
+            })),
+        };
+    let function_config = config.get_function(function_name)?;
     let dynamic_demonstration_info = get_dynamic_demonstration_info(
         &connection_info,
         inference_id,
-        &target_info.function_name,
+        function_name,
         function_config,
     )
     .await?;
@@ -446,7 +455,7 @@ async fn write_feedback_concurrently(params: WriteFeedbackParams<'_>) -> Result<
         if params.tags.contains_key(HUMAN_FEEDBACK_TAG_KEY)
             && params.tags.contains_key(DATAPOINT_TAG_KEY)
         {
-            tasks.push(Box::pin(write_human_feedback(
+            tasks.push(Box::pin(write_human_static_evaluation_feedback(
                 connection_info,
                 config,
                 target_info,
@@ -513,11 +522,18 @@ async fn throttled_get_target_info(
 }
 
 #[derive(Debug, Deserialize)]
-struct TargetInfo {
-    function_name: String,
-    variant_name: String,
-    inference_id: Uuid,
-    episode_id: Uuid,
+enum TargetInfo {
+    Inference {
+        function_name: String,
+        variant_name: String,
+        inference_id: Uuid,
+        episode_id: Uuid,
+    },
+    Episode {
+        // We will likely need the episode_id at some point for generalizations of feedback handling.
+        #[allow(dead_code)]
+        episode_id: Uuid,
+    },
 }
 
 /// Retrieves the function name associated with a given `target_id` of the inference or episode.
@@ -539,23 +555,42 @@ async fn get_target_info(
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
 ) -> Result<TargetInfo, Error> {
-    let table_name = match metric_config_level {
-        MetricConfigLevel::Inference => "InferenceById",
-        MetricConfigLevel::Episode => "InferenceByEpisodeId",
+    let (query, identifier_type) = match metric_config_level {
+        MetricConfigLevel::Inference => (
+            r#"
+        SELECT
+            function_name,
+            variant_name,
+            uint_to_uuid(id_uint) as inference_id,
+            episode_id
+        FROM InferenceById FINAL
+        WHERE id_uint = toUInt128(toUUID({target_id:String}))
+        FORMAT JSONEachRow
+        "#,
+            "Inference",
+        ),
+        MetricConfigLevel::Episode => (
+            r#"
+        SELECT
+            uint_to_uuid(id_uint) as inference_id,
+            uint_to_uuid(episode_id_uint) as episode_id
+        FROM InferenceByEpisodeId FINAL
+        WHERE episode_id_uint = toUInt128(toUUID({target_id:String}))
+        LIMIT 1
+        FORMAT JSONEachRow
+        "#,
+            "Episode",
+        ),
     };
-    let identifier_type = match metric_config_level {
-        MetricConfigLevel::Inference => "Inference",
-        MetricConfigLevel::Episode => "Episode",
-    };
-    let identifier_key = match metric_config_level {
-        MetricConfigLevel::Inference => "id_uint",
-        MetricConfigLevel::Episode => "episode_id_uint",
-    };
-    let query = format!(
-        "SELECT function_name, variant_name, uint_to_uuid(id_uint) as inference_id, uint_to_uuid(episode_id_uint) as episode_id FROM {} FINAL WHERE {} = toUInt128(toUUID('{}')) FORMAT JSONEachRow",
-        table_name, identifier_key, target_id
-    );
-    let result = connection_info.run_query_synchronous(query, None).await?;
+    let result = connection_info
+        .run_query_synchronous(
+            query.to_string(),
+            Some(&HashMap::from([(
+                "target_id",
+                target_id.to_string().as_str(),
+            )])),
+        )
+        .await?;
     let result = result.trim();
     if result.is_empty() {
         // We don't want to log here since this can happen if we send feedback immediately after the target is created.
@@ -801,7 +836,7 @@ async fn get_dynamic_demonstration_info(
 /// Writes human evaluation feedback to the database.
 /// Should only be called if the params contain both the human feedback tag
 /// and a datapoint id tag.
-async fn write_human_feedback(
+async fn write_human_static_evaluation_feedback(
     clickhouse: &ClickHouseConnectionInfo,
     config: &Config<'_>,
     target_info: &TargetInfo,
@@ -821,7 +856,20 @@ async fn write_human_feedback(
                     message: format!("Invalid datapoint ID: {}", e),
                 })
             })?;
-    let function_config = config.get_function(&target_info.function_name)?;
+    let TargetInfo::Inference {
+        function_name,
+        variant_name,
+        episode_id,
+        inference_id,
+        ..
+    } = target_info
+    else {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Human feedback is only supported for inference targets. This is a bug."
+                .to_string(),
+        }));
+    };
+    let function_config = config.get_function(function_name)?;
     let table_name = match &**function_config {
         FunctionConfig::Chat(..) => "ChatInference",
         FunctionConfig::Json(..) => "JsonInference",
@@ -855,16 +903,16 @@ async fn write_human_feedback(
     })?;
     let datapoint_id_str = datapoint_id.to_string();
     let feedback_id_str = feedback_id.to_string();
-    let episode_id_str = target_info.episode_id.to_string();
-    let inference_id_str = target_info.inference_id.to_string();
+    let episode_id_str = episode_id.to_string();
+    let inference_id_str = inference_id.to_string();
     let parameters = HashMap::from([
         ("metric_name", params.metric_name.as_str()),
         ("datapoint_id", datapoint_id_str.as_str()),
         ("value", value.as_str()),
         ("feedback_id", feedback_id_str.as_str()),
         ("table_name", table_name),
-        ("function_name", &target_info.function_name),
-        ("variant_name", &target_info.variant_name),
+        ("function_name", function_name),
+        ("variant_name", variant_name),
         ("episode_id", episode_id_str.as_str()),
         ("inference_id", inference_id_str.as_str()),
     ]);

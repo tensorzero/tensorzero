@@ -406,6 +406,14 @@ impl ClickHouseConnectionInfo {
     }
 }
 
+/// ClickHouse uses backslashes to escape quotes and all other special sequences in strings.
+/// In certain cases, we'll want to compare a raw string containing user input to strings in the database.
+/// These may contain backslashes, for example, if the user input contains doubly-serialized JSON.
+/// This function will escape backslashes in the input string so that the comparison will be accurate.
+pub fn escape_backslashes_for_string_comparison(s: &str) -> String {
+    s.replace(r#"\"#, r#"\\"#)
+}
+
 async fn write_mock(
     rows: &[impl Serialize + Send + Sync],
     table: &str,
