@@ -756,7 +756,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                     index: 0,
                     finish_reason: response.finish_reason.unwrap_or(FinishReason::Stop).into(),
                     message: OpenAICompatibleResponseMessage {
-                        content: Some(response.output.raw),
+                        content: response.output.raw,
                         tool_calls: None,
                         role: "assistant".to_string(),
                     },

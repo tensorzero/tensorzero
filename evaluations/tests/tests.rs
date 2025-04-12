@@ -906,7 +906,7 @@ async fn test_parse_args() {
         "--format",
         "jsonl",
         "--inference-cache",
-        "write-only",
+        "write_only",
     ])
     .unwrap();
     assert_eq!(args.evaluation_name, "my-evaluation");
@@ -1200,7 +1200,7 @@ async fn test_run_llm_judge_evaluator_json() {
     let inference_response = InferenceResponse::Json(JsonInferenceResponse {
         output: JsonInferenceOutput {
             parsed: Some(json!({"answer": "LeBron James"})),
-            raw: "{\"answer\": \"LeBron James\"}".to_string(),
+            raw: Some("{\"answer\": \"LeBron James\"}".to_string()),
         },
         original_response: None,
         finish_reason: None,
@@ -1230,7 +1230,7 @@ async fn test_run_llm_judge_evaluator_json() {
         function_name: "test_function".to_string(),
         output: Some(JsonInferenceOutput {
             parsed: Some(json!({"answer": "LeBron James"})),
-            raw: "{\"answer\": \"LeBron James\"}".to_string(),
+            raw: Some("{\"answer\": \"LeBron James\"}".to_string()),
         }),
         output_schema: json!({"answer": "string"}),
         tags: None,

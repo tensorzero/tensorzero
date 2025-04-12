@@ -347,10 +347,11 @@ fn prepare_serialized_chat_output(content: &Vec<ContentBlockChatOutput>) -> Resu
 }
 
 fn prepare_serialized_json_output(output: &JsonInferenceOutput) -> Result<String> {
-    if output.parsed.is_none() {
-        bail!("JSON output does not contain a `parsed` field");
+    match (&output.raw, &output.parsed) {
+        (_, None) => bail!("JSON output does not contain a `parsed` field"),
+        (None, _) => bail!("JSON output does not contain a `raw` field"),
+        (Some(raw), Some(_parsed)) => Ok(raw.clone()),
     }
-    Ok(output.raw.clone())
 }
 
 /// Handles the reference output for the LLM judge evaluator.
@@ -799,7 +800,7 @@ mod tests {
     fn test_prepare_serialized_json_output() {
         // Test with parsed field
         let output = JsonInferenceOutput {
-            raw: r#"{"key":"value"}"#.to_string(),
+            raw: Some(r#"{"key":"value"}"#.to_string()),
             parsed: Some(json!({"key":"value"})),
         };
         let serialized = prepare_serialized_json_output(&output).unwrap();
@@ -807,7 +808,7 @@ mod tests {
 
         // Test without parsed field
         let output = JsonInferenceOutput {
-            raw: r#"{"key":"value"}"#.to_string(),
+            raw: Some(r#"{"key":"value"}"#.to_string()),
             parsed: None,
         };
         let err = prepare_serialized_json_output(&output).unwrap_err();
@@ -915,7 +916,7 @@ mod tests {
                 messages: Vec::new(),
             },
             output: Some(JsonInferenceOutput {
-                raw: r#"{"result":"json reference"}"#.to_string(),
+                raw: Some(r#"{"result":"json reference"}"#.to_string()),
                 parsed: Some(json!({"result":"json reference"})),
             }),
             output_schema: json!({}),
@@ -1108,7 +1109,7 @@ mod tests {
             &input,
             &InferenceResponse::Json(JsonInferenceResponse {
                 output: JsonInferenceOutput {
-                    raw: r#"{"result":"json output"}"#.to_string(),
+                    raw: Some(r#"{"result":"json output"}"#.to_string()),
                     parsed: Some(json!({"result":"json output"})),
                 },
                 inference_id: Uuid::now_v7(),
@@ -1128,7 +1129,7 @@ mod tests {
                     messages: Vec::new(),
                 },
                 output: Some(JsonInferenceOutput {
-                    raw: r#"{"result":"reference output"}"#.to_string(),
+                    raw: Some(r#"{"result":"reference output"}"#.to_string()),
                     parsed: Some(json!({"result":"reference output"})),
                 }),
                 output_schema: json!({}),

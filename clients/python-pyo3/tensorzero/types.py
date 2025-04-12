@@ -145,7 +145,7 @@ class FinishReason(str, Enum):
 
 @dataclass
 class JsonInferenceOutput:
-    raw: str
+    raw: Optional[str]
     parsed: Optional[Dict[str, Any]]
 
 
