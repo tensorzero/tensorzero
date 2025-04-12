@@ -35,6 +35,7 @@ use tensorzero_rust::{
 use tokio::sync::Mutex;
 use url::Url;
 
+mod internal;
 mod python_helpers;
 
 pub(crate) static JSON_LOADS: GILOnceCell<Py<PyAny>> = GILOnceCell::new();
@@ -1020,13 +1021,72 @@ impl AsyncTensorZeroGateway {
             })
         })
     }
+
+    /// For internal use only - do not call.
+    // This is a helper function used by `optimizations-server` to get the template config
+    // when applying a new prompt template during fine-tuning
+    #[pyo3(signature = (*, function_name, variant_name))]
+    fn _internal_get_template_config(
+        this: PyRef<'_, Self>,
+        function_name: &str,
+        variant_name: &str,
+    ) -> PyResult<Py<PyDict>> {
+        let Some(config) = this.as_super().client.get_config() else {
+            return Err(tensorzero_internal_error(
+                this.py(),
+                "Called _get_template_config on HTTP gateway",
+            )?);
+        };
+        crate::internal::get_template_config(this.py(), &config, function_name, variant_name)
+    }
+
+    /// For internal use only - do not call.
+    // This is a helper function used by `optimizations-server` to get inferences used for fine-tuning
+    #[pyo3(signature = (*, function_name, metric_name=None, threshold=None, max_samples=None))]
+    fn _internal_get_curated_inferences(
+        this: PyRef<'_, Self>,
+        function_name: String,
+        metric_name: Option<String>,
+        threshold: Option<f64>,
+        max_samples: Option<u64>,
+    ) -> PyResult<Py<PyAny>> {
+        let Some(app_state) = this.as_super().client.get_app_state_data().cloned() else {
+            return Err(tensorzero_internal_error(
+                this.py(),
+                "Called _internal_get_curated_inferences on HTTP gateway",
+            )?);
+        };
+        Ok(
+            pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+                let inferences_result = crate::internal::get_curated_inferences(
+                    &app_state.config,
+                    &app_state.clickhouse_connection_info,
+                    &function_name,
+                    metric_name.as_deref(),
+                    threshold,
+                    max_samples,
+                )
+                .await;
+
+                Python::with_gil(|py| {
+                    let inferences = inferences_result.map_err(|e| convert_error(py, e))?;
+                    let mut dict_inferences = Vec::with_capacity(inferences.len());
+                    for inference in inferences {
+                        dict_inferences.push(serialize_to_dict(py, inference)?);
+                    }
+                    Ok(PyList::new(py, dict_inferences)?.unbind())
+                })
+            })?
+            .unbind(),
+        )
+    }
 }
 
 #[allow(unknown_lints)]
 // This lint currently does nothing on stable, but let's include it
 // so that it will start working automatically when it's stabilized
 #[deny(non_exhaustive_omitted_patterns)]
-fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyErr {
+pub fn convert_error(py: Python<'_>, e: TensorZeroError) -> PyErr {
     match e {
         TensorZeroError::Http {
             status_code,

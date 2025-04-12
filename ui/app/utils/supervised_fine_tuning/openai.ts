@@ -153,9 +153,7 @@ export class OpenAISFTJob extends SFTJob {
       formData: this.formData,
       rawData: this.job,
       jobUrl: this.jobUrl,
-      estimatedCompletionTime: estimatedCompletionTime
-        ? new Date(estimatedCompletionTime * 1000)
-        : undefined,
+      estimatedCompletionTime: estimatedCompletionTime || undefined,
       analysisData: this.analysisData,
     };
   }
