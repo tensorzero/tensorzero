@@ -552,7 +552,7 @@ async fn get_target_info(
         MetricConfigLevel::Episode => "episode_id_uint",
     };
     let query = format!(
-        "SELECT function_name, variant_name, uint_to_uuid(id_uint) as inference_id, uint_to_uuid(episode_id_uint) as episode_id FROM {} FINAL WHERE {} = toUInt128(toUUID('{}'))",
+        "SELECT function_name, variant_name, uint_to_uuid(id_uint) as inference_id, uint_to_uuid(episode_id_uint) as episode_id FROM {} FINAL WHERE {} = toUInt128(toUUID('{}')) FORMAT JSONEachRow",
         table_name, identifier_key, target_id
     );
     let result = connection_info.run_query_synchronous(query, None).await?;
@@ -827,7 +827,7 @@ async fn write_human_feedback(
         FunctionConfig::Json(..) => "JsonInference",
     };
     let query = r#"
-        INSERT INTO HumanEvaluationFeedback (
+        INSERT INTO HumanStaticEvaluationFeedback (
             metric_name,
             datapoint_id,
             output,

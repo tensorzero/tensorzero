@@ -3,10 +3,7 @@ use std::path::PathBuf;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_internal::{
-    clickhouse::{
-        test_helpers::{clickhouse_flush_async_insert, select_feedback_clickhouse},
-        ClickHouseConnectionInfo,
-    },
+    clickhouse::test_helpers::{select_feedback_clickhouse, select_feedback_tags_clickhouse},
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
 use tokio::time::{sleep, Duration};
@@ -1224,27 +1221,6 @@ async fn e2e_test_boolean_feedback() {
     assert!(retrieved_value);
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "goal_achieved");
-}
-
-async fn select_feedback_tags_clickhouse(
-    clickhouse_connection_info: &ClickHouseConnectionInfo,
-    metric_name: &str,
-    tag_key: &str,
-    tag_value: &str,
-) -> Option<Value> {
-    clickhouse_flush_async_insert(clickhouse_connection_info).await;
-
-    let query = format!(
-        "SELECT * FROM FeedbackTag WHERE metric_name = '{}' AND key = '{}' AND value = '{}' FORMAT JSONEachRow",
-        metric_name, tag_key, tag_value
-    );
-
-    let text = clickhouse_connection_info
-        .run_query_synchronous(query, None)
-        .await
-        .unwrap();
-    let json: Value = serde_json::from_str(&text).ok()?;
-    Some(json)
 }
 
 #[tokio::test(flavor = "multi_thread")]
