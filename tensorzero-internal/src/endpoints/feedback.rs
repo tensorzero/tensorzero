@@ -522,6 +522,7 @@ async fn throttled_get_target_info(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(untagged)]
 enum TargetInfo {
     Inference {
         function_name: String,

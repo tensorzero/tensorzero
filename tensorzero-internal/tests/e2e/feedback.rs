@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_internal::{
@@ -11,20 +9,8 @@ use tracing_test::traced_test;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
-use tensorzero_internal::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
-
-async fn make_embedded_gateway() -> tensorzero::Client {
-    let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("tests/e2e/tensorzero.toml");
-    tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(config_path),
-        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
-        timeout: None,
-    })
-    .build()
-    .await
-    .unwrap()
-}
+use crate::providers::common::make_embedded_gateway;
+use tensorzero_internal::clickhouse::test_helpers::get_clickhouse;
 
 #[tokio::test]
 async fn e2e_test_comment_feedback() {

@@ -2,6 +2,7 @@
 use super::ClickHouseConnectionInfo;
 use serde::Deserialize;
 use serde_json::Value;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 lazy_static::lazy_static! {
@@ -424,12 +425,14 @@ pub async fn select_human_static_evaluation_feedback_clickhouse(
     datapoint_id: Uuid,
     output: &str,
 ) -> Option<HumanStaticEvaluationFeedback> {
-    use std::collections::HashMap;
+    use super::escape_backslashes_for_string_comparison;
+
     let datapoint_id_str = datapoint_id.to_string();
+    let escaped_output = escape_backslashes_for_string_comparison(output);
     let params = HashMap::from([
         ("metric_name", metric_name),
         ("datapoint_id", &datapoint_id_str),
-        ("output", output),
+        ("output", &escaped_output),
     ]);
     let query = r#"
         SELECT * FROM HumanStaticEvaluationFeedback
