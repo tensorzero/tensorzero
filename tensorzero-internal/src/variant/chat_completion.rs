@@ -1308,7 +1308,7 @@ mod tests {
                 assert!(json_result.output.parsed.is_none());
                 assert_eq!(
                     json_result.output.raw,
-                    r#"{"location":"Brooklyn","units":"celsius"}"#.to_string()
+                    Some(r#"{"location":"Brooklyn","units":"celsius"}"#.to_string())
                 );
                 assert_eq!(
                     json_result.usage,
@@ -1380,7 +1380,10 @@ mod tests {
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
-                assert_eq!(json_result.output.raw, DUMMY_JSON_RESPONSE_RAW.to_string());
+                assert_eq!(
+                    json_result.output.raw,
+                    Some(DUMMY_JSON_RESPONSE_RAW.to_string())
+                );
                 assert_eq!(
                     json_result.usage,
                     Usage {
@@ -1485,7 +1488,10 @@ mod tests {
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.output.parsed, Some(json!({"answer": "Hello"})));
-                assert_eq!(json_result.output.raw, DUMMY_JSON_RESPONSE_RAW.to_string());
+                assert_eq!(
+                    json_result.output.raw,
+                    Some(DUMMY_JSON_RESPONSE_RAW.to_string())
+                );
                 assert_eq!(
                     json_result.usage,
                     Usage {
@@ -1586,7 +1592,10 @@ mod tests {
         match result {
             InferenceResult::Json(json_result) => {
                 assert_eq!(json_result.output.parsed, None);
-                assert_eq!(json_result.output.raw, DUMMY_JSON_RESPONSE_RAW.to_string());
+                assert_eq!(
+                    json_result.output.raw,
+                    Some(DUMMY_JSON_RESPONSE_RAW.to_string())
+                );
                 assert_eq!(
                     json_result.usage,
                     Usage {
