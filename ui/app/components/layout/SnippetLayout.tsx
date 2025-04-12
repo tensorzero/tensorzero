@@ -81,7 +81,7 @@ export function SnippetDescription({
 interface SnippetContentProps {
   children: ReactNode;
   className?: string;
-  maxHeight?: number;
+  maxHeight?: number | "Content";
 }
 
 export function SnippetContent({
@@ -98,10 +98,12 @@ export function SnippetContent({
     // Reset expanded state when content changes
     setExpanded(false);
 
-    if (contentRef.current) {
+    if (contentRef.current && maxHeight !== "Content") {
       // Simple check if content is taller than maxHeight
       const contentHeight = contentRef.current.scrollHeight;
       setNeedsExpansion(contentHeight > maxHeight);
+    } else {
+      setNeedsExpansion(false);
     }
   }, [children, maxHeight]);
 
@@ -110,19 +112,24 @@ export function SnippetContent({
       <div
         ref={contentRef}
         style={
-          !expanded && needsExpansion ? { maxHeight: `${maxHeight}px` } : {}
+          !expanded && needsExpansion && maxHeight !== "Content"
+            ? { maxHeight: `${maxHeight}px` }
+            : {}
         }
         className={cn(
           "relative space-y-4",
-          !expanded && needsExpansion && "overflow-hidden",
+          !expanded &&
+            needsExpansion &&
+            maxHeight !== "Content" &&
+            "overflow-hidden",
           className,
         )}
       >
         {children}
       </div>
 
-      {needsExpansion && !expanded && (
-        <div className="from-bg-primary absolute right-0 bottom-0 left-0 flex justify-center bg-linear-to-t to-transparent pt-8 pb-4">
+      {needsExpansion && !expanded && maxHeight !== "Content" && (
+        <div className="from-bg-primary absolute right-0 bottom-0 left-0 flex justify-center bg-gradient-to-t to-transparent pt-8 pb-4">
           <Button variant="outline" size="sm" onClick={() => setExpanded(true)}>
             Show more
           </Button>

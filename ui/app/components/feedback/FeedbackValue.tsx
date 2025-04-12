@@ -1,35 +1,15 @@
-import { Code } from "~/components/ui/code";
+import { useState } from "react";
+import { Sheet, SheetContent } from "~/components/ui/sheet";
 import type { FeedbackRow } from "~/utils/clickhouse/feedback";
 import type { MetricConfig } from "~/utils/config/metric";
-import { cn } from "~/utils/common";
-import { getFeedbackIcon } from "~/utils/icon";
-import type { ReactNode } from "react";
-
-type FeedbackStatus = "success" | "failure" | "neutral";
-
-interface FeedbackItemProps {
-  status: FeedbackStatus;
-  children: ReactNode;
-  className?: string;
-}
-
-function FeedbackItem({ status, children, className }: FeedbackItemProps) {
-  const { icon, iconBg } = getFeedbackIcon(status);
-
-  return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <div
-        className={cn(
-          "flex h-5 w-5 items-center justify-center rounded-md",
-          iconBg,
-        )}
-      >
-        {icon}
-      </div>
-      {children}
-    </div>
-  );
-}
+import {
+  BooleanItem,
+  FloatItem,
+  CommentItem,
+  DemonstrationItem,
+  type FeedbackStatus,
+} from "./FeedbackTableItem";
+import { CommentModal, DemonstrationModal } from "./FeedbackTableModal";
 
 interface FeedbackValueProps {
   feedback: FeedbackRow;
@@ -42,6 +22,15 @@ export default function FeedbackValue({
   metric,
   truncate = true,
 }: FeedbackValueProps) {
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  const handleClick = (event: React.MouseEvent) => {
+    if (feedback.type === "comment" || feedback.type === "demonstration") {
+      event.stopPropagation();
+      setIsSheetOpen(true);
+    }
+  };
+
   // Handle boolean metrics
   if (feedback.type === "boolean" && typeof feedback.value === "boolean") {
     const optimize = metric?.type === "boolean" ? metric.optimize : "unknown";
@@ -61,57 +50,56 @@ export default function FeedbackValue({
       status = "failure";
     }
 
-    return (
-      <FeedbackItem status={status}>
-        <span>{feedback.value ? "True" : "False"}</span>
-      </FeedbackItem>
-    );
+    return <BooleanItem value={feedback.value} status={status} />;
   }
 
   // Handle float metrics
   if (feedback.type === "float" && typeof feedback.value === "number") {
-    return (
-      <FeedbackItem status="neutral">
-        <div>{feedback.value.toFixed(3)}</div>
-      </FeedbackItem>
-    );
+    return <FloatItem value={feedback.value} />;
   }
 
-  // Handle comments and demonstrations (both have string values)
+  // Handle comments
   if (feedback.type === "comment" && typeof feedback.value === "string") {
     if (truncate) {
       return (
-        <FeedbackItem status="neutral">
-          <div className="overflow-hidden text-ellipsis whitespace-nowrap">
-            {feedback.value}
-          </div>
-        </FeedbackItem>
+        <>
+          <CommentItem
+            value={feedback.value}
+            truncate={true}
+            onClick={handleClick}
+          />
+          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+            <SheetContent className="bg-bg-secondary overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+              <CommentModal feedback={feedback} />
+            </SheetContent>
+          </Sheet>
+        </>
       );
     }
-    return (
-      <FeedbackItem status="neutral">
-        <div className="break-words whitespace-pre-wrap">{feedback.value}</div>
-      </FeedbackItem>
-    );
+
+    return <CommentItem value={feedback.value} truncate={false} />;
   }
 
+  // Handle demonstrations
   if (feedback.type === "demonstration" && typeof feedback.value === "string") {
     if (truncate) {
       return (
-        <FeedbackItem status="neutral">
-          <div className="overflow-hidden font-mono text-ellipsis whitespace-nowrap">
-            {feedback.value}
-          </div>
-        </FeedbackItem>
+        <>
+          <DemonstrationItem
+            value={feedback.value}
+            truncate={true}
+            onClick={handleClick}
+          />
+          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+            <SheetContent className="bg-bg-secondary w-full overflow-y-auto p-0 sm:max-w-xl md:max-w-2xl lg:max-w-3xl">
+              <DemonstrationModal feedback={feedback} />
+            </SheetContent>
+          </Sheet>
+        </>
       );
     }
-    return (
-      <FeedbackItem status="neutral">
-        <div className="text-sm font-normal">
-          <Code>{feedback.value}</Code>
-        </div>
-      </FeedbackItem>
-    );
+
+    return <DemonstrationItem value={feedback.value} truncate={false} />;
   }
 
   // Fallback for unexpected types
