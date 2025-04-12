@@ -82,7 +82,6 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
-    # Simplified command to just run the script
     command:
       ["bash", "-c", "cd /fixtures && ./load_fixtures.sh && sleep infinity"]
     # Added healthcheck to wait for the marker file created by the script
