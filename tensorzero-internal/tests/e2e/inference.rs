@@ -3015,3 +3015,75 @@ async fn test_client_adjust_tool_call() {
     let last_body = { bad_gateway.last_body.lock().await.take().unwrap() };
     assert_eq!(last_body, non_stringified_tool_call_args);
 }
+
+/// Test that an json inference with null response (i.e. no generated content blocks) works as expected.
+#[tokio::test]
+async fn test_chat_function_null_response() {
+    let payload = json!({
+        "function_name": "null_chat",
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "No yapping!"
+                }
+            ]
+        },
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    // Check that the response content is an empty array (no content blocks)
+    assert!(response_json["content"].as_array().unwrap().is_empty());
+}
+
+/// Test that an json inference with null response (i.e. no generated content blocks) works as expected.
+#[tokio::test]
+async fn test_json_function_null_response() {
+    let payload = json!({
+        "function_name": "null_json",
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Extract no data!"
+                }
+            ]
+        },
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    // Check that raw and parsed keys exist with null values
+    assert!(response_json
+        .get("output")
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .contains_key("raw"));
+    assert!(response_json
+        .get("output")
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .contains_key("parsed"));
+    assert!(response_json["output"]["raw"].is_null());
+    assert!(response_json["output"]["parsed"].is_null());
+}

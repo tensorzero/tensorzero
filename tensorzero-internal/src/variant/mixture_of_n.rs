@@ -455,8 +455,10 @@ impl FuserConfig {
                     included_indices.push(i);
                 }
                 InferenceResult::Json(json_result) => {
-                    if json_result.output.parsed.is_some() {
-                        candidate_outputs.push(json_result.output.raw.clone());
+                    if let (Some(raw), Some(_)) =
+                        (&json_result.output.raw, &json_result.output.parsed)
+                    {
+                        candidate_outputs.push(raw.clone());
                         included_indices.push(i);
                     }
                 }
@@ -854,7 +856,7 @@ mod tests {
 
         let candidate1 = InferenceResult::Json(JsonInferenceResult::new(
             Uuid::now_v7(),
-            "{\"response\": \"Valid JSON response\"}".to_string(),
+            Some("{\"response\": \"Valid JSON response\"}".to_string()),
             Some(json!({"response": "Valid JSON response"})),
             Usage {
                 input_tokens: 10,
@@ -891,7 +893,7 @@ mod tests {
 
         let candidate2 = InferenceResult::Json(JsonInferenceResult::new(
             Uuid::now_v7(),
-            "{\"oops: \"Malformed JSON response\"".to_string(),
+            Some("{\"oops: \"Malformed JSON response\"".to_string()),
             None, // malformed
             Usage {
                 input_tokens: 15,
@@ -1086,7 +1088,7 @@ mod tests {
             output_tokens: 55,
         };
         let expected_content = JsonInferenceOutput {
-            raw: "{\"answer\":\"Hello\"}".to_string(),
+            raw: Some("{\"answer\":\"Hello\"}".to_string()),
             parsed: Some(json!({"answer": "Hello"})),
         };
         match fused {

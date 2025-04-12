@@ -427,7 +427,9 @@ impl DiclConfig {
                 .into_iter()
                 .map(|x| x.into())
                 .collect(),
-            Example::Json(json_example) => vec![json_example.output.raw.clone().into()],
+            Example::Json(json_example) => {
+                vec![json_example.output.raw.clone().unwrap_or_default().into()]
+            }
         };
 
         // Push the output as an assistant message
@@ -720,7 +722,7 @@ mod tests {
 
         // Mock Output data for JsonExample
         let json_output = JsonInferenceOutput {
-            raw: "{\"result\": \"success\"}".to_string(),
+            raw: Some("{\"result\": \"success\"}".to_string()),
             parsed: Some(json!({"result": "success"})),
         };
 
@@ -745,7 +747,7 @@ mod tests {
 
         // Second message should be from Assistant with raw JSON output as text
         let expected_content = vec![ContentBlock::Text(Text {
-            text: json_output.raw.clone(),
+            text: json_output.raw.unwrap().clone(),
         })];
 
         assert_eq!(json_messages[1].role, Role::Assistant);
@@ -935,7 +937,7 @@ mod tests {
                 })
                 .unwrap(),
                 output: serde_json::to_string(&JsonInferenceOutput {
-                    raw: "{\"status\": \"success\", \"data\": {\"id\": 1}}".to_string(),
+                    raw: Some("{\"status\": \"success\", \"data\": {\"id\": 1}}".to_string()),
                     parsed: Some(json!({
                         "status": "success",
                         "data": {
@@ -957,7 +959,7 @@ mod tests {
                 })
                 .unwrap(),
                 output: serde_json::to_string(&JsonInferenceOutput {
-                    raw: "{\"result\": [1, 2, 3], \"status\": \"ok\"}".to_string(),
+                    raw: Some("{\"result\": [1, 2, 3], \"status\": \"ok\"}".to_string()),
                     parsed: Some(json!({
                         "result": [1, 2, 3],
                         "status": "ok"

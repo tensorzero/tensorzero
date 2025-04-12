@@ -1049,3 +1049,40 @@ async def test_patch_openai_client_with_async_client_async_setup_false():
     )
 
     tensorzero.close_patched_openai_client_gateway(patched_client)
+
+
+@pytest.mark.asyncio
+async def test_async_chat_function_null_response(async_client):
+    """
+    Test that an chat inference with null response (i.e. no generated content blocks) works as expected.
+    """
+    result = await async_client.chat.completions.create(
+        model="tensorzero::function_name::null_chat",
+        messages=[
+            {
+                "role": "user",
+                "content": "No yapping!",
+            }
+        ],
+    )
+
+    assert result.model == "tensorzero::function_name::null_chat::variant_name::variant"
+    assert result.choices[0].message.content is None
+
+
+@pytest.mark.asyncio
+async def test_async_json_function_null_response(async_client):
+    """
+    Test that an JSON inference with null response (i.e. no generated content blocks) works as expected.
+    """
+    result = await async_client.chat.completions.create(
+        model="tensorzero::function_name::null_json",
+        messages=[
+            {
+                "role": "user",
+                "content": "Extract no data!",
+            }
+        ],
+    )
+    assert result.model == "tensorzero::function_name::null_json::variant_name::variant"
+    assert result.choices[0].message.content is None

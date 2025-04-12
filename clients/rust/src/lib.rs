@@ -548,7 +548,7 @@ impl Client {
         resp.json().await.map_err(|e| TensorZeroError::Other {
             source: tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
                 message: format!(
-                    "Error deserializing inference response: {}",
+                    "Error deserializing response: {}",
                     DisplayOrDebug {
                         val: e,
                         debug: self.verbose_errors,
