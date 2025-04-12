@@ -3016,7 +3016,7 @@ async fn test_client_adjust_tool_call() {
     assert_eq!(last_body, non_stringified_tool_call_args);
 }
 
-/// Test that an json inference with null response (i.e. no generated content blocks) works as expected.
+/// Test that a json inference with null response (i.e. no generated content blocks) works as expected.
 #[tokio::test]
 async fn test_chat_function_null_response() {
     let payload = json!({
@@ -3046,7 +3046,7 @@ async fn test_chat_function_null_response() {
     assert!(response_json["content"].as_array().unwrap().is_empty());
 }
 
-/// Test that an json inference with null response (i.e. no generated content blocks) works as expected.
+/// Test that a json inference with null response (i.e. no generated content blocks) works as expected.
 #[tokio::test]
 async fn test_json_function_null_response() {
     let payload = json!({

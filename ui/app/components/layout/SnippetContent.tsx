@@ -29,7 +29,7 @@ function Label({ text }: LabelProps) {
 // Code content component
 interface CodeMessageProps {
   label?: string;
-  content?: string | null;
+  content?: string;
   showLineNumbers?: boolean;
   emptyMessage?: string;
 }
@@ -80,7 +80,7 @@ export function CodeMessage({
 // Text content component
 interface TextMessageProps {
   label?: string;
-  content?: string | null;
+  content?: string;
   emptyMessage?: string;
 }
 

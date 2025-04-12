@@ -232,7 +232,7 @@ export const requestMessageSchema = z.object({
 export type RequestMessage = z.infer<typeof requestMessageSchema>;
 
 export const jsonInferenceOutputSchema = z.object({
-  raw: z.string().nullable(),
+  raw: z.string().default(""),
   parsed: z.any().nullable(),
 });
 

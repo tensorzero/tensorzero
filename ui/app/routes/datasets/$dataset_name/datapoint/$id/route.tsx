@@ -370,11 +370,7 @@ function transformOutputForTensorZero(
   if (output === null || output === undefined) {
     return null;
   } else if ("raw" in output) {
-    if (output.raw === null) {
-      return null;
-    } else {
-      return JSON.parse(output.raw);
-    }
+    return JSON.parse(output.raw);
   } else if (typeof output === "object") {
     return JSON.parse(JSON.stringify(output));
   } else {

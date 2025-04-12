@@ -1073,7 +1073,7 @@ async def test_async_chat_function_null_response(async_client):
 @pytest.mark.asyncio
 async def test_async_json_function_null_response(async_client):
     """
-    Test that an JSON inference with null response (i.e. no generated content blocks) works as expected.
+    Test that a JSON inference with null response (i.e. no generated content blocks) works as expected.
     """
     result = await async_client.chat.completions.create(
         model="tensorzero::function_name::null_json",

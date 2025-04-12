@@ -2657,7 +2657,7 @@ def test_sync_chat_function_null_response(sync_client: TensorZeroGateway):
 
 def test_sync_json_function_null_response(sync_client: TensorZeroGateway):
     """
-    Test that an json inference with null response (i.e. no generated content blocks) works as expected.
+    Test that a JSON inference with null response (i.e. no generated content blocks) works as expected.
     """
     result = sync_client.inference(
         function_name="null_json",

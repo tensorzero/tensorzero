@@ -252,7 +252,7 @@ function TextBlock({ block, isEditing, onContentChange }: TextBlockProps) {
               ? "border-red-500 dark:border-red-500"
               : "border-slate-300 dark:border-slate-700"
           }`}
-          value={displayValue || ""}
+          value={displayValue}
           onChange={handleChange}
           rows={3}
         />
@@ -325,7 +325,7 @@ function InputToolCallBlock({
               ? "border-red-500 dark:border-red-500"
               : "border-slate-300 dark:border-slate-700"
           } dark:bg-slate-800`}
-          value={displayValue || ""}
+          value={displayValue}
           onChange={handleChange}
           rows={3}
         />
