@@ -1065,8 +1065,9 @@ def test_sync_inference_streaming_caching(sync_client: TensorZeroGateway):
     )
     assert isinstance(stream, t.Iterator)
 
-    chunks: t.List[InferenceChunk] = []
+    chunks: t.List[ChatChunk] = []
     for chunk in stream:
+        assert isinstance(chunk, ChatChunk)
         chunks.append(chunk)
 
     expected_text = [
@@ -1087,8 +1088,8 @@ def test_sync_inference_streaming_caching(sync_client: TensorZeroGateway):
         " cheese",
         " pizza.",
     ]
+
     for i, chunk in enumerate(chunks[:-1]):
-        assert isinstance(chunk, ChatChunk)
         assert len(chunk.content) == 1
         assert chunk.content[0].type == "text"
         assert isinstance(chunk.content[0], TextChunk)
@@ -1112,12 +1113,12 @@ def test_sync_inference_streaming_caching(sync_client: TensorZeroGateway):
     )
     assert isinstance(stream, t.Iterator)
 
-    chunks: t.List[InferenceChunk] = []
+    chunks: t.List[ChatChunk] = []
     for chunk in stream:
+        assert isinstance(chunk, ChatChunk)
         chunks.append(chunk)
 
     for i, chunk in enumerate(chunks[:-1]):
-        assert isinstance(chunk, ChatChunk)
         assert len(chunk.content) == 1
         assert chunk.content[0].type == "text"
         assert isinstance(chunk.content[0], TextChunk)
