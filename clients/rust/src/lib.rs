@@ -106,35 +106,35 @@ pub struct ClientBuilder {
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum TensorZeroError {
-    #[error("HTTP error: {status_code} {text:?}")]
+    #[error("HTTP Error (status code {status_code}): {text:?}")]
     Http {
         status_code: u16,
         text: Option<String>,
         #[source]
         source: TensorZeroInternalError,
     },
-    #[error("Internal error: {source}")]
+    #[error("{source}")] // the `source` has already been formatted (below)
     Other {
         #[source]
         source: TensorZeroInternalError,
     },
-    #[error("HTTP request timed out")]
+    #[error("HTTP Error: request timed out")]
     RequestTimeout,
 }
 
 #[derive(Debug, Error)]
-#[error("Internal TensorZero error: {0}")]
+#[error("Internal TensorZero Error: {0}")]
 pub struct TensorZeroInternalError(#[from] tensorzero_internal::error::Error);
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum ClientBuilderError {
     #[error(
-        "Missing config - you must call `with_config_file` before calling `build` in EmbeddedGateway mode"
+        "Missing configuration: you must call `with_config_file` before calling `build` in EmbeddedGateway mode"
     )]
     MissingConfig,
     #[error(
-        "Missing gateway URL - you must call `with_gateway_url` before calling `build` in HTTPGateway mode"
+        "Missing gateway URL: you must call `with_gateway_url` before calling `build` in HTTPGateway mode"
     )]
     MissingGatewayUrl,
     #[error("Called ClientBuilder.build_http() when not in HTTPGateway mode")]
