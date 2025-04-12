@@ -906,7 +906,7 @@ async fn test_parse_args() {
         "--format",
         "jsonl",
         "--inference-cache",
-        "write-only",
+        "write_only",
     ])
     .unwrap();
     assert_eq!(args.evaluation_name, "my-evaluation");
