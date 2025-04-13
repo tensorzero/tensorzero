@@ -7,16 +7,15 @@ import {
 import { useConfig } from "~/context/config";
 import MetricSelector from "../metric/MetricSelector";
 import { useState } from "react";
-import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
-import { Label } from "~/components/ui/label";
-import { Input } from "~/components/ui/input";
-import { Textarea } from "~/components/ui/textarea";
 import type { ContentBlockOutput } from "~/utils/clickhouse/common";
 import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
 import Output from "../inference/Output";
 import { Link, Form } from "react-router";
 import { Button } from "~/components/ui/button";
 import { filterMetricsByLevel } from "~/utils/config/metric";
+import BooleanFeedbackInput from "./BooleanFeedbackInput";
+import FloatFeedbackInput from "./FloatFeedbackInput";
+import CommentFeedbackInput from "./CommentFeedbackInput";
 
 interface HumanFeedbackModalProps {
   isOpen: boolean;
@@ -188,75 +187,6 @@ function FeedbackForm({
         </div>
       )}
     </Form>
-  );
-}
-
-interface BooleanFeedbackInputProps {
-  metricName: string;
-  value: string | null;
-  onChange: (value: string | null) => void;
-}
-
-function BooleanFeedbackInput({ value, onChange }: BooleanFeedbackInputProps) {
-  return (
-    <div className="mt-4">
-      <Label>Value</Label>
-      <RadioGroup
-        value={value ?? undefined}
-        onValueChange={onChange}
-        className="mt-2 flex gap-4"
-      >
-        <div className="flex items-center space-x-2">
-          <RadioGroupItem value="true" id={`true`} />
-          <Label htmlFor={`true`}>True</Label>
-        </div>
-        <div className="flex items-center space-x-2">
-          <RadioGroupItem value="false" id={`false`} />
-          <Label htmlFor={`false`}>False</Label>
-        </div>
-      </RadioGroup>
-    </div>
-  );
-}
-
-interface FloatFeedbackInputProps {
-  value: string;
-  onChange: (value: string) => void;
-}
-
-function FloatFeedbackInput({ value, onChange }: FloatFeedbackInputProps) {
-  return (
-    <div className="mt-4 space-y-2">
-      <Label htmlFor="float-input">Value</Label>
-      <Input
-        id="float-input"
-        type="number"
-        step="any"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Enter a number"
-      />
-    </div>
-  );
-}
-
-interface CommentFeedbackInputProps {
-  value: string;
-  onChange: (value: string) => void;
-}
-
-function CommentFeedbackInput({ value, onChange }: CommentFeedbackInputProps) {
-  return (
-    <div className="mt-4 space-y-2">
-      <Label htmlFor="comment-input">Comment</Label>
-      <Textarea
-        id="comment-input"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Enter your comment"
-        rows={4}
-      />
-    </div>
   );
 }
 
