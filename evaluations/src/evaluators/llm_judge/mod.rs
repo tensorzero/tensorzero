@@ -8,7 +8,8 @@ use tensorzero::{
 };
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{
-    get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType,
+    get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
+    LLMJudgeOutputType,
 };
 use tensorzero_internal::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, TextKind,
@@ -52,7 +53,7 @@ pub async fn run_llm_judge_evaluator(
     } = params;
     if let Some(human_feedback) = check_static_eval_human_feedback(
         &clients.clickhouse_client,
-        evaluation_name,
+        &get_evaluator_metric_name(evaluation_name, evaluator_name),
         datapoint.id(),
         inference_response,
     )

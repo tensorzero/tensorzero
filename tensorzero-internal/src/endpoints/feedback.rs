@@ -875,10 +875,6 @@ async fn write_human_static_evaluation_feedback(
         FunctionConfig::Chat(..) => "ChatInference",
         FunctionConfig::Json(..) => "JsonInference",
     };
-    println!(
-        "Writing human static evaluation feedback with params: {:?}",
-        params
-    );
     let query = r#"
         INSERT INTO HumanStaticEvaluationFeedback (
             metric_name,
