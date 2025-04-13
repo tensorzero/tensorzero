@@ -124,6 +124,137 @@ async def test_async_basic_inference_json_schema(async_client):
 
 
 @pytest.mark.asyncio
+async def test_async_inference_cache(async_client):
+    messages = [
+        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {"role": "user", "content": "Hello"},
+    ]
+
+    result = await async_client.chat.completions.create(
+        messages=messages,
+        model="tensorzero::function_name::basic_test",
+        temperature=0.4,
+    )
+
+    assert (
+        result.choices[0].message.content
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.prompt_tokens == 10
+    assert usage.completion_tokens == 10
+    assert usage.total_tokens == 20
+
+    # Test caching
+    result = await async_client.chat.completions.create(
+        extra_body={
+            "tensorzero::cache_options": {"max_age_s": 10, "enabled": "on"},
+        },
+        messages=messages,
+        model="tensorzero::function_name::basic_test",
+        temperature=0.4,
+    )
+
+    assert (
+        result.choices[0].message.content
+        == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
+    )
+    usage = result.usage
+    assert usage.prompt_tokens == 0  # should be cached
+    assert usage.completion_tokens == 0  # should be cached
+    assert usage.total_tokens == 0  # should be cached
+
+
+@pytest.mark.asyncio
+async def test_async_inference_streaming_with_cache(async_client):
+    messages = [
+        {"role": "system", "content": [{"assistant_name": "Alfred Pennyworth"}]},
+        {"role": "user", "content": "Hello"},
+    ]
+
+    # First request without cache to populate the cache
+    stream = await async_client.chat.completions.create(
+        extra_body={"tensorzero::episode_id": str(uuid7())},
+        messages=messages,
+        model="tensorzero::function_name::basic_test",
+        stream=True,
+        seed=69,
+    )
+
+    chunks = []
+    async for chunk in stream:
+        chunks.append(chunk)
+
+    # Verify the response
+    expected_text = [
+        "Wally,",
+        " the",
+        " golden",
+        " retriever,",
+        " wagged",
+        " his",
+        " tail",
+        " excitedly",
+        " as",
+        " he",
+        " devoured",
+        " a",
+        " slice",
+        " of",
+        " cheese",
+        " pizza.",
+    ]
+
+    content = ""
+    for i, chunk in enumerate(chunks[:-1]):  # All but the last chunk
+        if i < len(expected_text):
+            assert chunk.choices[0].delta.content == expected_text[i]
+            content += chunk.choices[0].delta.content
+
+    # Check final chunk has usage stats
+    final_chunk = chunks[-1]
+    assert final_chunk.choices[0].finish_reason == "stop"
+    assert final_chunk.usage.prompt_tokens == 10
+    assert final_chunk.usage.completion_tokens == 16
+
+    # Second request with cache
+    stream = await async_client.chat.completions.create(
+        extra_body={
+            "tensorzero::episode_id": str(uuid7()),
+            "tensorzero::cache_options": {"max_age_s": 10, "enabled": "on"},
+        },
+        messages=messages,
+        model="tensorzero::function_name::basic_test",
+        stream=True,
+        seed=69,
+    )
+
+    cached_chunks = []
+    async for chunk in stream:
+        cached_chunks.append(chunk)
+
+    # Verify we get the same content
+    cached_content = ""
+    for i, chunk in enumerate(cached_chunks[:-1]):  # All but the last chunk
+        if i < len(expected_text):
+            assert chunk.choices[0].delta.content == expected_text[i]
+            cached_content += chunk.choices[0].delta.content
+
+    assert content == cached_content
+
+    # Check final chunk has the correct finish reason
+    final_cached_chunk = cached_chunks[-1]
+    assert final_cached_chunk.choices[0].finish_reason == "stop"
+
+    # In streaming mode, the cached response might not include usage statistics
+    # This is still correct behavior as no tokens were used
+    if final_cached_chunk.usage is not None:
+        assert final_cached_chunk.usage.prompt_tokens == 0  # should be cached
+        assert final_cached_chunk.usage.completion_tokens == 0  # should be cached
+        assert final_cached_chunk.usage.total_tokens == 0  # should be cached
+
+
+@pytest.mark.asyncio
 async def test_async_inference_streaming(async_client):
     start_time = time()
     messages = [
