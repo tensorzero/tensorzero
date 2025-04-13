@@ -46,6 +46,7 @@ use uuid::Uuid;
 async fn run_evaluations_json() {
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
+    let tensorzero_client = get_tensorzero_client().await;
     write_json_fixture_to_dataset(
         &PathBuf::from(&format!(
             "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
@@ -59,8 +60,8 @@ async fn run_evaluations_json() {
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
-    let args = Args {
-        config_file: config_path,
+    let args = || Args {
+        config_file: config_path.clone(),
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: dataset_name.clone(),
@@ -71,14 +72,14 @@ async fn run_evaluations_json() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args, evaluation_run_id, &mut output)
+    run_evaluation(args(), evaluation_run_id, &mut output)
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
     let output_str = String::from_utf8(output).unwrap();
     let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
     let mut parsed_output = Vec::new();
-    let mut total_the = 0;
+    let mut total_sports = 0;
     for line in output_lines {
         let parsed: EvaluationUpdate =
             serde_json::from_str(line).expect("Each line should be valid JSON");
@@ -199,6 +200,28 @@ async fn run_evaluations_json() {
                 .unwrap(),
         )
         .unwrap();
+        // Send human feedback to the evaluator and overwrite the existing feedback
+        let human_feedback_payload = FeedbackParams {
+            inference_id: Some(inference_id),
+            metric_name:
+                "tensorzero::evaluation_name::entity_extraction::evaluator_name::count_sports"
+                    .to_string(),
+            value: json!(0),
+            internal: true,
+            tags: HashMap::from([
+                (
+                    "tensorzero::datapoint_id".to_string(),
+                    parsed.datapoint.id().to_string(),
+                ),
+                ("tensorzero::human_feedback".to_string(), "true".to_string()),
+            ]),
+            dryrun: Some(false),
+            episode_id: None,
+        };
+        tensorzero_client
+            .feedback(human_feedback_payload)
+            .await
+            .unwrap();
         let evaluator_inference =
             select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
                 .await
@@ -207,11 +230,39 @@ async fn run_evaluations_json() {
             evaluator_inference["tags"]["tensorzero::evaluation_name"],
             "entity_extraction"
         );
-        total_the += feedback["value"].as_f64().unwrap() as u32;
+        total_sports += feedback["value"].as_f64().unwrap() as u32;
         parsed_output.push(parsed);
     }
     assert_eq!(parsed_output.len(), 6);
-    assert_eq!(total_the, 3);
+    assert_eq!(total_sports, 3);
+
+    // Check that the human feedback affects the next eval run results
+    // Run the evaluation again but now it should read the human feedback that was sent
+    let mut output = Vec::new();
+    run_evaluation(args(), evaluation_run_id, &mut output)
+        .await
+        .unwrap();
+    clickhouse_flush_async_insert(&clickhouse).await;
+    let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let mut total_sports = 0;
+    for line in output_lines {
+        let parsed: EvaluationUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed = match parsed {
+            EvaluationUpdate::Success(evaluation_info) => evaluation_info,
+            EvaluationUpdate::Error(evaluation_error) => {
+                panic!("evaluation error: {}", evaluation_error.message);
+            }
+        };
+        // We only check the total_topic_fs for the second run
+        total_sports += parsed.evaluations["count_sports"]
+            .as_ref()
+            .unwrap()
+            .as_f64()
+            .unwrap() as u32;
+    }
+    assert_eq!(total_sports, 0);
 }
 
 #[tokio::test(flavor = "multi_thread")]
