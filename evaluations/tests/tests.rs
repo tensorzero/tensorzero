@@ -45,10 +45,14 @@ use uuid::Uuid;
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_json() {
     let clickhouse = get_clickhouse().await;
-    write_json_fixture_to_dataset(&PathBuf::from(&format!(
-        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    )))
+    let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
+    write_json_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
+    )
     .await;
     let config_path = PathBuf::from(&format!(
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
@@ -59,7 +63,7 @@ async fn run_evaluations_json() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
-        dataset_name: "extract_entities_0.8".to_string(),
+        dataset_name: dataset_name.clone(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -118,7 +122,7 @@ async fn run_evaluations_json() {
         );
         assert_eq!(
             clickhouse_inference["tags"]["tensorzero::dataset_name"],
-            "extract_entities_0.8"
+            dataset_name
         );
         // Check boolean feedback was recorded
         let feedback = select_feedback_by_target_id_clickhouse(
@@ -882,10 +886,14 @@ async fn run_llm_judge_evaluation_chat_human_readable() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_json_human_readable() {
-    write_json_fixture_to_dataset(&PathBuf::from(&format!(
-        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    )))
+    let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
+    write_json_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
+    )
     .await;
     let config_path = PathBuf::from(&format!(
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
@@ -896,7 +904,7 @@ async fn run_llm_judge_evaluation_json_human_readable() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
-        dataset_name: "extract_entities_0.8".to_string(),
+        dataset_name: dataset_name.clone(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::HumanReadable,
@@ -1030,11 +1038,15 @@ async fn test_run_evaluation_binary() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_errors() {
+    let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
-    write_json_fixture_to_dataset(&PathBuf::from(&format!(
-        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    )))
+    write_json_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
+    )
     .await;
     let config_path = PathBuf::from(&format!(
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
@@ -1045,7 +1057,7 @@ async fn run_evaluations_errors() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
-        dataset_name: "extract_entities_0.8".to_string(),
+        dataset_name: dataset_name.clone(),
         variant_name: "dummy_error".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -1415,11 +1427,15 @@ async fn test_run_llm_judge_evaluator_json() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_best_of_3() {
+    let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
-    write_json_fixture_to_dataset(&PathBuf::from(&format!(
-        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    )))
+    write_json_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
+    )
     .await;
     let config_path = PathBuf::from(&format!(
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
@@ -1430,7 +1446,7 @@ async fn run_evaluations_best_of_3() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "best_of_3".to_string(),
-        dataset_name: "extract_entities_0.8".to_string(),
+        dataset_name: dataset_name.clone(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -1486,7 +1502,7 @@ async fn run_evaluations_best_of_3() {
         );
         assert_eq!(
             clickhouse_inference["tags"]["tensorzero::dataset_name"],
-            "extract_entities_0.8"
+            dataset_name
         );
         // Check boolean feedback was recorded
         let feedback = select_feedback_by_target_id_clickhouse(
@@ -1597,10 +1613,14 @@ async fn run_evaluations_best_of_3() {
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_mixture_of_3() {
     let clickhouse = get_clickhouse().await;
-    write_json_fixture_to_dataset(&PathBuf::from(&format!(
-        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    )))
+    let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
+    write_json_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
+    )
     .await;
     let config_path = PathBuf::from(&format!(
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
@@ -1611,7 +1631,7 @@ async fn run_evaluations_mixture_of_3() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "mixture_of_3".to_string(),
-        dataset_name: "extract_entities_0.8".to_string(),
+        dataset_name: dataset_name.clone(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -1667,7 +1687,7 @@ async fn run_evaluations_mixture_of_3() {
         );
         assert_eq!(
             clickhouse_inference["tags"]["tensorzero::dataset_name"],
-            "extract_entities_0.8"
+            dataset_name
         );
         // Check boolean feedback was recorded
         let feedback = select_feedback_by_target_id_clickhouse(
@@ -1781,10 +1801,14 @@ async fn run_evaluations_mixture_of_3() {
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_dicl() {
     let clickhouse = get_clickhouse().await;
-    write_json_fixture_to_dataset(&PathBuf::from(&format!(
-        "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    )))
+    let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
+    write_json_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
+    )
     .await;
     let config_path = PathBuf::from(&format!(
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
@@ -1795,7 +1819,7 @@ async fn run_evaluations_dicl() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "dicl".to_string(),
-        dataset_name: "extract_entities_0.8".to_string(),
+        dataset_name: dataset_name.clone(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -1851,7 +1875,7 @@ async fn run_evaluations_dicl() {
         );
         assert_eq!(
             clickhouse_inference["tags"]["tensorzero::dataset_name"],
-            "extract_entities_0.8"
+            dataset_name
         );
         // Check boolean feedback was recorded
         let feedback = select_feedback_by_target_id_clickhouse(
