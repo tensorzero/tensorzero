@@ -346,8 +346,10 @@ export class TensorZeroClient {
         body: JSON.stringify(request),
       });
       if (!response.ok) {
+        const errorText = await response.text();
+        const errorContents = JSON.parse(errorText).error;
         throw new Error(
-          `Inference request failed with status ${response.status}`,
+          `Inference request failed with status ${response.status}: ${errorContents}`,
         );
       }
       return (await response.json()) as InferenceResponse;
@@ -419,7 +421,11 @@ export class TensorZeroClient {
       body: JSON.stringify(request),
     });
     if (!response.ok) {
-      throw new Error(`Feedback request failed with status ${response.status}`);
+      const errorText = await response.text();
+      const errorContents = JSON.parse(errorText).error;
+      throw new Error(
+        `Feedback request failed with status ${response.status}: ${errorContents}`,
+      );
     }
     return (await response.json()) as FeedbackResponse;
   }
