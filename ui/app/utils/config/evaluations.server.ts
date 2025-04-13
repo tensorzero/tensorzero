@@ -43,13 +43,9 @@ const llm_judge_user_template = `# Input
 const llm_judge_float_output_schema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   type: "object",
-  required: ["thinking", "score"],
+  required: ["score"],
   additionalProperties: false,
   properties: {
-    thinking: {
-      type: "string",
-      description: "The reasoning or thought process behind the judgment",
-    },
     score: {
       type: "number",
       description: "The score assigned as a number",
@@ -63,13 +59,9 @@ const llm_judge_float_output_schema = {
 const llm_judge_boolean_output_schema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   type: "object",
-  required: ["thinking", "score"],
+  required: ["score"],
   additionalProperties: false,
   properties: {
-    thinking: {
-      type: "string",
-      description: "The reasoning or thought process behind the judgment",
-    },
     score: {
       type: "boolean",
       description: "The LLM judge's score as a boolean",
