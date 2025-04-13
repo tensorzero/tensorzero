@@ -212,11 +212,15 @@ async fn run_evaluations_json() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_exact_match_evaluation_chat() {
+    let dataset_name = format!("good-haiku-data-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
-    write_chat_fixture_to_dataset(&PathBuf::from(&format!(
-        "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    )))
+    write_chat_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
+    )
     .await;
     let config_path = PathBuf::from(&format!(
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
@@ -227,7 +231,7 @@ async fn run_exact_match_evaluation_chat() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "haiku_with_outputs".to_string(),
-        dataset_name: "good-haiku-data".to_string(),
+        dataset_name: dataset_name.clone(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -283,7 +287,7 @@ async fn run_exact_match_evaluation_chat() {
         );
         assert_eq!(
             clickhouse_inference["tags"]["tensorzero::dataset_name"],
-            "good-haiku-data"
+            dataset_name
         );
         let clickhouse_feedback = select_feedback_by_target_id_clickhouse(
             &clickhouse,
@@ -328,11 +332,15 @@ async fn run_exact_match_evaluation_chat() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_chat() {
+    let dataset_name = format!("good-haikus-no-output-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
-    write_chat_fixture_to_dataset(&PathBuf::from(&format!(
-        "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    )))
+    write_chat_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
+    )
     .await;
     let config_path = PathBuf::from(&format!(
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
@@ -343,7 +351,7 @@ async fn run_llm_judge_evaluation_chat() {
     let args = || Args {
         config_file: config_path.clone(),
         gateway_url: None,
-        dataset_name: "good-haikus-no-output".to_string(),
+        dataset_name: dataset_name.clone(),
         evaluation_name: "haiku_without_outputs".to_string(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
@@ -520,11 +528,15 @@ async fn run_llm_judge_evaluation_chat() {
 /// However, it takes an image and we verify that the image is actually used in the inference.
 #[tokio::test(flavor = "multi_thread")]
 async fn run_image_evaluation() {
+    let dataset_name = format!("baz-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
-    write_chat_fixture_to_dataset(&PathBuf::from(&format!(
-        "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    )))
+    write_chat_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("baz".to_string(), dataset_name.clone())]),
+    )
     .await;
     let config_path = PathBuf::from(&format!(
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
@@ -534,7 +546,7 @@ async fn run_image_evaluation() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        dataset_name: "baz".to_string(),
+        dataset_name: dataset_name.clone(),
         evaluation_name: "images".to_string(),
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
@@ -729,11 +741,15 @@ async fn run_image_evaluation() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn check_invalid_image_evaluation() {
+    let dataset_name = format!("baz-{}", Uuid::now_v7());
     let clickhouse = get_clickhouse().await;
-    write_chat_fixture_to_dataset(&PathBuf::from(&format!(
-        "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    )))
+    write_chat_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("baz".to_string(), dataset_name.clone())]),
+    )
     .await;
     let config_path = PathBuf::from(&format!(
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
@@ -743,7 +759,7 @@ async fn check_invalid_image_evaluation() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        dataset_name: "baz".to_string(),
+        dataset_name: dataset_name.clone(),
         evaluation_name: "bad_images".to_string(),
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
@@ -825,10 +841,14 @@ async fn check_invalid_image_evaluation() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_llm_judge_evaluation_chat_human_readable() {
-    write_chat_fixture_to_dataset(&PathBuf::from(&format!(
-        "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    )))
+    let dataset_name = format!("good-haikus-no-output-{}", Uuid::now_v7());
+    write_chat_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-internal/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("good-haikus-no-output".to_string(), dataset_name.clone())]),
+    )
     .await;
     let config_path = PathBuf::from(&format!(
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
@@ -839,7 +859,7 @@ async fn run_llm_judge_evaluation_chat_human_readable() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "haiku_without_outputs".to_string(),
-        dataset_name: "good-haikus-no-output".to_string(),
+        dataset_name: dataset_name.clone(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::HumanReadable,
