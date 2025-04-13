@@ -355,7 +355,7 @@ async fn e2e_test_demonstration_feedback_json() {
     let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo"})),
-        raw: "{\"answer\":\"Tokyo\"}".to_string(),
+        raw: Some("{\"answer\":\"Tokyo\"}".to_string()),
     };
     assert_eq!(retrieved_value, expected_value);
 
@@ -481,7 +481,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
     let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
     let expected_value = JsonInferenceOutput {
         parsed: Some(json!({"answer": "Tokyo", "comment": "This is a comment"})),
-        raw: "{\"answer\":\"Tokyo\",\"comment\":\"This is a comment\"}".to_string(),
+        raw: Some("{\"answer\":\"Tokyo\",\"comment\":\"This is a comment\"}".to_string()),
     };
     assert_eq!(retrieved_value, expected_value);
 

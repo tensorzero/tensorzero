@@ -364,7 +364,9 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   }
 }
 
-function transformOutputForTensorZero(output: ParsedDatasetRow["output"]) {
+function transformOutputForTensorZero(
+  output: ParsedDatasetRow["output"],
+): string | null {
   if (output === null || output === undefined) {
     return null;
   } else if ("raw" in output) {

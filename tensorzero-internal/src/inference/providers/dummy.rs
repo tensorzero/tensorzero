@@ -225,6 +225,7 @@ impl InferenceProvider for DummyProvider {
         let id = Uuid::now_v7();
         let created = current_timestamp();
         let content = match self.model_name.as_str() {
+            "null" => vec![],
             "tool" => vec![ContentBlockOutput::ToolCall(ToolCall {
                 name: "get_temperature".to_string(),
                 #[allow(clippy::unwrap_used)]
@@ -310,14 +311,10 @@ impl InferenceProvider for DummyProvider {
                     })?,
                 })]
             }
-            "llm_judge::true" => vec![r#"{"thinking": "hmmm", "score": true}"#.to_string().into()],
-            "llm_judge::false" => {
-                vec![r#"{"thinking": "hmmm", "score": false}"#.to_string().into()]
-            }
-            "llm_judge::zero" => vec![r#"{"thinking": "hmmm", "score": 0}"#.to_string().into()],
-            "llm_judge::one" => {
-                vec![r#"{"thinking": "hmmm", "score": 1}"#.to_string().into()]
-            }
+            "llm_judge::true" => vec![r#"{"score": true}"#.to_string().into()],
+            "llm_judge::false" => vec![r#"{"score": false}"#.to_string().into()],
+            "llm_judge::zero" => vec![r#"{"score": 0}"#.to_string().into()],
+            "llm_judge::one" => vec![r#"{"score": 1}"#.to_string().into()],
             "llm_judge::error" => {
                 return Err(ErrorDetails::InferenceClient {
                     message: "Dummy error in inference".to_string(),

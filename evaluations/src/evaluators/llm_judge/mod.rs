@@ -6,6 +6,7 @@ use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     DynamicToolParams, Image, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
+use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{
     get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
@@ -33,7 +34,7 @@ pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub evaluator_name: &'a str,
     pub evaluation_run_id: Uuid,
     pub input: &'a ClientInput,
-    pub skip_cache_read: bool,
+    pub inference_cache: CacheEnabledMode,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -49,7 +50,7 @@ pub async fn run_llm_judge_evaluator(
         evaluator_name,
         evaluation_run_id,
         input,
-        skip_cache_read,
+        inference_cache,
     } = params;
     if let Some(human_feedback) = check_static_eval_human_feedback(
         &clients.clickhouse_client,
@@ -94,7 +95,7 @@ pub async fn run_llm_judge_evaluator(
         dynamic_tool_params: DynamicToolParams::default(),
         output_schema: None,
         credentials: HashMap::new(),
-        cache_options: get_cache_options(skip_cache_read),
+        cache_options: get_cache_options(inference_cache),
         extra_body: Default::default(),
     };
     let result = clients.tensorzero_client.inference(params).await?;
@@ -360,10 +361,11 @@ fn prepare_serialized_chat_output(content: &Vec<ContentBlockChatOutput>) -> Resu
 }
 
 fn prepare_serialized_json_output(output: &JsonInferenceOutput) -> Result<String> {
-    if output.parsed.is_none() {
-        bail!("JSON output does not contain a `parsed` field");
+    match (&output.raw, &output.parsed) {
+        (_, None) => bail!("JSON output does not contain a `parsed` field"),
+        (None, _) => bail!("JSON output does not contain a `raw` field"),
+        (Some(raw), Some(_parsed)) => Ok(raw.clone()),
     }
-    Ok(output.raw.clone())
 }
 
 /// Handles the reference output for the LLM judge evaluator.
@@ -812,7 +814,7 @@ mod tests {
     fn test_prepare_serialized_json_output() {
         // Test with parsed field
         let output = JsonInferenceOutput {
-            raw: r#"{"key":"value"}"#.to_string(),
+            raw: Some(r#"{"key":"value"}"#.to_string()),
             parsed: Some(json!({"key":"value"})),
         };
         let serialized = prepare_serialized_json_output(&output).unwrap();
@@ -820,7 +822,7 @@ mod tests {
 
         // Test without parsed field
         let output = JsonInferenceOutput {
-            raw: r#"{"key":"value"}"#.to_string(),
+            raw: Some(r#"{"key":"value"}"#.to_string()),
             parsed: None,
         };
         let err = prepare_serialized_json_output(&output).unwrap_err();
@@ -928,7 +930,7 @@ mod tests {
                 messages: Vec::new(),
             },
             output: Some(JsonInferenceOutput {
-                raw: r#"{"result":"json reference"}"#.to_string(),
+                raw: Some(r#"{"result":"json reference"}"#.to_string()),
                 parsed: Some(json!({"result":"json reference"})),
             }),
             output_schema: json!({}),
@@ -1121,7 +1123,7 @@ mod tests {
             &input,
             &InferenceResponse::Json(JsonInferenceResponse {
                 output: JsonInferenceOutput {
-                    raw: r#"{"result":"json output"}"#.to_string(),
+                    raw: Some(r#"{"result":"json output"}"#.to_string()),
                     parsed: Some(json!({"result":"json output"})),
                 },
                 inference_id: Uuid::now_v7(),
@@ -1141,7 +1143,7 @@ mod tests {
                     messages: Vec::new(),
                 },
                 output: Some(JsonInferenceOutput {
-                    raw: r#"{"result":"reference output"}"#.to_string(),
+                    raw: Some(r#"{"result":"reference output"}"#.to_string()),
                     parsed: Some(json!({"result":"reference output"})),
                 }),
                 output_schema: json!({}),

@@ -390,6 +390,12 @@ routing = ["together"]
 type = "together"
 model_name = "deepseek-ai/DeepSeek-R1"
 
+[models.null]
+routing = ["dummy"]
+
+[models.null.providers.dummy]
+type = "dummy"
+model_name = "null"
 
 [models.slow]
 routing = ["slow"]
@@ -2125,6 +2131,23 @@ type = "chat"
 type = "chat_completion"
 weight = 1
 model = "test"
+max_tokens = 100
+
+[functions.null_chat]
+type = "chat"
+
+[functions.null_chat.variants.variant]
+type = "chat_completion"
+model = "null"
+max_tokens = 100
+
+[functions.null_json]
+type = "json"
+output_schema = "../../fixtures/config/functions/basic_test/output_schema.json"
+
+[functions.null_json.variants.variant]
+type = "chat_completion"
+model = "null"
 max_tokens = 100
 
 [functions.weather_helper]
