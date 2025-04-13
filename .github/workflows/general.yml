@@ -25,6 +25,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6
+        with:
+          save-if: ${{ github.event_name == 'merge_group' }}
       - name: Install cargo-nextest
         uses: taiki-e/install-action@37bdc826eaedac215f638a96472df572feab0f9b
         with:
