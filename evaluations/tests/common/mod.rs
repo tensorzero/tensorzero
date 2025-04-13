@@ -1,8 +1,9 @@
 #![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+use tensorzero::{Client, ClientBuilder, ClientBuilderMode};
 use tensorzero_internal::{
-    clickhouse::test_helpers::get_clickhouse,
+    clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL},
     endpoints::datasets::{
         ClickHouseChatInferenceDatapoint, ClickHouseDatapoint, ClickHouseJsonInferenceDatapoint,
         Datapoint,
@@ -41,4 +42,18 @@ pub async fn write_json_fixture_to_dataset(fixture_path: &Path) {
         .write(&datapoints, "JsonInferenceDatapoint")
         .await
         .unwrap();
+}
+
+pub async fn get_tensorzero_client() -> Client {
+    ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(PathBuf::from(&format!(
+            "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        ))),
+        clickhouse_url: Some(CLICKHOUSE_URL.clone()),
+        timeout: None,
+    })
+    .build()
+    .await
+    .unwrap()
 }

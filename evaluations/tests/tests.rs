@@ -9,7 +9,6 @@ use evaluations::{Clients, ThrottledTensorZeroClient};
 use serde_json::json;
 use tensorzero::input_handling::resolved_input_to_client_input;
 use tensorzero_internal::clickhouse::test_helpers::select_model_inferences_clickhouse;
-use tensorzero_internal::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_internal::inference::types::{
@@ -19,11 +18,12 @@ use tokio::time::sleep;
 use url::Url;
 
 use crate::common::write_json_fixture_to_dataset;
-use common::write_chat_fixture_to_dataset;
+use common::{get_tensorzero_client, write_chat_fixture_to_dataset};
 use evaluations::{run_evaluation, stats::EvaluationUpdate, Args, OutputFormat};
+use std::collections::HashMap;
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
-use tensorzero::{ClientBuilder, ClientBuilderMode};
+use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
 use tensorzero::{InferenceResponse, Role};
 use tensorzero_internal::{
     clickhouse::test_helpers::{
@@ -338,9 +338,10 @@ async fn run_llm_judge_evaluation_chat() {
         "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
+    let tensorzero_client = get_tensorzero_client().await;
     let evaluation_run_id = Uuid::now_v7();
-    let args = Args {
-        config_file: config_path,
+    let args = || Args {
+        config_file: config_path.clone(),
         gateway_url: None,
         dataset_name: "good-haikus-no-output".to_string(),
         evaluation_name: "haiku_without_outputs".to_string(),
@@ -351,7 +352,7 @@ async fn run_llm_judge_evaluation_chat() {
     };
 
     let mut output = Vec::new();
-    run_evaluation(args, evaluation_run_id, &mut output)
+    run_evaluation(args(), evaluation_run_id, &mut output)
         .await
         .unwrap();
     clickhouse_flush_async_insert(&clickhouse).await;
@@ -455,6 +456,24 @@ async fn run_llm_judge_evaluation_chat() {
                 .unwrap(),
         )
         .unwrap();
+        // Send human feedback to the evaluator and overwrite the existing feedback
+        let human_feedback_payload = FeedbackParams {
+            inference_id: Some(inference_id),
+            metric_name: "tensorzero::evaluation_name::haiku_without_outputs::evaluator_name::topic_starts_with_f".to_string(),
+            value: json!(false),
+            internal: true,
+            tags: HashMap::from([
+                ("tensorzero::datapoint_id".to_string(), parsed.datapoint.id().to_string()),
+                ("tensorzero::human_feedback".to_string(), "true".to_string()),
+            ]),
+            dryrun: Some(false),
+            episode_id: None,
+        };
+        tensorzero_client
+            .feedback(human_feedback_payload)
+            .await
+            .unwrap();
+
         let evaluator_inference =
             select_json_inference_clickhouse(&clickhouse, evaluator_inference_id)
                 .await
@@ -467,6 +486,33 @@ async fn run_llm_judge_evaluation_chat() {
     }
     assert_eq!(parsed_output.len(), 10);
     assert_eq!(total_topic_fs, 3);
+    sleep(Duration::from_millis(500)).await;
+    // Run the evaluation again but now it should read the human feedback that was sent
+    let mut output = Vec::new();
+    run_evaluation(args(), evaluation_run_id, &mut output)
+        .await
+        .unwrap();
+    clickhouse_flush_async_insert(&clickhouse).await;
+    let output_str = String::from_utf8(output).unwrap();
+    let output_lines: Vec<&str> = output_str.lines().skip(1).collect();
+    let mut total_topic_fs = 0;
+    for line in output_lines {
+        let parsed: EvaluationUpdate =
+            serde_json::from_str(line).expect("Each line should be valid JSON");
+        let parsed = match parsed {
+            EvaluationUpdate::Success(evaluation_info) => evaluation_info,
+            EvaluationUpdate::Error(evaluation_error) => {
+                panic!("evaluation error: {}", evaluation_error.message);
+            }
+        };
+        // We only check the total_topic_fs for the second run
+        total_topic_fs += parsed.evaluations["topic_starts_with_f"]
+            .as_ref()
+            .unwrap()
+            .as_bool()
+            .unwrap() as u32;
+    }
+    assert_eq!(total_topic_fs, 0);
 }
 
 /// High level with this test is that the judge is actually just checking if the reference output matches the
@@ -1022,13 +1068,10 @@ async fn test_run_llm_judge_evaluator_chat() {
     .build()
     .await
     .unwrap();
-    let tensorzero_client = Arc::new(ThrottledTensorZeroClient::new(
-        tensorzero_client,
-        Semaphore::new(1),
-    ));
+    let tensorzero_client = ThrottledTensorZeroClient::new(tensorzero_client, Semaphore::new(1));
     let clients = Arc::new(Clients {
         tensorzero_client,
-        clickhouse_client: ClickHouseConnectionInfo::new(&clickhouse_url).await?,
+        clickhouse_client: get_clickhouse().await,
     });
     let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
         content: vec![ContentBlockChatOutput::Text(Text {
@@ -1076,10 +1119,12 @@ async fn test_run_llm_judge_evaluator_chat() {
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
     };
-    let input =
-        resolved_input_to_client_input(datapoint.input().clone(), &tensorzero_client.client)
-            .await
-            .unwrap();
+    let input = resolved_input_to_client_input(
+        datapoint.input().clone(),
+        &clients.tensorzero_client.client,
+    )
+    .await
+    .unwrap();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
@@ -1099,7 +1144,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
-        tensorzero_client: &tensorzero_client,
+        clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: "test_evaluation",
         evaluator_name: "sad_bool",
@@ -1115,7 +1160,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
-        tensorzero_client: &tensorzero_client,
+        clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: "test_evaluation",
         evaluator_name: "zero",
@@ -1131,7 +1176,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
-        tensorzero_client: &tensorzero_client,
+        clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: "test_evaluation",
         evaluator_name: "one",
@@ -1170,7 +1215,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
-        tensorzero_client: &tensorzero_client,
+        clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: "test_evaluation",
         evaluator_name: "happy_bool",
@@ -1185,21 +1230,12 @@ async fn test_run_llm_judge_evaluator_chat() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_run_llm_judge_evaluator_json() {
-    let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(PathBuf::from(&format!(
-            "{}/../tensorzero-internal/tests/e2e/tensorzero.toml",
-            std::env::var("CARGO_MANIFEST_DIR").unwrap()
-        ))),
-        clickhouse_url: None,
-        timeout: None,
-    })
-    .build()
-    .await
-    .unwrap();
-    let tensorzero_client = Arc::new(ThrottledTensorZeroClient::new(
+    let tensorzero_client = get_tensorzero_client().await;
+    let tensorzero_client = ThrottledTensorZeroClient::new(tensorzero_client, Semaphore::new(1));
+    let clients = Arc::new(Clients {
         tensorzero_client,
-        Semaphore::new(1),
-    ));
+        clickhouse_client: get_clickhouse().await,
+    });
     let inference_response = InferenceResponse::Json(JsonInferenceResponse {
         output: JsonInferenceOutput {
             parsed: Some(json!({"answer": "LeBron James"})),
@@ -1248,14 +1284,16 @@ async fn test_run_llm_judge_evaluator_json() {
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
     };
-    let input =
-        resolved_input_to_client_input(datapoint.input().clone(), &tensorzero_client.client)
-            .await
-            .unwrap();
+    let input = resolved_input_to_client_input(
+        datapoint.input().clone(),
+        &clients.tensorzero_client.client,
+    )
+    .await
+    .unwrap();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
-        tensorzero_client: &tensorzero_client,
+        clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: "test_evaluation",
         evaluator_name: "happy_bool",
@@ -1271,7 +1309,7 @@ async fn test_run_llm_judge_evaluator_json() {
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
-        tensorzero_client: &tensorzero_client,
+        clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: "test_evaluation",
         evaluator_name: "sad_bool",
@@ -1287,7 +1325,7 @@ async fn test_run_llm_judge_evaluator_json() {
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
-        tensorzero_client: &tensorzero_client,
+        clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: "test_evaluation",
         evaluator_name: "zero",
@@ -1303,7 +1341,7 @@ async fn test_run_llm_judge_evaluator_json() {
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
-        tensorzero_client: &tensorzero_client,
+        clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: "test_evaluation",
         evaluator_name: "one",
@@ -1342,7 +1380,7 @@ async fn test_run_llm_judge_evaluator_json() {
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
-        tensorzero_client: &tensorzero_client,
+        clients: &clients,
         llm_judge_config: &llm_judge_config,
         evaluation_name: "test_evaluation",
         evaluator_name: "happy_bool",

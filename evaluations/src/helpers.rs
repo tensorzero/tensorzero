@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use serde_json::Value;
 use tensorzero::{CacheParamsOptions, DynamicToolParams, InferenceResponse};
-use tensorzero_internal::clickhouse::escape_backslashes_for_string_comparison;
+use tensorzero_internal::clickhouse::escape_string_for_clickhouse_comparison;
 use tensorzero_internal::{
     cache::CacheEnabledMode, clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
     tool::ToolCallConfigDatabaseInsert,
@@ -94,10 +94,11 @@ pub async fn check_static_eval_human_feedback(
             metric_name = {metric_name:String}
         AND datapoint_id = {datapoint_id:UUID}
         AND output = {output:String}
+        ORDER BY timestamp DESC
         LIMIT 1
         FORMAT JSONEachRow
     "#;
-    let escaped_serialized_output = escape_backslashes_for_string_comparison(&serialized_output);
+    let escaped_serialized_output = escape_string_for_clickhouse_comparison(&serialized_output);
     let result = clickhouse
         .run_query_synchronous(
             query.to_string(),
@@ -108,6 +109,12 @@ pub async fn check_static_eval_human_feedback(
             ])),
         )
         .await?;
+    println!("serialized_output: {}", serialized_output);
+    println!("escaped_serialized_output: {}", escaped_serialized_output);
+    println!("metric_name: {}", metric_name);
+    println!("datapoint_id: {}", datapoint_id);
+    println!("output: {}", serialized_output);
+    println!("result: {:?}", result);
     if result.is_empty() {
         return Ok(None);
     }

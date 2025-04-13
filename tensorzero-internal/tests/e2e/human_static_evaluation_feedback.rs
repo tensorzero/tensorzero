@@ -438,7 +438,7 @@ async fn e2e_test_float_human_feedback() {
 }
 
 #[tokio::test]
-async fn e2e_test_boolean_feedback() {
+async fn e2e_test_boolean_human_feedback() {
     let client = Client::new();
 
     // Run inference (standard, no dryrun) to get an inference_id.
@@ -467,7 +467,7 @@ async fn e2e_test_boolean_feedback() {
 
     // No sleeping, we should throttle in the gateway
     let datapoint_id = Uuid::now_v7();
-    let payload = json!({"inference_id": inference_id, "metric_name": "task_success", "value": true, "tags": {"tensorzero::human_feedback": "true", "tensorzero::datapoint_id": datapoint_id.to_string()}});
+    let payload = json!({"inference_id": inference_id, "metric_name": "task_success", "internal": true, "value": true, "tags": {"tensorzero::human_feedback": "true", "tensorzero::datapoint_id": datapoint_id.to_string()}});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
         .json(&payload)
