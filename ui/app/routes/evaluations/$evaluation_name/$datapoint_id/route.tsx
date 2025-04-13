@@ -42,6 +42,7 @@ import { getConfig } from "~/utils/config/index.server";
 import type { EvaluationConfig } from "~/utils/config/evaluations";
 import type { ContentBlockOutput } from "~/utils/clickhouse/common";
 import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
+import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const evaluation_name = params.evaluation_name;
@@ -113,16 +114,16 @@ export default function EvaluationDatapointPage({
       output: consolidatedEvaluationResults[0].reference_output,
       metrics: [],
       variant_name: "Reference",
+      inferenceId: null,
     },
     ...consolidatedEvaluationResults.map((result) => ({
       id: result.evaluation_run_id,
+      inferenceId: result.inference_id,
       variant_name: result.variant_name,
       output: result.generated_output,
       metrics: result.metrics,
     })),
   ];
-
-  // REMOVE useColorAssigner() call from here
 
   return (
     // Provider remains here
@@ -151,6 +152,7 @@ export default function EvaluationDatapointPage({
             outputsToDisplay={outputsToDisplay}
             evaluation_name={evaluation_name}
             evaluation_config={evaluation_config}
+            datapointId={datapoint_id}
           />
         </SectionsGroup>
       </PageLayout>
@@ -163,10 +165,14 @@ const MetricsDisplay = ({
   metrics,
   evaluation_name,
   evaluatorsConfig,
+  datapointId,
+  inferenceId,
 }: {
   metrics: ConsolidatedMetric[];
   evaluation_name: string;
   evaluatorsConfig: Record<string, EvaluatorConfig>;
+  datapointId: string;
+  inferenceId: string | null;
 }) => {
   return (
     <div className="mt-3 border-t border-gray-200 pt-2">
@@ -182,6 +188,8 @@ const MetricsDisplay = ({
               evaluatorName={metricObj.evaluator_name}
               metricValue={metricObj.metric_value}
               evaluatorConfig={evaluatorConfig}
+              datapointId={datapointId}
+              inferenceId={inferenceId}
             />
           );
         })}
@@ -196,11 +204,15 @@ const MetricRow = ({
   evaluation_name,
   metricValue,
   evaluatorConfig,
+  datapointId,
+  inferenceId,
 }: {
   evaluatorName: string;
   evaluation_name: string;
   metricValue: string;
   evaluatorConfig: EvaluatorConfig;
+  datapointId: string;
+  inferenceId: string | null;
 }) => {
   const config = useConfig();
   const metric_name = getEvaluatorMetricName(evaluation_name, evaluatorName);
@@ -211,6 +223,12 @@ const MetricRow = ({
   ) {
     return null;
   }
+  if (inferenceId === null) {
+    console.warn(
+      `Inference ID is null for metric ${metric_name} in datapoint ${datapointId}, this should not happen.`,
+    );
+  }
+  const evaluationType = evaluatorConfig.type;
   return (
     <div className="flex items-center gap-2">
       <TooltipProvider delayDuration={300}>
@@ -252,6 +270,14 @@ const MetricRow = ({
         evaluatorConfig={evaluatorConfig}
         className="text-sm"
       />
+      {inferenceId !== null && evaluationType === "llm_judge" && (
+        <EvaluationFeedbackEditor
+          inferenceId={inferenceId}
+          datapointId={datapointId}
+          metricName={metric_name}
+          originalValue={metricValue}
+        />
+      )}
     </div>
   );
 };
@@ -290,15 +316,18 @@ type OutputsSectionProps = {
     variant_name: string;
     output: ContentBlockOutput[] | JsonInferenceOutput;
     metrics: ConsolidatedMetric[];
+    inferenceId: string | null;
   }>;
   evaluation_name: string;
   evaluation_config: EvaluationConfig; // Use the specific config type
+  datapointId: string;
 };
 
 function OutputsSection({
   outputsToDisplay,
   evaluation_name,
   evaluation_config,
+  datapointId,
 }: OutputsSectionProps) {
   const { getColor } = useColorAssigner();
 
@@ -341,6 +370,8 @@ function OutputsSection({
                   evaluation_name={evaluation_name}
                   metrics={result.metrics}
                   evaluatorsConfig={evaluation_config.evaluators}
+                  datapointId={datapointId}
+                  inferenceId={result.inferenceId}
                 />
               )}
           </div>

@@ -195,6 +195,7 @@ export async function getEvaluationResults(
     ci.output as generated_output,
     ci.tags['tensorzero::evaluation_run_id'] as evaluation_run_id,
     ci.tags['tensorzero::dataset_name'] as dataset_name,
+    ci.id as inference_id,
     feedback.metric_name as metric_name,
     feedback.value as metric_value
   FROM (
@@ -471,6 +472,7 @@ export async function getEvaluationsForDatapoint(
     inference.input as input,
     dp.id as datapoint_id,
     dp.output as reference_output,
+    inference.id as inference_id,
     inference.output as generated_output,
     inference.tags['tensorzero::evaluation_run_id'] as evaluation_run_id,
     inference.variant_name as variant_name,
