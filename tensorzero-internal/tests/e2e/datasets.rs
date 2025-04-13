@@ -26,7 +26,7 @@ async fn test_datapoint_insert_synthetic_chat() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -98,7 +98,7 @@ async fn test_datapoint_insert_synthetic_chat() {
     let new_datapoint_id = Uuid::now_v7();
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -123,7 +123,7 @@ async fn test_datapoint_insert_synthetic_chat() {
     let new_datapoint_id = Uuid::now_v7();
     let resp = client
        .put(get_gateway_endpoint(&format!(
-           "/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
+           "/internal/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
        )))
        .json(&json!({
            "function_name": "basic_test",
@@ -216,7 +216,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -255,7 +255,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
     // Next we check invalid arguments
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -293,7 +293,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
 
     let resp = client
     .put(get_gateway_endpoint(&format!(
-        "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
     )))
     .json(&json!({
         "function_name": "basic_test",
@@ -380,7 +380,7 @@ async fn test_datapoint_insert_synthetic_json() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "json_success",
@@ -455,7 +455,7 @@ async fn test_datapoint_insert_synthetic_json() {
     // Test updating with a different output schema (this should fail)
     let new_resp = client
     .put(get_gateway_endpoint(&format!(
-        "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
     )))
     .json(&json!({
         "function_name": "json_success",
@@ -486,7 +486,7 @@ async fn test_datapoint_insert_synthetic_json() {
     // but we are overwriting the same datapoint with a new one
     let new_resp = client
     .put(get_gateway_endpoint(&format!(
-        "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
     )))
     .json(&json!({
         "function_name": "json_success",
@@ -567,7 +567,7 @@ async fn test_datapoint_insert_synthetic_json() {
     let new_datapoint_id = Uuid::now_v7();
     let new_resp = client
     .put(get_gateway_endpoint(&format!(
-        "/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
+        "/internal/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
     )))
     .json(&json!({
         "function_name": "json_success",
@@ -600,7 +600,7 @@ async fn test_datapoint_insert_synthetic_json() {
     let new_datapoint_id = Uuid::now_v7();
     let resp = client
        .put(get_gateway_endpoint(&format!(
-           "/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
+           "/internal/datasets/{dataset_name}/datapoints/{new_datapoint_id}",
        )))
        .json(&json!({
            "function_name": "json_success",
@@ -670,7 +670,7 @@ async fn test_datapoint_insert_bad_name() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "json_success",
@@ -701,7 +701,7 @@ async fn test_datapoint_insert_invalid_input_synthetic_chat() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "variant_failover",
@@ -735,7 +735,7 @@ async fn test_datapoint_insert_invalid_input_synthetic_json() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "json_success",
@@ -770,7 +770,7 @@ async fn test_datapoint_insert_invalid_output_synthetic_json() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "json_success",
@@ -809,7 +809,7 @@ async fn test_datapoint_insert_synthetic_bad_uuid() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_uuid_v4}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_uuid_v4}",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -837,7 +837,7 @@ async fn test_datapoint_insert_synthetic_bad_params() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -888,7 +888,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1034,7 +1034,7 @@ async fn test_datapoint_insert_output_none_chat() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1120,7 +1120,7 @@ async fn test_datapoint_create_bad_name() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1186,7 +1186,7 @@ async fn test_datapoint_insert_output_demonstration_chat() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1279,7 +1279,7 @@ async fn test_datapoint_insert_output_inherit_json() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1430,7 +1430,7 @@ async fn test_datapoint_insert_output_none_json() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1535,7 +1535,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1602,7 +1602,9 @@ async fn test_missing_inference_id() {
     let client = Client::new();
     let fake_inference_id = Uuid::now_v7();
     let resp = client
-        .post(get_gateway_endpoint("/datasets/dummy-dataset/datapoints"))
+        .post(get_gateway_endpoint(
+            "/internal/datasets/dummy-dataset/datapoints",
+        ))
         .json(&json!({
             "inference_id": fake_inference_id,
             "output": "inherit"
@@ -1647,7 +1649,7 @@ async fn test_datapoint_missing_demonstration() {
 
     let resp = client
         .post(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints"
+            "/internal/datasets/{dataset_name}/datapoints"
         )))
         .json(&json!({
             "inference_id": inference_id,
@@ -1676,7 +1678,7 @@ async fn test_datapoint_insert_missing_output_chat() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -1740,7 +1742,7 @@ async fn test_datapoint_insert_null_output_chat() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "basic_test",
@@ -1804,7 +1806,7 @@ async fn test_datapoint_insert_missing_output_json() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "json_success",
@@ -1869,7 +1871,7 @@ async fn test_datapoint_insert_null_output_json() {
 
     let resp = client
         .put(get_gateway_endpoint(&format!(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
         )))
         .json(&json!({
             "function_name": "json_success",

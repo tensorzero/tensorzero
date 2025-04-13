@@ -5,6 +5,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
 import type { DatasetDetailRow } from "~/utils/clickhouse/datasets";
@@ -33,14 +34,7 @@ export default function DatasetRowTable({
         </TableHeader>
         <TableBody>
           {rows.length === 0 ? (
-            <TableRow className="hover:bg-bg-primary">
-              <TableCell
-                colSpan={5}
-                className="text-fg-muted px-3 py-8 text-center"
-              >
-                No datapoints found.
-              </TableCell>
-            </TableRow>
+            <TableEmptyState message="No datapoints found" />
           ) : (
             rows.map((row) => (
               <TableRow key={row.id} id={row.id}>

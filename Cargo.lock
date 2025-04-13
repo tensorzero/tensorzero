@@ -1109,9 +1109,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.5.14"
+version = "0.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06ba6d68e24814cb8de6bb986db8222d3a027d15872cabc0d18817bc3c0e4471"
+checksum = "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -1366,7 +1366,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "0.1.0"
+version = "2025.4.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -1566,7 +1566,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "0.1.0"
+version = "2025.4.4"
 dependencies = [
  "axum",
  "clap",
@@ -2202,9 +2202,9 @@ dependencies = [
 
 [[package]]
 name = "libmimalloc-sys"
-version = "0.1.41"
+version = "0.1.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b20daca3a4ac14dbdc753c5e90fc7b490a48a9131daed3c9a9ced7b2defd37b"
+checksum = "ec9d6fac27761dabcd4ee73571cdb06b7022dc99089acbe5435691edffaac0f4"
 dependencies = [
  "cc",
  "libc",
@@ -2360,9 +2360,9 @@ dependencies = [
 
 [[package]]
 name = "mimalloc"
-version = "0.1.45"
+version = "0.1.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03cb1f88093fe50061ca1195d336ffec131347c7b833db31f9ab62a2d1b7925f"
+checksum = "995942f432bbb4822a7e9c3faa87a695185b0d09273ba85f097b54f4e458f2af"
 dependencies = [
  "libmimalloc-sys",
 ]
@@ -2407,7 +2407,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-bindings"
-version = "0.1.0"
+version = "2025.4.4"
 dependencies = [
  "console_error_panic_hook",
  "minijinja",
@@ -3848,7 +3848,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-internal"
-version = "0.1.0"
+version = "2025.4.4"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -3909,7 +3909,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.4.2"
+version = "2025.4.4"
 dependencies = [
  "futures",
  "pyo3",

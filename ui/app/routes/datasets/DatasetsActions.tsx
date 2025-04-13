@@ -3,15 +3,11 @@ import { BuildDatasetButton } from "./BuildDatasetButton";
 
 interface DatasetsActionsProps {
   onBuildDataset: () => void;
-  className?: string;
 }
 
-export function DatasetsActions({
-  onBuildDataset,
-  className,
-}: DatasetsActionsProps) {
+export function DatasetsActions({ onBuildDataset }: DatasetsActionsProps) {
   return (
-    <ActionBar className={className}>
+    <ActionBar>
       <BuildDatasetButton onClick={onBuildDataset} />
     </ActionBar>
   );

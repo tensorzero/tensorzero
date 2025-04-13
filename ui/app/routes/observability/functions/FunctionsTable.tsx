@@ -5,6 +5,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import type { FunctionConfig } from "~/utils/config/function";
 import type { FunctionCountInfo } from "~/utils/clickhouse/inference";
@@ -60,14 +61,7 @@ export default function FunctionsTable({
         </TableHeader>
         <TableBody>
           {mergedFunctions.length === 0 ? (
-            <TableRow className="hover:bg-bg-primary">
-              <TableCell
-                colSpan={4}
-                className="text-fg-muted px-3 py-8 text-center"
-              >
-                No functions found.
-              </TableCell>
-            </TableRow>
+            <TableEmptyState message="No functions found" />
           ) : (
             mergedFunctions.map(
               ({ function_name, count, max_timestamp, type }) => (

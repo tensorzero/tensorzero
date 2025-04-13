@@ -12,6 +12,9 @@ members = [
 ]
 resolver = "2"
 
+[workspace.package]
+version = "2025.4.4"
+
 [workspace.dependencies]
 reqwest = { version = "0.12.15", features = [
     "json",

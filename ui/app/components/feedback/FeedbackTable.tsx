@@ -5,6 +5,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
@@ -32,14 +33,7 @@ export default function FeedbackTable({
         </TableHeader>
         <TableBody>
           {feedback.length === 0 ? (
-            <TableRow className="hover:bg-bg-primary">
-              <TableCell
-                colSpan={4}
-                className="text-fg-muted px-3 py-8 text-center"
-              >
-                No feedback found.
-              </TableCell>
-            </TableRow>
+            <TableEmptyState message="No feedback found" />
           ) : (
             feedback.map((item) => (
               <TableRow key={item.id}>

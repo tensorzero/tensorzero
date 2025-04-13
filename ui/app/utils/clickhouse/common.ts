@@ -232,8 +232,8 @@ export const requestMessageSchema = z.object({
 export type RequestMessage = z.infer<typeof requestMessageSchema>;
 
 export const jsonInferenceOutputSchema = z.object({
-  raw: z.string(),
-  parsed: z.any().optional(),
+  raw: z.string().default(""),
+  parsed: z.any().nullable(),
 });
 
 export type JsonInferenceOutput = z.infer<typeof jsonInferenceOutputSchema>;

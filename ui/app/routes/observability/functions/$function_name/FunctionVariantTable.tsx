@@ -6,6 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import type { VariantCounts } from "~/utils/clickhouse/function";
 import { formatDate } from "~/utils/date";
@@ -36,14 +37,7 @@ export default function FunctionVariantTable({
       </TableHeader>
       <TableBody>
         {variant_counts.length === 0 ? (
-          <TableRow className="hover:bg-bg-primary">
-            <TableCell
-              colSpan={5}
-              className="text-fg-muted px-3 py-8 text-center"
-            >
-              No variants found.
-            </TableCell>
-          </TableRow>
+          <TableEmptyState message="No variants found" />
         ) : (
           variant_counts.map((variant_count) => (
             <TableRow

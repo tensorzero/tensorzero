@@ -5,6 +5,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableEmptyState,
 } from "~/components/ui/table";
 import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
 import { formatDate } from "~/utils/date";
@@ -28,14 +29,7 @@ export default function FunctionInferenceTable({
       </TableHeader>
       <TableBody>
         {inferences.length === 0 ? (
-          <TableRow className="hover:bg-bg-primary">
-            <TableCell
-              colSpan={4}
-              className="text-fg-muted px-3 py-8 text-center"
-            >
-              No inferences found.
-            </TableCell>
-          </TableRow>
+          <TableEmptyState message="No inferences found" />
         ) : (
           inferences.map((inference) => (
             <TableRow key={inference.id} id={inference.id}>

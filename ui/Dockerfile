@@ -2,6 +2,8 @@
 
 FROM node:23-bookworm-slim AS base
 
+COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
+
 RUN npm install -g pnpm
 
 # ========== development-dependencies-env ==========
@@ -28,9 +30,9 @@ RUN pnpm install --frozen-lockfile --prod
 
 FROM rust:latest AS minijinja-build-env
 
-COPY ./ui/app/utils/minijinja /minijinja/
+COPY . /build
 
-WORKDIR /minijinja
+WORKDIR /build/ui/app/utils/minijinja
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 RUN wasm-pack build --features console_error_panic_hook
 
@@ -59,13 +61,26 @@ FROM base AS build-env
 
 COPY ./ui /app/
 
-COPY --from=minijinja-build-env /minijinja/pkg /app/app/utils/minijinja/pkg
+COPY --from=minijinja-build-env /build/ui/app/utils/minijinja/pkg /app/app/utils/minijinja/pkg
 
 COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 
 WORKDIR /app
 
+ENV VITE_TENSORZERO_UI_FF_ENABLE_DATASETS=1
+
 RUN pnpm run build
+
+FROM rust:latest AS python-build-env
+RUN apt-get update && apt-get install -y python3
+COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
+COPY . /build
+WORKDIR /build/optimizations-server
+# TODO - figure out how to cache the rust build here
+# UV_PYTHON_DOWNLOADS=never
+# https://hynek.me/articles/docker-uv/
+ENV UV_COMPILE_BYTECODE=1
+RUN --mount=type=cache,target=/uv-cache CARGO_TARGET_DIR=/uv-cache/cargo-target uv --cache-dir /uv-cache --verbose sync --locked --no-dev
 
 # ========== ui ==========
 
@@ -73,13 +88,19 @@ FROM base AS ui
 
 RUN useradd -m -s /bin/sh ui
 
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl python3 && rm -rf /var/lib/apt/lists/*
 
 COPY ./ui/package.json ./ui/pnpm-lock.yaml /app/
 
 COPY ./ui/entrypoint.sh /app/entrypoint.sh
 
 RUN chmod +x /app/entrypoint.sh
+
+COPY ./optimizations-server /build/optimizations-server
+COPY --from=python-build-env /build/clients/python-pyo3 /build/clients/python-pyo3
+COPY --from=python-build-env /build/optimizations-server/.venv  /build/optimizations-server/.venv
+# Workaround for uv issue
+#COPY ./clients/python-pyo3 /clients/python-pyo3
 
 USER ui
 

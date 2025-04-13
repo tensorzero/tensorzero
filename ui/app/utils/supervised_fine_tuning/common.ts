@@ -41,7 +41,7 @@ export type SFTJobStatus =
       formData: SFTFormValues;
       jobUrl: string;
       rawData: RawData;
-      estimatedCompletionTime?: Date;
+      estimatedCompletionTime?: number;
       analysisData?: AnalysisData;
     }
   | {

@@ -320,6 +320,14 @@ impl Client {
         }
     }
 
+    #[cfg(feature = "pyo3")]
+    pub fn get_config(&self) -> Option<Arc<Config>> {
+        match &self.mode {
+            ClientMode::EmbeddedGateway { gateway, .. } => Some(gateway.state.config.clone()),
+            _ => None,
+        }
+    }
+
     /// Assigns feedback for a TensorZero inference.
     /// See https://www.tensorzero.com/docs/gateway/api-reference#post-feedback
     pub async fn feedback(
@@ -540,7 +548,7 @@ impl Client {
         resp.json().await.map_err(|e| TensorZeroError::Other {
             source: tensorzero_internal::error::Error::new(ErrorDetails::Serialization {
                 message: format!(
-                    "Error deserializing inference response: {}",
+                    "Error deserializing response: {}",
                     DisplayOrDebug {
                         val: e,
                         debug: self.verbose_errors,
@@ -645,7 +653,7 @@ impl Client {
         }))
     }
 
-    #[cfg(feature = "e2e_tests")]
+    #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
     pub fn get_app_state_data(&self) -> Option<&AppStateData> {
         match &self.mode {
             ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.state),
