@@ -854,6 +854,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -1277,6 +1278,7 @@ mod tests {
             user_schema: None,
             output_schema,
             implicit_tool_call_config,
+            description: None,
         });
         let inference_config = InferenceConfig {
             templates: &templates,
@@ -1426,6 +1428,7 @@ mod tests {
             user_schema: None,
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
+            description: None,
         });
         let inference_params = InferenceParams {
             chat_completion: ChatCompletionInferenceParams {
@@ -1534,6 +1537,7 @@ mod tests {
             user_schema: None,
             output_schema: hardcoded_output_schema,
             implicit_tool_call_config,
+            description: None,
         });
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
@@ -1652,7 +1656,9 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         })));
+
         let system_template_name = "system";
         let user_template_name = "greeting_with_age";
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
@@ -1883,6 +1889,7 @@ mod tests {
             tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            description: None,
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
@@ -1989,6 +1996,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
             },
+            description: None,
         });
         let inference_config = InferenceConfig {
             ids: InferenceIds {

@@ -388,6 +388,7 @@ impl UninitializedEvaluatorConfig {
                     assistant_schema: None,
                     output_schema,
                     implicit_tool_call_config,
+                    description: None,
                 });
                 Ok((
                     EvaluatorConfig::LLMJudge(LLMJudgeConfig {
@@ -873,6 +874,7 @@ mod tests {
             assistant_schema: None,
             output_schema: create_test_schema(),
             implicit_tool_call_config: create_implicit_tool_call_config(create_test_schema()),
+            description: None,
         });
         functions.insert(function_name.to_string(), Arc::new(function_config));
 
@@ -1299,6 +1301,7 @@ mod tests {
                     implicit_tool_call_config: create_implicit_tool_call_config(
                         create_test_schema(),
                     ),
+                    description: None,
                 })),
             );
 
