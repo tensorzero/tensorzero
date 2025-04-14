@@ -4,7 +4,7 @@ use pyo3::{
     Py, PyResult, Python,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tensorzero_internal::inference::types::batch::deserialize_json_string;
 use tensorzero_internal::{
     clickhouse::ClickHouseConnectionInfo,
@@ -85,10 +85,15 @@ pub async fn get_curated_inferences(
                 ("inference_table_name", inference_table_name),
                 ].into_iter().collect())).await.map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
-            let json_rows: Vec<Value> = rows
+            let mut json_rows: Vec<Value> = rows
                 .lines()
                 .filter_map(|line| serde_json::from_str(line).ok())
                 .collect();
+            if function_name.starts_with("tensorzero::llm_judge::") {
+                for row in json_rows.iter_mut() {
+                    handle_llm_judge_output(row)?;
+                }
+            }
             return Ok(json_rows);
         }
     };
@@ -226,12 +231,19 @@ async fn query_curated_metric_data(
         })
         .collect();
 
-    json_rows.map_err(|e| TensorZeroError::Other {
+    let mut json_rows = json_rows.map_err(|e| TensorZeroError::Other {
         source: Error::new(ErrorDetails::Serialization {
             message: format!("Failed to deserialize inferences: {e:?}"),
         })
         .into(),
-    })
+    })?;
+
+    if function_name.starts_with("tensorzero::llm_judge::") {
+        for row in json_rows.iter_mut() {
+            handle_llm_judge_output(row)?;
+        }
+    }
+    Ok(json_rows)
 }
 
 // Helper function to determine comparison operator based on optimization goal
@@ -239,5 +251,78 @@ fn get_comparison_operator(optimize: MetricConfigOptimize) -> &'static str {
     match optimize {
         MetricConfigOptimize::Max => ">=",
         MetricConfigOptimize::Min => "<=",
+    }
+}
+
+/// When we first introduced LLM Judges, we included the thinking section in the output.
+/// We have since removed it, but we need to handle the old data.
+/// So, we transform any old LLM Judge outputs to the new format by removing the thinking section from the
+/// parsed and raw outputs.
+fn handle_llm_judge_output(output: &mut Value) -> Result<(), TensorZeroError> {
+    if let Some(parsed) = output.get_mut("parsed") {
+        if parsed.get("thinking").is_some() {
+            if let Some(obj) = parsed.as_object_mut() {
+                obj.remove("thinking");
+            }
+        }
+
+        let raw_json = serde_json::to_string(&parsed).map_err(|e| TensorZeroError::Other {
+            source: Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize inferences: {e:?}"),
+            })
+            .into(),
+        })?;
+
+        *output = json!({
+            "parsed": parsed,
+            "raw": raw_json
+        });
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_handle_llm_judge_output() {
+        // Test removing the thinking field from the output
+        let mut input = json!({
+            "parsed": {
+                "thinking": "This is a test",
+                "answer": "This is a test"
+            },
+            "raw": "{\"thinking\": \"This is a test\", \"answer\": \"This is a test\"}"
+        });
+
+        handle_llm_judge_output(&mut input).unwrap();
+
+        let expected = json!({
+            "parsed": {
+                "answer": "This is a test"
+            },
+            "raw": "{\"answer\":\"This is a test\"}"
+        });
+
+        assert_eq!(input, expected);
+
+        // Test the correct output is unmodified
+        handle_llm_judge_output(&mut input).unwrap();
+        assert_eq!(input, expected);
+
+        // Test not modifying the output if the parsed field is not present
+        let mut input = json!({
+            "raw": "This is a test"
+        });
+
+        handle_llm_judge_output(&mut input).unwrap();
+
+        let expected = json!({
+            "raw": "This is a test"
+        });
+
+        assert_eq!(input, expected);
     }
 }
