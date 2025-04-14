@@ -231,11 +231,12 @@ export type InferenceResponse = z.infer<typeof InferenceResponseSchema>;
  */
 export const FeedbackRequestSchema = z.object({
   dryrun: z.boolean().optional(),
-  episode_id: z.string().optional(),
-  inference_id: z.string().optional(),
+  episode_id: z.string().nullable(),
+  inference_id: z.string().nullable(),
   metric_name: z.string(),
   tags: z.record(z.string()).optional(),
   value: JSONValueSchema,
+  internal: z.boolean().optional(),
 });
 export type FeedbackRequest = z.infer<typeof FeedbackRequestSchema>;
 
@@ -345,8 +346,10 @@ export class TensorZeroClient {
         body: JSON.stringify(request),
       });
       if (!response.ok) {
+        const errorText = await response.text();
+        const errorContents = JSON.parse(errorText).error;
         throw new Error(
-          `Inference request failed with status ${response.status}`,
+          `Inference request failed with status ${response.status}: ${errorContents}`,
         );
       }
       return (await response.json()) as InferenceResponse;
@@ -418,7 +421,11 @@ export class TensorZeroClient {
       body: JSON.stringify(request),
     });
     if (!response.ok) {
-      throw new Error(`Feedback request failed with status ${response.status}`);
+      const errorText = await response.text();
+      const errorContents = JSON.parse(errorText).error;
+      throw new Error(
+        `Feedback request failed with status ${response.status}: ${errorContents}`,
+      );
     }
     return (await response.json()) as FeedbackResponse;
   }
