@@ -82,7 +82,6 @@ export async function addEvaluationHumanFeedback(
     addHumanFeedback(formData),
     addJudgeDemonstration(formData),
   ]);
-  // We don't need the feedback ID for the judge demonstration as long as it succeeds
   return {
     feedbackResponse: r1,
     judgeDemonstrationResponse: r2,

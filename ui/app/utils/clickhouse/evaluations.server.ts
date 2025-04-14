@@ -481,7 +481,6 @@ export async function getEvaluationsForDatapoint(
   const metric_names = Object.keys(evaluators).map((evaluatorName) =>
     getEvaluatorMetricName(evaluation_name, evaluatorName),
   );
-  // TODO: get the tag for LLM judge feedback if present
   const query = `
   SELECT
     inference.input as input,
