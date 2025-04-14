@@ -1,4 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
+#[cfg(feature = "e2e_tests")]
+use super::escape_string_for_clickhouse_comparison;
 use super::ClickHouseConnectionInfo;
 use serde::Deserialize;
 use serde_json::Value;
@@ -426,8 +428,6 @@ pub async fn select_human_static_evaluation_feedback_clickhouse(
     datapoint_id: Uuid,
     output: &str,
 ) -> Option<HumanStaticEvaluationFeedback> {
-    use super::escape_string_for_clickhouse_comparison;
-
     let datapoint_id_str = datapoint_id.to_string();
     let escaped_output = escape_string_for_clickhouse_comparison(output);
     let params = HashMap::from([
