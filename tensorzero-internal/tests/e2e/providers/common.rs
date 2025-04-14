@@ -10382,12 +10382,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert_eq!(raw, "{\n    \"answer\": \"Tokyo\"\n}");
 
     // The result shouldn't be valid JSON when json_mode is off
-    let is_valid_json = serde_json::from_str::<Value>(raw).is_ok();
-    if is_valid_json {
-        // Some providers might still return JSON even with json_mode off
-        // This is not a failure, just something to be aware of
-        println!("WARNING: Provider returned valid JSON despite json_mode being off");
-    }
+    assert!(serde_json::from_str::<Value>(raw).is_err());
 
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
