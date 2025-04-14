@@ -8,6 +8,7 @@ import {
   inputSchema,
   jsonInferenceOutputSchema,
 } from "./common";
+import type { JsonInferenceOutput } from "./common";
 import { clickhouseClient } from "./client.server";
 import type { FunctionConfig } from "../config/function";
 import { getComparisonOperator } from "../config/metric";
@@ -167,7 +168,7 @@ async function queryAllInferencesForFunction(
     query_params: { function_name },
   });
   const rows = await resultSet.json<InferenceExample>();
-  return parseInferenceExamples(rows, inference_table_name);
+  return parseInferenceExamples(rows, inference_table_name, function_name);
 }
 
 // Generic function to handle both boolean and float metric queries
@@ -239,7 +240,7 @@ async function queryCuratedMetricData(
     },
   });
   const rows = await resultSet.json<InferenceExample>();
-  return parseInferenceExamples(rows, inference_table_name);
+  return parseInferenceExamples(rows, inference_table_name, function_name);
 }
 
 // Generic function to count metric data
@@ -339,7 +340,7 @@ async function queryDemonstrationDataForFunction(
     },
   });
   const rows = await resultSet.json<InferenceExample>();
-  return parseInferenceExamples(rows, inference_table_name);
+  return parseInferenceExamples(rows, inference_table_name, function_name);
 }
 
 export async function countDemonstrationDataForFunction(
@@ -377,6 +378,7 @@ export async function countDemonstrationDataForFunction(
 function parseInferenceExamples(
   rows: InferenceExample[],
   tableName: string,
+  function_name: string,
 ): ParsedChatInferenceExample[] | ParsedJsonInferenceExample[] {
   if (tableName === "ChatInference") {
     return rows.map((row) => ({
@@ -385,10 +387,46 @@ function parseInferenceExamples(
       output: z.array(contentBlockOutputSchema).parse(JSON.parse(row.output)),
     })) as ParsedChatInferenceExample[];
   } else {
-    return rows.map((row) => ({
-      ...row,
-      input: inputSchema.parse(JSON.parse(row.input)),
-      output: jsonInferenceOutputSchema.parse(JSON.parse(row.output)),
-    })) as ParsedJsonInferenceExample[];
+    return rows.map((row) => {
+      if (function_name.startsWith("tensorzero::llm_judge::")) {
+        row.output = handle_llm_judge_output(row.output);
+      }
+      return {
+        ...row,
+        input: inputSchema.parse(JSON.parse(row.input)),
+        output: jsonInferenceOutputSchema.parse(JSON.parse(row.output)),
+      };
+    }) as ParsedJsonInferenceExample[];
   }
+}
+
+/**
+ * When we first introduced LLM Judges, we included the thinking section in the output.
+ * We have since removed it, but we need to handle the old data.
+ * So, we transform any old LLM Judge outputs to the new format by removing the thinking section from the
+ * parsed and raw outputs.
+ */
+export function handle_llm_judge_output(output: string) {
+  let parsed: JsonInferenceOutput;
+  try {
+    parsed = JSON.parse(output);
+  } catch (e) {
+    console.warn("Error parsing LLM Judge output", e);
+    // Don't do anything if the output failed to parse
+    return output;
+  }
+  if (!parsed.parsed) {
+    // if the output failed to parse don't do anything
+    return output;
+  }
+  if (parsed.parsed.thinking) {
+    // there is a thinking section that needs to be removed in the parsed and raw outputs
+    delete parsed.parsed.thinking;
+    const output = {
+      parsed: parsed.parsed,
+      raw: JSON.stringify(parsed.parsed),
+    };
+    return JSON.stringify(output);
+  }
+  return JSON.stringify(parsed);
 }
