@@ -510,18 +510,18 @@ describe("getVariantCounts", () => {
     });
     expect(result).toMatchObject([
       {
-        count: 183,
-        last_used: "2025-04-02T20:51:05.000Z",
+        count: 186,
+        last_used: "2025-04-14T18:26:41.000Z",
         variant_name: "gpt4o_mini_initial_prompt",
       },
       {
         count: 152,
-        last_used: "2025-03-23T21:56:17.000Z",
+        last_used: "2025-04-14T18:21:05.000Z",
         variant_name: "llama_8b_initial_prompt",
       },
       {
-        count: 131,
-        last_used: "2025-03-19T15:13:58.000Z",
+        count: 133,
+        last_used: "2025-04-14T18:21:58.000Z",
         variant_name: "gpt4o_initial_prompt",
       },
       {
@@ -553,19 +553,19 @@ describe("getVariantCounts", () => {
     });
     expect(result).toMatchObject([
       {
-        count: 569,
-        last_used: "2025-03-19T15:13:38.000Z",
+        count: 571,
+        last_used: "2025-04-14T14:49:48.000Z",
         variant_name: "initial_prompt_gpt4o_mini",
       },
       {
-        count: 76,
-        last_used: "2025-03-23T20:01:28.000Z",
-        variant_name: "better_prompt_haiku_3_5",
+        count: 77,
+        last_used: "2025-04-14T14:50:27.000Z",
+        variant_name: "initial_prompt_haiku_3_5",
       },
       {
-        count: 75,
-        last_used: "2025-03-19T15:12:49.000Z",
-        variant_name: "initial_prompt_haiku_3_5",
+        count: 77,
+        last_used: "2025-04-14T14:51:32.000Z",
+        variant_name: "better_prompt_haiku_3_5",
       },
     ]);
   });

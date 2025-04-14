@@ -28,7 +28,7 @@ test("countInferencesForFunction returns correct counts", async () => {
     type: "json",
     variants: {},
   });
-  expect(jsonCount).toBe(566);
+  expect(jsonCount).toBe(571);
 
   const chatCount = await countInferencesForFunction("write_haiku", {
     type: "chat",
@@ -37,7 +37,7 @@ test("countInferencesForFunction returns correct counts", async () => {
     tool_choice: "none",
     parallel_tool_calls: false,
   });
-  expect(chatCount).toBe(720);
+  expect(chatCount).toBe(725);
 });
 
 // Test countInferencesForVariant
@@ -47,7 +47,7 @@ test("countInferencesForVariant returns correct counts", async () => {
     { type: "json", variants: {} },
     "gpt4o_initial_prompt",
   );
-  expect(jsonCount).toBe(131);
+  expect(jsonCount).toBe(133);
 
   const chatCount = await countInferencesForVariant(
     "write_haiku",
@@ -60,7 +60,7 @@ test("countInferencesForVariant returns correct counts", async () => {
     },
     "initial_prompt_gpt4o_mini",
   );
-  expect(chatCount).toBe(569);
+  expect(chatCount).toBe(571);
 });
 
 test("queryInferenceTable", async () => {
@@ -118,7 +118,7 @@ test("queryInferenceTable pages through all results correctly using before", asy
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements
-  expect(totalElements).toBe(3263);
+  expect(totalElements).toBe(3283);
 
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
@@ -178,7 +178,7 @@ test("queryInferenceTable pages through all results correctly using after", asyn
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements matches the previous test
-  expect(totalElements).toBe(3262); // One less than with before because we excluded the first ID
+  expect(totalElements).toBe(3282); // One less than with before because we excluded the first ID
 
   // We should have seen at least one full page
   expect(numFullPages).toBeGreaterThan(0);
@@ -317,13 +317,13 @@ test("queryInferenceTableByEpisodeId pages through all results correctly using a
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0195f845-a261-72d2-8686-774b967d938e");
+  expect(bounds.last_id).toBe("0196358d-b84f-7832-ba3a-b60e027d3dda");
 });
 
 test("queryEpisodeTableBounds", async () => {
   const bounds = await queryEpisodeTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0195f845-a261-72d2-8686-774b967d938e");
+  expect(bounds.last_id).toBe("0196358d-b84f-7832-ba3a-b60e027d3dda");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -376,7 +376,7 @@ test("queryInferenceTableBoundsByFunctionName", async () => {
     function_name: "extract_entities",
   });
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("0195f845-9862-7a53-b35e-1ee5fa8ae316");
+  expect(bounds.last_id).toBe("0196358d-b39f-7190-96ff-129371fc8760");
 });
 
 test("queryInferenceTableByVariantName", async () => {
@@ -417,7 +417,7 @@ test("queryInferenceTableBoundsByVariantName", async () => {
     variant_name: "gpt4o_initial_prompt",
   });
   expect(bounds.first_id).toBe("01939adf-0f50-79d0-8d55-7a009fcc5e32");
-  expect(bounds.last_id).toBe("0195aef7-edb9-7e13-897e-1d08865e8b8c");
+  expect(bounds.last_id).toBe("01963589-649a-7930-bbc9-82de5604a81d");
 });
 
 test("queryEpisodeTable", async () => {
@@ -509,7 +509,7 @@ test("queryEpisodeTable pages through all results correctly using before", async
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements
-  expect(totalElements).toBe(1732);
+  expect(totalElements).toBe(1752);
 
   // We should have seen at least 9 full pages
   expect(numFullPages).toBeGreaterThan(8);
@@ -571,7 +571,7 @@ test("queryEpisodeTable pages through all results correctly using after", async 
   expect(currentPage.length).toBeLessThanOrEqual(PAGE_SIZE);
 
   // Verify total number of elements matches the previous test
-  expect(totalElements).toBe(1731); // One less than with before because we excluded the first ID
+  expect(totalElements).toBe(1751); // One less than with before because we excluded the first ID
 
   // We should have seen at least 9 full pages
   expect(numFullPages).toBeGreaterThan(8);
@@ -624,50 +624,49 @@ test("countInferencesByFunction", async () => {
   const countsInfo = await countInferencesByFunction();
   expect(countsInfo).toEqual([
     {
-      count: 166,
       function_name: "tensorzero::llm_judge::entity_extraction::count_sports",
-      max_timestamp: "2025-04-02T20:51:08Z",
+      max_timestamp: "2025-04-14T18:26:42Z",
+      count: 171,
     },
     {
-      count: 566,
       function_name: "extract_entities",
-      max_timestamp: "2025-04-02T20:51:05Z",
+      max_timestamp: "2025-04-14T18:26:41Z",
+      count: 571,
     },
     {
-      count: 3,
+      function_name: "tensorzero::llm_judge::haiku::topic_starts_with_f",
+      max_timestamp: "2025-04-14T14:51:39Z",
+      count: 231,
+    },
+    {
+      function_name: "write_haiku",
+      max_timestamp: "2025-04-14T14:51:32Z",
+      count: 725,
+    },
+    {
       function_name: "tensorzero::default",
       max_timestamp: "2025-03-29T18:12:59Z",
+      count: 3,
     },
     {
-      count: 226,
-      function_name: "tensorzero::llm_judge::haiku::topic_starts_with_f",
-      max_timestamp: "2025-03-23T20:01:40Z",
-    },
-    {
-      count: 720,
-      function_name: "write_haiku",
-      max_timestamp: "2025-03-23T20:01:28Z",
-    },
-
-    {
-      count: 1,
       function_name: "foo",
       max_timestamp: "2025-02-13T22:29:20Z",
+      count: 1,
     },
     {
-      count: 767,
       function_name: "ask_question",
       max_timestamp: "2025-01-03T21:52:59Z",
+      count: 767,
     },
     {
-      count: 764,
       function_name: "answer_question",
       max_timestamp: "2025-01-03T21:52:59Z",
+      count: 764,
     },
     {
-      count: 50,
       function_name: "generate_secret",
       max_timestamp: "2025-01-03T21:51:29Z",
+      count: 50,
     },
   ]);
 });
