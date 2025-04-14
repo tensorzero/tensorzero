@@ -1,0 +1,11 @@
+[project]
+name = "tensorzero-examples-integrations-langgraph"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "grandalf>=0.8",
+    "langgraph>=0.3.29",
+    "pyright>=1.1.399",
+    "tensorzero",
+]
