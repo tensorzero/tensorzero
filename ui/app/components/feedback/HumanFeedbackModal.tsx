@@ -87,6 +87,8 @@ function FeedbackForm({
   const [demonstrationValue, setDemonstrationValue] = useState<
     ContentBlockOutput[] | JsonInferenceOutput | undefined
   >(inferenceOutput);
+  const [demonstrationIsValid, setDemonstrationIsValid] =
+    useState<boolean>(true);
 
   // Calculate if input is missing based on the selected metric type
   const isInputMissing =
@@ -146,7 +148,14 @@ function FeedbackForm({
             <Output
               output={demonstrationValue}
               isEditing={true}
-              onOutputChange={setDemonstrationValue}
+              onOutputChange={(updatedOutput) => {
+                if (updatedOutput === null) {
+                  setDemonstrationIsValid(false);
+                } else {
+                  setDemonstrationValue(updatedOutput);
+                  setDemonstrationIsValid(true);
+                }
+              }}
             />
 
             <input
@@ -178,7 +187,9 @@ function FeedbackForm({
         <div className="flex justify-end">
           <Button
             type="submit"
-            disabled={!selectedMetricName || isInputMissing}
+            disabled={
+              !selectedMetricName || isInputMissing || !demonstrationIsValid
+            }
             className="mt-2"
           >
             Submit Feedback
