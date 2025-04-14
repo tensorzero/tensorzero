@@ -2060,7 +2060,7 @@ async def test_async_timeout_int_http():
                     "messages": [{"role": "user", "content": "Hello"}],
                 },
             )
-        assert "HTTP request timed out" in str(exc_info.value)
+        assert "HTTP Error: request timed out" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -2081,7 +2081,7 @@ async def test_async_timeout_int_embedded():
                     "messages": [{"role": "user", "content": "Hello"}],
                 },
             )
-        assert "HTTP request timed out" in str(exc_info.value)
+        assert "HTTP Error: request timed out" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -2101,7 +2101,7 @@ async def test_async_timeout_float_http():
                     "messages": [{"role": "user", "content": "Hello"}],
                 },
             )
-        assert "HTTP request timed out" in str(exc_info.value)
+        assert "HTTP Error: request timed out" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -2122,7 +2122,7 @@ async def test_async_timeout_float_embedded():
                     "messages": [{"role": "user", "content": "Hello"}],
                 },
             )
-        assert "HTTP request timed out" in str(exc_info.value)
+        assert "HTTP Error: request timed out" in str(exc_info.value)
 
 
 def test_sync_timeout_invalid():
