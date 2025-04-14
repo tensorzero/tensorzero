@@ -310,6 +310,18 @@ export const Compare: React.FC<IconProps> = (props) => (
   </IconWrapper>
 );
 
+// TODO: make this icon more appropriate for a feedback button
+export const Feedback: React.FC<IconProps> = (props) => (
+  <IconWrapper {...props}>
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M8.75 2C8.75 1.58579 8.41421 1.25 8 1.25C7.58579 1.25 7.25 1.58579 7.25 2L7.25 14C7.25 14.4142 7.58579 14.75 8 14.75C8.41421 14.75 8.75 14.4142 8.75 14L8.75 2ZM0.75 5C0.75 4.0335 1.5335 3.25 2.5 3.25H4.5C5.4665 3.25 6.25 4.0335 6.25 5V11C6.25 11.9665 5.4665 12.75 4.5 12.75H2.5C1.5335 12.75 0.75 11.9665 0.75 11V5ZM2.5 4.75C2.36193 4.75 2.25 4.86193 2.25 5V11C2.25 11.1381 2.36193 11.25 2.5 11.25H4.5C4.63807 11.25 4.75 11.1381 4.75 11V5C4.75 4.86193 4.63807 4.75 4.5 4.75H2.5ZM9.75 5C9.75 4.0335 10.5335 3.25 11.5 3.25H13.5C14.4665 3.25 15.25 4.0335 15.25 5V11C15.25 11.9665 14.4665 12.75 13.5 12.75H11.5C10.5335 12.75 9.75 11.9665 9.75 11V5ZM11.5 4.75C11.3619 4.75 11.25 4.86193 11.25 5V11C11.25 11.1381 11.3619 11.25 11.5 11.25H13.5C13.6381 11.25 13.75 11.1381 13.75 11V5C13.75 4.86193 13.6381 4.75 13.5 4.75H11.5Z"
+      fill="currentColor"
+    />
+  </IconWrapper>
+);
+
 export const ArrowTopRight: React.FC<IconProps> = (props) => (
   <IconWrapper {...props}>
     <path
@@ -402,6 +414,7 @@ export const iconComponents: Record<string, React.FC<IconProps>> = {
   Dataset,
   AddToDataset,
   Compare,
+  Feedback,
   ArrowTopRight,
   ArrowBottomRight,
   Check,
