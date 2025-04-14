@@ -16,7 +16,7 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import PageButtons from "~/components/utils/PageButtons";
-import { useNavigate } from "react-router";
+import { redirect, useNavigate } from "react-router";
 import AutoRefreshIndicator, { useAutoRefresh } from "./AutoRefreshIndicator";
 import BasicInfo from "./EvaluationBasicInfo";
 import { useConfig } from "~/context/config";
@@ -25,6 +25,10 @@ import {
   EvaluationErrorInfo,
   type EvaluationErrorDisplayInfo,
 } from "./EvaluationErrorInfo";
+import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
+import { Toaster } from "~/components/ui/toaster";
+import { useToast } from "~/hooks/use-toast";
+import { useEffect } from "react";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -34,6 +38,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
+  const newFeedbackId = searchParams.get("newFeedbackId");
+  const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
 
   const selected_evaluation_run_ids = searchParams.get("evaluation_run_ids");
   const selected_evaluation_run_ids_array = selected_evaluation_run_ids
@@ -157,7 +163,38 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     evaluator_names,
     any_evaluation_is_running,
     errors,
+    newFeedbackId,
+    newJudgeDemonstrationId,
   };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const _action = formData.get("_action");
+  switch (_action) {
+    case "addFeedback": {
+      const response = await addEvaluationHumanFeedback(formData);
+      const url = new URL(request.url);
+      url.searchParams.delete("beforeFeedback");
+      url.searchParams.delete("afterFeedback");
+      url.searchParams.set(
+        "newFeedbackId",
+        response.feedbackResponse.feedback_id,
+      );
+      if (response.judgeDemonstrationResponse) {
+        url.searchParams.set(
+          "newJudgeDemonstrationId",
+          response.judgeDemonstrationResponse.feedback_id,
+        );
+      } else {
+        console.warn("No judge demonstration response");
+      }
+      return redirect(url.toString());
+    }
+    default:
+      console.error(`Unknown action: ${_action}`);
+      return null;
+  }
 }
 
 export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
@@ -173,6 +210,8 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     evaluator_names,
     any_evaluation_is_running,
     errors,
+    newFeedbackId,
+    newJudgeDemonstrationId,
   } = loaderData;
   const navigate = useNavigate();
   const handleNextPage = () => {
@@ -194,6 +233,19 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const hasErrorsToDisplay = Object.values(errors).some(
     (error) => error.errors.length > 0,
   );
+  const { toast } = useToast();
+  useEffect(() => {
+    if (newFeedbackId) {
+      let message = `ID: ${newFeedbackId}`;
+      if (newJudgeDemonstrationId) {
+        message += `\nJudge Demonstration ID: ${newJudgeDemonstrationId}`;
+      }
+      toast({
+        title: "Feedback Added",
+        description: message,
+      });
+    }
+  }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
   return (
     <PageLayout>
@@ -235,6 +287,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
           )}
         </SectionLayout>
       </SectionsGroup>
+      <Toaster />
     </PageLayout>
   );
 }

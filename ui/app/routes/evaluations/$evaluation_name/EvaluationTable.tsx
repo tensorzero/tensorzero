@@ -519,7 +519,11 @@ export function EvaluationTable({
                                         />
                                         {/* Make feedback editor appear on hover */}
                                         {evaluationType === "llm_judge" && (
-                                          <div className="ml-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                                          <div
+                                            className="ml-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                                            // Stop click event propagation
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
                                             <EvaluationFeedbackEditor
                                               inferenceId={
                                                 metricValue.inference_id

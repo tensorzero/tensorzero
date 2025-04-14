@@ -90,7 +90,6 @@ export async function addEvaluationHumanFeedback(
 }
 
 export async function addJudgeDemonstration(formData: FormData) {
-  console.log("formData", formData);
   const evaluatorInferenceId = formData.get("evaluatorInferenceId")?.toString();
   if (!evaluatorInferenceId) {
     // This is likely not an LLM Judge datapoint since this ID is not present.

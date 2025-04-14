@@ -107,7 +107,7 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const _action = formData.get("_action");
   switch (_action) {
-    case "addFeedback":
+    case "addFeedback": {
       const response = await addEvaluationHumanFeedback(formData);
       const url = new URL(request.url);
       url.searchParams.delete("beforeFeedback");
@@ -122,9 +122,10 @@ export async function action({ request }: Route.ActionArgs) {
           response.judgeDemonstrationResponse.feedback_id,
         );
       } else {
-        console.log("No judge demonstration response");
+        console.warn("No judge demonstration response");
       }
       return redirect(url.toString());
+    }
     default:
       console.error(`Unknown action: ${_action}`);
       return null;
