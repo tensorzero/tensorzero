@@ -541,7 +541,6 @@ export async function getEvaluationsForDatapoint(
     },
   });
   const rows = await result.json<EvaluationResultWithVariant>();
-  console.log(rows);
   const parsed_rows = await Promise.all(
     rows.map((row) => parseEvaluationResultWithVariant(row)),
   );

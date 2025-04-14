@@ -57,7 +57,7 @@ export default function EvaluationFeedbackEditor({
               />
             </div>
           </DialogHeader>
-          <Form method="post">
+          <Form method="post" onSubmit={() => setIsOpen(false)}>
             <input type="hidden" name="inferenceId" value={inferenceId} />
             <input type="hidden" name="datapointId" value={datapointId} />
             <input type="hidden" name="metricName" value={metricName} />

@@ -121,6 +121,8 @@ export async function action({ request }: Route.ActionArgs) {
           "newJudgeDemonstrationId",
           response.judgeDemonstrationResponse.feedback_id,
         );
+      } else {
+        console.log("No judge demonstration response");
       }
       return redirect(url.toString());
     default:
