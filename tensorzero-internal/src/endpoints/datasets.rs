@@ -199,6 +199,7 @@ async fn insert_from_existing(
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
                 source_inference_id: Some(existing.inference_id),
+                staled_at: None,
             };
             let rows_written = put_deduped_json_datapoint(clickhouse, &datapoint).await?;
             if rows_written == 0 {
@@ -236,6 +237,7 @@ async fn insert_from_existing(
                 auxiliary: "{}".to_string(),
                 is_deleted: false,
                 source_inference_id: Some(existing.inference_id),
+                staled_at: None,
             };
             let rows_written = put_deduped_chat_datapoint(clickhouse, &datapoint).await?;
             if rows_written == 0 {
@@ -356,6 +358,7 @@ pub async fn update_datapoint_handler(
                 auxiliary: chat.auxiliary,
                 is_deleted: false,
                 source_inference_id: chat.source_inference_id,
+                staled_at: None,
             };
             let rows_written =
                 put_deduped_chat_datapoint(&app_state.clickhouse_connection_info, &datapoint)
@@ -418,6 +421,7 @@ pub async fn update_datapoint_handler(
                 auxiliary: json.auxiliary,
                 is_deleted: false,
                 source_inference_id: json.source_inference_id,
+                staled_at: None,
             };
             let rows_written =
                 put_deduped_json_datapoint(&app_state.clickhouse_connection_info, &datapoint)
@@ -539,6 +543,8 @@ pub struct ChatInferenceDatapoint {
     pub is_deleted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_inference_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staled_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -557,6 +563,8 @@ pub struct JsonInferenceDatapoint {
     pub is_deleted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_inference_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staled_at: Option<String>,
 }
 
 /// We need to be able to deserialize Datapoints from both ClickHouse and
@@ -588,6 +596,7 @@ pub struct ClickHouseChatInferenceDatapoint {
     auxiliary: String,
     is_deleted: bool,
     source_inference_id: Option<Uuid>,
+    staled_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -606,6 +615,7 @@ pub struct ClickHouseJsonInferenceDatapoint {
     auxiliary: String,
     is_deleted: bool,
     source_inference_id: Option<Uuid>,
+    staled_at: Option<String>,
 }
 
 impl From<ClickHouseDatapoint> for Datapoint {
@@ -624,6 +634,7 @@ impl From<ClickHouseDatapoint> for Datapoint {
                     auxiliary: datapoint.auxiliary,
                     is_deleted: datapoint.is_deleted,
                     source_inference_id: datapoint.source_inference_id,
+                    staled_at: datapoint.staled_at,
                 })
             }
             ClickHouseDatapoint::Json(datapoint) => {
@@ -639,6 +650,7 @@ impl From<ClickHouseDatapoint> for Datapoint {
                     auxiliary: datapoint.auxiliary,
                     is_deleted: datapoint.is_deleted,
                     source_inference_id: datapoint.source_inference_id,
+                    staled_at: datapoint.staled_at,
                 })
             }
         }
