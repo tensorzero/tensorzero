@@ -71,7 +71,6 @@ export function runEvaluation(
     "--format",
     "jsonl",
   ];
-  console.log("Running evaluation:", command.join(" "));
 
   return new Promise<EvaluationStartInfo>((resolve, reject) => {
     // Spawn a child process to run the evaluations command
