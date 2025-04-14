@@ -36,13 +36,15 @@ export default function EvaluationFeedbackEditor({
         <DialogContent className="max-h-[90vh] sm:max-w-[1200px]">
           <DialogHeader>
             <DialogTitle>Edit Feedback for {metricName}</DialogTitle>
-            <EvaluationRunBadge
-              runInfo={{
-                evaluation_run_id: evalRunId,
-                variant_name: "Reference",
-              }}
-              getColor={getColor}
-            />
+            <div style={{ width: "fit-content" }}>
+              <EvaluationRunBadge
+                runInfo={{
+                  evaluation_run_id: evalRunId,
+                  variant_name: "Reference",
+                }}
+                getColor={getColor}
+              />
+            </div>
           </DialogHeader>
           <Form method="post">
             <input type="hidden" name="inferenceId" value={inferenceId} />

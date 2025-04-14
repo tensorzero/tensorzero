@@ -466,7 +466,7 @@ export async function getEvaluationsForDatapoint(
   const metric_names = Object.keys(evaluators).map((evaluatorName) =>
     getEvaluatorMetricName(evaluation_name, evaluatorName),
   );
-
+  // TODO: get the tag for LLM judge feedback if present
   const query = `
   SELECT
     inference.input as input,
@@ -477,6 +477,7 @@ export async function getEvaluationsForDatapoint(
     inference.tags['tensorzero::evaluation_run_id'] as evaluation_run_id,
     inference.variant_name as variant_name,
     inference.tags['tensorzero::dataset_name'] as dataset_name,
+    if(length(feedback.evaluator_inference_id) > 0, feedback.evaluator_inference_id, null) as evaluator_inference_id,
     feedback.metric_name as metric_name,
     feedback.value as metric_value
   FROM TagInference datapoint_tag FINAL
@@ -490,11 +491,11 @@ export async function getEvaluationsForDatapoint(
     AND dp.function_name = {function_name:String}
     AND dp.dataset_name = inference.tags['tensorzero::dataset_name']
   LEFT JOIN (
-    SELECT target_id, metric_name, toString(value) as value
+    SELECT target_id, metric_name, toString(value) as value, tags['tensorzero::evaluator_inference_id'] as evaluator_inference_id
     FROM BooleanMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
     UNION ALL
-    SELECT target_id, metric_name, toString(value) as value
+    SELECT target_id, metric_name, toString(value) as value, tags['tensorzero::evaluator_inference_id'] as evaluator_inference_id
     FROM FloatMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
   ) feedback
@@ -517,6 +518,7 @@ export async function getEvaluationsForDatapoint(
     },
   });
   const rows = await result.json<EvaluationResultWithVariant>();
+  console.log(rows);
   const parsed_rows = await Promise.all(
     rows.map((row) => parseEvaluationResultWithVariant(row)),
   );

@@ -63,14 +63,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const [
     selected_evaluation_run_infos,
     allowedEvaluationRunInfos,
-    EvaluationResults,
+    evaluationResults,
   ] = await Promise.all([
     getEvaluationRunInfos(selectedRunIds, function_name),
     getEvaluationRunInfosForDatapoint(datapoint_id, function_name),
     getEvaluationsForDatapoint(evaluation_name, datapoint_id, selectedRunIds),
   ]);
   const consolidatedEvaluationResults =
-    consolidate_evaluation_results(EvaluationResults);
+    consolidate_evaluation_results(evaluationResults);
   if (consolidatedEvaluationResults.length !== selectedRunIds.length) {
     // Find which evaluation run IDs are missing from the results
     const foundEvaluationRunIds = new Set(
