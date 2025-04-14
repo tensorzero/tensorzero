@@ -521,7 +521,7 @@ export function EvaluationTable({
                                         {evaluationType === "llm_judge" && (
                                           <div
                                             className="ml-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-                                            // Stop click event propagation
+                                            // Stop click event propagation so the row navigation is not triggered
                                             onClick={(e) => e.stopPropagation()}
                                           >
                                             <EvaluationFeedbackEditor
