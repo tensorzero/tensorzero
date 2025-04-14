@@ -10,6 +10,9 @@ import BooleanFeedbackInput from "../feedback/BooleanFeedbackInput";
 import { EditButton } from "~/components/utils/EditButton";
 import EvaluationRunBadge from "./EvaluationRunBadge";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
+import { useConfig } from "~/context/config";
+import FloatFeedbackInput from "../feedback/FloatFeedbackInput";
+import { Button } from "../ui/button";
 
 interface EvaluationFeedbackEditorProps {
   inferenceId: string;
@@ -17,6 +20,7 @@ interface EvaluationFeedbackEditorProps {
   metricName: string;
   originalValue: string;
   evalRunId: string;
+  evaluatorInferenceId: string | null;
 }
 
 export default function EvaluationFeedbackEditor({
@@ -25,10 +29,17 @@ export default function EvaluationFeedbackEditor({
   metricName,
   originalValue,
   evalRunId,
+  evaluatorInferenceId,
 }: EvaluationFeedbackEditorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const { getColor } = useColorAssigner();
+  const config = useConfig();
+  const metricConfig = config.metrics[metricName];
+  const metricType = metricConfig.type;
+  if (metricType === "comment" || metricType === "demonstration") {
+    return null;
+  }
   return (
     <>
       <EditButton onClick={() => setIsOpen(true)} />
@@ -51,11 +62,28 @@ export default function EvaluationFeedbackEditor({
             <input type="hidden" name="datapointId" value={datapointId} />
             <input type="hidden" name="metricName" value={metricName} />
             <input type="hidden" name="originalValue" value={originalValue} />
-            <BooleanFeedbackInput
-              value={feedback}
-              onChange={(value) => setFeedback(value)}
-              metricName={metricName}
+            <input type="hidden" name="_action" value="addFeedback" />
+            <input
+              type="hidden"
+              name="evaluatorInferenceId"
+              value={evaluatorInferenceId ?? ""}
             />
+            <input type="hidden" name="value" value={feedback || ""} />
+            {metricType === "boolean" && (
+              <BooleanFeedbackInput
+                value={feedback}
+                onChange={(value) => setFeedback(value)}
+              />
+            )}
+            {metricType === "float" && (
+              <FloatFeedbackInput
+                value={feedback ?? ""}
+                onChange={(value) => setFeedback(value)}
+              />
+            )}
+            <Button type="submit" className="mt-2" disabled={!feedback}>
+              Submit Feedback
+            </Button>
           </Form>
         </DialogContent>
       </Dialog>

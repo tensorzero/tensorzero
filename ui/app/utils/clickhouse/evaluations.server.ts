@@ -195,6 +195,7 @@ export async function getEvaluationResults(
     ci.output as generated_output,
     ci.tags['tensorzero::evaluation_run_id'] as evaluation_run_id,
     ci.tags['tensorzero::dataset_name'] as dataset_name,
+    if(length(ci.tags['tensorzero::evaluator_inference_id']) > 0, ci.tags['tensorzero::evaluator_inference_id'], null) as evaluator_inference_id,
     ci.id as inference_id,
     feedback.metric_name as metric_name,
     feedback.value as metric_value
@@ -215,11 +216,11 @@ export async function getEvaluationResults(
     AND ci.variant_name = datapoint_tag.variant_name
     AND ci.episode_id = datapoint_tag.episode_id
   INNER JOIN (
-    SELECT target_id, metric_name, toString(value) as value
+    SELECT target_id, metric_name, toString(value) as value, tags['tensorzero::evaluator_inference_id'] as evaluator_inference_id
     FROM BooleanMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
     UNION ALL
-    SELECT target_id, metric_name, toString(value) as value
+    SELECT target_id, metric_name, toString(value) as value, tags['tensorzero::evaluator_inference_id'] as evaluator_inference_id
     FROM FloatMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
   ) feedback

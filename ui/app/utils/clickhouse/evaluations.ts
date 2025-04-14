@@ -147,6 +147,7 @@ export type ConsolidatedMetric = {
   metric_name: string;
   metric_value: string;
   evaluator_name: string;
+  evaluator_inference_id: string | null;
 };
 
 // Define a type for consolidated evaluation results
@@ -178,6 +179,7 @@ export const consolidate_evaluation_results = (
             metric_name,
             metric_value,
             evaluator_name: getEvaluatorNameFromMetricName(metric_name),
+            evaluator_inference_id: result.evaluator_inference_id,
           },
         ],
       });
@@ -188,6 +190,7 @@ export const consolidate_evaluation_results = (
         metric_name: result.metric_name,
         metric_value: result.metric_value,
         evaluator_name: getEvaluatorNameFromMetricName(result.metric_name),
+        evaluator_inference_id: result.evaluator_inference_id,
       });
     }
   }

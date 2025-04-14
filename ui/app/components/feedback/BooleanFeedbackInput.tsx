@@ -2,7 +2,6 @@ import { Label } from "~/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 
 interface BooleanFeedbackInputProps {
-  metricName: string;
   value: string | null;
   onChange: (value: string | null) => void;
 }

@@ -43,6 +43,10 @@ import type { EvaluationConfig } from "~/utils/config/evaluations";
 import type { ContentBlockOutput } from "~/utils/clickhouse/common";
 import type { JsonInferenceOutput } from "~/utils/clickhouse/common";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
+import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
+import { Toaster } from "~/components/ui/toaster";
+import { useToast } from "~/hooks/use-toast";
+import { useEffect } from "react";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const evaluation_name = params.evaluation_name;
@@ -52,6 +56,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
   const evaluation_config = config.evaluations[evaluation_name];
   const function_name = evaluation_config.function_name;
+  const newFeedbackId = searchParams.get("newFeedbackId");
+  const newJudgeDemonstrationId = searchParams.get("newJudgeDemonstrationId");
 
   const selected_evaluation_run_ids = searchParams.get("evaluation_run_ids");
   const selectedRunIds = selected_evaluation_run_ids
@@ -92,7 +98,35 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     selected_evaluation_run_infos,
     allowedEvaluationRunInfos,
     selectedRunIds,
+    newFeedbackId,
+    newJudgeDemonstrationId,
   };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const _action = formData.get("_action");
+  switch (_action) {
+    case "addFeedback":
+      const response = await addEvaluationHumanFeedback(formData);
+      const url = new URL(request.url);
+      url.searchParams.delete("beforeFeedback");
+      url.searchParams.delete("afterFeedback");
+      url.searchParams.set(
+        "newFeedbackId",
+        response.feedbackResponse.feedback_id,
+      );
+      if (response.judgeDemonstrationResponse) {
+        url.searchParams.set(
+          "newJudgeDemonstrationId",
+          response.judgeDemonstrationResponse.feedback_id,
+        );
+      }
+      return redirect(url.toString());
+    default:
+      console.error(`Unknown action: ${_action}`);
+      return null;
+  }
 }
 
 export default function EvaluationDatapointPage({
@@ -105,6 +139,8 @@ export default function EvaluationDatapointPage({
     selected_evaluation_run_infos,
     allowedEvaluationRunInfos,
     selectedRunIds,
+    newFeedbackId,
+    newJudgeDemonstrationId,
   } = loaderData;
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
@@ -124,7 +160,19 @@ export default function EvaluationDatapointPage({
       metrics: result.metrics,
     })),
   ];
-
+  const { toast } = useToast();
+  useEffect(() => {
+    if (newFeedbackId) {
+      let message = `ID: ${newFeedbackId}`;
+      if (newJudgeDemonstrationId) {
+        message += `\nJudge Demonstration ID: ${newJudgeDemonstrationId}`;
+      }
+      toast({
+        title: "Feedback Added",
+        description: message,
+      });
+    }
+  }, [newFeedbackId, newJudgeDemonstrationId, toast]);
   return (
     // Provider remains here
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
@@ -155,6 +203,7 @@ export default function EvaluationDatapointPage({
             datapointId={datapoint_id}
           />
         </SectionsGroup>
+        <Toaster />
       </PageLayout>
     </ColorAssignerProvider>
   );
@@ -192,6 +241,7 @@ const MetricsDisplay = ({
               evaluatorConfig={evaluatorConfig}
               datapointId={datapointId}
               inferenceId={inferenceId}
+              evaluatorInferenceId={metricObj.evaluator_inference_id}
               evalRunId={evalRunId}
             />
           );
@@ -210,6 +260,7 @@ const MetricRow = ({
   datapointId,
   inferenceId,
   evalRunId,
+  evaluatorInferenceId,
 }: {
   evaluatorName: string;
   evaluation_name: string;
@@ -217,6 +268,7 @@ const MetricRow = ({
   evaluatorConfig: EvaluatorConfig;
   datapointId: string;
   inferenceId: string | null;
+  evaluatorInferenceId: string | null;
   evalRunId: string;
 }) => {
   const config = useConfig();
@@ -282,6 +334,7 @@ const MetricRow = ({
           metricName={metric_name}
           originalValue={metricValue}
           evalRunId={evalRunId}
+          evaluatorInferenceId={evaluatorInferenceId}
         />
       )}
     </div>

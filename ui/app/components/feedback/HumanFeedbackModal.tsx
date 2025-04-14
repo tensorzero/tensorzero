@@ -113,7 +113,6 @@ function FeedbackForm({
       {selectedMetric && selectedMetricType === "boolean" && (
         <>
           <BooleanFeedbackInput
-            metricName={selectedMetricName}
             value={booleanValue}
             onChange={setBooleanValue}
           />
