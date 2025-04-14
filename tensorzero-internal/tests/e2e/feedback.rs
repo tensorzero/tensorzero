@@ -394,6 +394,88 @@ async fn e2e_test_demonstration_feedback_json() {
 }
 
 #[tokio::test]
+async fn e2e_test_demonstration_feedback_llm_judge() {
+    let client = Client::new();
+    // Run inference (standard, no dryrun) to get an inference_id
+    let old_output_schema = json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "required": ["thinking", "score"],
+        "additionalProperties": false,
+        "properties": {
+          "thinking": {
+            "type": "string",
+            "description": "The reasoning or thought process behind the judgment"
+          },
+          "score": {
+            "type": "number",
+            "description": "The score assigned as a number"
+          }
+        }
+    });
+    let inference_payload = serde_json::json!({
+        "function_name": "tensorzero::llm_judge::haiku_without_outputs::topic_starts_with_f",
+        "input": {
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "arguments": {"input": "foo", "reference_output": null, "generated_output": "A poem about a cat"}},
+            ]}]
+        },
+        "stream": false,
+        "output_schema": old_output_schema,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&inference_payload)
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // No sleeping, we should throttle in the gateway
+    // Test demonstration feedback on an inference that requires the dynamic output schema
+    let payload = json!({
+        "inference_id": inference_id,
+        "metric_name": "demonstration",
+        "value": {"score": 0.5}
+    });
+    let response = client
+        .post(get_gateway_endpoint("/feedback"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let feedback_id = response_json.get("feedback_id").unwrap();
+    assert!(feedback_id.is_string());
+    let feedback_id = Uuid::parse_str(feedback_id.as_str().unwrap()).unwrap();
+    sleep(Duration::from_millis(200)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_feedback_clickhouse(&clickhouse, "DemonstrationFeedback", feedback_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
+    let retrieved_inference_id = result.get("inference_id").unwrap().as_str().unwrap();
+    let retrieved_inference_id_uuid = Uuid::parse_str(retrieved_inference_id).unwrap();
+    assert_eq!(retrieved_inference_id_uuid, inference_id);
+    let retrieved_value = result.get("value").unwrap().as_str().unwrap();
+    let retrieved_value = serde_json::from_str::<JsonInferenceOutput>(retrieved_value).unwrap();
+    let expected_value = JsonInferenceOutput {
+        parsed: Some(json!({"score": 0.5})),
+        raw: Some("{\"score\":0.5}".to_string()),
+    };
+    assert_eq!(retrieved_value, expected_value);
+}
+
+#[tokio::test]
 async fn e2e_test_demonstration_feedback_dynamic_json() {
     let client = Client::new();
     // Running without valid inference_id. Should fail.

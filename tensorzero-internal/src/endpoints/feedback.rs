@@ -940,7 +940,10 @@ static OLD_LLM_JUDGE_OUTPUT_SCHEMA_BOOLEAN: OnceLock<Value> = OnceLock::new();
 static NEW_LLM_JUDGE_OUTPUT_SCHEMA_FLOAT: OnceLock<Value> = OnceLock::new();
 static NEW_LLM_JUDGE_OUTPUT_SCHEMA_BOOLEAN: OnceLock<Value> = OnceLock::new();
 
-// TODO: test this I guess
+/// When we first introduced LLM Judges, we used a slightly different output schema
+/// for them that explicitly included a "thinking" field.
+/// We want to be able to take demonstrations that do not include this field.
+/// This function handles the conversion of the old schema to the new schema for validation purposes.
 fn handle_llm_judge_output_schema(output_schema: Value) -> Value {
     let old_float_schema = OLD_LLM_JUDGE_OUTPUT_SCHEMA_FLOAT.get_or_init(|| {
         json!({
