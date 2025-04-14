@@ -285,7 +285,7 @@ const MetricRow = ({
   }
   if (inferenceId === null) {
     console.warn(
-      `Inference ID is null for metric ${metric_name} in datapoint ${datapointId}, this should not happen.`,
+      `Inference ID is null for metric ${metric_name} in datapoint ${datapointId}, this should not happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports`,
     );
   }
   const evaluationType = evaluatorConfig.type;
