@@ -216,13 +216,21 @@ export async function getEvaluationResults(
     AND ci.variant_name = datapoint_tag.variant_name
     AND ci.episode_id = datapoint_tag.episode_id
   INNER JOIN (
-    SELECT target_id, metric_name, toString(value) as value, tags['tensorzero::evaluator_inference_id'] as evaluator_inference_id
+    SELECT target_id,
+           metric_name,
+           argMax(toString(value), timestamp) as value,
+           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id
     FROM BooleanMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
+    GROUP BY target_id, metric_name -- for the argMax
     UNION ALL
-    SELECT target_id, metric_name, toString(value) as value, tags['tensorzero::evaluator_inference_id'] as evaluator_inference_id
+    SELECT target_id,
+           metric_name,
+           argMax(toString(value), timestamp) as value,
+           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id
     FROM FloatMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
+    GROUP BY target_id, metric_name -- for the argMax
   ) feedback
     ON feedback.target_id = ci.id
   WHERE
@@ -284,13 +292,19 @@ export async function getEvaluationStatistics(
     AND ci.variant_name = datapoint_tag.variant_name
     AND ci.episode_id = datapoint_tag.episode_id
   INNER JOIN (
-    SELECT target_id, metric_name, value
+    SELECT target_id,
+           metric_name,
+           argMax(value, timestamp) as value
     FROM BooleanMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
+    GROUP BY target_id, metric_name -- for the argMax
     UNION ALL
-    SELECT target_id, metric_name, value
+    SELECT target_id,
+           metric_name,
+           argMax(value, timestamp) as value
     FROM FloatMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
+    GROUP BY target_id, metric_name -- for the argMax
   ) feedback
     ON feedback.target_id = ci.id
   WHERE
@@ -492,13 +506,21 @@ export async function getEvaluationsForDatapoint(
     AND dp.function_name = {function_name:String}
     AND dp.dataset_name = inference.tags['tensorzero::dataset_name']
   LEFT JOIN (
-    SELECT target_id, metric_name, toString(value) as value, tags['tensorzero::evaluator_inference_id'] as evaluator_inference_id
+    SELECT target_id,
+           metric_name,
+           argMax(toString(value), timestamp) as value,
+           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id
     FROM BooleanMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
+    GROUP BY target_id, metric_name -- for the argMax
     UNION ALL
-    SELECT target_id, metric_name, toString(value) as value, tags['tensorzero::evaluator_inference_id'] as evaluator_inference_id
+    SELECT target_id,
+           metric_name,
+           argMax(toString(value), timestamp) as value,
+           argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id
     FROM FloatMetricFeedback
     WHERE metric_name IN ({metric_names:Array(String)})
+    GROUP BY target_id, metric_name -- for the argMax
   ) feedback
     ON feedback.target_id = inference.id
   WHERE datapoint_tag.key = 'tensorzero::datapoint_id'
