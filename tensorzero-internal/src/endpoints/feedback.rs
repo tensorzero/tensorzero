@@ -306,15 +306,13 @@ async fn write_demonstration(
         &inference_id,
     )
     .await?;
-    let function_name =
-        match &target_info {
-            TargetInfo::Inference { function_name, .. } => function_name,
-            _ => return Err(Error::new(ErrorDetails::InvalidRequest {
-                message:
-                    "Demonstration feedback is only supported for inference targets. This is a bug."
-                        .to_string(),
-            })),
-        };
+    let function_name = target_info.get_function_name().ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidRequest {
+            message:
+                "Demonstration feedback is only supported for inference targets. This is a bug."
+                    .to_string(),
+        })
+    })?;
     let function_config = config.get_function(function_name)?;
     let dynamic_demonstration_info = get_dynamic_demonstration_info(
         &connection_info,
@@ -536,6 +534,15 @@ enum TargetInfo {
         #[allow(dead_code)]
         episode_id: Uuid,
     },
+}
+
+impl TargetInfo {
+    pub fn get_function_name(&self) -> Option<&str> {
+        match self {
+            TargetInfo::Inference { function_name, .. } => Some(function_name),
+            _ => None,
+        }
+    }
 }
 
 /// Retrieves the function name associated with a given `target_id` of the inference or episode.
