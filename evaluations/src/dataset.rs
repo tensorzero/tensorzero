@@ -19,9 +19,9 @@ pub async fn query_dataset(
     };
 
     // Construct the query to fetch datapoints from the appropriate table
-    let query = r#"SELECT * FROM {{table_name: Identifier}} FINAL
-         WHERE dataset_name = {{dataset_name: String}}
-         AND function_name = {{function_name: String}}
+    let query = r#"SELECT * FROM {table_name: Identifier} FINAL
+         WHERE dataset_name = {dataset_name: String}
+         AND function_name = {function_name: String}
          AND staled_at IS NULL
          FORMAT JSON"#;
 
