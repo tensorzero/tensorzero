@@ -49,6 +49,7 @@ pub struct FunctionConfigChat {
     pub tools: Vec<String>, // tool names
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -59,6 +60,7 @@ pub struct FunctionConfigJson {
     pub assistant_schema: Option<JSONSchemaFromPath>,
     pub output_schema: JSONSchemaFromPath, // schema is mandatory for JSON functions
     pub implicit_tool_call_config: ToolCallConfig,
+    pub description: Option<String>,
 }
 
 impl FunctionConfig {
@@ -68,9 +70,7 @@ impl FunctionConfig {
             FunctionConfig::Json(params) => &params.variants,
         }
     }
-}
 
-impl FunctionConfig {
     pub fn validate_inference_params(
         &self,
         params: &crate::endpoints::inference::Params,
@@ -266,6 +266,13 @@ impl FunctionConfig {
         match self {
             FunctionConfig::Chat(params) => params.assistant_schema.as_ref(),
             FunctionConfig::Json(params) => params.assistant_schema.as_ref(),
+        }
+    }
+
+    pub fn description(&self) -> Option<&String> {
+        match self {
+            FunctionConfig::Chat(params) => params.description.as_ref(),
+            FunctionConfig::Json(params) => params.description.as_ref(),
         }
     }
 
@@ -1028,6 +1035,7 @@ mod tests {
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&json!({})).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1100,6 +1108,7 @@ mod tests {
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1162,6 +1171,7 @@ mod tests {
             assistant_schema: None,
             output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1225,6 +1235,7 @@ mod tests {
             assistant_schema: Some(assistant_schema),
             output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1292,6 +1303,7 @@ mod tests {
             assistant_schema: Some(assistant_schema),
             output_schema: JSONSchemaFromPath::from_value(&output_schema).unwrap(),
             implicit_tool_call_config,
+            description: None,
         };
         let function_config = FunctionConfig::Json(tool_config);
 
@@ -1479,6 +1491,58 @@ mod tests {
         assert!((0.0..1.0).contains(&value4));
     }
 
+    #[test]
+    fn test_description_getter() {
+        // Test for Chat function with description
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            description: Some("A chat function description".to_string()),
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
+        assert_eq!(
+            function_config.description(),
+            Some(&"A chat function description".to_string())
+        );
+
+        // Test for JSON function with description
+        let output_schema = JSONSchemaFromPath::from_value(&json!({})).unwrap();
+        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&json!({}));
+        let json_config = FunctionConfigJson {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            output_schema,
+            implicit_tool_call_config,
+            description: Some("A JSON function description".to_string()),
+        };
+        let function_config = FunctionConfig::Json(json_config);
+        assert_eq!(
+            function_config.description(),
+            Some(&"A JSON function description".to_string())
+        );
+
+        // Test for None description
+        let chat_config = FunctionConfigChat {
+            variants: HashMap::new(),
+            system_schema: None,
+            user_schema: None,
+            assistant_schema: None,
+            tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            description: None,
+        };
+        let function_config = FunctionConfig::Chat(chat_config);
+        assert_eq!(function_config.description(), None);
+    }
+
     #[tokio::test]
     #[traced_test]
     async fn test_prepare_response_json() {
@@ -1508,6 +1572,7 @@ mod tests {
             assistant_schema: None,
             output_schema,
             implicit_tool_call_config,
+            description: None,
         });
         let raw_request = "raw_request".to_string();
 
@@ -2081,6 +2146,7 @@ mod tests {
             assistant_schema: None,
             output_schema,
             implicit_tool_call_config,
+            description: None,
         });
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];

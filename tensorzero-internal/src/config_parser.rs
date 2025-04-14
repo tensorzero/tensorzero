@@ -667,6 +667,8 @@ struct UninitializedFunctionConfigChat {
     tool_choice: ToolChoice,
     #[serde(default)]
     parallel_tool_calls: Option<bool>,
+    #[serde(default)]
+    description: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -724,6 +726,7 @@ impl UninitializedFunctionConfig {
                     tools: params.tools,
                     tool_choice: params.tool_choice,
                     parallel_tool_calls: params.parallel_tool_calls,
+                    description: params.description,
                 }))
             }
             UninitializedFunctionConfig::Json(params) => {
@@ -786,6 +789,7 @@ impl UninitializedFunctionConfig {
                     assistant_schema,
                     output_schema,
                     implicit_tool_call_config,
+                    description: None,
                 }))
             }
         }

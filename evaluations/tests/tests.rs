@@ -4,6 +4,7 @@
 )]
 mod common;
 use clap::Parser;
+use evaluations::dataset::query_dataset;
 use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEvaluatorParams};
 use evaluations::{Clients, ThrottledTensorZeroClient};
 use serde_json::json;
@@ -12,6 +13,7 @@ use tensorzero_internal::cache::CacheEnabledMode;
 use tensorzero_internal::clickhouse::test_helpers::select_model_inferences_clickhouse;
 use tensorzero_internal::endpoints::datasets::Datapoint;
 use tensorzero_internal::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
+use tensorzero_internal::function::{FunctionConfig, FunctionConfigJson};
 use tensorzero_internal::inference::types::{
     ResolvedInputMessage, ResolvedInputMessageContent, Text,
 };
@@ -1194,6 +1196,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         tags: None,
         tool_params: None,
         source_inference_id: None,
+        staled_at: None,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1295,6 +1298,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         tags: None,
         tool_params: None,
         source_inference_id: None,
+        staled_at: None,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
@@ -1359,6 +1363,7 @@ async fn test_run_llm_judge_evaluator_json() {
         output_schema: json!({"answer": "string"}),
         tags: None,
         source_inference_id: None,
+        staled_at: None,
     });
     let llm_judge_config = LLMJudgeConfig {
         input_format: LLMJudgeInputFormat::Serialized,
@@ -1460,6 +1465,7 @@ async fn test_run_llm_judge_evaluator_json() {
         tags: None,
         tool_params: None,
         source_inference_id: None,
+        staled_at: None,
     });
 
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
@@ -2040,4 +2046,32 @@ async fn run_evaluations_dicl() {
         assert_eq!(model_inferences.len(), 2);
     }
     assert_eq!(parsed_output.len(), 6);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_query_skips_staled_datapoints() {
+    let dataset_name = format!("exact_matches_empty-{}", Uuid::now_v7());
+    let clickhouse = get_clickhouse().await;
+    write_json_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-internal/fixtures/datasets/json_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("exact_matches_empty".to_string(), dataset_name.clone())]),
+    )
+    .await;
+
+    let dataset = query_dataset(
+        &clickhouse,
+        &dataset_name,
+        "extract_entities",
+        &FunctionConfig::Json(FunctionConfigJson::default()),
+    )
+    .await
+    .unwrap();
+    // This ID should not be returned
+    let staled_id = Uuid::parse_str("01957bbb-44a8-7490-bfe7-32f8ed2fc797").unwrap();
+    let staled_datapoint = dataset.iter().find(|dp| dp.id() == staled_id);
+    assert!(staled_datapoint.is_none());
+    assert_eq!(dataset.len(), 21);
 }

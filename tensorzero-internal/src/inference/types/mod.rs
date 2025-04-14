@@ -2441,6 +2441,7 @@ mod tests {
             assistant_schema: None,
             implicit_tool_call_config,
             output_schema,
+            description: None,
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -2701,6 +2702,7 @@ mod tests {
             assistant_schema: None,
             implicit_tool_call_config,
             output_schema,
+            description: None,
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -2798,6 +2800,7 @@ mod tests {
             assistant_schema: None,
             implicit_tool_call_config,
             output_schema,
+            description: None,
         }));
         let usage1 = Usage {
             input_tokens: 10,
