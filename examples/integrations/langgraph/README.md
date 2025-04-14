@@ -19,7 +19,7 @@ We provide a simple TensorZero configuration with a function `chatbot` that uses
 ### Setup
 
 1. Set the `OPENAI_API_KEY` environment variable.
-2. Run the chatbot using `python chatbot.py`. The script is interactive.
+2. Run the chatbot using `python main.py`. The script is interactive.
 
 ## Sample Run
 
