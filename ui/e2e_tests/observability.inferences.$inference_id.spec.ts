@@ -193,7 +193,7 @@ test("should be able to add json demonstration feedback via the inference page",
   page,
 }) => {
   await page.goto(
-    "/observability/inferences/0195f845-a261-72d2-8686-774b967d938e",
+    "/observability/inferences/019639be-3d57-7b10-9b22-f95e70211c9a",
   );
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
@@ -219,7 +219,7 @@ test("should be able to add json demonstration feedback via the inference page",
   const dialog = page.locator('div[role="dialog"]');
   // Locate the textbox within the dialog and fill it
   await dialog.getByRole("textbox").waitFor({ state: "visible" });
-  const json = `{"thinking": "hmm", "score": ${randomFloat}}`;
+  const json = `{"score": ${randomFloat}}`;
   await dialog.getByRole("textbox").fill(json);
 
   // Click the submit button
@@ -244,7 +244,7 @@ test("should be able to add chat demonstration feedback via the inference page",
   page,
 }) => {
   await page.goto(
-    "/observability/inferences/0195c498-70e3-71f3-bbd9-a2db26b8d349",
+    "/observability/inferences/0196374b-0d7d-7422-b6dc-e94c572cc79b",
   );
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
@@ -270,8 +270,8 @@ test("should be able to add chat demonstration feedback via the inference page",
   // Locate the textbox within the dialog and fill it
   await dialog.getByRole("textbox").waitFor({ state: "visible" });
   // This doesn't have to be a JSON, it can be any string
-  const json = `{"thinking": "hmm", "score": ${randomFloat}}`;
-  await dialog.getByRole("textbox").fill(json);
+  const demonstration = "hop on pop";
+  await dialog.getByRole("textbox").fill(demonstration);
 
   // Click the submit button
   await page.getByText("Submit Feedback").click();
@@ -295,7 +295,7 @@ test("should be able to add comment feedback via the episode page", async ({
   page,
 }) => {
   await page.goto(
-    "/observability/episodes/0195f845-a261-72d2-8686-775bc929a221",
+    "/observability/episodes/019639be-3ec4-7771-a44f-26cd1c793e60",
   );
   // Click on the Add feedback button
   await page.getByText("Add feedback").click();
