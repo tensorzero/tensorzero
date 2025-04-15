@@ -3295,7 +3295,7 @@ async fn check_json_cot_inference_response(
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, expected_model_provider_name);
 
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    result.get("raw_request").unwrap().as_str().unwrap();
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
