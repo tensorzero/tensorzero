@@ -116,7 +116,8 @@ lazy_static! {
 }
 pub static DUMMY_JSON_RESPONSE_RAW: &str = r#"{"answer":"Hello"}"#;
 pub static DUMMY_JSON_GOODBYE_RESPONSE_RAW: &str = r#"{"answer":"Goodbye"}"#;
-pub static DUMMY_JSON_COT_RESPONSE_RAW: &str = r#"{"thinking":"hmmm", "answer":"howdy!"}"#;
+pub static DUMMY_JSON_COT_RESPONSE_RAW: &str =
+    r#"{"thinking":"hmmm", "response": {"answer":"tokyo!"}}"#;
 pub static DUMMY_INFER_USAGE: Usage = Usage {
     input_tokens: 10,
     output_tokens: 10,

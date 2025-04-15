@@ -67,6 +67,7 @@ impl Variant for ChainOfThoughtConfig {
             None => &json_config.output_schema.value,
         };
         let augmented_output_schema = prepare_thinking_output_schema(original_output_schema);
+        println!("augmented_output_schema: {augmented_output_schema:#?}");
         let augmented_inference_config = InferenceConfig {
             dynamic_output_schema: Some(&augmented_output_schema),
             tool_config: None, // Dynamic tool configs are handled farther down, we don't need to set that here
@@ -96,7 +97,9 @@ impl Variant for ChainOfThoughtConfig {
             }
             .into());
         };
+        println!("json_result: {json_result:#?}");
         let output = parse_thinking_output(json_result.output)?;
+        println!("output: {output:#?}");
         Ok(InferenceResult::Json(JsonInferenceResult {
             inference_id: json_result.inference_id,
             created: json_result.created,
@@ -151,7 +154,7 @@ impl Variant for ChainOfThoughtConfig {
     }
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
-        todo!()
+        self.inner.get_all_template_paths()
     }
 
     async fn start_batch_inference<'a>(

@@ -1640,6 +1640,22 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "strict"
 max_tokens = 100
 
+[functions.json_success.variants.chain_of_thought]
+type = "experimental_chain_of_thought"
+model = "dummy::json_cot"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+max_tokens = 100
+json_mode = "strict"
+
+[functions.json_success.variants.chain_of_thought_implicit_tool]
+type = "experimental_chain_of_thought"
+model = "dummy::json_cot_tool"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+max_tokens = 100
+json_mode = "implicit_tool"
+
 [functions.dynamic_json]
 type = "json"
 system_schema = "../../fixtures/config/functions/dynamic_json/system_schema.json"
