@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
 
 test("should show the inference detail page", async ({ page }) => {
-  const inference_id = "01963729-eb5c-7d70-827f-00383bed7aea";
+  const inference_id = "019639b3-7443-7ab3-afd7-4bd987db4044";
   await page.goto(`/observability/inferences/${inference_id}`);
   // The episode ID should be visible
   await expect(
-    page.getByText("01963729-eb5c-7d70-827f-004cffa1996a"),
+    page.getByText("019639b3-7443-7ab3-afd7-4bea01cec6c1"),
   ).toBeVisible();
 
   // Assert that "error" is not in the page
@@ -14,7 +14,7 @@ test("should show the inference detail page", async ({ page }) => {
 
 test("should display inferences with image content", async ({ page }) => {
   await page.goto(
-    "/observability/inferences/0195e31b-68d6-7001-b7b7-fde770175c65",
+    "/observability/inferences/0196372f-1b4b-7013-a446-511e312a3c30",
   );
   // Assert that there are 2 images displayed and they render
   const images = page.locator("img");
@@ -32,7 +32,7 @@ test("should display inferences with image content", async ({ page }) => {
 
   // Verify that images display in the modelInference section too
   // Click on the modelInference section
-  await page.getByText("0195e31b-703c-74a3-bbdd-e252ca10a86d").click();
+  await page.getByText("0196372f-2b63-7ed1-9a5a-9d0fa69c43e9").click();
   // Assert that the images are visible
   const newImages = page.locator("img");
   await expect(newImages).toHaveCount(4);
