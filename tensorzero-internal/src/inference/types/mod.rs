@@ -524,7 +524,7 @@ pub struct ChatInferenceResult {
 pub struct JsonInferenceResult {
     pub inference_id: Uuid,
     pub created: u64,
-    pub output: JsonInferenceOutput,
+    pub output: InternalJsonInferenceOutput,
     pub usage: Usage,
     pub model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
     pub output_schema: Value,
@@ -537,6 +537,13 @@ pub struct JsonInferenceResult {
 pub struct JsonInferenceOutput {
     pub raw: Option<String>,
     pub parsed: Option<Value>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct InternalJsonInferenceOutput {
+    pub raw: Option<String>,
+    pub parsed: Option<Value>,
+    pub auxiliary_content: Vec<ContentBlockOutput>,
 }
 
 /// In the streaming case we convert ProviderInferenceResponseChunks into a InferenceResultChunk, which is then
@@ -970,13 +977,18 @@ impl JsonInferenceResult {
         inference_id: Uuid,
         raw: Option<String>,
         parsed: Option<Value>,
+        auxiliary_content: Vec<ContentBlockOutput>,
         usage: Usage,
         model_inference_results: Vec<ModelInferenceResponseWithMetadata>,
         output_schema: Value,
         inference_params: InferenceParams,
         original_response: Option<String>,
     ) -> Self {
-        let output = JsonInferenceOutput { raw, parsed };
+        let output = InternalJsonInferenceOutput {
+            raw,
+            parsed,
+            auxiliary_content,
+        };
         let finish_reason = get_finish_reason(&model_inference_results);
         Self {
             inference_id,
@@ -1107,6 +1119,11 @@ impl JsonInferenceDatabaseInsert {
             .map(|duration| duration.as_millis() as u32);
 
         let inference_params = json_result.inference_params;
+        let InternalJsonInferenceOutput {
+            raw,
+            parsed,
+            auxiliary_content,
+        } = json_result.output;
 
         Self {
             id: json_result.inference_id,

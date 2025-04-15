@@ -187,22 +187,8 @@ impl FunctionConfig {
                 .await,
             )),
             FunctionConfig::Json(params) => {
-                // Parse the content blocks into a JSON object
-                // We assume here that the last content block that's text or a tool call is the JSON object.
-                // (this is because we could have used an implicit tool call and there is no other reason for a tool call in a JSON function).
-                //
-                // Sometimes models will return no content blocks (e.g. when instructed to not return anything), so `raw_output` will be `None` then.
-                let raw_output: Option<String> =
-                    content_blocks
-                        .iter()
-                        .rev()
-                        .find_map(|content_block| match content_block {
-                            ContentBlockOutput::Text(text) => Some(text.text.to_string()),
-                            ContentBlockOutput::ToolCall(tool_call) => {
-                                Some(tool_call.arguments.to_string())
-                            }
-                            _ => None,
-                        });
+                let (raw_output, auxiliary_content) =
+                    get_json_output_from_content_blocks(content_blocks);
 
                 // Try to parse the raw output as JSON.
                 //
@@ -238,6 +224,7 @@ impl FunctionConfig {
                     inference_id,
                     raw_output,
                     parsed_output,
+                    auxiliary_content,
                     usage,
                     model_inference_results,
                     output_schema.value().clone(),
@@ -316,6 +303,47 @@ impl FunctionConfig {
             FunctionConfig::Json(_) => Ok(()),
         }
     }
+}
+
+/// Parse the content blocks into a JSON object
+/// We assume here that the last content block that's text or a tool call is the JSON object.
+/// (this is because we could have used an implicit tool call and there is no other reason for a tool call in a JSON function).
+///
+/// Sometimes models will return no content blocks (e.g. when instructed to not return anything), so `raw_output` will be `None` then.
+fn get_json_output_from_content_blocks(
+    content_blocks: Vec<ContentBlockOutput>,
+) -> (Option<String>, Vec<ContentBlockOutput>) {
+    let raw_output = content_blocks
+        .iter()
+        .rev()
+        .find_map(|content_block| match content_block {
+            ContentBlockOutput::Text(text) => Some(text.text.to_string()),
+            ContentBlockOutput::ToolCall(tool_call) => Some(tool_call.arguments.to_string()),
+            _ => None,
+        });
+    let maybe_index_from_end = content_blocks.iter().rev().position(|content_block| {
+        matches!(
+            content_block,
+            ContentBlockOutput::Text(_) | ContentBlockOutput::ToolCall(_)
+        )
+    });
+    let auxiliary_content = if let Some(i) = maybe_index_from_end {
+        let index_from_start = content_blocks.len() - 1 - i;
+        content_blocks
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, content_block)| {
+                if index != index_from_start {
+                    Some(content_block)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    } else {
+        content_blocks
+    };
+    (raw_output, auxiliary_content)
 }
 
 /// Validate all input messages that contain text (not raw_text).
@@ -2194,6 +2222,107 @@ mod tests {
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
             }
             _ => panic!("Expected a JSON inference result"),
+        }
+    }
+
+    #[test]
+    fn test_get_json_output_from_content_blocks() {
+        // Case 1: Text followed by ToolCall
+        let content_blocks = vec![
+            ContentBlockOutput::Text("Hello".to_string().into()),
+            ContentBlockOutput::ToolCall(ToolCall {
+                id: "tool_call_id".to_string(),
+                name: "tool_call_name".to_string(),
+                arguments: "tool_call_arguments".to_string(),
+            }),
+        ];
+        let (raw_output, auxiliary_content) =
+            get_json_output_from_content_blocks(content_blocks.clone());
+        assert_eq!(raw_output, Some("tool_call_arguments".to_string()));
+        assert_eq!(auxiliary_content.len(), 1);
+        match &auxiliary_content[0] {
+            ContentBlockOutput::Text(t) => assert_eq!(t.text, "Hello"),
+            _ => panic!("Expected Text block"),
+        }
+
+        // Case 2: Only Thought blocks
+        let content_blocks = vec![
+            ContentBlockOutput::Thought(Thought {
+                text: "thinking...".to_string(),
+                signature: None,
+            }),
+            ContentBlockOutput::Thought(Thought {
+                text: "still thinking".to_string(),
+                signature: Some("sig".to_string()),
+            }),
+        ];
+        let (raw_output, auxiliary_content) =
+            get_json_output_from_content_blocks(content_blocks.clone());
+        assert_eq!(raw_output, None);
+        assert_eq!(auxiliary_content, content_blocks);
+
+        // Case 3: Mixed Text, Thought, ToolCall
+        let content_blocks = vec![
+            ContentBlockOutput::Thought(Thought {
+                text: "first thought".to_string(),
+                signature: None,
+            }),
+            ContentBlockOutput::Text("Some text".to_string().into()),
+            ContentBlockOutput::Thought(Thought {
+                text: "second thought".to_string(),
+                signature: Some("sig2".to_string()),
+            }),
+            ContentBlockOutput::ToolCall(ToolCall {
+                id: "id2".to_string(),
+                name: "name2".to_string(),
+                arguments: "{\"foo\": 1}".to_string(),
+            }),
+        ];
+        let (raw_output, auxiliary_content) =
+            get_json_output_from_content_blocks(content_blocks.clone());
+        assert_eq!(raw_output, Some("{\"foo\": 1}".to_string()));
+        // Should exclude the ToolCall block from auxiliary_content
+        assert_eq!(auxiliary_content.len(), 3);
+        assert!(auxiliary_content
+            .iter()
+            .any(|b| matches!(b, ContentBlockOutput::Text(_))));
+        assert_eq!(
+            auxiliary_content
+                .iter()
+                .filter(|b| matches!(b, ContentBlockOutput::Thought(_)))
+                .count(),
+            2
+        );
+
+        // Case 4: Only Text blocks
+        let content_blocks = vec![
+            ContentBlockOutput::Text("A".to_string().into()),
+            ContentBlockOutput::Text("B".to_string().into()),
+        ];
+        let (raw_output, auxiliary_content) =
+            get_json_output_from_content_blocks(content_blocks.clone());
+        assert_eq!(raw_output, Some("B".to_string()));
+        assert_eq!(auxiliary_content.len(), 1);
+        match &auxiliary_content[0] {
+            ContentBlockOutput::Text(t) => assert_eq!(t.text, "A"),
+            _ => panic!("Expected Text block"),
+        }
+
+        // Case 5: Thought block at the end
+        let content_blocks = vec![
+            ContentBlockOutput::Text("A".to_string().into()),
+            ContentBlockOutput::Thought(Thought {
+                text: "final thought".to_string(),
+                signature: None,
+            }),
+        ];
+        let (raw_output, auxiliary_content) =
+            get_json_output_from_content_blocks(content_blocks.clone());
+        assert_eq!(raw_output, Some("A".to_string()));
+        assert_eq!(auxiliary_content.len(), 1);
+        match &auxiliary_content[0] {
+            ContentBlockOutput::Thought(t) => assert_eq!(t.text, "final thought"),
+            _ => panic!("Expected Thought block"),
         }
     }
 }

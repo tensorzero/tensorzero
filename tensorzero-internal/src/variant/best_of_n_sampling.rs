@@ -1027,6 +1027,7 @@ mod tests {
             Uuid::now_v7(),
             Some("{\"response\": \"Valid JSON response\"}".to_string()),
             Some(json!({"response": "Valid JSON response"})),
+            vec![],
             Usage {
                 input_tokens: 10,
                 output_tokens: 20,
@@ -1067,6 +1068,7 @@ mod tests {
             Uuid::now_v7(),
             Some("{\"oops: \"Malformed JSON response\"".to_string()),
             None, // malformed
+            vec![],
             Usage {
                 input_tokens: 15,
                 output_tokens: 25,

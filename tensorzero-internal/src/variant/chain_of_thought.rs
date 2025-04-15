@@ -10,7 +10,8 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
 use crate::inference::types::{
-    InferenceResult, InferenceResultStream, JsonInferenceOutput, JsonInferenceResult, ResolvedInput,
+    ContentBlock, ContentBlockOutput, InferenceResult, InferenceResultStream,
+    InternalJsonInferenceOutput, JsonInferenceOutput, JsonInferenceResult, ResolvedInput, Thought,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -186,11 +187,23 @@ fn prepare_thinking_output_schema(previous_output_schema: &Value) -> DynamicJSON
 
 /// Parses the output of the actual function being called and serializes the `response` field.
 /// After this point, the function output should look like a normal JSON response and not include thinking.
-fn parse_thinking_output(mut output: JsonInferenceOutput) -> Result<JsonInferenceOutput, Error> {
+fn parse_thinking_output(
+    mut output: InternalJsonInferenceOutput,
+) -> Result<InternalJsonInferenceOutput, Error> {
     match &mut output.parsed {
         // If the output failed to parse, don't handle it here.
-        None => Ok(output),
+        None => Ok((output)),
         Some(parsed) => {
+            let Some(thinking) = parsed
+                .get_mut("thinking")
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+            else {
+                tracing::warn!(
+                    "Chain of thought variant received a parsed output that didn't contain a `thinking` field. {}",
+                    IMPOSSIBLE_ERROR_MESSAGE
+                );
+                return Ok(output);
+            };
             let Some(response) = parsed.get_mut("response") else {
                 tracing::warn!(
                     "Chain of thought variant received a parsed output that didn't contain a `response` field. {}",
@@ -202,10 +215,15 @@ fn parse_thinking_output(mut output: JsonInferenceOutput) -> Result<JsonInferenc
                 serde_json::to_string(response).map_err(|e| ErrorDetails::Serialization {
                     message: format!("Failed to serialize chain of thought response: {e}"),
                 })?;
-            Ok(JsonInferenceOutput {
-                parsed: Some(response.take()),
-                raw: Some(serialized_response),
-            })
+            output.parsed = Some(response.take());
+            output.raw = Some(serialized_response);
+            output
+                .auxiliary_content
+                .push(ContentBlockOutput::Thought(Thought {
+                    text: thinking,
+                    signature: None,
+                }));
+            Ok(output)
         }
     }
 }
