@@ -17,6 +17,7 @@ use crate::{
 #[must_use = "Extra headers must be inserted into request builder"]
 pub fn inject_extra_request_data(
     config: &FullExtraBodyConfig,
+    extra_headers_config: &Option<FullExtraHeadersConfig>,
     model_provider_data: impl Into<ModelProviderRequestInfo>,
     model_name: &str,
     body: &mut serde_json::Value,
@@ -70,32 +71,76 @@ pub fn inject_extra_request_data(
     }
 
     let mut headers = http::HeaderMap::new();
-    // Write the variant extra_headers first, then the model_provider extra_headers.
-    // This way, the model_provider extra_headers will overwrite keys in the
-    // variant extra_headers.
-    for extra_headers in [&config.variant_extra_headers, &model_provider.extra_headers]
+
+    // Process variant and model provider config headers
+    if let Some(extra_headers) = extra_headers_config {
+        // Write the variant extra_headers first, then the model_provider extra_headers
+        for header_config in [
+            &extra_headers.variant_extra_headers,
+            &model_provider.extra_headers,
+        ]
         .into_iter()
         .flatten()
-    {
-        for ExtraHeader { name, value } in &extra_headers.data {
-            headers.insert(
-                http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Invalid header name `{name}`: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?,
-                http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Invalid header value `{value}`: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?,
-            );
+        {
+            for ExtraHeader { name, value } in &header_config.data {
+                headers.insert(
+                    http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!("Invalid header name `{name}`: {e}"),
+                        })
+                    })?,
+                    http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!("Invalid header value `{value}`: {e}"),
+                        })
+                    })?,
+                );
+            }
+        }
+
+        // Process inference-level headers
+        let expected_provider_name =
+            fully_qualified_name(model_name, &model_provider.provider_name);
+
+        for header in &extra_headers.inference_extra_headers.data {
+            match header {
+                InferenceExtraHeader::Variant { name, value, .. } => {
+                    headers.insert(
+                        http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!("Invalid header name `{name}`: {e}"),
+                            })
+                        })?,
+                        http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!("Invalid header value `{value}`: {e}"),
+                            })
+                        })?,
+                    );
+                }
+                InferenceExtraHeader::Provider {
+                    model_provider_name,
+                    name,
+                    value,
+                } => {
+                    if *model_provider_name == expected_provider_name {
+                        headers.insert(
+                            http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                                Error::new(ErrorDetails::Serialization {
+                                    message: format!("Invalid header name `{name}`: {e}"),
+                                })
+                            })?,
+                            http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(
+                                |e| {
+                                    Error::new(ErrorDetails::Serialization {
+                                        message: format!("Invalid header value `{value}`: {e}"),
+                                    })
+                                },
+                            )?,
+                        );
+                    }
+                }
+            }
         }
     }
 
