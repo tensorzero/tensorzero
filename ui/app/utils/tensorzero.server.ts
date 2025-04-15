@@ -78,6 +78,13 @@ type AddEvaluationHumanFeedbackResponse = {
 export async function addEvaluationHumanFeedback(
   formData: FormData,
 ): Promise<AddEvaluationHumanFeedbackResponse> {
+  // We check that the formData contains a datapointId
+  const datapointId = formData.get("datapointId")?.toString();
+  if (!datapointId) {
+    throw new Error(
+      "Datapoint ID is required. This is a bug. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+    );
+  }
   const [r1, r2] = await Promise.all([
     addHumanFeedback(formData),
     addJudgeDemonstration(formData),
