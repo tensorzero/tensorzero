@@ -458,10 +458,7 @@ jobs:
 
       - name: Build ui container
         # Enable feedback in the UI for this job so the playwright tests can use it
-        run: docker buildx build \
-          --build-arg VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=1 \
-          -f ui/Dockerfile . \
-          -t tensorzero/ui
+        run: docker buildx build --build-arg VITE_TENSORZERO_UI_FF_ENABLE_FEEDBACK=1 -f ui/Dockerfile . -t tensorzero/ui
 
       - name: Start services for ui e2e tests
         working-directory: ui
